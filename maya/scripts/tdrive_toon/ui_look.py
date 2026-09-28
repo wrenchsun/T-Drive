@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from . import look, params, preview, roles, session
+from . import features, look, params, preview, roles, session
 
 MIXED = "—"
 # Common（D-Drive MaterialCommon）のうち編集できるもの。(キー, 表示名, 種類, 最小, 最大)
@@ -73,6 +73,11 @@ class LookTab(QtWidgets.QWidget):
         self.title = QtWidgets.QLabel()
         self.title.setWordWrap(True)
         self.form.addWidget(self.title)
+        self.hidden_note = QtWidgets.QLabel()
+        self.hidden_note.setWordWrap(True)
+        self.hidden_note.setStyleSheet("color: #9aa6b8;")
+        self.form.addWidget(self.hidden_note)
+        self.boxes: list[tuple[QtWidgets.QGroupBox, list[str]]] = []
         self._build_rows()
         self.form.addStretch(1)
         scroll.setWidget(self.panel)
@@ -93,6 +98,7 @@ class LookTab(QtWidgets.QWidget):
                 row.add_to(grid, i)
                 self.rows[key] = row
             self.form.addWidget(box)
+            self.boxes.append((box, [r[0] for r in rows]))
 
     # -------------------------------------------------------------- 表示
     def refresh(self) -> None:
@@ -125,7 +131,23 @@ class LookTab(QtWidgets.QWidget):
         self.tree.blockSignals(False)
         self.refresh_values()
 
+    def _apply_features(self) -> None:
+        """オフの機能のパラメータを隠す（値は残っている。機能タブでオンにすると出る）。"""
+        lk = self.session.look
+        off = set()
+        for key, row in self.rows.items():
+            fid = features.FEATURE_OF_PARAM.get(key)
+            visible = lk is None or fid is None or look.enabled(lk, fid)
+            row.set_visible(visible)
+            if not visible:
+                off.add(features.BY_ID[fid].label)
+        for box, keys in self.boxes:
+            box.setVisible(any(self.rows[k].visible for k in keys))
+        self.hidden_note.setText(f"オフの機能は隠しています（機能タブ）: {'、'.join(sorted(off))}" if off else "")
+        self.hidden_note.setVisible(bool(off))
+
     def refresh_values(self) -> None:
+        self._apply_features()
         enabled = self.target is not None and self.session.look is not None
         self.panel.setEnabled(enabled)
         if not enabled:
@@ -183,6 +205,7 @@ class ParamRow:
     def __init__(self, tab: LookTab, key: str, label: str, kind: str, lo: float, hi: float) -> None:
         self.tab, self.key, self.kind, self.lo, self.hi = tab, key, kind, float(lo), float(hi)
         self._color = [1.0, 1.0, 1.0, 1.0]
+        self.visible = True
         self.label = QtWidgets.QLabel(label)
         self.label.setFixedWidth(170)  # グループをまたいでスライダーの開始位置を揃える
         self.editor = self._make_editor()
@@ -194,6 +217,13 @@ class ParamRow:
         self.base_btn.setText("base")
         self.base_btn.setToolTip("このバリアントでの上書きを外して base の値に戻す")
         self.base_btn.clicked.connect(lambda: tab.clear_override(key))
+
+    def set_visible(self, on: bool) -> None:
+        self.visible = on
+        for w in (self.label, self.editor, self.reset_btn):
+            w.setVisible(on)
+        if not on:
+            self.base_btn.setVisible(False)
 
     def add_to(self, grid: QtWidgets.QGridLayout, row: int) -> None:
         grid.addWidget(self.label, row, 0)
@@ -319,7 +349,7 @@ class ParamRow:
         notes = [self.key, "部位内で値が異なる（操作すると揃う）" if mixed else "", "バリアントで上書き中" if overridden else ""]
         self.label.setToolTip(" / ".join(n for n in notes if n))
         self.label.setStyleSheet("color: #f0c060; font-weight: bold;" if overridden else "")
-        self.base_btn.setVisible(overridden)
+        self.base_btn.setVisible(overridden and self.visible)
         k = self.kind
         if k == params.FLOAT:
             self.spin.blockSignals(True)

@@ -103,6 +103,27 @@ def run() -> None:
     data = json.loads(out.read_text(encoding="utf-8"))
     face = {x["Property"]: x["Value"] for x in data["materials"]["face"]["Specific"]}
     check("Unity 出力: B の値が入る", face["_ToonShadowStrength"]["FloatValue"] == 0.1)
+    check("Unity 出力: features（オンの機能）が入る",
+          "shade" in data["features"] and "outline" in data["features"] and "rim" not in data["features"],
+          str(data["features"]))
+
+    # ---- 機能のオン/オフ（docs/11）。mayapy では .fx の属性が読めないので解決値で確かめる
+    s.show("base")
+    width_on = s.look["materials"]["face"]["specific"]["_ToonOutlineWidth"]
+    s.set_feature("outline", False)
+    s.set_feature("vertexMask", False)
+    r = look.resolve(s.look)["face"]
+    check("機能オフ: 線幅 0 で解決され、保存値は残る",
+          r["specific"]["_ToonOutlineWidth"] == 0.0 and width_on > 0
+          and s.look["materials"]["face"]["specific"]["_ToonOutlineWidth"] == width_on)
+    check("機能オフ: 解決結果の features から外れる（頂点マスク無効の根拠）", "vertexMask" not in r["features"])
+    s.undo()
+    s.undo()
+    check("機能オン/オフは Undo で戻る", s.feature_enabled("outline") and s.feature_enabled("vertexMask"))
+    turned_off = s.disable_unused_features()
+    check("使っていない機能をオフ: 使用中の機能は残る",
+          s.feature_enabled("outline") and "outline" not in turned_off and "shade" not in turned_off, str(turned_off))
+    s.undo()
 
     # ---- 部位タブの操作（UI から呼ぶセッション API）
     s.rename_part("hair", "kami")
@@ -275,12 +296,14 @@ def run() -> None:
     s.rename_part("hair", "kami2")
     check("部位名の変更にインナーライン対象が追従", s.setting("innerLine.parts") == ["kami2"])
     s.undo()
+    s.set_feature("expressions", True)
     s.set_setting("expressions", {"blush": [{"material": "face", "property": "_ToonTintStrength", "min": 0.0, "max": 0.8}]})
     rows = s.preview_expression("blush", 0.5)
     check("表情プレビューは対応表どおりの値で、Look には保存されない",
           rows == [("face", "_ToonTintStrength", 0.4)] and s.look["materials"]["face"]["specific"]["_ToonTintStrength"] == 0.0)
     s.checkpoint()
     s.set_value("face", "_ToonDepthCompressWeight", 1.0)
+    s.set_feature("depthCompression", True)
     s.set_setting("depthCompression", 0.5)
     st = preview.environment_state()
     check("奥行き圧縮: 量と中心（顔のメッシュ）がプレビューに渡る", st["depthCompression"] == 0.5 and st["depthPivot"] != (0.0, 0.0, 0.0))

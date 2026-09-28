@@ -216,7 +216,7 @@ def enable(materials: dict[str, dict[str, Any]]) -> list[str]:
             continue
         shader = _ensure_preview_shader(mat)
         apply_values(mat, values)
-        _update_mesh_streams(shader, scene.get(mat, []))
+        _update_mesh_streams(shader, scene.get(mat, []), "vertexMask" in values.get("features", ["vertexMask"]))
         _swap(_shading_group(mat), _shading_group(shader))
     apply_environment()
     return missing
@@ -260,9 +260,9 @@ def _ensure_preview_shader(mat: str) -> str:
     return shader
 
 
-def _update_mesh_streams(shader: str, meshes: list[str]) -> None:
-    """頂点カラー tdToonMask を全メッシュが持つときだけ頂点マスクを有効にする（無いメッシュを黒で壊さない）。"""
-    has_mask = bool(meshes) and all(MASK_COLOR_SET in (cmds.polyColorSet(m, query=True, allColorSets=True) or []) for m in meshes)
+def _update_mesh_streams(shader: str, meshes: list[str], vertex_mask_on: bool = True) -> None:
+    """頂点カラー tdToonMask を全メッシュが持ち、機能 vertexMask がオンのときだけ頂点マスクを有効にする。"""
+    has_mask = vertex_mask_on and bool(meshes) and all(MASK_COLOR_SET in (cmds.polyColorSet(m, query=True, allColorSets=True) or []) for m in meshes)
     _set(shader, "VertexMaskEnabled", has_mask)
     # dx11Shader の頂点ストリームの取得元（既定は color:colorSet / uv:map3）
     _set_string(shader, "Color0_Source", f"color:{MASK_COLOR_SET}")

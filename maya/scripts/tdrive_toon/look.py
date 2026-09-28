@@ -15,7 +15,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from . import params, roles
+from . import features, params, roles
 
 SCHEMA_VERSION = 1
 BASE = "base"
@@ -34,6 +34,7 @@ def new_look(character: str, model: str) -> dict[str, Any]:
         "materials": {},
         "variants": {},
         SETTINGS: copy.deepcopy(CHARACTER_DEFAULTS),
+        FEATURES: features.default_flags(),
     }
 
 
@@ -50,6 +51,7 @@ CHARACTER_DEFAULTS: dict[str, Any] = {
 }
 EXPRESSION_NAME = re.compile(r"^[A-Za-z0-9_]+$")
 SETTINGS = "characterSettings"  # トップレベルの "character" はキャラクター ID
+FEATURES = "features"  # 機能のオン/オフ（docs/11）
 
 
 def _fill_defaults(target: dict[str, Any], defaults: dict[str, Any], prefix: str, added: set[str]) -> None:
@@ -75,7 +77,56 @@ def upgrade(look: dict[str, Any]) -> list[str]:
             if k not in spec:
                 spec[k] = copy.deepcopy(v)
                 added.add(k)
+    # 機能のオン/オフ: 無い機能は「既定でオン」か「値が既定と違う（= 使われている）」ならオン（見た目を変えない）
+    flags = look.setdefault(FEATURES, {})
+    used = used_features(look)
+    for f in features.FEATURES:
+        if f.id not in flags:
+            flags[f.id] = f.default_on or f.id in used
+            added.add(f"{FEATURES}.{f.id}")
     return sorted(added)
+
+
+def used_features(look: dict[str, Any]) -> set[str]:
+    """値が効果なしの値と違う（= 使われている）機能。"""
+    used = set()
+    pdefaults = {p.unity: p.default for p in params.SPECIFIC_PARAMS}
+    sections = [m.get("specific", {}) for m in look.get("materials", {}).values()]
+    sections += [ov.get("specific", {}) for v in look.get("variants", {}).values() for ov in v.get("overrides", {}).values()]
+    for spec in sections:
+        for k, v in spec.items():
+            if k in features.FEATURE_OF_PARAM and v != features.off_value(k, pdefaults.get(k)):
+                used.add(features.FEATURE_OF_PARAM[k])
+    for key, v in look.get(SETTINGS, {}).items():
+        if key in features.FEATURE_OF_SETTING and v != CHARACTER_DEFAULTS.get(key):
+            used.add(features.FEATURE_OF_SETTING[key])
+    return used
+
+
+def enabled(look: dict[str, Any], feature_id: str) -> bool:
+    f = features.BY_ID[feature_id]
+    return f.required or bool(look.get(FEATURES, {}).get(feature_id, f.default_on))
+
+
+def enabled_features(look: dict[str, Any]) -> list[str]:
+    """オンの機能 ID（定義順ではなく名前順。出力・生成シェーダーのキーに使う）。"""
+    return sorted(f.id for f in features.FEATURES if enabled(look, f.id))
+
+
+def set_feature(look: dict[str, Any], feature_id: str, on: bool) -> None:
+    f = features.BY_ID[feature_id]
+    if f.required and not on:
+        raise ValueError(f"{f.label} は必須の機能なのでオフにできません")
+    look.setdefault(FEATURES, features.default_flags())[feature_id] = bool(on)
+
+
+def resolved_settings(look: dict[str, Any]) -> dict[str, Any]:
+    """characterSettings の最終値。オフの機能の設定は既定値（= 効果なし）にする。"""
+    cs = copy.deepcopy(look.get(SETTINGS, CHARACTER_DEFAULTS))
+    for key, fid in features.FEATURE_OF_SETTING.items():
+        if not enabled(look, fid):
+            cs[key] = copy.deepcopy(CHARACTER_DEFAULTS[key])
+    return cs
 
 
 def load(path: str | Path) -> dict[str, Any]:
@@ -135,6 +186,13 @@ def validate(look: dict[str, Any]) -> list[str]:
             errors += _validate_material(f"variants.{var_name}.{mat_name}", ov, partial=True)
     if SETTINGS in look:
         errors += _validate_settings(look)
+    for fid, on in look.get(FEATURES, {}).items():
+        if fid not in features.BY_ID:
+            errors.append(f"{FEATURES}.{fid} は未知の機能")
+        elif not isinstance(on, bool):
+            errors.append(f"{FEATURES}.{fid} は true / false")
+        elif features.BY_ID[fid].required and not on:
+            errors.append(f"{FEATURES}.{fid} は必須の機能なのでオフにできない")
     return errors
 
 
@@ -294,17 +352,31 @@ def add_variant(look: dict[str, Any], name: str, label: str = "", copy_from: str
     look.setdefault("variants", {})[name] = {"label": label or name, "overrides": overrides}
 
 
+def merged(look: dict[str, Any], variant: str = BASE) -> dict[str, dict[str, Any]]:
+    """variant の上書きを base に合成しただけの値（機能のオン/オフは適用しない。保存・採用に使う）。"""
+    result = copy.deepcopy(look.get("materials", {}))
+    if variant != BASE:
+        for mat_name, ov in look["variants"][variant].get("overrides", {}).items():
+            mat = result[mat_name]
+            mat["common"].update(copy.deepcopy(ov.get("common", {})))
+            mat["specific"].update(copy.deepcopy(ov.get("specific", {})))
+            if "renderQueueOffset" in ov:
+                mat["renderQueueOffset"] = ov["renderQueueOffset"]
+    return result
+
+
 def resolve(look: dict[str, Any], variant: str = BASE) -> dict[str, dict[str, Any]]:
     """variant の上書きを base に適用した、マテリアルごとの最終値を返す。"""
-    result = copy.deepcopy(look.get("materials", {}))
-    if variant == BASE:
-        return result
-    for mat_name, ov in look["variants"][variant].get("overrides", {}).items():
-        mat = result[mat_name]
-        mat["common"].update(copy.deepcopy(ov.get("common", {})))
-        mat["specific"].update(copy.deepcopy(ov.get("specific", {})))
-        if "renderQueueOffset" in ov:
-            mat["renderQueueOffset"] = ov["renderQueueOffset"]
+    result = merged(look, variant)
+    # オフの機能のパラメータは「効果なしの値」で解決する（保存値は消さない。docs/11 §2）
+    pdefaults = {p.unity: p.default for p in params.SPECIFIC_PARAMS}
+    on = enabled_features(look)
+    for mat in result.values():
+        for k in list(mat["specific"]):
+            fid = features.FEATURE_OF_PARAM.get(k)
+            if fid and fid not in on:
+                mat["specific"][k] = copy.deepcopy(features.off_value(k, pdefaults.get(k)))
+        mat["features"] = on  # 解決結果だけに付ける（プレビュー・出力が使う。保存データには入らない）
     return result
 
 
@@ -327,7 +399,7 @@ def set_value(look: dict[str, Any], material: str, key: str, value: Any, variant
 
 def diff(look: dict[str, Any], a: str, b: str) -> list[tuple[str, str, Any, Any]]:
     """2 つのバリアントで値が異なる (material, key, a値, b値) の一覧。"""
-    ra, rb = resolve(look, a), resolve(look, b)
+    ra, rb = merged(look, a), merged(look, b)  # 差分は保存されている値で見る（オフの機能も含めて）
     rows = []
     for mat in sorted(ra):
         for section in ("common", "specific"):
@@ -343,7 +415,7 @@ def diff(look: dict[str, Any], a: str, b: str) -> list[tuple[str, str, Any, Any]
 
 def promote(look: dict[str, Any], variant: str) -> None:
     """variant の内容を base に確定し、variant を削除する（B 案採用）。"""
-    look["materials"] = resolve(look, variant)
+    look["materials"] = merged(look, variant)  # resolve だとオフの機能の値・features が焼き込まれる
     del look["variants"][variant]
 
 
@@ -382,7 +454,7 @@ def to_ddrive_material_data(look: dict[str, Any], material: str, variant: str = 
         "Specific": [
             {"Property": k, "Value": _param_value(v)}
             for k, v in sorted(mat["specific"].items())
-            if v is not None
+            if v is not None and features.FEATURE_OF_PARAM.get(k) in mat["features"]
         ],
         "RenderQueueOffset": mat["renderQueueOffset"],
         "RenderQueue": params.BASE_RENDER_QUEUE[c["blend"]] + mat["renderQueueOffset"],

@@ -13,7 +13,7 @@ from typing import Any, Iterable
 
 from maya import cmds
 
-from . import REPO_ROOT, environment, look, preview, roles
+from . import REPO_ROOT, environment, features, look, preview, roles
 
 LOOKS_DIR = REPO_ROOT / "looks"
 CAPTURE_DIR = REPO_ROOT / "captures"
@@ -214,6 +214,35 @@ class Session:
         targets = [m for mat in self.require()["parts"][part]["materials"] for m in meshes.get(mat, [])]
         cmds.select(targets, replace=True)
 
+    # ------------------------------------------------------------ 機能のオン/オフ（docs/11）
+    def feature_enabled(self, feature_id: str) -> bool:
+        return look.enabled(self.require(), feature_id)
+
+    @undoable
+    def set_feature(self, feature_id: str, on: bool) -> None:
+        """機能をオン/オフする。保存値は残し、プレビューは効果なしの値で描き直す。"""
+        lk = self.require()
+        look.set_feature(lk, feature_id, on)
+        if preview.is_active():
+            preview.enable(look.resolve(lk, self.shown))
+            self._sync_character_preview()
+        self._changed()
+
+    @undoable
+    def disable_unused_features(self) -> list[str]:
+        """使っていない（値がすべて効果なしの）機能をオフにする。オフにした ID を返す。"""
+        lk = self.require()
+        used = look.used_features(lk)
+        off = [f.id for f in features.FEATURES
+               if not f.required and look.enabled(lk, f.id) and f.id not in used]
+        for fid in off:
+            look.set_feature(lk, fid, False)
+        if off and preview.is_active():
+            preview.enable(look.resolve(lk, self.shown))
+            self._sync_character_preview()
+        self._changed(dirty=bool(off))
+        return off
+
     # ------------------------------------------------------------ キャラクター単位の設定（docs/02 §4.1）
     def setting(self, path: str) -> Any:
         return look.get_setting(self.require(), path)
@@ -232,7 +261,8 @@ class Session:
         lk = self.look
         if lk is None:
             return
-        amount = float(lk.get(look.SETTINGS, {}).get("depthCompression", 0.0))
+        cs = look.resolved_settings(lk)  # オフの機能の設定は効果なし
+        amount = float(cs["depthCompression"])
         resolved = look.resolve(lk, self.shown)
         weighted = [m for m, v in resolved.items() if v["specific"].get("_ToonDepthCompressWeight", 0) > 0]
         scene = preview.scene_materials()
@@ -242,7 +272,7 @@ class Session:
             b = cmds.exactWorldBoundingBox(meshes)
             pivot = ((b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2)
         preview.set_depth_compression(amount, pivot)
-        fs = lk.get(look.SETTINGS, {}).get("faceShadow", look.CHARACTER_DEFAULTS["faceShadow"])
+        fs = cs["faceShadow"]
         preview.set_face_axes(fs["forward"], fs["right"])
 
     # ------------------------------------------------------------ カメラ角度の補正 BlendShape（T-20）
@@ -309,6 +339,8 @@ class Session:
 
         対応表の値をプレビューに流すだけなので、表示を切り替える（show）と Look の値に戻る。
         """
+        if not look.enabled(self.require(), "expressions"):
+            return []  # 機能がオフ
         rows = look.expression_values(self.require(), name, t)
         for material, prop, value in rows:
             preview.apply_value(material, prop, value)
@@ -382,7 +414,7 @@ class Session:
         return [target]
 
     def value(self, material: str, key: str) -> Any:
-        mat = look.resolve(self.require(), self.edit_variant)[material]
+        mat = look.merged(self.require(), self.edit_variant)[material]  # 編集中の値（オフの機能でも保存値を見せる）
         if key == "renderQueueOffset":
             return mat["renderQueueOffset"]
         if key.startswith("common."):
@@ -616,6 +648,11 @@ class Session:
             "lookVersion": lk["lookVersion"],
             "variant": variant,
             "parts": lk["parts"],
+            "features": look.enabled_features(lk),  # プロジェクト専用シェーダーの生成に使う（docs/11 §3）
+            "characterSettings": {  # オンの機能の設定だけ（オフは Unity 側で処理しない）
+                k: v for k, v in look.resolved_settings(lk).items()
+                if look.enabled(lk, features.FEATURE_OF_SETTING[k])
+            },
             "materials": {m: look.to_ddrive_material_data(lk, m, variant) for m in sorted(lk["materials"])},
         }
         path = out / f"{lk['character']}_{variant}.materialdata.json"

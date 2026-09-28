@@ -16,6 +16,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from . import __version__, environment, look, preview, roles, session
 from .ui_ab import ABTab
 from .ui_character import CharacterTab
+from .ui_features import FeaturesTab
 from .ui_look import LookTab
 from .ui_preview import PreviewTab
 
@@ -115,6 +116,8 @@ class EditorWindow(MayaQWidgetDockableMixin, QtWidgets.QWidget):
         self.tabs.addTab(self.look_tab, "ルック")
         self.character_tab = CharacterTab(self.session)
         self.tabs.addTab(self.character_tab, "キャラクター")
+        self.features_tab = FeaturesTab(self.session)
+        self.tabs.addTab(self.features_tab, "機能")
         self.ab_tab = ABTab(self.session)
         self.ab_tab.open_in_look.connect(self._open_in_look)
         self.tabs.addTab(self.ab_tab, "A/B")
@@ -160,6 +163,7 @@ class EditorWindow(MayaQWidgetDockableMixin, QtWidgets.QWidget):
         self.parts_tab.refresh()
         self.look_tab.refresh()
         self.character_tab.refresh()
+        self.features_tab.refresh()
         self.ab_tab.refresh()
         self.preview_tab.refresh()
         problems = environment.parity_problems()

@@ -134,3 +134,52 @@ def test_old_look_gets_character_settings(tmp_path):
     p = tmp_path / "old.json"
     p.write_text(look.dumps(lk), encoding="utf-8")
     assert look.load(p)[look.SETTINGS]["contactShadow"]["radius"] == 0.25
+
+
+def test_every_param_and_setting_belongs_to_exactly_one_feature():
+    from tdrive_toon import features
+
+    owners = {}
+    for f in features.FEATURES:
+        for p in f.params:
+            assert p not in owners, f"{p} が {owners.get(p)} と {f.id} の両方に属している"
+            owners[p] = f.id
+    assert set(owners) == {p.unity for p in params.SPECIFIC_PARAMS}
+    assert set(features.FEATURE_OF_SETTING) == set(look.CHARACTER_DEFAULTS)
+
+
+def test_feature_off_resolves_to_no_effect_and_keeps_saved_value():
+    lk = _sample()
+    look.set_feature(lk, "rim", True)
+    look.set_value(lk, "hair", "_ToonRimStrength", 0.6)
+    assert look.resolve(lk)["hair"]["specific"]["_ToonRimStrength"] == 0.6
+    look.set_feature(lk, "rim", False)
+    assert look.resolve(lk)["hair"]["specific"]["_ToonRimStrength"] == 0.0  # 効果なし
+    assert lk["materials"]["hair"]["specific"]["_ToonRimStrength"] == 0.6  # 保存値は残る
+    look.set_feature(lk, "outline", False)
+    assert look.resolve(lk)["hair"]["specific"]["_ToonOutlineWidth"] == 0.0  # 既定値が効果ありのものは off_values
+    md = look.to_ddrive_material_data(lk, "hair")
+    props = {x["Property"] for x in md["Specific"]}
+    assert "_ToonRimStrength" not in props and "_ToonOutlineWidth" not in props  # オフの機能は出力しない
+    with pytest.raises(ValueError):
+        look.set_feature(lk, "shade", False)
+
+
+def test_old_look_turns_on_used_features():
+    lk = _sample()
+    look.set_value(lk, "hair", "_ToonRimStrength", 0.5)
+    del lk[look.FEATURES]
+    look.upgrade(lk)
+    assert lk[look.FEATURES]["rim"] is True  # 使われていたのでオン（見た目が変わらない）
+    assert lk[look.FEATURES]["matCap"] is False
+    assert lk[look.FEATURES]["outline"] is True  # 既定でオン
+
+
+def test_promote_does_not_bake_off_values():
+    lk = _sample()
+    look.set_value(lk, "hair", "_ToonRimStrength", 0.6)
+    look.add_variant(lk, "B")
+    look.set_value(lk, "hair", "_ToonShadeThreshold", 0.3, variant="B")
+    look.promote(lk, "B")  # rim はオフのまま
+    assert lk["materials"]["hair"]["specific"]["_ToonRimStrength"] == 0.6
+    assert "features" not in lk["materials"]["hair"]

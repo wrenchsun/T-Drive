@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from . import look, params, session
+from . import features, look, params, session
 
 UNITY_ONLY = "<span style='color:#9aa6b8'>（Unity でのみ）</span>"
 
@@ -27,19 +27,24 @@ class CharacterTab(QtWidgets.QWidget):
         body = QtWidgets.QWidget()
         self.form = QtWidgets.QVBoxLayout(body)
         scroll.setWidget(body)
+        self.hidden_note = QtWidgets.QLabel()
+        self.hidden_note.setWordWrap(True)
+        self.hidden_note.setStyleSheet("color: #9aa6b8;")
+        outer.addWidget(self.hidden_note)
         outer.addWidget(scroll)
+        self.feature_boxes: dict[str, QtWidgets.QGroupBox] = {}
 
         # ---- ライト（影の安定化） T-17
-        box, f = self._group(f"キャラクターライトの安定化 {UNITY_ONLY}")
+        box, f = self._group(f"キャラクターライトの安定化 {UNITY_ONLY}", feature="lightStabilize")
         self.smoothing = self._spin(f, "平滑化（秒）", "light.smoothing", 0.0, 2.0, 0.05)
         self.hysteresis = self._spin(f, "ヒステリシス（度）", "light.hysteresisDeg", 0.0, 20.0, 0.5)
 
         # ---- ステンシル T-24
-        box, f = self._group(f"髪越し表示（ステンシル） {UNITY_ONLY}")
+        box, f = self._group(f"髪越し表示（ステンシル） {UNITY_ONLY}", feature="stencil")
         self.stencil = self._check(f, "使う（眉・目・アイラインを前髪の上に。Maya では「手前に出す」で代わりに確認）", "stencil.enabled")
 
         # ---- インナーライン T-23
-        box, f = self._group(f"画面上の内側の線（インナーライン） {UNITY_ONLY}")
+        box, f = self._group(f"画面上の内側の線（インナーライン） {UNITY_ONLY}", feature="innerLine")
         self.il_enabled = self._check(f, "使う", "innerLine.enabled")
         self.il_width = self._spin(f, "線幅（px@1080p）", "innerLine.width", 0.0, 10.0, 0.1)
         self.il_color = QtWidgets.QPushButton()
@@ -51,18 +56,18 @@ class CharacterTab(QtWidgets.QWidget):
         f.addRow("線を出す部位", self.il_parts)
 
         # ---- 接地影 T-29
-        box, f = self._group(f"接地影 {UNITY_ONLY}")
+        box, f = self._group(f"接地影 {UNITY_ONLY}", feature="contactShadow")
         self.cs_enabled = self._check(f, "使う", "contactShadow.enabled")
         self.cs_radius = self._spin(f, "半径（m）", "contactShadow.radius", 0.01, 2.0, 0.01)
         self.cs_strength = self._spin(f, "濃さ", "contactShadow.strength", 0.0, 1.0, 0.05)
 
         # ---- 奥行き圧縮 T-22（Maya でもプレビュー可）
-        box, f = self._group("奥行き圧縮（顔を平面的に）")
+        box, f = self._group("奥行き圧縮（顔を平面的に）", feature="depthCompression")
         self.depth = self._spin(f, "量（0〜1）", "depthCompression", 0.0, 1.0, 0.05)
         f.addRow("", QtWidgets.QLabel("効かせる部位は ルックタブ › 手前に出す › 奥行き圧縮の効かせ具合（例: 顔だけ 1）"))
 
         # ---- SDF 顔影マップ T-21（docs/05 §3.3）
-        box, f = self._group("顔影マップ（SDF。ライトの角度で顔の影を作画どおりに進める）")
+        box, f = self._group("顔影マップ（SDF。ライトの角度で顔の影を作画どおりに進める）", feature="faceShadowSdf")
         gen = QtWidgets.QPushButton("マスクから生成…")
         gen.setToolTip("角度ごとの白黒マスク（face_shadow_000.png, _030 … _180）が入ったフォルダを選ぶ → 顔マテリアルに設定")
         gen.clicked.connect(self._generate_face_shadow)
@@ -78,7 +83,7 @@ class CharacterTab(QtWidgets.QWidget):
         f.addRow("", QtWidgets.QLabel("効かせ具合はルックタブ › 顔影マップ（SDF）。顔はキャラクターが +Z（正面）を向いている前提"))
 
         # ---- カメラ角度補正 T-20（docs/05 §3.2）
-        box, f = self._group("カメラ角度補正（正面 / 3/4 / 横で顔の形を補正する BlendShape）")
+        box, f = self._group("カメラ角度補正（正面 / 3/4 / 横で顔の形を補正する BlendShape）", feature="viewCorrection")
         self.vc_mesh = QtWidgets.QLabel()
         f.addRow("対象メッシュ", self.vc_mesh)
         self.vc = {}
@@ -110,7 +115,7 @@ class CharacterTab(QtWidgets.QWidget):
         f.addRow("", row)
 
         # ---- 表情パラメータ T-25（3-9 プレビュー）
-        box, v = self._group("表情パラメータ（0〜1 の入力で値を動かす対応表）", form=False)
+        box, v = self._group("表情パラメータ（0〜1 の入力で値を動かす対応表）", form=False, feature="expressions")
         row = QtWidgets.QHBoxLayout()
         self.expr = QtWidgets.QComboBox()
         self.expr.currentIndexChanged.connect(self._show_expression)
@@ -141,8 +146,10 @@ class CharacterTab(QtWidgets.QWidget):
         self.form.addStretch(1)
 
     # -------------------------------------------------------------- 部品
-    def _group(self, title: str, form: bool = True):
+    def _group(self, title: str, form: bool = True, feature: str | None = None):
         box = QtWidgets.QGroupBox()
+        if feature:
+            self.feature_boxes[feature] = box
         lay = QtWidgets.QVBoxLayout(box)
         head = QtWidgets.QLabel(f"<b>{title}</b>")
         lay.addWidget(head)
@@ -203,6 +210,14 @@ class CharacterTab(QtWidgets.QWidget):
         self.setEnabled(lk is not None)
         if lk is None:
             return
+        off = []
+        for fid, box in self.feature_boxes.items():
+            on = look.enabled(lk, fid)
+            box.setVisible(on)
+            if not on:
+                off.append(features.BY_ID[fid].label)
+        self.hidden_note.setText(f"オフの機能は隠しています（機能タブ）: {'、'.join(off)}" if off else "")
+        self.hidden_note.setVisible(bool(off))
         self._updating = True
         try:
             for w in self.findChildren(QtWidgets.QDoubleSpinBox):

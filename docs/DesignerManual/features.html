@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>機能のオン/オフ - T-Drive デザイナーマニュアル</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<nav class="breadcrumb"><a href="Readme.html">トップ</a> › 機能のオン/オフ</nav>
+<h1>機能のオン/オフ（機能タブ）</h1>
+<p class="lastupdate">最終更新日: 2026-09-28</p>
+
+<p>リム・髪ハイライト・MatCap などの表現（<strong>機能</strong>）を、キャラクターごとに<strong>使う / 使わない</strong>で切り替えます。</p>
+<ul>
+<li>オフにした機能は「効果なし」で表示され、Unity にも渡りません</li>
+<li>Unity では、プロジェクトのキャラクターが使う機能だけを入れた<strong>専用のシェーダー</strong>が作られます。使わない機能を切るほどゲームが軽くなります</li>
+<li>オフにしても<strong>調整した値は消えません</strong>。オンに戻すと元の見た目に戻ります</li>
+</ul>
+
+<h2>使い方</h2>
+<ol>
+<li>エディタの <strong>機能</strong> タブを開く</li>
+<li>使う機能の <strong>オン</strong> にチェックを入れる / 使わない機能のチェックを外す。ビューポートにすぐ反映されます</li>
+<li>オフの機能のパラメータは、ルックタブ・キャラクタータブから<strong>隠れます</strong>（上に「オフの機能は隠しています」と表示）</li>
+<li>調整が終わったら <strong>使っていない機能をオフにする</strong> を押すと、値が既定のまま（= 使っていない）機能がまとめてオフになります</li>
+</ol>
+<div class="tip">間違えてオフにしても <strong>Ctrl+Z</strong> で戻せます。</div>
+
+<h2>表の見方</h2>
+<table>
+<tr><th>列</th><th>意味</th></tr>
+<tr><td>オン</td><td>チェックが入っている機能だけが効きます。「2 階調影」は必須なので外せません</td></tr>
+<tr><td>技術</td><td>技術一覧（T-xx）の番号</td></tr>
+<tr><td>Unity での実現</td><td>シェーダー / メッシュ / コンポーネント / Renderer Feature（画面効果）のどれで作るか</td></tr>
+<tr><td>Maya プレビュー</td><td>○ = Maya でも同じ見た目、△ = 簡易表示（Unity で最終確認）、× = Maya では確認できない</td></tr>
+<tr><td>使用中</td><td>● = 値が既定と違う（使っている）。<span style="color:#f0a040">値あり（オフ中）</span> = 調整値が残っているがオフなので効いていない</td></tr>
+</table>
+
+<h2>最初にオンになっている機能</h2>
+<p>新しい Look では、基本の表現（2 階調影・輪郭線・線のスムーズ法線・頂点カラーの Toon マスク・固定色）だけがオンです。それ以外は必要になったらオンにしてください。</p>
+<p>この機能が入る前に作った Look を開いたときは、<strong>値を調整していた機能が自動でオン</strong>になります（見た目は変わりません）。</p>
+
+<h2>注意</h2>
+<ul>
+<li>機能のオン/オフはキャラクター単位です（A/B のバリアントごとには変えられません）</li>
+<li>他のキャラクターが使っている機能は、このキャラクターでオフにしてもプロジェクトのシェーダーには残ります（そのキャラクターでは効果なし）</li>
+</ul>
+
+<p>関連: <a href="look-params.html">見た目のパラメータ</a> / <a href="character.html">キャラクター設定</a> / <a href="export.html">Unity 出力</a></p>
+
+<footer><a href="Readme.html">トップへ戻る</a></footer>
+</body>
+</html>
