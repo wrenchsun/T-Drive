@@ -186,6 +186,31 @@ def run() -> None:
           all(k.endswith("Orig") for k in baked) and all(smooth_normals.has_smooth_normals(m) for m in s.meshes_for("hair")),
           str(list(baked)))
 
+    # ---- 同名メッシュ（キャラクターの複製）があっても動く（2026-09-28 不具合: Toon に戻らない）
+    dup_group = cmds.group(empty=True, name="tdDupTest")
+    dup = cmds.duplicate(s.meshes_for("cloth")[0])[0]  # 同じ短い名前（Leg 等）のメッシュが 2 つになる
+    cmds.parent(dup, dup_group)
+    s.set_preview(False)
+    s.set_preview(True)
+    check("同名メッシュがあっても Toon ⇔ 元の見た目 が往復できる", preview.is_active())
+    cmds.delete(dup_group)
+
+    # ---- エディタ内 Undo は部位操作も戻せる / Maya の Undo はプレビューを戻さない
+    s.rename_part("hair", "hair2")
+    s.undo()
+    check("部位名変更を Undo で戻せる", "hair" in s.look["parts"] and "hair2" not in s.look["parts"])
+    s.add_variant("C", "テスト", "base")
+    s.undo()
+    check("バリアント追加を Undo で戻せる", "C" not in s.look["variants"])
+    cmds.undoInfo(state=True)
+    cmds.undoInfo(openChunk=True)
+    cmds.polyCube(name="tdUndoProbe")  # Maya の Undo で戻る操作
+    cmds.undoInfo(closeChunk=True)
+    s.set_preview(False)
+    s.set_preview(True)
+    cmds.undo()  # 直前の Maya の操作（キューブ作成）だけが戻り、プレビューの割り当ては戻らないこと
+    check("Maya の Undo でプレビューの割り当てが戻らない", preview.is_active() and not cmds.objExists("tdUndoProbe"))
+
     # ---- Unity 向け FBX（別プロセスの mayapy で整形・書き出し。開いているシーンは変わらない）
     from maya.api import OpenMaya as om
 

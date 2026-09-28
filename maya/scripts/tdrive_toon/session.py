@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
+from functools import wraps
 from typing import Any, Iterable
 
 from maya import cmds
@@ -17,6 +18,23 @@ from . import REPO_ROOT, environment, look, preview, roles
 LOOKS_DIR = REPO_ROOT / "looks"
 CAPTURE_DIR = REPO_ROOT / "captures"
 EXPORT_DIR = REPO_ROOT / "build" / "unity"
+
+
+def undoable(fn):
+    """エディタ内 Undo の区切り（checkpoint）を自動で入れる。入れ子の呼び出しでは外側の 1 回だけ。"""
+
+    @wraps(fn)
+    def wrapper(self, *args, **kwargs):
+        outer = self._undo_depth == 0
+        if outer:
+            self.checkpoint()
+        self._undo_depth += 1
+        try:
+            return fn(self, *args, **kwargs)
+        finally:
+            self._undo_depth -= 1
+
+    return wrapper
 
 
 class Session:
@@ -30,6 +48,7 @@ class Session:
         self.listeners: list = []  # 変更通知（UI 更新用）
         self._undo: list[dict[str, Any]] = []  # Look のスナップショット（エディタ内 Undo。Maya の Undo とは別）
         self._redo: list[dict[str, Any]] = []
+        self._undo_depth = 0
 
     # ------------------------------------------------------------ 状態
     def require(self) -> dict[str, Any]:
@@ -92,6 +111,7 @@ class Session:
         return path
 
     # ------------------------------------------------------------ 部位登録
+    @undoable
     def auto_register(self, overwrite: bool = False) -> dict[str, str]:
         """シーン内のマテリアルをロール推定で部位登録する。登録した {material: part} を返す。"""
         lk = self.require()
@@ -107,6 +127,7 @@ class Session:
         self._changed()
         return done
 
+    @undoable
     def register(self, part: str, role: str, materials: Iterable[str]) -> None:
         mats = list(materials)
         if not mats:
@@ -133,11 +154,13 @@ class Session:
         if preview.is_active():
             preview.enable({m: look.resolve(lk, self.shown)[m] for m in mats})
 
+    @undoable
     def unregister(self, part: str) -> None:
         lk = self.require()
         lk["parts"].pop(part, None)
         self._changed()
 
+    @undoable
     def set_role(self, part: str, role: str, apply_preset: bool) -> None:
         """部位のロールを変える。apply_preset=True なら所属マテリアルにロールのプリセットを再適用する。"""
         lk = self.require()
@@ -150,6 +173,7 @@ class Session:
             lk["parts"][part]["role"] = role
         self._changed()
 
+    @undoable
     def rename_part(self, old: str, new: str) -> None:
         lk = self.require()
         new = new.strip()
@@ -160,6 +184,7 @@ class Session:
         lk["parts"] = {(new if k == old else k): v for k, v in lk["parts"].items()}
         self._changed()
 
+    @undoable
     def move_material(self, material: str, part: str, role: str | None = None) -> None:
         """マテリアルを別の部位へ移す（部位が無ければ作る）。移動先のプリセットはそのマテリアルにだけ適用する。"""
         lk = self.require()
@@ -341,10 +366,12 @@ class Session:
         return True
 
     # ------------------------------------------------------------ バリアント / A/B
+    @undoable
     def add_variant(self, name: str, label: str = "", copy_from: str | None = None) -> None:
         look.add_variant(self.require(), name, label, copy_from or self.edit_variant)
         self._changed()
 
+    @undoable
     def delete_variant(self, name: str) -> None:
         lk = self.require()
         lk["variants"].pop(name, None)
@@ -355,6 +382,7 @@ class Session:
             self.show(look.BASE)
         self._changed()
 
+    @undoable
     def promote(self, name: str) -> None:
         look.promote(self.require(), name)
         self.delete_variant(name)

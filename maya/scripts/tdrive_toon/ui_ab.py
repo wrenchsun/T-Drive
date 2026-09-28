@@ -184,14 +184,12 @@ class ABTab(QtWidgets.QWidget):
         b = self.session.ab[1]
         r = QtWidgets.QMessageBox.question(self, "採用", f"B（{b}）の内容を base に確定し、B を削除します。よろしいですか？\n（ルックタブの 元に戻す で取り消せます）")
         if r == QtWidgets.QMessageBox.Yes:
-            self.session.checkpoint()
             self._run(self.session.promote, b)
 
     def on_delete(self) -> None:
         b = self.session.ab[1]
         r = QtWidgets.QMessageBox.question(self, "削除", f"バリアント B（{b}）を削除しますか？（元に戻す で取り消せます）")
         if r == QtWidgets.QMessageBox.Yes:
-            self.session.checkpoint()
             self._run(self.session.delete_variant, b)
 
 

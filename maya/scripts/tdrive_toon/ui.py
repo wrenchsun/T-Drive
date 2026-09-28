@@ -11,7 +11,7 @@ from pathlib import Path
 
 from maya import cmds
 from maya.app.general.mayaMixin import MayaQWidgetDockableMixin
-from PySide6 import QtCore, QtWidgets
+from PySide6 import QtCore, QtGui, QtWidgets
 
 from . import __version__, environment, look, preview, roles, session
 from .ui_ab import ABTab
@@ -119,6 +119,12 @@ class EditorWindow(MayaQWidgetDockableMixin, QtWidgets.QWidget):
         self.tabs.addTab(self.preview_tab, "プレビュー")
         layout.addWidget(self.tabs, 1)
 
+        # エディタ内 Undo（Look の値）。どのタブにフォーカスがあっても効く。Maya の Undo とは別
+        for key, fn in (("Ctrl+Z", self._undo), ("Ctrl+Y", self._redo), ("Ctrl+Shift+Z", self._redo)):
+            sc = QtGui.QShortcut(QtGui.QKeySequence(key), self)
+            sc.setContext(QtCore.Qt.WidgetWithChildrenShortcut)
+            sc.activated.connect(fn)
+
         self.session.listeners.append(self.refresh)
         self.refresh()
 
@@ -133,6 +139,14 @@ class EditorWindow(MayaQWidgetDockableMixin, QtWidgets.QWidget):
     def closeEvent(self, event) -> None:  # noqa: N802 (Qt)
         self.detach()
         super().closeEvent(event)
+
+    def _undo(self) -> None:
+        if not self.session.undo():
+            cmds.inViewMessage(amg="T-Drive: これ以上元に戻せません", pos="topCenter", fade=True)
+
+    def _redo(self) -> None:
+        if not self.session.redo():
+            cmds.inViewMessage(amg="T-Drive: やり直せる操作がありません", pos="topCenter", fade=True)
 
     def _open_in_look(self, target: str) -> None:
         self.tabs.setCurrentWidget(self.look_tab)
@@ -381,7 +395,9 @@ class PartsTab(QtWidgets.QWidget):
                 combo.currentIndexChanged.connect(lambda _i, p=part, c=combo: self.on_role_changed(p, c.currentData()))
                 self.table.setCellWidget(row, 2, combo)
 
-                meshes = QtWidgets.QTableWidgetItem(", ".join(scene.get(mat, [])))
+                paths = scene.get(mat, [])
+                meshes = QtWidgets.QTableWidgetItem(", ".join(preview.short_name(p) for p in paths))
+                meshes.setToolTip("\n".join(paths))  # 同名メッシュの区別用に完全パス
                 meshes.setFlags(meshes.flags() & ~QtCore.Qt.ItemIsEditable)
                 self.table.setItem(row, 3, meshes)
             self.table.resizeColumnsToContents()

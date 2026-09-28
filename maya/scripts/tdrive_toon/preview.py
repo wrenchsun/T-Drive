@@ -35,6 +35,29 @@ _env: dict[str, Any] = {
 # ---------------------------------------------------------------- 準備
 
 
+def outside_maya_undo(fn):
+    """プレビューの見た目の更新を Maya の Undo 履歴に積まない。
+
+    積むと、ビューポートで Ctrl+Z したとき見た目（シェーダーの値・割り当て）だけが戻り、Look の値とずれる。
+    Look の値の Undo はエディタ内 Undo（session.undo）が担当する。
+    """
+    from functools import wraps
+
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        on = cmds.undoInfo(query=True, stateWithoutFlush=True)
+        if on:
+            cmds.undoInfo(stateWithoutFlush=False)
+        try:
+            return fn(*args, **kwargs)
+        finally:
+            if on:
+                cmds.undoInfo(stateWithoutFlush=True)
+
+    return wrapper
+
+
+
 def ensure_plugin() -> None:
     if not cmds.pluginInfo(NODE_TYPE, query=True, loaded=True):
         cmds.loadPlugin(NODE_TYPE, quiet=True)
@@ -44,21 +67,28 @@ def ensure_plugin() -> None:
 
 
 def scene_materials() -> dict[str, list[str]]:
-    """メッシュに割り当てられている元マテリアル名 → メッシュ(transform)一覧。割り当ての無いメッシュは対象外。"""
+    """メッシュに割り当てられている元マテリアル名 → メッシュ(transform)の**完全パス**一覧。割り当ての無いメッシュは対象外。
+
+    完全パスで返す: 同名メッシュ（キャラクターの複製・複数読み込み）があっても曖昧にならないように。
+    表示では short_name() で末尾だけにする。
+    """
     result: dict[str, set[str]] = {}
     for sg in cmds.ls(type="shadingEngine"):
         shader = _surface_shader(sg)
         if not shader:
             continue
         meshes = set()
-        for m in cmds.sets(sg, query=True) or []:
-            node = m.split(".")[0]
-            if cmds.nodeType(node) == "mesh":
-                node = cmds.listRelatives(node, parent=True)[0]
-            meshes.add(node)
+        for m in cmds.ls(cmds.sets(sg, query=True) or [], long=True, objectsOnly=True):
+            if cmds.nodeType(m) == "mesh":
+                m = cmds.listRelatives(m, parent=True, fullPath=True)[0]
+            meshes.add(m)
         if meshes:
             result.setdefault(source_material(shader), set()).update(meshes)
     return {k: sorted(v) for k, v in sorted(result.items())}
+
+
+def short_name(path: str) -> str:
+    return path.split("|")[-1]
 
 
 def source_material(shader: str) -> str:
@@ -153,6 +183,7 @@ def is_active() -> bool:
     return any(cmds.sets(sg, query=True) for s in preview_shaders() if (sg := _shading_group(s)))
 
 
+@outside_maya_undo
 def enable(materials: dict[str, dict[str, Any]]) -> list[str]:
     """resolve 済みのマテリアル値でプレビューを有効化する。シーンに無かったマテリアル名を返す。"""
     ensure_plugin()
@@ -169,6 +200,7 @@ def enable(materials: dict[str, dict[str, Any]]) -> list[str]:
     return missing
 
 
+@outside_maya_undo
 def disable() -> None:
     """元マテリアルの割り当てに戻す（プレビューシェーダーは残し、次回すぐ有効化できるようにする）。"""
     for shader in preview_shaders():
@@ -177,6 +209,7 @@ def disable() -> None:
             _swap(_shading_group(shader), _shading_group(src))
 
 
+@outside_maya_undo
 def delete_all() -> None:
     disable()
     for shader in preview_shaders():
@@ -238,6 +271,7 @@ def technique_for(common: dict[str, Any]) -> str:
     return "OpaqueDoubleSided" if common.get("doubleSided") else "Opaque"
 
 
+@outside_maya_undo
 def apply_values(mat: str, values: dict[str, Any]) -> None:
     """values に含まれる項目だけを反映する（部分更新可）。"""
     shader = preview_shader_of(mat)
@@ -407,6 +441,7 @@ def set_light(direction: tuple[float, float, float] | None = None, color: tuple[
     apply_environment()
 
 
+@outside_maya_undo
 def apply_environment() -> None:
     for shader in preview_shaders():
         _set(shader, "PreviewLightDir", list(_env["lightDir"]))

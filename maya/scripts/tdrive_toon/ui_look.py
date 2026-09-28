@@ -40,13 +40,11 @@ class LookTab(QtWidgets.QWidget):
         self.variant.currentIndexChanged.connect(self.on_variant)
         top.addWidget(self.variant)
         top.addStretch(1)
+        # ショートカット（Ctrl+Z / Ctrl+Y）はエディタ全体で効くよう EditorWindow 側で登録している
         for text, fn, key in (("元に戻す", self.session.undo, "Ctrl+Z"), ("やり直す", self.session.redo, "Ctrl+Y")):
             b = QtWidgets.QPushButton(f"{text} ({key})")
             b.clicked.connect(fn)
             top.addWidget(b)
-            sc = QtGui.QShortcut(QtGui.QKeySequence(key), self)
-            sc.setContext(QtCore.Qt.WidgetWithChildrenShortcut)
-            sc.activated.connect(fn)
         v.addLayout(top)
 
         split = QtWidgets.QSplitter()
