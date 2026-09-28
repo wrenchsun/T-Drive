@@ -1,0 +1,532 @@
+{
+  "character": "unitychan",
+  "lookVersion": "0.1.0",
+  "materials": {
+    "body": {
+      "common": {
+        "albedo": "assets/unitychan/textures/body_01.tga",
+        "albedoTint": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "blend": "Opaque",
+        "cutoff": 0.5,
+        "doubleSided": false,
+        "emission": null,
+        "emissionColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "emissionIntensity": 0.0,
+        "normal": null,
+        "normalScale": 1.0
+      },
+      "renderQueueOffset": 0,
+      "shader": "MS2026/Toon",
+      "specific": {
+        "_ToonOutlineBaseMix": 0.5,
+        "_ToonOutlineColor": [
+          0.28,
+          0.2,
+          0.2,
+          1.0
+        ],
+        "_ToonOutlineSmoothNormal": 1.0,
+        "_ToonOutlineWidth": 1.0,
+        "_ToonShadeColor": [
+          0.78,
+          0.72,
+          0.86,
+          1.0
+        ],
+        "_ToonShadeFeather": 0.02,
+        "_ToonShadeThreshold": 0.5,
+        "_ToonShadowStrength": 1.0,
+        "_ToonTintColor": [
+          1.0,
+          0.6,
+          0.6,
+          1.0
+        ],
+        "_ToonTintStrength": 0.0
+      }
+    },
+    "eye_L1": {
+      "common": {
+        "albedo": "assets/unitychan/textures/eye_iris_L_00.tga",
+        "albedoTint": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "blend": "Transparent",
+        "cutoff": 0.5,
+        "doubleSided": false,
+        "emission": null,
+        "emissionColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "emissionIntensity": 0.0,
+        "normal": null,
+        "normalScale": 1.0
+      },
+      "renderQueueOffset": 20,
+      "shader": "MS2026/Toon",
+      "specific": {
+        "_ToonOutlineBaseMix": 0.5,
+        "_ToonOutlineColor": [
+          0.28,
+          0.2,
+          0.2,
+          1.0
+        ],
+        "_ToonOutlineSmoothNormal": 1.0,
+        "_ToonOutlineWidth": 0.0,
+        "_ToonShadeColor": [
+          0.78,
+          0.72,
+          0.86,
+          1.0
+        ],
+        "_ToonShadeFeather": 0.02,
+        "_ToonShadeThreshold": 0.5,
+        "_ToonShadowStrength": 0.0,
+        "_ToonTintColor": [
+          1.0,
+          0.6,
+          0.6,
+          1.0
+        ],
+        "_ToonTintStrength": 0.0
+      }
+    },
+    "eye_R1": {
+      "common": {
+        "albedo": "assets/unitychan/textures/eye_iris_R_00.tga",
+        "albedoTint": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "blend": "Transparent",
+        "cutoff": 0.5,
+        "doubleSided": false,
+        "emission": null,
+        "emissionColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "emissionIntensity": 0.0,
+        "normal": null,
+        "normalScale": 1.0
+      },
+      "renderQueueOffset": 20,
+      "shader": "MS2026/Toon",
+      "specific": {
+        "_ToonOutlineBaseMix": 0.5,
+        "_ToonOutlineColor": [
+          0.28,
+          0.2,
+          0.2,
+          1.0
+        ],
+        "_ToonOutlineSmoothNormal": 1.0,
+        "_ToonOutlineWidth": 0.0,
+        "_ToonShadeColor": [
+          0.78,
+          0.72,
+          0.86,
+          1.0
+        ],
+        "_ToonShadeFeather": 0.02,
+        "_ToonShadeThreshold": 0.5,
+        "_ToonShadowStrength": 0.0,
+        "_ToonTintColor": [
+          1.0,
+          0.6,
+          0.6,
+          1.0
+        ],
+        "_ToonTintStrength": 0.0
+      }
+    },
+    "eyebase": {
+      "common": {
+        "albedo": "assets/unitychan/textures/face_00.tga",
+        "albedoTint": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "blend": "Opaque",
+        "cutoff": 0.5,
+        "doubleSided": false,
+        "emission": null,
+        "emissionColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "emissionIntensity": 0.0,
+        "normal": null,
+        "normalScale": 1.0
+      },
+      "renderQueueOffset": 20,
+      "shader": "MS2026/Toon",
+      "specific": {
+        "_ToonOutlineBaseMix": 0.5,
+        "_ToonOutlineColor": [
+          0.28,
+          0.2,
+          0.2,
+          1.0
+        ],
+        "_ToonOutlineSmoothNormal": 1.0,
+        "_ToonOutlineWidth": 0.0,
+        "_ToonShadeColor": [
+          0.78,
+          0.72,
+          0.86,
+          1.0
+        ],
+        "_ToonShadeFeather": 0.02,
+        "_ToonShadeThreshold": 0.5,
+        "_ToonShadowStrength": 0.0,
+        "_ToonTintColor": [
+          1.0,
+          0.6,
+          0.6,
+          1.0
+        ],
+        "_ToonTintStrength": 0.0
+      }
+    },
+    "eyeline": {
+      "common": {
+        "albedo": "assets/unitychan/textures/eyeline_00.tga",
+        "albedoTint": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "blend": "Transparent",
+        "cutoff": 0.5,
+        "doubleSided": false,
+        "emission": null,
+        "emissionColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "emissionIntensity": 0.0,
+        "normal": null,
+        "normalScale": 1.0
+      },
+      "renderQueueOffset": 25,
+      "shader": "MS2026/Toon",
+      "specific": {
+        "_ToonOutlineBaseMix": 0.5,
+        "_ToonOutlineColor": [
+          0.28,
+          0.2,
+          0.2,
+          1.0
+        ],
+        "_ToonOutlineSmoothNormal": 1.0,
+        "_ToonOutlineWidth": 0.0,
+        "_ToonShadeColor": [
+          0.78,
+          0.72,
+          0.86,
+          1.0
+        ],
+        "_ToonShadeFeather": 0.02,
+        "_ToonShadeThreshold": 0.5,
+        "_ToonShadowStrength": 0.0,
+        "_ToonTintColor": [
+          1.0,
+          0.6,
+          0.6,
+          1.0
+        ],
+        "_ToonTintStrength": 0.0
+      }
+    },
+    "face": {
+      "common": {
+        "albedo": "assets/unitychan/textures/face_00.tga",
+        "albedoTint": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "blend": "Opaque",
+        "cutoff": 0.5,
+        "doubleSided": false,
+        "emission": null,
+        "emissionColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "emissionIntensity": 0.0,
+        "normal": null,
+        "normalScale": 1.0
+      },
+      "renderQueueOffset": 0,
+      "shader": "MS2026/Toon",
+      "specific": {
+        "_ToonOutlineBaseMix": 0.5,
+        "_ToonOutlineColor": [
+          0.28,
+          0.2,
+          0.2,
+          1.0
+        ],
+        "_ToonOutlineSmoothNormal": 1.0,
+        "_ToonOutlineWidth": 0.6,
+        "_ToonShadeColor": [
+          0.78,
+          0.72,
+          0.86,
+          1.0
+        ],
+        "_ToonShadeFeather": 0.02,
+        "_ToonShadeThreshold": 0.45,
+        "_ToonShadowStrength": 0.35,
+        "_ToonTintColor": [
+          1.0,
+          0.6,
+          0.6,
+          1.0
+        ],
+        "_ToonTintStrength": 0.0
+      }
+    },
+    "hair": {
+      "common": {
+        "albedo": "assets/unitychan/textures/hair_01.tga",
+        "albedoTint": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "blend": "Opaque",
+        "cutoff": 0.5,
+        "doubleSided": false,
+        "emission": null,
+        "emissionColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "emissionIntensity": 0.0,
+        "normal": null,
+        "normalScale": 1.0
+      },
+      "renderQueueOffset": 10,
+      "shader": "MS2026/Toon",
+      "specific": {
+        "_ToonOutlineBaseMix": 0.5,
+        "_ToonOutlineColor": [
+          0.28,
+          0.2,
+          0.2,
+          1.0
+        ],
+        "_ToonOutlineSmoothNormal": 1.0,
+        "_ToonOutlineWidth": 1.3,
+        "_ToonShadeColor": [
+          0.78,
+          0.72,
+          0.86,
+          1.0
+        ],
+        "_ToonShadeFeather": 0.02,
+        "_ToonShadeThreshold": 0.5,
+        "_ToonShadowStrength": 1.0,
+        "_ToonTintColor": [
+          1.0,
+          0.6,
+          0.6,
+          1.0
+        ],
+        "_ToonTintStrength": 0.0
+      }
+    },
+    "mat_cheek": {
+      "common": {
+        "albedo": "assets/unitychan/textures/cheek_00.tga",
+        "albedoTint": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "blend": "Transparent",
+        "cutoff": 0.5,
+        "doubleSided": false,
+        "emission": null,
+        "emissionColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "emissionIntensity": 0.0,
+        "normal": null,
+        "normalScale": 1.0
+      },
+      "renderQueueOffset": 40,
+      "shader": "MS2026/Toon",
+      "specific": {
+        "_ToonOutlineBaseMix": 0.5,
+        "_ToonOutlineColor": [
+          0.28,
+          0.2,
+          0.2,
+          1.0
+        ],
+        "_ToonOutlineSmoothNormal": 1.0,
+        "_ToonOutlineWidth": 0.0,
+        "_ToonShadeColor": [
+          0.78,
+          0.72,
+          0.86,
+          1.0
+        ],
+        "_ToonShadeFeather": 0.02,
+        "_ToonShadeThreshold": 0.5,
+        "_ToonShadowStrength": 0.0,
+        "_ToonTintColor": [
+          1.0,
+          0.6,
+          0.6,
+          1.0
+        ],
+        "_ToonTintStrength": 0.0
+      }
+    },
+    "skin1": {
+      "common": {
+        "albedo": "assets/unitychan/textures/skin_01.tga",
+        "albedoTint": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "blend": "Opaque",
+        "cutoff": 0.5,
+        "doubleSided": false,
+        "emission": null,
+        "emissionColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "emissionIntensity": 0.0,
+        "normal": null,
+        "normalScale": 1.0
+      },
+      "renderQueueOffset": 0,
+      "shader": "MS2026/Toon",
+      "specific": {
+        "_ToonOutlineBaseMix": 0.5,
+        "_ToonOutlineColor": [
+          0.28,
+          0.2,
+          0.2,
+          1.0
+        ],
+        "_ToonOutlineSmoothNormal": 1.0,
+        "_ToonOutlineWidth": 0.9,
+        "_ToonShadeColor": [
+          0.93,
+          0.72,
+          0.72,
+          1.0
+        ],
+        "_ToonShadeFeather": 0.02,
+        "_ToonShadeThreshold": 0.5,
+        "_ToonShadowStrength": 1.0,
+        "_ToonTintColor": [
+          1.0,
+          0.6,
+          0.6,
+          1.0
+        ],
+        "_ToonTintStrength": 0.0
+      }
+    }
+  },
+  "model": "assets/unitychan/unitychan_test.ma",
+  "parts": {
+    "blush": {
+      "materials": [
+        "mat_cheek"
+      ],
+      "role": "blush"
+    },
+    "cloth": {
+      "materials": [
+        "body"
+      ],
+      "role": "cloth"
+    },
+    "eye": {
+      "materials": [
+        "eye_L1",
+        "eye_R1",
+        "eyebase"
+      ],
+      "role": "eye"
+    },
+    "eyeline": {
+      "materials": [
+        "eyeline"
+      ],
+      "role": "eyeline"
+    },
+    "face": {
+      "materials": [
+        "face"
+      ],
+      "role": "face"
+    },
+    "hair": {
+      "materials": [
+        "hair"
+      ],
+      "role": "hair"
+    },
+    "skin": {
+      "materials": [
+        "skin1"
+      ],
+      "role": "skin"
+    }
+  },
+  "schemaVersion": 1,
+  "variants": {}
+}

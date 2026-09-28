@@ -318,9 +318,10 @@ def _set_texture(shader: str, attr: str, path: str | None, srgb: bool) -> None:
     if not cmds.objExists(file_node):
         file_node = cmds.shadingNode("file", asTexture=True, isColorManaged=True, name=file_node)
         cmds.connectAttr(f"{file_node}.outColor", f"{shader}.{attr}", force=True)
-    full = from_repo_path(path)
-    if cmds.getAttr(f"{file_node}.fileTextureName") != full:
-        cmds.setAttr(f"{file_node}.fileTextureName", full, type="string")
+    # リポジトリ内のテクスチャは $TDRIVE_ROOT（TDriveToon.mod が定義）基準で書き、どの PC でもシーンが開けるようにする
+    name = path if Path(path).is_absolute() else f"$TDRIVE_ROOT/{path}"
+    if cmds.getAttr(f"{file_node}.fileTextureName") != name:
+        cmds.setAttr(f"{file_node}.fileTextureName", name, type="string")
     # ベースカラーは sRGB（Unity の sRGB テクスチャ）、マスク類はリニア（docs/09 §2）
     space = environment.pick_texture_space(srgb)
     if space:
