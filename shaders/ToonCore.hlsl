@@ -75,6 +75,47 @@ float Toon_OutlineDistanceFactor(float distance, float refDistance, float scale)
     return lerp(1.0, k, scale);
 }
 
+// ------------------------------------------------------------------ P2（docs/03 §2 / §3）
+// T-27: 2 影を含む影の色。lit2 = 1 のとき 1 影色、0 のとき 2 影色
+float Toon_Lit2Factor(float x, float threshold2, float feather, float strength2)
+{
+    return lerp(1.0, smoothstep(threshold2 - feather, threshold2 + feather, x), strength2);
+}
+
+// 本体の 2 階調影の入力 x（Toon_LitFactor と同じ）。2 影の判定に使う
+float Toon_ShadeInput(float3 N, float3 L, float4 mask)
+{
+    float halfLambert = dot(N, L) * 0.5 + 0.5;
+    return saturate(halfLambert * mask.r + (1.0 - mask.b));
+}
+
+float3 Toon_Shade2(float3 baseColor, float lit, float lit2, float3 shadeColor, float3 shade2Color, float3 lightColor)
+{
+    float3 shadeC = lerp(baseColor * shade2Color, baseColor * shadeColor, lit2);
+    return lerp(shadeC, baseColor, lit) * lightColor;
+}
+
+// T-28: 彩度・明るさ（1 = そのまま）
+float3 Toon_ColorCorrect(float3 color, float saturation, float brightness)
+{
+    float luma = dot(color, float3(0.2126, 0.7152, 0.0722));
+    return lerp(luma.xxx, color, saturation) * brightness;
+}
+
+// T-30: ビュー空間の法線 → MatCap の UV
+float2 Toon_MatCapUV(float3 normalVS)
+{
+    return normalVS.xy * 0.5 + 0.5;
+}
+
+// T-26: 線の太さの方向依存（影側・下向きの面を太く）
+float Toon_OutlineDirectionFactor(float3 normalWS, float3 L, float shadowSide, float bottom)
+{
+    float litV = saturate(dot(normalWS, L) * 0.5 + 0.5);
+    float f = lerp(shadowSide, 1.0, litV);
+    return f * lerp(1.0, bottom, saturate(-normalWS.y));
+}
+
 // ------------------------------------------------------------------ アウトライン（docs/03 §3）
 // widthPx は「1080p 換算の px」= 画面高さの 1/1080 単位。クリップ空間で押し出すため距離によらず一定。
 // 方向はピクセル空間で正規化する（NDC のまま正規化すると横向きの輪郭で線が 幅/高さ 倍に太る）

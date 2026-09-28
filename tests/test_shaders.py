@@ -40,6 +40,11 @@ def test_core_compiles_standalone(tmp_path):
         "  col.xy += Toon_HairHighlightUV(c.xy, float3(0,0,1), float3(0,1,0), 0.1) * 0.001;\n"
         "  col += Toon_DepthOffsetWS(c.xyz, float3(0,1,5), 0.03) * 0.001;\n"
         "  col *= Toon_OutlineDistanceFactor(5.0, 2.0, 0.5);\n"
+        "  float l2 = Toon_Lit2Factor(Toon_ShadeInput(normalize(n), float3(0,1,0), m), 0.25, 0.02, 1.0);\n"
+        "  col = Toon_Shade2(col, lit, l2, float3(0.8,0.7,0.9), float3(0.6,0.5,0.7), float3(1,1,1));\n"
+        "  col = Toon_ColorCorrect(col, 1.2, 0.9);\n"
+        "  col.xy += Toon_MatCapUV(normalize(n)) * 0.001;\n"
+        "  col *= Toon_OutlineDirectionFactor(normalize(n), float3(0,1,0), 1.5, 1.2);\n"
         "  return float4(Toon_Tonemap(col, TOON_TONEMAP_NEUTRAL), 1);\n"
         "}\n",
         encoding="utf-8",

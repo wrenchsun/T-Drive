@@ -4,7 +4,7 @@
 これを include する薄いラッパーで、同じパラメータ名を使う（[09_render_parity.md](09_render_parity.md) D-5）。
 この文書が式の仕様であり、変更時は この文書 → ToonCore.hlsl → パリティテスト の順に行う。
 
-対象は P0 技術（[04](04_technique_priority.md) T-01〜T-08）と、P1 のうちシェーダーで行うもの（T-09 / T-11 / T-12 / T-13 / T-18）。P2 以降は §7.3 に予約名のみ定義する。
+対象は P0 技術（[04](04_technique_priority.md) T-01〜T-08）と、P1 / P2 のうちシェーダーで行うもの（T-09 / T-11 / T-12 / T-13 / T-18 / T-26 / T-27 / T-28 / T-30）。それ以外は §7.3 に予約名のみ定義する。
 
 ## 1. 入力
 
@@ -30,7 +30,15 @@ lit    = lerp(1, lit, _ToonShadowStrength)                // 0 = 影を出さな
 
 base   = _BaseMap(uv) * _BaseColor
 lightC = lerp(1, lightColor, _ToonLightColorInfluence)   // P1 T-11: 0 = ライト色の影響を受けない（目のハイライト等）
-col    = lerp(base.rgb * _ToonShadeColor.rgb, base.rgb, lit) * lightC
+
+// P2 T-27 2 影: 影の中のさらに暗い部分（_ToonShade2Strength = 0 なら従来の 2 階調）
+lit2   = lerp(1, smoothstep(_ToonShade2Threshold - _ToonShadeFeather,
+                            _ToonShade2Threshold + _ToonShadeFeather, x), _ToonShade2Strength)
+shadeC = lerp(base.rgb * _ToonShade2Color.rgb, base.rgb * _ToonShadeColor.rgb, lit2)
+col    = lerp(shadeC, base.rgb, lit) * lightC
+
+// P2 T-30 MatCap（ビュー空間の法線で球面テクスチャを引く。未設定 = 黒 = 何も足さない）
+col   += _ToonMatCapMap(normalVS.xy * 0.5 + 0.5).rgb * _ToonMatCapStrength * lightC
 
 // P1 T-13 リム（明側のみ）
 rim    = pow(1 - saturate(dot(N, V)), _ToonRimPower) * _ToonRimStrength * lit
@@ -42,6 +50,10 @@ col   += _ToonHairHighlightColor.rgb * _ToonHairHighlightMap(huv).r * lit * ligh
 
 tint   = (1 - mask.a) * _ToonTintStrength                 // A 黒 → 固定色（頬・耳・口内）
 col    = lerp(col, col * _ToonTintColor.rgb, saturate(tint))
+
+// P2 T-28 部位別の色補正（彩度・明るさ。1 = そのまま）
+luma   = dot(col, (0.2126, 0.7152, 0.0722))
+col    = lerp(luma, col, _ToonSaturation) * _ToonBrightness
 
 alpha  = base.a                                            // Cutout は Cutoff で discard、Transparent はそのまま
 
@@ -74,6 +86,13 @@ clip.xy += dirPx * px / (screenSize / 2) * clip.w          // ピクセル → N
   ```
   k   = saturate(_ToonOutlineRefDistance / dist)          // 基準距離より近ければ 1（細くしない）
   px *= lerp(1, k, _ToonOutlineDistanceScale)             // 0 = 補正なし（画面上で常に一定）
+  ```
+
+- **方向依存の太さ（P2 T-26）**: 影側・下側の線を太くして重さを出す（どちらも 1 = 補正なし）
+  ```
+  litV = saturate(dot(n_world, L) * 0.5 + 0.5)            // 頂点での明るさ（ハーフランバート）
+  px  *= lerp(_ToonOutlineShadowSide, 1, litV)             // 影側ほど _ToonOutlineShadowSide 倍
+  px  *= lerp(1, _ToonOutlineBottom, saturate(-n_world.y)) // 下向きの面ほど _ToonOutlineBottom 倍
   ```
 
 ## 3.1 デプスオフセット（P1 T-09: 眉・目を髪の上に）
@@ -129,7 +148,7 @@ Maya の uniform 名は先頭の `_` を除いた名前。定義の実体は `ma
 （`_Surface` `_Blend` `_SrcBlend` `_DstBlend` `_ZWrite` `_AlphaClip` `_Cutoff` `_Cull` `_QueueOffset` …）。
 値は D-Drive の `MaterialCommonBinding` が Common から流し込むので、Look 定義では `common` に書く。
 
-### 7.2 Specific（P0 / P1）
+### 7.2 Specific（P0 / P1 / P2）
 
 | プロパティ | 型 | 既定 | 範囲 | 説明 | 技術 |
 |---|---|---|---|---|---|
@@ -143,6 +162,15 @@ Maya の uniform 名は先頭の `_` を除いた名前。定義の実体は `ma
 | `_ToonHairHighlightShift` | Float | 0 | -0.5–0.5 | カメラの上下に応じて帯を縦にずらす量（UV）（P1） | T-12 |
 | `_ToonOutlineDistanceScale` | Float | 0 | 0–1 | 遠いほど線を細くする度合い（0 = 補正なし）（P1） | T-18 |
 | `_ToonOutlineRefDistance` | Float | 2 | 0.1–20 | 線を細くし始める距離（m）（P1） | T-18 |
+| `_ToonShade2Color` | Color | (0.6, 0.52, 0.72, 1) | | 2 影の乗算色（P2） | T-27 |
+| `_ToonShade2Threshold` | Float | 0.25 | 0–1 | 2 影の境界（P2） | T-27 |
+| `_ToonShade2Strength` | Float | 0 | 0–1 | 2 影の強さ（0 = 2 影なし）（P2） | T-27 |
+| `_ToonSaturation` | Float | 1 | 0–2 | 彩度（1 = そのまま）（P2） | T-28 |
+| `_ToonBrightness` | Float | 1 | 0–2 | 明るさ（1 = そのまま）（P2） | T-28 |
+| `_ToonOutlineShadowSide` | Float | 1 | 0–3 | 影側の線の太さ倍率（P2） | T-26 |
+| `_ToonOutlineBottom` | Float | 1 | 0–3 | 下向きの面の線の太さ倍率（P2） | T-26 |
+| `_ToonMatCapMap` | Texture | black | | MatCap（球面）テクスチャ（未設定 = 足さない）（P2） | T-30 |
+| `_ToonMatCapStrength` | Float | 0 | 0–1 | MatCap の強さ（P2） | T-30 |
 | `_ToonShadeColor` | Color | (0.78, 0.72, 0.86, 1) | | 影の乗算色 | T-01 |
 | `_ToonShadeThreshold` | Float | 0.5 | 0–1 | 影の境界 | T-01 |
 | `_ToonShadeFeather` | Float | 0.02 | 0.001–0.5 | 境界のぼかし幅 | T-01 |
@@ -160,7 +188,6 @@ Maya の uniform 名は先頭の `_` を除いた名前。定義の実体は `ma
 | プロパティ | 技術 |
 |---|---|
 | `_ToonFaceShadowMap` `_ToonFaceForward` `_ToonFaceRight` | T-21 |
-| `_ToonShade2Color` `_ToonShade2Threshold` | T-27 |
 
 ### 7.4 命名規則
 

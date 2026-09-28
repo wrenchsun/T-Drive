@@ -84,12 +84,25 @@ SPECIFIC_PARAMS: tuple[Param, ...] = (
     Param("_ToonHairHighlightMap", TEXTURE, None, "Hair", "ハイライトの帯（R）"),
     Param("_ToonHairHighlightColor", COLOR, [1.0, 1.0, 0.95, 1.0], "Hair", "ハイライト色"),
     Param("_ToonHairHighlightShift", FLOAT, 0.0, "Hair", "視線で帯をずらす量", -0.5, 0.5),
+    # ---------------- P2（Phase 3。既定値では従来と同じ見た目 = MINOR） ----------------
+    # --- 2 影 T-27 ---
+    Param("_ToonShade2Color", COLOR, [0.6, 0.52, 0.72, 1.0], "Shadow", "2 影の色"),
+    Param("_ToonShade2Threshold", FLOAT, 0.25, "Shadow", "2 影の境界", 0.0, 1.0),
+    Param("_ToonShade2Strength", FLOAT, 0.0, "Shadow", "2 影の強さ", 0.0, 1.0),
+    # --- 部位別の色補正 T-28 ---
+    Param("_ToonSaturation", FLOAT, 1.0, "Color", "彩度", 0.0, 2.0),
+    Param("_ToonBrightness", FLOAT, 1.0, "Color", "明るさ", 0.0, 2.0),
+    # --- 線の太さの方向依存 T-26 ---
+    Param("_ToonOutlineShadowSide", FLOAT, 1.0, "Outline", "影側の線の太さ（倍）", 0.0, 3.0),
+    Param("_ToonOutlineBottom", FLOAT, 1.0, "Outline", "下向きの面の線の太さ（倍）", 0.0, 3.0),
+    # --- MatCap T-30（未設定 = 黒 = 何も足さない） ---
+    Param("_ToonMatCapMap", TEXTURE, None, "MatCap", "MatCap テクスチャ"),
+    Param("_ToonMatCapStrength", FLOAT, 0.0, "MatCap", "MatCap の強さ", 0.0, 1.0),
 )
 
-# 名前だけ先に確定している P2 以降のパラメータ（docs/03 §7.3）。追加時にここから SPECIFIC_PARAMS へ移す
+# 名前だけ先に確定しているパラメータ（docs/03 §7.3）。追加時にここから SPECIFIC_PARAMS へ移す
 RESERVED_NAMES = (
     "_ToonFaceShadowMap", "_ToonFaceForward", "_ToonFaceRight",
-    "_ToonShade2Color", "_ToonShade2Threshold",
 )
 
 PARAMS_BY_UNITY = {p.unity: p for p in SPECIFIC_PARAMS}

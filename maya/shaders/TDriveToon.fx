@@ -12,6 +12,7 @@ float4x4 gWorld : World                 < string UIWidget = "None"; >;
 float4x4 gWIT   : WorldInverseTranspose < string UIWidget = "None"; >;
 float4x4 gVP    : ViewProjection        < string UIWidget = "None"; >;
 float4x4 gViewI : ViewInverse           < string UIWidget = "None"; >;
+float4x4 gView  : View                  < string UIWidget = "None"; >;
 float2 gViewportPixelSize : ViewportPixelSize < string UIWidget = "None"; >;
 
 // ------------------------------------------------------------------ Common（D-Drive MaterialCommon）
@@ -53,6 +54,18 @@ Texture2D ToonHairHighlightMap < string UIGroup = "Hair"; string ResourceName = 
 bool ToonHairHighlightMapEnabled < string UIGroup = "Hair"; int UIOrder = 56; > = false;
 float4 ToonHairHighlightColor < string UIGroup = "Hair"; string UIWidget = "ColorPicker"; int UIOrder = 57; > = {1.0, 1.0, 0.95, 1.0};
 float ToonHairHighlightShift < string UIGroup = "Hair"; float UIMin = -0.5; float UIMax = 0.5; int UIOrder = 58; > = 0.0;
+
+// ---- P2（既定値では従来と同じ見た目）
+float4 ToonShade2Color < string UIGroup = "Shadow"; string UIWidget = "ColorPicker"; int UIOrder = 14; > = {0.6, 0.52, 0.72, 1.0};
+float ToonShade2Threshold < string UIGroup = "Shadow"; float UIMin = 0.0; float UIMax = 1.0; int UIOrder = 15; > = 0.25;
+float ToonShade2Strength < string UIGroup = "Shadow"; float UIMin = 0.0; float UIMax = 1.0; int UIOrder = 16; > = 0.0;
+float ToonSaturation < string UIGroup = "Color"; float UIMin = 0.0; float UIMax = 2.0; int UIOrder = 60; > = 1.0;
+float ToonBrightness < string UIGroup = "Color"; float UIMin = 0.0; float UIMax = 2.0; int UIOrder = 61; > = 1.0;
+float ToonOutlineShadowSide < string UIGroup = "Outline"; float UIMin = 0.0; float UIMax = 3.0; int UIOrder = 46; > = 1.0;
+float ToonOutlineBottom < string UIGroup = "Outline"; float UIMin = 0.0; float UIMax = 3.0; int UIOrder = 47; > = 1.0;
+Texture2D ToonMatCapMap < string UIGroup = "MatCap"; string ResourceName = ""; string UIWidget = "FilePicker"; string ResourceType = "2D"; int UIOrder = 62; >;
+bool ToonMatCapMapEnabled < string UIGroup = "MatCap"; int UIOrder = 63; > = false;
+float ToonMatCapStrength < string UIGroup = "MatCap"; float UIMin = 0.0; float UIMax = 1.0; int UIOrder = 64; > = 0.0;
 
 // ------------------------------------------------------------------ プレビュー環境（Unity では キャラクターライト / ポスト）
 float3 PreviewLightDir < string UIGroup = "Preview"; string UIName = "Character Light Dir (to light, world)"; int UIOrder = 90; > = {0.4, 0.6, 0.7};
@@ -172,7 +185,13 @@ float4 ShadeMain(VSOut i, bool frontFace)
     }
     float3 V = normalize(CameraPosWS() - i.positionWS);
     float3 lightC = Toon_LightColor(PreviewLightColor, ToonLightColorInfluence);
-    float3 col = Toon_Shade(base.rgb, lit, ToonShadeColor.rgb, lightC);
+    float lit2 = Toon_Lit2Factor(Toon_ShadeInput(N, L, mask), ToonShade2Threshold, ToonShadeFeather, ToonShade2Strength);
+    float3 col = Toon_Shade2(base.rgb, lit, lit2, ToonShadeColor.rgb, ToonShade2Color.rgb, lightC);
+    if (ToonMatCapMapEnabled)
+    {
+        float3 normalVS = normalize(mul(float4(N, 0.0), gView).xyz);
+        col += ToonMatCapMap.Sample(SamLinearWrap, Toon_MatCapUV(normalVS)).rgb * ToonMatCapStrength * lightC;
+    }
     col += ToonRimColor.rgb * Toon_Rim(N, V, ToonRimPower, ToonRimStrength, lit) * lightC;
     if (ToonHairHighlightMapEnabled)
     {
@@ -180,6 +199,7 @@ float4 ShadeMain(VSOut i, bool frontFace)
         col += ToonHairHighlightColor.rgb * h * lit * lightC;
     }
     col = Toon_ApplyTint(col, mask, ToonTintColor.rgb, ToonTintStrength);
+    col = Toon_ColorCorrect(col, ToonSaturation, ToonBrightness);
     col = Toon_Tonemap(col, PreviewTonemap);
     return float4(col, base.a);
 }
@@ -213,7 +233,8 @@ VSOut VS_Outline(VSIn v)
     float4 clip = mul(float4(posWS, 1.0), gVP);
     float2 nClip = mul(float4(n, 0.0), gVP).xy;
     float distM = length(CameraPosWS() - posWS) / PreviewUnitScale;
-    float width = ToonOutlineWidth * Toon_OutlineDistanceFactor(distM, ToonOutlineRefDistance, ToonOutlineDistanceScale);
+    float width = ToonOutlineWidth * Toon_OutlineDistanceFactor(distM, ToonOutlineRefDistance, ToonOutlineDistanceScale)
+                * Toon_OutlineDirectionFactor(normalWS, normalize(PreviewLightDir), ToonOutlineShadowSide, ToonOutlineBottom);
     clip.xy += Toon_OutlineClipOffset(nClip, width, mask, clip.w, gViewportPixelSize);
     o.positionCS = clip;
     o.positionWS = posWS;
