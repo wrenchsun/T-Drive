@@ -170,12 +170,30 @@ def prepare_panel(panel: str | None = None) -> str | None:
     return panel
 
 
-def capture_panel_settings(panel: str) -> None:
-    """キャプチャ時だけ邪魔な表示（ジョイント・グリッド・HUD 等）を消す。"""
-    cmds.modelEditor(
-        panel, edit=True, joints=False, grid=False, locators=False, nurbsCurves=False, handles=False,
-        ikHandles=False, deformers=False, manipulators=False, selectionHiliteDisplay=False, headsUpDisplay=False,
-    )
+_CAPTURE_HIDE = (
+    "joints", "grid", "locators", "nurbsCurves", "handles", "ikHandles", "deformers", "manipulators",
+    "selectionHiliteDisplay", "headsUpDisplay",
+)
+
+
+def capture_panel_settings(panel: str) -> dict[str, bool]:
+    """キャプチャ時だけ邪魔な表示（ジョイント・グリッド・HUD 等）を消す。元の設定を返す。"""
+    before = {k: cmds.modelEditor(panel, query=True, **{k: True}) for k in _CAPTURE_HIDE}
+    cmds.modelEditor(panel, edit=True, **{k: False for k in _CAPTURE_HIDE})
+    return before
+
+
+class capture_panel:  # noqa: N801 (with 文で使う)
+    """with capture_panel() as panel: … の間だけキャプチャ用の表示にし、終わったら元に戻す。"""
+
+    def __enter__(self) -> str | None:
+        self.panel = prepare_panel()
+        self.before = capture_panel_settings(self.panel) if self.panel else {}
+        return self.panel
+
+    def __exit__(self, *exc) -> None:
+        if self.panel and self.before:
+            cmds.modelEditor(self.panel, edit=True, **self.before)
 
 
 def model_panel() -> str | None:

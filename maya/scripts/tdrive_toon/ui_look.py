@@ -135,6 +135,10 @@ class LookTab(QtWidgets.QWidget):
         if name and name != self.session.edit_variant:
             self.session.set_edit_variant(name)
 
+    def select_target(self, target: str) -> None:
+        self.target = target
+        self.refresh()
+
     def on_target(self) -> None:
         items = self.tree.selectedItems()
         self.target = items[0].data(0, QtCore.Qt.UserRole) if items else None

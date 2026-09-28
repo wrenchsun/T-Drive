@@ -327,6 +327,12 @@ class Session:
             print(f"[T-Drive] シーンに存在しないマテリアル: {', '.join(failed)}")
         self._changed(dirty=False)
 
+    def set_ab(self, slot: int, variant: str) -> None:
+        if variant not in look.variant_names(self.require()):
+            raise ValueError(f"バリアント '{variant}' はありません")
+        self.ab[slot] = variant
+        self._changed(dirty=False)
+
     def show_ab(self, slot: int) -> None:
         self.show(self.ab[slot])
 
@@ -334,18 +340,37 @@ class Session:
         self.show(self.ab[1] if self.shown == self.ab[0] else self.ab[0])
         return self.shown
 
-    def capture_ab(self, width: int = 1920, height: int = 1080) -> tuple[str, str]:
-        """A と B を同じカメラ・ライトでキャプチャする。表示は元のバリアントに戻す。"""
+    def capture_ab(
+        self, yaws: list[float] | None = None, target: str = "all", width: int = 1920, height: int = 1080
+    ) -> list[dict[str, Any]]:
+        """A と B を同じカメラ・ライト・解像度でキャプチャする。表示は元のバリアントに戻す。
+
+        yaws=None なら現在のカメラで 1 組。角度を渡すと環境プロファイルのカメラでその方向から撮る。
+        戻り値: [{"yaw": 角度 or None, "A": パス, "B": パス}, ...]
+        """
         stamp = time.strftime("%Y%m%d-%H%M%S")
         char = self.require()["character"]
         before = self.shown
-        paths = []
-        for slot, variant in zip("AB", self.ab):
-            self.show(variant)
-            cmds.refresh(force=True)
-            paths.append(preview.capture(str(CAPTURE_DIR / char / f"{stamp}_{slot}_{variant}.png"), width, height))
+        prof_name = preview.environment_state()["profile"] or environment.default_profile()
+        prof = environment.load_profile(prof_name) if prof_name else None
+        env_tag = prof_name or "noenv"
+        shots = []
+        with environment.capture_panel():
+            for yaw in yaws or [None]:
+                if yaw is not None:
+                    if prof is None:
+                        raise RuntimeError("環境プロファイルがありません（looks/_env）")
+                    environment.frame_camera(prof, yaw, target=target)
+                shot: dict[str, Any] = {"yaw": yaw}
+                for slot, variant in zip("AB", self.ab):
+                    self.show(variant)
+                    cmds.refresh(force=True)
+                    angle = "cur" if yaw is None else f"{int(yaw):+04d}"
+                    name = f"{stamp}_{env_tag}_{angle}_{slot}_{variant}.png"
+                    shot[slot] = preview.capture(str(CAPTURE_DIR / char / name), width, height)
+                shots.append(shot)
         self.show(before)
-        return paths[0], paths[1]
+        return shots
 
     def diff_ab(self) -> list[tuple[str, str, Any, Any]]:
         return look.diff(self.require(), *self.ab)

@@ -138,6 +138,19 @@ def run() -> None:
     s.set_edit_variant("base")
     check("部位単位の値一覧（混在判定用）", len(s.values("eye", "_ToonShadowStrength")) == 3)
 
+    # ---- A/B
+    s.set_ab(0, "base")
+    s.set_ab(1, "B")
+    s.show_ab(1)
+    first = s.shown
+    s.toggle_ab()
+    check("A/B: B 表示 → 切替で A 表示", first == "B" and s.shown == "base")
+    s.checkpoint()
+    s.promote("B")
+    check("採用: B が base に確定し B は消える", "B" not in s.look["variants"] and s.ab == ["base", "base"])
+    s.undo()
+    check("採用の取り消し（Undo）", "B" in s.look["variants"])
+
     # 後片付け
     preview.delete_all()
     check("delete_all: プレビューノードが残らない", not preview.preview_shaders())

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A/B 比較 - T-Drive デザイナーマニュアル</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<nav class="breadcrumb"><a href="Readme.html">トップ</a> › A/B 比較</nav>
+<h1>A/B 比較</h1>
+<p class="lastupdate">最終更新日: 2026-09-28</p>
+
+<p>「今の見た目（A）」と「試したい案（B）」を<strong>同じカメラ・同じライト・同じ解像度</strong>で見比べて、良い方を採用します。</p>
+
+<figure>
+<img src="images/editor_ab.png" alt="A/B タブ">
+<figcaption>A/B タブ。上で A と B を選び、「並べてキャプチャ」で同じ条件の画像を並べます。下は A と B で値が違う項目</figcaption>
+</figure>
+
+<h2>はじめの一歩</h2>
+<ol>
+<li>A/B タブの <strong>バリアント追加…</strong> で案を作る（例: 名前 <code>B</code>、説明「顔の影を弱く」、複製元 <code>base</code>）。作った案は自動で B に入ります</li>
+<li><a href="look-params.html">ルックタブ</a>の <strong>編集先</strong> を B にして値を変える（変えた項目は黄色の太字になります）</li>
+<li>A/B タブで <strong>切替（Alt+T）</strong> を押して、ビューポートで見比べる</li>
+<li><strong>並べてキャプチャ</strong> で画像を並べて比べる。<strong>正面 / 3/4 / 横 / 後ろ を一括</strong> にチェックすると 4 方向ぶん撮れます</li>
+<li>B が良ければ <strong>B を採用</strong>（B の内容が base になります）。ヘッダーの <strong>保存</strong> を忘れずに</li>
+</ol>
+
+<h2>画面の説明</h2>
+<table>
+<tr><th>項目</th><th>内容</th></tr>
+<tr><td>A / B</td><td>比べる 2 つの案。<strong>base</strong>（基本の値）か、作ったバリアントを選びます</td></tr>
+<tr><td>A を表示 / B を表示 / 切替（Alt+T）</td><td>ビューポートの表示を切り替えます。<strong>Alt+T はビューポートにカーソルがあっても効きます</strong></td></tr>
+<tr><td>並べてキャプチャ</td><td>A と B を同じ条件で撮影します（1920×1080）。「顔 / 全身」で写す範囲を選べます</td></tr>
+<tr><td>比較: 左右 / ワイプ</td><td>左右に並べるか、1 枚の画像をスライダーで A と B に分けて見るか</td></tr>
+<tr><td>差分の表</td><td>A と B で値が違う項目の一覧。<strong>行をダブルクリック</strong>するとルックタブでそのマテリアルが開きます</td></tr>
+<tr><td>B を採用</td><td>B の内容を base に確定して B を消します。ルックタブの <strong>元に戻す</strong> で取り消せます</td></tr>
+<tr><td>B を削除</td><td>B を消します（元に戻す で取り消せます）</td></tr>
+</table>
+
+<div class="tip">
+キャプチャ画像は <span class="path">captures/&lt;キャラクター&gt;/</span> に日時・環境・角度付きの名前で保存されます（Git には入りません）。採用した理由と画像は、ルックを確定するときにルックの履歴（<span class="path">looks/&lt;キャラクター&gt;/CHANGELOG.md</span>）に残す運用です。
+</div>
+<div class="warn">
+撮影のときは一時的にジョイントやグリッドを隠します。撮影が終わるとビューポートの表示設定は元に戻ります。
+</div>
+
+<footer><a href="Readme.html">トップへ戻る</a></footer>
+</body>
+</html>

@@ -14,6 +14,7 @@ from maya.app.general.mayaMixin import MayaQWidgetDockableMixin
 from PySide6 import QtCore, QtWidgets
 
 from . import __version__, environment, look, preview, roles, session
+from .ui_ab import ABTab
 from .ui_look import LookTab
 
 WINDOW_NAME = "TDriveToonEditor"
@@ -67,7 +68,9 @@ class EditorWindow(MayaQWidgetDockableMixin, QtWidgets.QWidget):
         self.tabs.addTab(self.parts_tab, "部位")
         self.look_tab = LookTab(self.session)
         self.tabs.addTab(self.look_tab, "ルック")
-        self.tabs.addTab(_placeholder("A/B 比較は 1-7 で実装予定"), "A/B")
+        self.ab_tab = ABTab(self.session)
+        self.ab_tab.open_in_look.connect(self._open_in_look)
+        self.tabs.addTab(self.ab_tab, "A/B")
         self.tabs.addTab(_placeholder("プレビュー設定は 1-8 で実装予定"), "プレビュー")
         layout.addWidget(self.tabs, 1)
 
@@ -82,10 +85,15 @@ class EditorWindow(MayaQWidgetDockableMixin, QtWidgets.QWidget):
         self.detach()
         super().closeEvent(event)
 
+    def _open_in_look(self, target: str) -> None:
+        self.tabs.setCurrentWidget(self.look_tab)
+        self.look_tab.select_target(target)
+
     def refresh(self) -> None:
         self.header.refresh()
         self.parts_tab.refresh()
         self.look_tab.refresh()
+        self.ab_tab.refresh()
         problems = environment.parity_problems()
         self.warning.setText("Unity とのパリティ: " + " / ".join(problems) if problems else "")
         self.warning.setVisible(bool(problems))
