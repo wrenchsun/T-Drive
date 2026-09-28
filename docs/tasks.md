@@ -92,6 +92,19 @@ Unity は T-Drive for Unity パッケージ（Phase U）として実装する（
 | 4-7 | インナーラインの Maya プレビュー（Render Override で画面上のエッジ検出） | T-23 | 3 | 4-3 | 線を出す部位の境界に線が出る。Unity（U-10）と同じアルゴリズム | ✅ Render Override（MRT で ToonId → `Toon_LineInnerPair` で合成）。判定式は ToonCore（Unity と共有）。実機で部位境界・折れ目・髪の束に線を確認 |
 | 4-8 | スクリーンスペース外側輪郭: 設定（`characterSettings.screenOutline`: 有無・線幅・色）・機能 `screenOutline`・Maya プレビュー（4-7 のエッジ検出を共有） | T-42 | 1.5 | 4-7 | オンにするとキャラクターの外形に画面上一定幅の線が出る。背面押し出しの線と併用 / 置き換えを選べる | ✅ `characterSettings.screenOutline`・機能 `screenOutline`・`Toon_LineOuterPair`。置き換えは機能 `outline` をオフ。輪郭線パスも ToonId を書く（穴で体の内側に線が出る不具合を修正） |
 
+## Phase R: Maya ツールの配布・導入・更新
+
+仕様: [13_distribution.md](13_distribution.md)。D-Drive と同じ「git タグで固定 + 更新ウィンドウ」。
+
+| # | チケット | 技術 | 日数 | 依存 | 受け入れ条件 | 状態 |
+|---|---|---|---|---|---|---|
+| R-1 | プロジェクトフォルダ（Look・出力・キャプチャ・環境プロファイルの置き場所をツール本体から分離）+ メニュー「プロジェクトを選ぶ…」 | — | 1 | — | 開発用はリポジトリがそのままプロジェクト。別フォルダを選ぶと Look・出力がそこに保存され、テクスチャのパスはプロジェクト基準 | ⬜ |
+| R-2 | 版の比較・タグ解析・CHANGELOG の範囲・git 呼び出し（`updater.py`、Maya 非依存）+ 単体テスト | — | 1 | — | PATCH / MINOR / MAJOR の判定、範囲の CHANGELOG の抽出がテストで担保される | ⬜ |
+| R-3 | インストーラー `tools/install.ps1`（前提確認・最新タグに固定・LFS を取らない・.mod 生成・MCP 既定無効） | — | 1 | R-2 | 別フォルダへの clone から 1 コマンドで導入でき、Maya 起動でメニューが出る | ⬜ |
+| R-4 | 更新ウィンドウ（確認・変更点・更新・前の版に戻す・更新後の確認）+ 起動時の確認（1 日 1 回・更新後の確認待ち） | — | 2 | R-2 R-3 | 古いタグに固定した導入から、ウィンドウ操作だけで新しいタグに更新・元に戻せる | ⬜ |
+| R-5 | マニュアル（導入・更新）と、デザイナー向けの導入手順書 | — | 0.5 | R-3 R-4 | 手順書どおりに導入・更新できる | ⬜ |
+| R-6 | v0.1.0 のリリース（CHANGELOG の互換性・check_release・タグ） | — | 0.5 | R-1〜R-5 | タグ v0.1.0 があり、更新ウィンドウで確認できる（GitHub への push は指示を受けてから） | ⬜ |
+
 ## Phase U: T-Drive for Unity パッケージ（Unity で再現・一任）
 
 仕様: [08_unity_port_plan.md](08_unity_port_plan.md)。キャラクターのルックは T-Drive パッケージに一任し、D-Drive からは切り離す（互換ブリッジで変換可能）。シェーダー単体で無理なものはコンポーネント・Renderer Feature で実装する。
@@ -141,5 +154,6 @@ A 系の詳細仕様は Phase 3 完了時に起こす。
 | 2 | ルック P1 | 10 |
 | 3 | ルック P2（Maya で仕上げる） | 13.5 |
 | 4 | 機能のオン/オフ・Unity でのみの機能の Maya プレビュー | 9.5 |
+| R | Maya ツールの配布・導入・更新 | 6 |
 | U | T-Drive for Unity パッケージ | 35 |
 | A | アニメーション | 22 |

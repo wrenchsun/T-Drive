@@ -30,11 +30,15 @@
 
 前提: Windows / Maya 2026 / git（Git LFS は不要）/ GitHub の `wrenchsun/T-Drive` を読める権限。
 
+PowerShell で:
+
 ```
-1. git clone --filter=blob:none https://github.com/wrenchsun/T-Drive.git "%LOCALAPPDATA%\TDriveToon\T-Drive"
-2. powershell -ExecutionPolicy Bypass -File "%LOCALAPPDATA%\TDriveToon\T-Drive\tools\install.ps1"
+1. $env:GIT_LFS_SKIP_SMUDGE = "1"; git clone https://github.com/wrenchsun/T-Drive.git "$env:LOCALAPPDATA\TDriveToon\T-Drive"
+2. powershell -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\TDriveToon\T-Drive\tools\install.ps1"
 3. Maya を起動 → T-Drive Toon › プロジェクトを選ぶ…
 ```
+
+（1 の `GIT_LFS_SKIP_SMUDGE` はテスト素体など大きなファイル（約 50MB）を取らないため。ツールには不要）
 
 `tools/install.ps1` がすること（D-Drive のセットアップウィザード相当）:
 
