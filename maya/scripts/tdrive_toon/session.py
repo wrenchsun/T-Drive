@@ -207,6 +207,7 @@ class Session:
             self.show(self.shown)
         else:
             preview.disable()
+            self._sync_character_preview()  # 接地影の板も隠す
             self._changed(dirty=False)
 
     def select_part(self, part: str) -> None:
@@ -251,13 +252,15 @@ class Session:
     def set_setting(self, path: str, value: Any, notify: bool = True) -> None:
         look.set_setting(self.require(), path, value)
         self.dirty = True
-        if path == "depthCompression" or path.startswith("faceShadow"):
+        if path == "depthCompression" or path.startswith(("faceShadow", "contactShadow")):
             self._sync_character_preview()
         if notify:
             self._changed()
 
     def _sync_character_preview(self) -> None:
-        """キャラクター単位の設定のうち Maya でプレビューできるもの（奥行き圧縮）をプレビューへ反映する。"""
+        """キャラクター単位の設定のうち Maya でプレビューできるもの（奥行き圧縮・顔影・接地影）をプレビューへ反映する。"""
+        from . import contact_shadow
+
         lk = self.look
         if lk is None:
             return
@@ -274,6 +277,8 @@ class Session:
         preview.set_depth_compression(amount, pivot)
         fs = cs["faceShadow"]
         preview.set_face_axes(fs["forward"], fs["right"])
+        if cs["contactShadow"].get("enabled") or contact_shadow.exists():
+            contact_shadow.update(self.export_meshes(), cs["contactShadow"], visible=preview.is_active())
 
     # ------------------------------------------------------------ カメラ角度の補正 BlendShape（T-20）
     def _vc_mesh(self) -> str:

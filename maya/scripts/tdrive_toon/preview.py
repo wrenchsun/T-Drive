@@ -19,6 +19,7 @@ SHADER_FILE = (REPO_ROOT / "maya" / "shaders" / "TDriveToon.fx").as_posix()
 NODE_TYPE = "dx11Shader"
 SUFFIX = "_tdToon"
 SOURCE_ATTR = "tdSourceMaterial"  # プレビューシェーダー → 元マテリアル名
+PREVIEW_ONLY_ATTR = "tdPreviewOnly"  # プレビュー専用のメッシュ（接地影の板など）。部位登録・出力の対象外
 MASK_COLOR_SET = "tdToonMask"  # docs/03 §4
 SMOOTH_NORMAL_UV = "tdSmoothNormal"  # docs/03 §5
 
@@ -90,6 +91,8 @@ def scene_materials() -> dict[str, list[str]]:
             elif cmds.nodeType(m) == "mesh":
                 m = cmds.listRelatives(m, parent=True, fullPath=True)[0]
             else:
+                continue
+            if cmds.attributeQuery(PREVIEW_ONLY_ATTR, node=m, exists=True):
                 continue
             meshes.add(m)
         if meshes:
@@ -233,7 +236,10 @@ def disable() -> None:
 
 @outside_maya_undo
 def delete_all() -> None:
+    from . import contact_shadow
+
     disable()
+    contact_shadow.delete()
     for shader in preview_shaders():
         nodes = [shader, _shading_group(shader), *(cmds.listConnections(shader, type="file") or [])]
         cmds.delete([n for n in nodes if n and cmds.objExists(n)])

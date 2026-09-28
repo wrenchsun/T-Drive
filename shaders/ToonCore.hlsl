@@ -212,4 +212,12 @@ float3 Toon_Tonemap(float3 x, int mode)
     return x;
 }
 
+// T-29 接地影（docs/08 §3.4）: 足の地面上の水平距離 d・地面からの高さ h（radius と同じ単位）→ 地面を暗くする割合 0..1。
+// 足ごとに求めて max で合成し、地面の色に (1 - 割合) を掛ける。
+float Toon_ContactShadow(float d, float h, float radius, float strength)
+{
+    float r = max(radius, 1e-5);
+    return strength * (1.0 - smoothstep(0.0, r, d)) * saturate(1.0 - max(h, 0.0) / r);
+}
+
 #endif // TDRIVE_TOON_CORE_INCLUDED

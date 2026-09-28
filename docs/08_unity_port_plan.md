@@ -83,7 +83,7 @@ Maya の `TDriveToon.fx` はそこを相対パスで include する（1 本の�
 |---|---|---|
 | ToonId | T-23 の前提 | キャラクターのマテリアルが部位 ID・線の種類を専用バッファに書く |
 | Screen-space Inner Line | T-23 | Depth / Normal / 部位 ID の差からエッジ検出。部位ごとの線の有無・太さ・色は `CharacterLook` から |
-| Contact Shadow | T-29 | 足元の接地影（足のボーン位置からの楕円影、またはスクリーンスペース） |
+| Contact Shadow | T-29 | 足元の接地影。Humanoid の左右の足ボーンごとに、地面上の水平距離 d・高さ h から `Toon_ContactShadow(d, h, radius, strength)`（ToonCore）で暗くする割合を求めて max で合成し、地面の色に (1 − 割合) を掛ける。Maya プレビュー（4-6）と同じ式 |
 
 - 設定は Renderer Feature 本体（全体の既定）と `CharacterLook`（キャラクター単位）の 2 段
 

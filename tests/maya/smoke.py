@@ -309,6 +309,27 @@ def run() -> None:
     check("奥行き圧縮: 量と中心（顔のメッシュ）がプレビューに渡る", st["depthCompression"] == 0.5 and st["depthPivot"] != (0.0, 0.0, 0.0))
     check("characterSettings を含めて Look が検証を通る", look.validate(s.look) == [], str(look.validate(s.look)))
 
+    # ---- 接地影のプレビュー（4-6）
+    from tdrive_toon import contact_shadow
+
+    s.set_feature("contactShadow", True)
+    s.set_setting("contactShadow.enabled", True)
+    feet = contact_shadow.find_feet(s.export_meshes())
+    check("接地影: 板ができて表示され、左右の足ジョイントが見つかる",
+          contact_shadow.exists() and cmds.getAttr(f"{contact_shadow.NODE}.visibility") and set(feet) == {"L", "R"}, str(feet))
+    check("接地影: 板は部位登録・出力の対象外",
+          all(contact_shadow.NODE not in m for ms in preview.scene_materials().values() for m in ms)
+          and all(contact_shadow.NODE not in m for m in s.export_meshes()))
+    s.set_preview(False)
+    check("接地影: 元の見た目にすると隠れる", not cmds.getAttr(f"{contact_shadow.NODE}.visibility"))
+    s.set_preview(True)
+    s.set_feature("contactShadow", False)
+    check("接地影: 機能をオフにすると隠れる", not cmds.getAttr(f"{contact_shadow.NODE}.visibility"))
+    s.set_feature("contactShadow", True)
+    preview.delete_all()
+    check("接地影: delete_all で消える", not contact_shadow.exists())
+    s.show(s.shown)
+
     # ---- Phase 3: カメラ角度の補正 BlendShape（T-20）
     import math
 

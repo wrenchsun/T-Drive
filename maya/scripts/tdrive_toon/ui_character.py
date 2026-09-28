@@ -56,7 +56,7 @@ class CharacterTab(QtWidgets.QWidget):
         f.addRow("線を出す部位", self.il_parts)
 
         # ---- 接地影 T-29
-        box, f = self._group(f"接地影 {UNITY_ONLY}", feature="contactShadow")
+        box, f = self._group("接地影（Maya では足元の板に簡易表示）", feature="contactShadow")
         self.cs_enabled = self._check(f, "使う", "contactShadow.enabled")
         self.cs_radius = self._spin(f, "半径（m）", "contactShadow.radius", 0.01, 2.0, 0.01)
         self.cs_strength = self._spin(f, "濃さ", "contactShadow.strength", 0.0, 1.0, 0.05)
