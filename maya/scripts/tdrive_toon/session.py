@@ -421,6 +421,28 @@ class Session:
         self.show(before)
         return shots
 
+    def capture_parity(self, variant: str | None = None, target: str = "all") -> list[str]:
+        """パリティ比較用（docs/09 §5）: 環境プロファイルの解像度・カメラで 正面 / 3/4 / 横 / 後ろ を撮る。
+
+        Unity 側で同じ条件のキャプチャを撮り、tools/parity/compare.py で比べる。
+        """
+        prof_name = preview.environment_state()["profile"] or environment.default_profile()
+        if not prof_name:
+            raise RuntimeError("環境プロファイルがありません（looks/_env）")
+        prof = environment.load_profile(prof_name)
+        w, h = prof.get("captureSize", [1920, 1080])
+        before = self.shown
+        self.show(variant or self.shown)
+        out_dir = CAPTURE_DIR / self.require()["character"] / "parity"
+        paths = []
+        with environment.capture_panel():
+            for name, yaw in list(environment.CAMERA_PRESETS.items())[:4]:
+                environment.frame_camera(prof, yaw, target=target)
+                cmds.refresh(force=True)
+                paths.append(preview.capture(str(out_dir / f"maya_{prof_name}_{int(yaw):+04d}_{target}.png"), w, h))
+        self.show(before)
+        return paths
+
     def diff_ab(self) -> list[tuple[str, str, Any, Any]]:
         return look.diff(self.require(), *self.ab)
 
