@@ -12,6 +12,7 @@ float4x4 gWorld : World                 < string UIWidget = "None"; >;
 float4x4 gWIT   : WorldInverseTranspose < string UIWidget = "None"; >;
 float4x4 gVP    : ViewProjection        < string UIWidget = "None"; >;
 float4x4 gViewI : ViewInverse           < string UIWidget = "None"; >;
+float2 gViewportPixelSize : ViewportPixelSize < string UIWidget = "None"; >;
 
 // ------------------------------------------------------------------ Common（D-Drive MaterialCommon）
 Texture2D BaseMap < string UIGroup = "Common"; string ResourceName = ""; string UIWidget = "FilePicker"; string UIName = "Base Map"; string ResourceType = "2D"; int UIOrder = 1; >;
@@ -168,7 +169,7 @@ VSOut VS_Outline(VSIn v)
     float4 mask = Toon_CombineMask(VertexMask(v.color), MaskMapSampleLevel0(v.uv));
     float4 clip = mul(p, gWVP);
     float2 nClip = mul(float4(n, 0.0), gVP).xy;
-    clip.xy += Toon_OutlineClipOffset(nClip, ToonOutlineWidth, mask, clip.w);
+    clip.xy += Toon_OutlineClipOffset(nClip, ToonOutlineWidth, mask, clip.w, gViewportPixelSize);
     o.positionCS = clip;
     o.positionWS = mul(p, gWorld).xyz;
     o.normalWS = normalWS;

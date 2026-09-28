@@ -34,7 +34,7 @@ def test_core_compiles_standalone(tmp_path):
         "  col = Toon_ApplyTint(col, m, float3(1,0.6,0.6), 0.5);\n"
         "  col += Toon_SmoothNormalWS(c.xy, normalize(n), float3(1,0,0), 1.0) * 0.001;\n"
         "  col += Toon_OutlineColor(col, float3(0.2,0.2,0.2), 0.5) * 0.001;\n"
-        "  col.xy += Toon_OutlineClipOffset(c.xy, 1.0, m, 1.0) * 0.001;\n"
+        "  col.xy += Toon_OutlineClipOffset(c.xy, 1.0, m, 1.0, float2(1920, 1080)) * 0.001;\n"
         "  return float4(Toon_Tonemap(col, TOON_TONEMAP_NEUTRAL), 1);\n"
         "}\n",
         encoding="utf-8",

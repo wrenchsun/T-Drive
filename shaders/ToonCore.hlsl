@@ -44,12 +44,16 @@ float3 Toon_ApplyTint(float3 color, float4 mask, float3 tintColor, float tintStr
 }
 
 // ------------------------------------------------------------------ アウトライン（docs/03 §3）
-// widthPx は「1080p 換算の px」= 画面高さの 1/1080 単位。クリップ空間で押し出すため距離によらず一定
-float2 Toon_OutlineClipOffset(float2 normalClipXY, float widthPx, float4 mask, float clipW)
+// widthPx は「1080p 換算の px」= 画面高さの 1/1080 単位。クリップ空間で押し出すため距離によらず一定。
+// 方向はピクセル空間で正規化する（NDC のまま正規化すると横向きの輪郭で線が 幅/高さ 倍に太る）
+float2 Toon_OutlineClipOffset(float2 normalClipXY, float widthPx, float4 mask, float clipW, float2 screenSize)
 {
-    float len = length(normalClipXY);
-    float2 dir = len > 1e-5 ? normalClipXY / len : float2(0.0, 0.0);
-    return dir * (widthPx * mask.g * (2.0 / 1080.0)) * clipW;
+    float2 halfScreen = screenSize * 0.5;
+    float2 dirPx = normalClipXY * halfScreen;
+    float len = length(dirPx);
+    dirPx = len > 1e-5 ? dirPx / len : float2(0.0, 0.0);
+    float px = widthPx * mask.g * screenSize.y / 1080.0;
+    return dirPx * px / halfScreen * clipW;
 }
 
 float3 Toon_OutlineColor(float3 baseColor, float3 outlineColor, float baseMix)

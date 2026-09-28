@@ -51,15 +51,17 @@ col    = Tonemap(col, 環境プロファイルの tonemapping)     // None / Neu
 ```
 n      = _ToonOutlineSmoothNormal > 0.5 ? decodeSmoothNormal(UV2, TBN) : 法線
 clip   = WorldViewProjection * pos
-dir    = normalize((ViewProjection * float4(n_world, 0)).xy)
-width  = _ToonOutlineWidth * mask.g * (2 / 1080)          // 「1080p 換算の px」。画面上で一定
-clip.xy += dir * width * clip.w
+nClip  = (ViewProjection * float4(n_world, 0)).xy
+dirPx  = normalize(nClip * screenSize / 2)                // 押し出し方向はピクセル空間で求める（横縦比で歪ませない）
+px     = _ToonOutlineWidth * mask.g * screenSize.y / 1080 // 「1080p 換算の px」。解像度に比例、距離によらず一定
+clip.xy += dirPx * px / (screenSize / 2) * clip.w          // ピクセル → NDC
 描画: 背面のみ（Unity・Maya とも Cull Front）
 色:   lerp(_ToonOutlineColor.rgb, _ToonOutlineColor.rgb * base.rgb, _ToonOutlineBaseMix)
 ```
 
 - 線幅 0 の部位（目・眉等）は描画しない
-- 画面アスペクト補正・距離補正（T-18）は P1。基準高さ 1080 は Unity では `_ScreenParams.y` 基準に置き換える
+- `screenSize` は描画先のピクセルサイズ（Unity: `_ScreenParams.xy`、Maya: `ViewportPixelSize`）。横縦比を無視すると横向きの輪郭で線が W/H 倍に太る（2026-09-28 の計測で判明）
+- 距離補正（T-18）は P1
 
 ## 4. 頂点カラー（Toon マスク）のチャンネル割当
 
