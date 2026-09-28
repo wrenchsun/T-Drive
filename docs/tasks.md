@@ -21,7 +21,7 @@ Unity 移植（U）は「のちに」だが、M1 到達後に並行で着手で�
 | 0-4 | UnityChan テスト素体の取り込み（D-Drive から FBX・テクスチャ・ライセンス） | — | 0.5 | 0-1 | `assets/unitychan/` に配置。Maya で FBX を読み込み、マテリアル一覧が取れる | ✅ CgFX マテリアル消失はフィクスチャ `tools/fixtures/build_unitychan_scene.py` 側で吸収（ツールには持ち込まない） |
 | 0-5 | パラメータ契約・ロール・Look 定義（読み書き・検証・バリアント解決・差分・D-Drive 形式出力）＋ pytest | — | 1.5 | 0-2 | [02](02_look_definition_spec.md) §6 の全検証ルールと [03](03_shader_spec.md) §7.2 の契約がテストで担保される | ✅ 契約と docs/03 の一致もテスト化 |
 | 0-7 | Unity 環境プロファイル仕様と既定値（`looks/_env/ms2026_ingame.json` を手入力で作成: Linear / トーンマップ / ライト / 縦 FOV 40） | — | 0.5 | 0-2 | [09](09_render_parity.md) §3 の形式で読み込める。トーンマップの本番値（None/Neutral）を MS2026 に確認済み | ✅ InGame=Neutral |
-| 0-6 | リリーススクリプト（`check-release.ps1` / `bump-version.ps1` / 契約スナップショット） | — | 1 | 0-5 | DryRun で VERSION・CHANGELOG の更新内容が表示される。契約から削除があるのに MAJOR でない場合に失敗する | ⬜ |
+| 0-6 | リリーススクリプト（`check-release.ps1` / `bump-version.ps1` / 契約スナップショット） | — | 1 | 0-5 | DryRun で VERSION・CHANGELOG の更新内容が表示される。契約から削除があるのに MAJOR でない場合に失敗する | ✅ Python 版（pwsh が無いため）。check_release / bump_version、契約差分から上げ幅を機械算出。v0.1.0 のタグ付けは未実施（ユーザー判断） |
 
 **M0 デモ**: Claude から MCP 経由で Maya に UnityChan を読み込み、マテリアル一覧を取得できる。
 

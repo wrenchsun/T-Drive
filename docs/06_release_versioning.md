@@ -51,26 +51,29 @@ D-Drive の運用（`D-Drive/docs/42_distribution.md` §4〜5、`docs/12_review.
 
 ## 5. リリース手順（ツール本体）
 
+D-Drive の Tools/Release と同じ手順・引数体系。この PC には PowerShell 7 が無いため Python（uv で実行）で実装している。
+
 ```
 1. CHANGELOG.md の [Unreleased] → ### 互換性 を埋める
-2. pwsh tools/release/check-release.ps1        # チェックのみ（下記）
-3. uv run --no-project --with pytest python -m pytest tests   # 単体テスト
-4. mayapy tests/maya/smoke.py                   # Maya スモークテスト（プレビュー有効化まで）
-   python tools/parity/compare.py …             # ToonCore / シェーダーを変更した場合のみ: 描画パリティ（09 §5）
-5. pwsh tools/release/bump-version.ps1 -Version X.Y.Z -DryRun
-6. pwsh tools/release/bump-version.ps1 -Version X.Y.Z -Tag
-      → VERSION と CHANGELOG を更新、"Release vX.Y.Z" でコミット、注釈付きタグ vX.Y.Z
+2. uv run --no-project python tools/release/check_release.py --version X.Y.Z   # 検査のみ（下記）
+3. uv run --no-project --with pytest --with numpy --with pillow python -m pytest tests
+      # 単体テスト + mayapy スモークテスト（tests/maya/smoke.py、Maya 2026 がある環境）
+4. python tools/parity/compare.py …                                            # ToonCore / シェーダーを変更した場合のみ（09 §5）
+5. uv run --no-project python tools/release/bump_version.py --version X.Y.Z --dry-run
+6. uv run --no-project python tools/release/bump_version.py --version X.Y.Z --tag
+      → VERSION・CHANGELOG・契約スナップショットを更新、"Release vX.Y.Z" でコミット、注釈付きタグ vX.Y.Z
 7. git push --follow-tags   ※明示的に指示されたときだけ
 ```
 
-`check-release.ps1` の検査項目:
+`check_release.py` の検査項目:
 
-- 作業ツリーがクリーン
-- `[Unreleased]` に `### 互換性` がある
-- パラメータ契約のスナップショット（`tests/snapshots/params.json`）との差分が互換性区分と矛盾しない（削除・改名があるのに MAJOR でない → エラー）
+- 作業ツリーがクリーン（`--allow-dirty` で試し打ち可）
+- `[Unreleased]` に `### 互換性` があり、記入済み
+- パラメータ契約のスナップショット（`tests/snapshots/params.json` = 直近リリース時点の契約）との差分から**必要な上げ幅を機械的に算出**し、指定した上げ幅が足りなければ失敗（削除・型変更 → MAJOR、追加 → MINOR。0.x の間は破壊的変更も MINOR）
 - 全 `looks/*/look.json` が検証を通る
+- 初回リリース（現在の VERSION のタグが無い）は上げ幅の検査を省略し、その時点の契約を基準にする
 
-`bump-version.ps1` は `-Part major|minor|patch` / `-NoCommit` にも対応（D-Drive と同じ引数体系）。
+`bump_version.py` は `--part major|minor|patch`（現在から自動計算）/ `--no-commit` にも対応。
 
 ## 6. ブランチ運用
 
