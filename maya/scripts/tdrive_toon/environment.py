@@ -156,6 +156,22 @@ def _visible(shape: str) -> bool:
     return True
 
 
+def prepare_panel(panel: str | None = None) -> str | None:
+    """プレビュー用にモデルパネルを整える（テクスチャ表示 ON。OFF だと dx11Shader が使われない。docs/09 §6）。"""
+    panel = panel or model_panel()
+    if panel:
+        cmds.modelEditor(panel, edit=True, displayTextures=True, displayAppearance="smoothShaded")
+    return panel
+
+
+def capture_panel_settings(panel: str) -> None:
+    """キャプチャ時だけ邪魔な表示（ジョイント・グリッド・HUD 等）を消す。"""
+    cmds.modelEditor(
+        panel, edit=True, joints=False, grid=False, locators=False, nurbsCurves=False, handles=False,
+        ikHandles=False, deformers=False, manipulators=False, selectionHiliteDisplay=False, headsUpDisplay=False,
+    )
+
+
 def model_panel() -> str | None:
     panel = cmds.getPanel(withFocus=True)
     if panel and cmds.getPanel(typeOf=panel) == "modelPanel":

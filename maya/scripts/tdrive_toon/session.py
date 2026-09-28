@@ -12,7 +12,7 @@ from typing import Any, Iterable
 
 from maya import cmds
 
-from . import REPO_ROOT, look, preview, roles
+from . import REPO_ROOT, environment, look, preview, roles
 
 LOOKS_DIR = REPO_ROOT / "looks"
 CAPTURE_DIR = REPO_ROOT / "captures"
@@ -180,6 +180,7 @@ class Session:
     def show(self, variant: str) -> None:
         lk = self.require()
         self.shown = variant
+        environment.prepare_panel()
         failed = preview.enable(look.resolve(lk, variant))
         if failed:
             print(f"[T-Drive] シーンに存在しないマテリアル: {', '.join(failed)}")
