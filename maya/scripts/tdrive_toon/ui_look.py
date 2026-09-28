@@ -338,7 +338,7 @@ class ParamRow:
 
     def _browse(self) -> None:
         path, _ = QtWidgets.QFileDialog.getOpenFileName(
-            self.editor, "テクスチャ", str(preview.REPO_ROOT), "Image (*.png *.tga *.tif *.exr *.psd *.jpg)"
+            self.editor, "テクスチャ", str(preview.project.root()), "Image (*.png *.tga *.tif *.exr *.psd *.jpg)"
         )
         if path:
             self.tab.begin()

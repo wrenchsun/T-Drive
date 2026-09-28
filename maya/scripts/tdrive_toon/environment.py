@@ -11,9 +11,8 @@ from typing import Any
 
 from maya import cmds
 
-from . import REPO_ROOT, envmath
+from . import envmath, project
 
-PROFILE_DIR = REPO_ROOT / "looks" / "_env"
 TONEMAP_MODES = {"None": 0, "Neutral": 1}  # ToonCore の TOON_TONEMAP_*。ACES は未対応（docs/09）
 
 # OCIO 設定によって名前が違うので候補を順に探す
@@ -23,8 +22,17 @@ TEXTURE_SRGB = ("sRGB Encoded Rec.709 (sRGB)", "sRGB", "Utility - sRGB - Texture
 TEXTURE_RAW = ("Raw",)
 
 
+def _profile_path(name: str):
+    """プロジェクトの looks/_env を優先し、無ければツール同梱（docs/13 §1）。"""
+    for d in project.profile_dirs():
+        p = d / f"{name}.json"
+        if p.exists():
+            return p
+    raise FileNotFoundError(f"環境プロファイル {name} が見つからない: {[str(d) for d in project.profile_dirs()]}")
+
+
 def list_profiles() -> list[str]:
-    return sorted(p.stem for p in PROFILE_DIR.glob("*.json"))
+    return sorted({p.stem for d in project.profile_dirs() for p in d.glob("*.json")})
 
 
 def default_profile() -> str | None:
@@ -34,7 +42,7 @@ def default_profile() -> str | None:
 
 
 def load_profile(name: str) -> dict[str, Any]:
-    prof = json.loads((PROFILE_DIR / f"{name}.json").read_text(encoding="utf-8"))
+    prof = json.loads(_profile_path(name).read_text(encoding="utf-8"))
     prof.setdefault("name", name)
     return prof
 

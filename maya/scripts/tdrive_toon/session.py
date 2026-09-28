@@ -13,11 +13,10 @@ from typing import Any, Iterable
 
 from maya import cmds
 
-from . import REPO_ROOT, environment, features, look, preview, roles
+from . import environment, features, look, preview, project, roles
 
-LOOKS_DIR = REPO_ROOT / "looks"
-CAPTURE_DIR = REPO_ROOT / "captures"
-EXPORT_DIR = REPO_ROOT / "build" / "unity"
+PROJECT_OPTION_VAR = "TDriveToon_ProjectRoot"  # 選んだプロジェクトフォルダ（Maya の設定に保存。docs/13 §1）
+INSTALLER_PROJECT_OPTION_VAR = "TDriveToon_InstallerProjectSeen"  # 採用済みのインストーラーのプロジェクト
 
 
 def undoable(fn):
@@ -72,7 +71,7 @@ class Session:
     def new(self, character: str, model: str = "") -> None:
         model = model or preview.to_repo_path(cmds.file(query=True, sceneName=True) or "")
         self.look = look.new_look(character, model or "unknown")
-        self.path = LOOKS_DIR / character / "look.json"
+        self.path = project.looks_dir() / character / "look.json"
         self.edit_variant = self.shown = look.BASE
         self._undo.clear()
         self._redo.clear()
@@ -98,7 +97,7 @@ class Session:
         if path:
             self.path = Path(path)
         if self.path is None:
-            self.path = LOOKS_DIR / lk["character"] / "look.json"
+            self.path = project.looks_dir() / lk["character"] / "look.json"
         look.save(lk, self.path)
         preview.remember_look_path(str(self.path))
         self.dirty = False
@@ -106,7 +105,7 @@ class Session:
         return self.path
 
     def preview_settings_path(self) -> Path:
-        base = self.path.parent if self.path else LOOKS_DIR / self.require()["character"]
+        base = self.path.parent if self.path else project.looks_dir() / self.require()["character"]
         return base / "preview.json"
 
     def save_preview_settings(self) -> Path:
@@ -634,7 +633,7 @@ class Session:
                     cmds.refresh(force=True)
                     angle = "cur" if yaw is None else f"{int(yaw):+04d}"
                     name = f"{stamp}_{env_tag}_{angle}_{slot}_{variant}.png"
-                    shot[slot] = preview.capture(str(CAPTURE_DIR / char / name), width, height)
+                    shot[slot] = preview.capture(str(project.capture_dir() / char / name), width, height)
                 shots.append(shot)
         self.show(before)
         return shots
@@ -651,7 +650,7 @@ class Session:
         w, h = prof.get("captureSize", [1920, 1080])
         before = self.shown
         self.show(variant or self.shown)
-        out_dir = CAPTURE_DIR / self.require()["character"] / "parity"
+        out_dir = project.capture_dir() / self.require()["character"] / "parity"
         paths = []
         with environment.capture_panel():
             for name, yaw in list(environment.CAMERA_PRESETS.items())[:4]:
@@ -668,7 +667,7 @@ class Session:
     def export_unity(self, variant: str = look.BASE, out_dir: Path | None = None) -> Path:
         """MS2026 の Unity インポーターが読む中間ファイル（MaterialData 相当）を書き出す。"""
         lk = self.require()
-        out = (out_dir or EXPORT_DIR) / lk["character"]
+        out = (out_dir or project.export_dir()) / lk["character"]
         out.mkdir(parents=True, exist_ok=True)
         payload = {
             "schemaVersion": look.SCHEMA_VERSION,
@@ -700,7 +699,7 @@ class Session:
 
     def fbx_path(self, out_dir: Path | None = None) -> Path:
         char = self.require()["character"]
-        return (out_dir or EXPORT_DIR) / char / f"{char}.fbx"
+        return (out_dir or project.export_dir()) / char / f"{char}.fbx"
 
     def start_unity_export(self, variant: str = look.BASE, out_dir: Path | None = None):
         """materialdata.json を書き、FBX の書き出しをバックグラウンドで始める。(json パス, ExportJob) を返す。"""
@@ -730,6 +729,42 @@ def on_scene_opened() -> None:
         print(f"[T-Drive] Look を開きました: {preview.to_repo_path(path)}")
     except Exception as exc:  # 壊れた Look でシーンを開く操作自体は止めない
         print(f"[T-Drive] Look を開けませんでした: {exc}")
+
+
+def load_project_preference() -> None:
+    """起動時: 使うプロジェクトフォルダを決める。
+
+    1. インストーラー（Install-TDriveToon.bat）が新しく登録したプロジェクト（$TDRIVE_INSTALL_PROJECT、1 回だけ採用）
+    2. Maya で選んで保存したプロジェクト
+    3. $TDRIVE_PROJECT（.mod）、無ければツール本体 = 開発用
+    """
+    import os
+
+    installed = os.environ.get("TDRIVE_INSTALL_PROJECT", "")
+    seen = cmds.optionVar(query=INSTALLER_PROJECT_OPTION_VAR) if cmds.optionVar(exists=INSTALLER_PROJECT_OPTION_VAR) else ""
+    if installed and installed != seen and Path(installed).is_dir():
+        cmds.optionVar(stringValue=(INSTALLER_PROJECT_OPTION_VAR, installed))
+        choose_project(installed)
+        return
+    if cmds.optionVar(exists=PROJECT_OPTION_VAR):
+        p = cmds.optionVar(query=PROJECT_OPTION_VAR)
+        if p and Path(p).is_dir():
+            project.set_root(p)
+            return
+    env = os.environ.get(project.ENV, "")
+    project.set_root(env if env and Path(env).is_dir() else None)
+
+
+def choose_project(path: str | None) -> Path:
+    """プロジェクトフォルダを選んで保存する（None でツール本体 = 開発用に戻す）。looks/ が無ければ作る。"""
+    root = project.set_root(path)
+    if path:
+        cmds.optionVar(stringValue=(PROJECT_OPTION_VAR, root.as_posix()))
+        (root / "looks").mkdir(parents=True, exist_ok=True)
+    elif cmds.optionVar(exists=PROJECT_OPTION_VAR):
+        cmds.optionVar(remove=PROJECT_OPTION_VAR)
+    _current._changed(dirty=False)
+    return root
 
 
 def current() -> Session:

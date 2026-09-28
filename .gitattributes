@@ -6,6 +6,7 @@
 *.mod text eol=lf
 *.ps1 text eol=crlf
 *.cmd text eol=crlf
+*.bat text eol=crlf
 
 # Maya ASCII はテキストだが巨大になるので diff はしない
 *.ma text eol=lf -diff linguist-generated

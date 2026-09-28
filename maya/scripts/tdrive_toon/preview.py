@@ -13,7 +13,7 @@ from typing import Any
 
 from maya import cmds
 
-from . import REPO_ROOT, environment, envmath, params
+from . import REPO_ROOT, environment, envmath, params, project
 
 SHADER_FILE = (REPO_ROOT / "maya" / "shaders" / "TDriveToon.fx").as_posix()
 NODE_TYPE = "dx11Shader"
@@ -180,16 +180,12 @@ def meshes_of(material: str) -> list[str]:
 
 
 def to_repo_path(path: str) -> str:
-    p = Path(path)
-    try:
-        return p.resolve().relative_to(REPO_ROOT.resolve()).as_posix()
-    except (ValueError, OSError):
-        return p.as_posix()
+    """プロジェクトフォルダ基準の相対パス（外なら絶対パス）。開発用はプロジェクト = リポジトリ（docs/13 §1）。"""
+    return project.to_project_path(path)
 
 
 def from_repo_path(path: str) -> str:
-    p = Path(path)
-    return (p if p.is_absolute() else REPO_ROOT / p).as_posix()
+    return project.from_project_path(path)
 
 
 # ---------------------------------------------------------------- 差し替え
@@ -408,8 +404,8 @@ def _set_texture(shader: str, attr: str, path: str | None, srgb: bool) -> None:
     if not cmds.objExists(file_node):
         file_node = cmds.shadingNode("file", asTexture=True, isColorManaged=True, name=file_node)
         cmds.connectAttr(f"{file_node}.outColor", f"{shader}.{attr}", force=True)
-    # リポジトリ内のテクスチャは $TDRIVE_ROOT（TDriveToon.mod が定義）基準で書き、どの PC でもシーンが開けるようにする
-    name = path if Path(path).is_absolute() else f"$TDRIVE_ROOT/{path}"
+    # プロジェクト内のテクスチャは $TDRIVE_PROJECT 基準で書き、どの PC でもシーンが開けるようにする（docs/13 §1）
+    name = path if Path(path).is_absolute() else f"${project.ENV}/{path}"
     if cmds.getAttr(f"{file_node}.fileTextureName") != name:
         cmds.setAttr(f"{file_node}.fileTextureName", name, type="string")
     # ベースカラーは sRGB（Unity の sRGB テクスチャ）、マスク類はリニア（docs/09 §2）

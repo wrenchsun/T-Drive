@@ -13,11 +13,18 @@ from maya import cmds
 
 
 def _tdrive_startup():
-    from tdrive_toon import mcp_bridge, menu
+    from tdrive_toon import mcp_bridge, menu, session
 
+    session.load_project_preference()  # 選んだプロジェクトフォルダ（docs/13 §1）
     mcp_bridge.open_from_env()
     cmds.scriptJob(event=["SceneOpened", "from tdrive_toon import session; session.on_scene_opened()"], protected=True)
     menu.install()
+    try:
+        from tdrive_toon import ui_update
+
+        ui_update.startup_check()  # 更新後の確認待ちの案内・1 日 1 回の更新の確認（docs/13 §3）
+    except Exception as exc:  # noqa: BLE001  起動を止めない
+        print(f"[T-Drive] 更新の確認に失敗: {exc}")
 
 
 if not cmds.about(batch=True):

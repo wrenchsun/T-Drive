@@ -13,7 +13,7 @@ from maya import cmds
 from maya.app.general.mayaMixin import MayaQWidgetDockableMixin
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from . import __version__, environment, lifecycle, look, preview, roles, session
+from . import __version__, environment, lifecycle, look, preview, project, roles, session
 from .ui_ab import ABTab
 from .ui_character import CharacterTab
 from .ui_features import FeaturesTab
@@ -249,12 +249,14 @@ class HeaderBar(QtWidgets.QWidget):
 
     def refresh(self) -> None:
         lk = self.session.look
+        where = "開発用（ツール本体）" if project.is_tool_repo() else project.root().as_posix()
+        self.label.setToolTip(f"プロジェクト: {project.root().as_posix()}（T-Drive Toon › プロジェクトを選ぶ… で変更）")
         if lk is None:
-            self.label.setText("Look: （未作成）— 新規 か 開く から始めてください")
+            self.label.setText(f"プロジェクト: {where}\nLook: （未作成）— 新規 か 開く から始めてください")
         else:
             path = preview.to_repo_path(str(self.session.path)) if self.session.path else "（未保存）"
             dirty = "  ●未保存" if self.session.dirty else ""
-            self.label.setText(f"Look: {path}   {lk['character']} v{lk['lookVersion']}{dirty}")
+            self.label.setText(f"プロジェクト: {where}\nLook: {path}   {lk['character']} v{lk['lookVersion']}{dirty}")
         active = preview.is_active()
         for b, on in ((self.toon, active), (self.original, not active)):
             b.blockSignals(True)
@@ -284,7 +286,7 @@ class HeaderBar(QtWidgets.QWidget):
     def on_open(self) -> None:
         if not self._confirm_discard():
             return
-        path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Look を開く", str(session.LOOKS_DIR), "Look (look.json *.json)")
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Look を開く", str(project.looks_dir()), "Look (look.json *.json)")
         if path:
             try:
                 self.session.open(path)
@@ -301,7 +303,7 @@ class HeaderBar(QtWidgets.QWidget):
         lk = self.session.look
         if lk is None:
             return
-        start = str(self.session.path or session.LOOKS_DIR / lk["character"] / "look.json")
+        start = str(self.session.path or project.looks_dir() / lk["character"] / "look.json")
         path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Look を別名保存", start, "Look (*.json)")
         if path:
             try:
