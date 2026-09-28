@@ -28,10 +28,10 @@
 | `depthOffset` | 手前に出す | T-09 | `_ToonDepthOffset` | Sh | ○ |
 | `depthCompression` | 奥行き圧縮 | T-22 | `_ToonDepthCompressWeight` + `characterSettings.depthCompression` | Sh Co | ○ |
 | `faceShadowSdf` | SDF 顔影マップ | T-21 | `_ToonFaceShadow*` + `characterSettings.faceShadow` | Sh Co | ○ |
-| `lightStabilize` | ライトの安定化 | T-17 | `characterSettings.light` | Co | △（ライト回転で再現。4-5） |
+| `lightStabilize` | ライトの安定化 | T-17 | `characterSettings.light` | Co | ○（プレビュータブで同じ式を掛ける。4-5） |
 | `stencil` | 髪越し表示（ステンシル） | T-24 | `characterSettings.stencil` + ステンシル状態 | Sh Co | △（手前に出すで代用） |
-| `innerLine` | 画面上のインナーライン | T-23 | `characterSettings.innerLine` + ToonId パス | RF | △（4-7 で再現） |
-| `contactShadow` | 接地影 | T-29 | `characterSettings.contactShadow` | RF | △（簡易表示。4-6） |
+| `innerLine` | 画面上のインナーライン | T-23 | `characterSettings.innerLine` + ToonId パス | RF | ×（4-7 で △） |
+| `contactShadow` | 接地影 | T-29 | `characterSettings.contactShadow` | RF | ×（4-6 で △ 簡易表示） |
 | `viewCorrection` | カメラ角度補正 | T-20 | `characterSettings.viewCorrection` + BlendShape | Me Co | ○ |
 | `expressions` | 表情パラメータ | T-25 | `characterSettings.expressions` | Co | ○（プレビュー） |
 

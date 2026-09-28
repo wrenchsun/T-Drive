@@ -73,3 +73,34 @@ def test_view_correction_weights_sum_to_one():
 def test_horizontal_angle():
     assert math.isclose(envmath.horizontal_angle_deg((0, 0, 1), (1, 5, 0)), 90.0)  # 高さは無視
     assert math.isclose(envmath.horizontal_angle_deg((0, 0, 1), (0, 0, -3)), 180.0)
+
+
+def test_light_stabilizer_hysteresis_ignores_small_jitter():
+    st = envmath.LightStabilizer(smoothing=0.0, hysteresis_deg=3.0)
+    base = (0.0, 0.0, 1.0)
+    st.update(base, 0.033)
+    tilt = lambda deg: (math.sin(math.radians(deg)), 0.0, math.cos(math.radians(deg)))
+    for deg in (1.0, -2.0, 2.9, -1.5):
+        assert envmath.angle_deg(st.update(tilt(deg), 0.033), base) < 1e-6  # 揺れは無視
+    assert envmath.angle_deg(st.update(tilt(5.0), 0.033), tilt(5.0)) < 1e-6  # 超えたら追従（平滑化 0 = 即時）
+
+
+def test_light_stabilizer_smoothing_time_constant():
+    st = envmath.LightStabilizer(smoothing=0.5, hysteresis_deg=0.0)
+    st.update((0.0, 0.0, 1.0), 0.0)
+    d = st.update((1.0, 0.0, 0.0), 0.5)  # 時定数 1 回分 → 90° の 1 - e^-1 ≒ 63.2% 進む
+    assert envmath.angle_deg(d, (0.0, 0.0, 1.0)) == pytest.approx(90.0 * (1 - math.exp(-1)), abs=1e-6)
+    for _ in range(200):
+        d = st.update((1.0, 0.0, 0.0), 0.033)
+    assert st.settled()
+
+
+def test_light_stabilizer_frame_rate_independent():
+    a = envmath.LightStabilizer(0.3, 0.0)
+    b = envmath.LightStabilizer(0.3, 0.0)
+    for s in (a, b):
+        s.update((0.0, 0.0, 1.0), 0.0)
+    da = a.update((1.0, 0.0, 0.0), 0.2)
+    for _ in range(4):
+        db = b.update((1.0, 0.0, 0.0), 0.05)
+    assert envmath.angle_deg(da, db) < 1e-6  # 同じ時間なら刻み方によらない（同一平面の slerp）

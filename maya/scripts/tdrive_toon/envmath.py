@@ -116,3 +116,58 @@ def orbit_camera(
         target[2] + math.cos(yaw) * math.cos(pitch) * distance,
     )
     return pos, (-pitch_deg, yaw_deg, 0.0)
+
+
+# ---------------------------------------------------------------- 影の安定化（T-17、docs/08 §3.3）
+Vec3 = tuple[float, float, float]
+
+
+def _normalize(v: Vec3) -> Vec3:
+    n = math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2])
+    return (v[0] / n, v[1] / n, v[2] / n) if n > 0 else (0.0, 0.0, 1.0)
+
+
+def angle_deg(a: Vec3, b: Vec3) -> float:
+    a, b = _normalize(a), _normalize(b)
+    d = max(-1.0, min(1.0, a[0] * b[0] + a[1] * b[1] + a[2] * b[2]))
+    return math.degrees(math.acos(d))
+
+
+def slerp(a: Vec3, b: Vec3, t: float) -> Vec3:
+    a, b = _normalize(a), _normalize(b)
+    omega = math.radians(angle_deg(a, b))
+    if omega < 1e-6:
+        return b
+    if math.pi - omega < 1e-6:  # 正反対は補間の向きが決まらないので線形（正規化）で代用
+        return _normalize(tuple(x + (y - x) * t for x, y in zip(a, b)))
+    s = math.sin(omega)
+    wa, wb = math.sin((1 - t) * omega) / s, math.sin(t * omega) / s
+    return _normalize(tuple(wa * x + wb * y for x, y in zip(a, b)))
+
+
+class LightStabilizer:
+    """キャラクターライトの平滑化・ヒステリシス。Unity の ToonLightRig と同じ式（C# はこれを移植する）。"""
+
+    def __init__(self, smoothing: float, hysteresis_deg: float) -> None:
+        self.smoothing = float(smoothing)
+        self.hysteresis_deg = float(hysteresis_deg)
+        self.anchor: Vec3 | None = None
+        self.current: Vec3 | None = None
+
+    def reset(self, direction: Vec3) -> None:
+        self.anchor = self.current = _normalize(direction)
+
+    def update(self, target: Vec3, dt: float) -> Vec3:
+        t = _normalize(target)
+        if self.current is None or self.anchor is None:
+            self.reset(t)
+            return t
+        if angle_deg(t, self.anchor) > self.hysteresis_deg:
+            self.anchor = t
+        k = 1.0 if self.smoothing <= 0 else 1.0 - math.exp(-max(dt, 0.0) / self.smoothing)
+        self.current = slerp(self.current, self.anchor, k)
+        return self.current
+
+    def settled(self, eps_deg: float = 0.01) -> bool:
+        """出力が基準方向に追いついた（これ以上動かない）。"""
+        return self.current is not None and angle_deg(self.current, self.anchor) <= eps_deg

@@ -70,6 +70,13 @@ Maya の `TDriveToon.fx` はそこを相対パスで include する（1 本の�
 
 - 既定のキャラクターライト（方向・色・強度）と、影の安定化（平滑化時間・ヒステリシス角度）の既定値
 
+**影の安定化（T-17）の式**（Maya プレビューと同じ。正本は `maya/scripts/tdrive_toon/envmath.py` の `LightStabilizer`、C# はこれを移植してテスト値を合わせる）:
+
+1. 入力 = 毎フレームの目標方向 `t`（正規化）。状態 = 基準方向 `a`・出力方向 `d`（初回は両方 `t`）
+2. **ヒステリシス**: `angle(t, a) > hysteresisDeg` のときだけ `a = t`（それ以下の揺れは無視）
+3. **平滑化**: `d = slerp(d, a, 1 - exp(-dt / smoothing))`（smoothing は時定数・秒。0 以下なら `d = a`）
+4. 出力 `d` をシェーダーのライト方向に使う。オフ（機能 `lightStabilize` がオフ）なら `d = t`
+
 ### 3.4 `ToonRendererFeature`（URP の Renderer に追加）
 
 | パス | 技術 | 内容 |

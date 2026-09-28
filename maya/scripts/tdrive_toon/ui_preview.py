@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import random
+import time
+
 from PySide6 import QtCore, QtWidgets
 
-from . import environment, preview, session
+from . import envmath, environment, look, preview, session
 
 ROTATE_STEP_DEG = 3.0
 ROTATE_INTERVAL_MS = 33
+JITTER_DEG = 2.0  # 「小さく揺らす」の振れ幅（ヒステリシスの確認用）
 
 
 def _warn(parent: QtWidgets.QWidget, exc: Exception) -> None:
@@ -77,6 +81,20 @@ class PreviewTab(QtWidgets.QWidget):
         self.rotate.setToolTip("ヨーを自動で回し、影の境界の動き方（パカパカしないか）を確認する")
         self.rotate.toggled.connect(self.on_rotate)
         grid.addWidget(self.rotate, 3, 0, 1, 3)
+        row = QtWidgets.QHBoxLayout()
+        self.stabilize = QtWidgets.QCheckBox("Unity の影の安定化を掛ける")
+        self.stabilize.setToolTip("キャラクタータブの平滑化・ヒステリシスで、ライトの動きに影を遅れて追従させる（Unity と同じ式）。"
+                                  "機能タブで「ライトの安定化」がオンのときだけ使える")
+        self.stabilize.toggled.connect(self.on_stabilize)
+        self.jitter = QtWidgets.QCheckBox(f"小さく揺らす（±{JITTER_DEG:.0f}°）")
+        self.jitter.setToolTip("ライトを細かく揺らして、ヒステリシスで影の境界がチラつかないかを確認する")
+        self.jitter.toggled.connect(self._update_timer)
+        row.addWidget(self.stabilize)
+        row.addWidget(self.jitter)
+        row.addStretch(1)
+        grid.addLayout(row, 4, 0, 1, 3)
+        self.stabilizer: envmath.LightStabilizer | None = None
+        self._last_tick = time.perf_counter()
         self.timer = QtCore.QTimer(self)
         self.timer.setInterval(ROTATE_INTERVAL_MS)
         self.timer.timeout.connect(self._tick)
@@ -130,6 +148,14 @@ class PreviewTab(QtWidgets.QWidget):
                 + f"<br><span style='color:#888'>{prof.get('source', '')}</span>"
             )
         self._show_light()
+        lk = self.session.look
+        can = lk is not None and look.enabled(lk, "lightStabilize")
+        self.stabilize.setEnabled(can)
+        if not can and self.stabilize.isChecked():
+            self.stabilize.setChecked(False)
+        elif self.stabilizer is not None:
+            light = look.resolved_settings(lk)["light"]  # キャラクタータブの変更を反映
+            self.stabilizer.smoothing, self.stabilizer.hysteresis_deg = light["smoothing"], light["hysteresisDeg"]
         rows = environment.parity_status()
         self.parity.setRowCount(len(rows))
         for i, (name, expected, actual, ok) in enumerate(rows):
@@ -172,26 +198,74 @@ class PreviewTab(QtWidgets.QWidget):
             _warn(self, exc)
 
     def set_light(self, pitch: float, yaw: float) -> None:
-        preview.set_light_euler(pitch, yaw)
+        self._set_target(pitch, yaw)
         self._show_light()
 
     def on_game_light(self) -> None:
         preview.reset_light_to_profile()
+        if self.stabilizer is not None:
+            self.stabilizer.reset(self.stabilizer.current)  # 戻した方向へ安定化しながら追従させる
+            preview.set_light(direction=self.stabilizer.current)
+            self._update_timer()
         self._show_light()
 
     def _on_slider(self) -> None:
-        preview.set_light_euler(self.pitch.value(), self.yaw.value())
+        self._set_target(self.pitch.value(), self.yaw.value())
         self.yaw_value.setText(f"{self.yaw.value()}°")
         self.pitch_value.setText(f"{self.pitch.value()}°")
 
+    def _set_target(self, pitch: float, yaw: float) -> None:
+        """ライトの目標の向き（保存される値）。安定化中は表示の方向をタイマーで追従させる。"""
+        stabilizing = self.stabilizer is not None
+        preview.set_light_euler(pitch, yaw, apply=not stabilizing)
+        if stabilizing:
+            self._update_timer()
+
     def on_rotate(self, on: bool) -> None:
         self.rotate.setText("ライト回転 ■" if on else "ライト回転 ▶")
-        self.timer.start() if on else self.timer.stop()
+        self._update_timer()
+
+    def on_stabilize(self, on: bool) -> None:
+        lk = self.session.look
+        if on and lk is not None:
+            light = look.resolved_settings(lk)["light"]
+            self.stabilizer = envmath.LightStabilizer(light["smoothing"], light["hysteresisDeg"])
+            self.stabilizer.reset(preview.environment_state()["lightDir"])
+        else:
+            self.stabilizer = None
+            pitch, yaw = preview.environment_state()["lightEuler"]
+            preview.set_light_euler(pitch, yaw)  # 目標の向きをそのまま表示に戻す
+        self._update_timer()
+
+    def _update_timer(self) -> None:
+        busy = self.rotate.isChecked() or self.jitter.isChecked() or self.stabilizer is not None
+        if busy and not self.timer.isActive():
+            self._last_tick = time.perf_counter()
+            self.timer.start()
+        elif not busy:
+            self.timer.stop()
+            if not self.jitter.isChecked():
+                pitch, yaw = preview.environment_state()["lightEuler"]
+                preview.set_light_euler(pitch, yaw)  # 揺らしをやめたら目標の向きに戻す
 
     def _tick(self) -> None:
+        now = time.perf_counter()
+        dt, self._last_tick = now - self._last_tick, now
         pitch, yaw = preview.environment_state()["lightEuler"]
-        preview.set_light_euler(pitch, yaw + ROTATE_STEP_DEG)
-        self._show_light()
+        if self.rotate.isChecked():
+            yaw += ROTATE_STEP_DEG
+            preview.set_light_euler(pitch, yaw, apply=False)
+            self._show_light()
+        jp = jy = 0.0
+        if self.jitter.isChecked():
+            jp, jy = (random.uniform(-JITTER_DEG, JITTER_DEG) for _ in range(2))
+        target = envmath.light_dir_to_light_maya((pitch + jp, yaw + jy, 0.0))
+        if self.stabilizer is None:
+            preview.set_light(direction=target)
+            return
+        preview.set_light(direction=self.stabilizer.update(target, dt))
+        if self.stabilizer.settled() and not (self.rotate.isChecked() or self.jitter.isChecked()):
+            self.timer.stop()  # 追いついたら止める（ビューポートを無駄に再描画しない）
 
     def on_fix_color(self) -> None:
         environment.apply_color_management()

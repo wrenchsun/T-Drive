@@ -35,7 +35,7 @@ class CharacterTab(QtWidgets.QWidget):
         self.feature_boxes: dict[str, QtWidgets.QGroupBox] = {}
 
         # ---- ライト（影の安定化） T-17
-        box, f = self._group(f"キャラクターライトの安定化 {UNITY_ONLY}", feature="lightStabilize")
+        box, f = self._group("キャラクターライトの安定化（プレビュータブ › Unity の影の安定化を掛ける で確認）", feature="lightStabilize")
         self.smoothing = self._spin(f, "平滑化（秒）", "light.smoothing", 0.0, 2.0, 0.05)
         self.hysteresis = self._spin(f, "ヒステリシス（度）", "light.hysteresisDeg", 0.0, 20.0, 0.5)
 
