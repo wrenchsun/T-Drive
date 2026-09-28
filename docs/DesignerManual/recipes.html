@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>表現のレシピ - T-Drive デザイナーマニュアル</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<nav class="breadcrumb"><a href="Readme.html">トップ</a> › 表現のレシピ</nav>
+<h1>表現のレシピ（アニメ的な“嘘”の作り方）</h1>
+<p class="lastupdate">最終更新日: 2026-09-28</p>
+
+<p>よく使う表現を、このツールの機能の組み合わせで作る手順です。どれも「3D として正しいか」より「絵として伝わるか」を優先します。</p>
+
+<h2 id="brow">眉・目を前髪の上に出す</h2>
+<ol>
+<li>眉・目・アイラインの部位のロールを <strong>眉 / 目 / アイライン</strong> にする（初期値で少し手前に出ます）</li>
+<li>足りなければルックタブ › <strong>手前に出す量 (m)</strong> を少しずつ上げる</li>
+<li>プレビュータブで <strong>横</strong> カメラにして、眉が頭の外に出ていないか確認</li>
+</ol>
+<div class="warn">眉と顔が同じマテリアル（顔のテクスチャに眉が描いてある）場合は部位を分けられません。モデル側で眉のポリゴンを別マテリアルに分けてください。</div>
+
+<h2 id="face-shadow">顔の影を綺麗にする</h2>
+<ol>
+<li>ロール <strong>顔</strong> で影の強さが弱め（0.35）になっています。さらに弱めたいときはルックタブ › <strong>影の強さ</strong></li>
+<li>影が細かく割れるときは <a href="parts.html#face-normal">顔の法線</a> で楕円体に寄せる</li>
+<li>「ここは影にしたくない」所は <a href="look-params.html#mask">Toon マスク</a> の <strong>B を黒</strong>（常に明るい）</li>
+<li>「ここは常に影」（首の下・目の周り・前髪の下）は <strong>R を黒</strong></li>
+</ol>
+
+<h2 id="nose">鼻を線にする・鼻の影を消す</h2>
+<p>3D の鼻は影が強く出て「鼻の立体」が目立ちます。アニメでは鼻は一本の線か小さな点で表現します。</p>
+<ol>
+<li><strong>鼻の影を消す</strong>: 部位タブで顔を選び、Toon マスクの <strong>B</strong> を押して鼻の周り（鼻筋・小鼻・鼻の下）を<strong>黒</strong>で塗り、<strong>確定</strong>。どの向きのライトでも鼻に影が出なくなります</li>
+<li><strong>鼻の線を消す</strong>: 同じく <strong>G</strong> を押して鼻の周りを黒で塗る（輪郭線が鼻で出っ張らなくなります）</li>
+<li><strong>鼻を線で描く</strong>: 顔のテクスチャ（ベースマップ）に鼻の線を描き込みます。線はテクスチャなので、ライトやカメラに関係なく同じ形で出ます</li>
+<li>鼻の下にだけ小さな影を出したいときは、鼻の下の頂点だけ <strong>R</strong> を黒で塗ります（常に影）</li>
+</ol>
+<div class="tip">頂点が少なくて鼻の周りだけ塗れないときは、ルックタブ › <strong>マスク › Toon マスク (RGBA)</strong> にテクスチャを指定すると画素単位で指定できます（<a href="look-params.html#mask">見た目のパラメータ</a>）。</div>
+
+<h2 id="eye-highlight">目のハイライトをライトに関係なく固定する</h2>
+<ol>
+<li>目の部位のロールを <strong>目</strong> にする（初期値で影なし・線なし・<strong>ライト色の影響 0</strong>）</li>
+<li>ハイライトは目のテクスチャに描き込む（または別メッシュにして同じく目のロールにする）</li>
+<li>プレビュータブで <strong>ライト回転</strong> しても目の見た目が変わらないことを確認</li>
+</ol>
+
+<h2 id="inner-line">インナーライン（服のしわ・髪の束の内側の線）</h2>
+<p>外側の輪郭線（アウトライン）とは別に、モデルの内側にも線を入れると作画らしさが上がります。このツールでは<strong>テクスチャに描き込む</strong>方法を使います（画面上の自動検出による線は Unity 側の今後の対応です）。</p>
+<h3>テクスチャに描き込む</h3>
+<ol>
+<li>ベースマップ（色のテクスチャ）に、しわ・境界・髪の束の線を<strong>直接描く</strong></li>
+<li>線の色は真っ黒ではなく、その場所の色の暗い版にする（輪郭線の「線色にベース色を混ぜる」と揃えると馴染みます）</li>
+<li>カメラを引いたときに線が潰れる場合は、線を太めに描くか、線の部分の UV を大きく取る</li>
+</ol>
+<h3>UV を直線に並べる方法（本村線）</h3>
+<p>線を入れたい辺の UV を<strong>縦か横の一直線</strong>に並べ、テクスチャ上で線をピクセルの格子に沿わせると、どの距離でもにじみにくい均一な線になります。</p>
+<ol>
+<li>Maya の UV エディタで、線を入れたい辺のループを選び、UV を水平（または垂直）にそろえる</li>
+<li>テクスチャ上でその直線に沿って 1〜2px の線を描く</li>
+<li>プレビューで距離を変えて、線の太さ・にじみを確認</li>
+</ol>
+
+<h2 id="hair">髪にハイライト（天使の輪）を入れる</h2>
+<ol>
+<li>髪の UV に合わせて、ハイライトの帯を<strong>白黒のテクスチャ（R チャンネル）</strong>で描く</li>
+<li>ルックタブで髪を選び、<strong>髪ハイライト › ハイライトの帯（R）</strong> にそのテクスチャを指定</li>
+<li><strong>ハイライト色</strong> を決め、<strong>視線で帯をずらす量</strong>（0.1〜0.3）でカメラの上下に合わせた動きを付ける</li>
+</ol>
+
+<footer><a href="Readme.html">トップへ戻る</a></footer>
+</body>
+</html>

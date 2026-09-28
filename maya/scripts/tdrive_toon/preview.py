@@ -79,8 +79,14 @@ def scene_materials() -> dict[str, list[str]]:
             continue
         meshes = set()
         for m in cmds.ls(cmds.sets(sg, query=True) or [], long=True, objectsOnly=True):
-            if cmds.nodeType(m) == "mesh":
+            if cmds.nodeType(m) == "transform":
+                shapes = cmds.listRelatives(m, shapes=True, type="mesh", noIntermediate=True) or []
+                if not shapes:
+                    continue  # NURBS（顔の法線プロキシ等）やメッシュ以外は対象外
+            elif cmds.nodeType(m) == "mesh":
                 m = cmds.listRelatives(m, parent=True, fullPath=True)[0]
+            else:
+                continue
             meshes.add(m)
         if meshes:
             result.setdefault(source_material(shader), set()).update(meshes)

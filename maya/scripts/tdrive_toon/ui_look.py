@@ -24,6 +24,13 @@ GROUP_LABELS = {
 }
 
 
+# テクスチャ未設定のときの意味（パラメータで違う。docs/03 §7.2 の既定値）
+TEXTURE_PLACEHOLDER = {
+    "_ToonMaskMap": "なし（白 = 何もしない）",
+    "_ToonHairHighlightMap": "なし（ハイライトなし）",
+}
+
+
 def _warn(parent: QtWidgets.QWidget, exc: Exception) -> None:
     QtWidgets.QMessageBox.warning(parent, "T-Drive Toon", str(exc))
 
@@ -235,7 +242,7 @@ class ParamRow:
             h = QtWidgets.QHBoxLayout(w)
             h.setContentsMargins(0, 0, 0, 0)
             self.path = QtWidgets.QLineEdit()
-            self.path.setPlaceholderText("なし（白 = 何もしない）")
+            self.path.setPlaceholderText(TEXTURE_PLACEHOLDER.get(self.key, "なし"))
             self.path.editingFinished.connect(self._on_path)
             browse = QtWidgets.QToolButton()
             browse.setText("…")

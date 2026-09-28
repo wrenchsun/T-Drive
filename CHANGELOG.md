@@ -17,7 +17,9 @@
 - Unity 出力（materialdata.json + FBX。開いているシーンは変えない）
 - 描画パリティ比較ツール（`tools/parity/compare.py`）、リリーススクリプト（`tools/release/`）
 - デザイナーマニュアル（`docs/DesignerManual/`）
+- ルック P1（Phase 2）: 眉・目を前髪の上に（`_ToonDepthOffset`）/ ライト色の影響 / リム / 髪ハイライト / 線幅の距離補正（パラメータ契約に 10 項目追加）
+- 顔の法線編集（楕円体プロキシへの転写・リセット）、表現のレシピ（マニュアル）
 
 ### 互換性
-- 初回リリース。以後の比較の基準となる互換性の面: パラメータ契約（`_Toon*` 11 個）・頂点カラー割当（R 影寄せ / G 線幅 / B 明寄せ / A 固定色）・UV2 = tdSmoothNormal（八面体・接空間）・Look 定義 schemaVersion 1・materialdata.json の形式
+- 初回リリース。以後の比較の基準となる互換性の面: パラメータ契約（`_Toon*` 21 個）・頂点カラー割当（R 影寄せ / G 線幅 / B 明寄せ / A 固定色）・UV2 = tdSmoothNormal（八面体・接空間）・Look 定義 schemaVersion 1・materialdata.json の形式
 - 0.x の間は破壊的変更を MINOR で出せる（MS2026 への移植開始後は追加変更のみ）
