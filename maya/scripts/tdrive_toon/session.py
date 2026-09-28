@@ -243,6 +243,46 @@ class Session:
             pivot = ((b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2)
         preview.set_depth_compression(amount, pivot)
 
+    # ------------------------------------------------------------ カメラ角度の補正 BlendShape（T-20）
+    def _vc_mesh(self) -> str:
+        from . import view_correction
+
+        name = self.setting("viewCorrection.mesh")
+        found = cmds.ls(name, long=True) if name else []
+        return found[0] if found else view_correction.mesh_for_selection()
+
+    def create_view_correction(self, key: str) -> str:
+        """選択中の顔メッシュ（または登録済みのメッシュ）から補正シェイプを複製して作る。"""
+        from . import view_correction
+
+        mesh = self._vc_mesh()
+        target = view_correction.create_target(mesh, key)
+        self.set_setting("viewCorrection.mesh", preview.short_name(mesh))
+        return target
+
+    def register_view_correction(self, key: str) -> str:
+        """彫った補正シェイプ（<メッシュ>_vc_<角度>）を BlendShape に登録し、Look に記録する。"""
+        from . import view_correction
+
+        mesh = self._vc_mesh()
+        target = f"{preview.short_name(mesh)}_vc_{key}"
+        if not cmds.objExists(target):
+            raise RuntimeError(f"{target} がありません（先に「作る」）")
+        alias = view_correction.register(mesh, key, target)
+        self.set_setting(f"viewCorrection.{key}", alias)
+        return alias
+
+    def connect_view_correction(self, camera: str | None = None) -> str:
+        from . import view_correction
+
+        targets = {k: self.setting(f"viewCorrection.{k}") for k in view_correction.KEYS}
+        return view_correction.connect_driver(self._vc_mesh(), targets, camera)
+
+    def disconnect_view_correction(self) -> None:
+        from . import view_correction
+
+        view_correction.disconnect_driver(self._vc_mesh())
+
     def preview_expression(self, name: str, t: float) -> list[tuple[str, str, float]]:
         """表情パラメータを t（0–1）にしたときの見た目をプレビューする（Look には保存しない。T-25）。
 
@@ -562,9 +602,15 @@ class Session:
         return path
 
     def export_meshes(self) -> list[str]:
-        """Look に登録されたマテリアルが付いているメッシュ（FBX に入れるもの）。"""
+        """Look に登録されたマテリアルが付いているメッシュ（FBX に入れるもの）。
+
+        カメラ角度補正の彫刻用メッシュ（BlendShape として顔に入るもの）は除く。
+        """
+        from . import view_correction
+
         scene = preview.scene_materials()
-        return sorted({m for mat in self.require()["materials"] for m in scene.get(mat, [])})
+        meshes = {m for mat in self.require()["materials"] for m in scene.get(mat, [])}
+        return sorted(m for m in meshes if not view_correction.is_target(m))
 
     def fbx_path(self, out_dir: Path | None = None) -> Path:
         char = self.require()["character"]

@@ -43,7 +43,7 @@ CHARACTER_DEFAULTS: dict[str, Any] = {
     "stencil": {"enabled": False},
     "innerLine": {"enabled": False, "width": 1.0, "color": [0.2, 0.15, 0.15, 1.0], "parts": []},
     "contactShadow": {"enabled": False, "radius": 0.25, "strength": 0.5},
-    "viewCorrection": {"front": "", "threeQuarter": "", "side": ""},
+    "viewCorrection": {"mesh": "", "front": "", "threeQuarter": "", "side": ""},
     "depthCompression": 0.0,
     "expressions": {},
 }

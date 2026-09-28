@@ -90,7 +90,7 @@ Maya でプレビューできない項目もここで編集して持つ（エデ
   "innerLine":      { "enabled": false, "width": 1.0,                    // T-23 画面上の内側の線         Unity のみ
                       "color": [0.2, 0.15, 0.15, 1.0], "parts": ["cloth"] },
   "contactShadow":  { "enabled": false, "radius": 0.25, "strength": 0.5 },// T-29 接地影（m / 0–1）       Unity のみ
-  "viewCorrection": { "front": "", "threeQuarter": "", "side": "" },     // T-20 カメラ角度補正の BlendShape 名
+  "viewCorrection": { "mesh": "", "front": "", "threeQuarter": "", "side": "" },  // T-20 補正 BlendShape を持つメッシュ名とターゲット名
   "depthCompression": 0.0,                                                // T-22 奥行き圧縮（0–1）
   "expressions": {                                                        // T-25 表情パラメータ（0–1 の入力 → 値）
     "blush": [ { "material": "face", "property": "_ToonTintStrength", "min": 0.0, "max": 1.0 } ]
@@ -104,7 +104,7 @@ Maya でプレビューできない項目もここで編集して持つ（エデ
 | innerLine.parts | 登録済みの部位名のみ |
 | innerLine.color | [r, g, b, a]（sRGB 値） |
 | contactShadow | radius > 0、strength 0–1 |
-| viewCorrection | 文字列（空 = 使わない） |
+| viewCorrection | すべて文字列。mesh = 補正 BlendShape（`tdViewCorrection_<mesh>`）を持つメッシュ名、front / threeQuarter / side = ターゲット名（空 = その角度は使わない） |
 | depthCompression | 0–1 |
 | expressions | 名前は英数字と `_`。各項目の material は登録済みマテリアル、property は Float 型のパラメータ契約（`_Toon*`） |
 

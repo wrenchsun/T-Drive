@@ -72,7 +72,7 @@ Unity は T-Drive for Unity パッケージ（Phase U）として実装する（
 | 3-4 | MatCap（髪・装飾の簡易反射） | T-30 | 0.5 | 1-1 | MatCap テクスチャ・強さで反射が乗る | ✅ `_ToonMatCapMap` / `_ToonMatCapStrength`（ビュー空間法線） |
 | 3-5 | SDF 顔影マップ（顔の影をライト角度で作画どおりに） | T-21 | 3 | 2-2 | 閾値マスク群から SDF を生成するツール + シェーダー。ライトを回すと影が作画どおりの形で進む | ⬜ |
 | 3-6 | ビュー空間の奥行き圧縮（部位マスク付き） | T-22 | 1.5 | 1-9 | 顔だけ奥行きを圧縮しても線・影が破綻しない | ✅ `_ToonDepthCompressWeight`（マテリアル）× `characterSettings.depthCompression`（キャラクター）。中心は効かせる部位の中心 |
-| 3-7 | カメラ角度依存の補正 BlendShape（作成支援・角度 → ウェイトのプレビュー） | T-20 | 3 | 1-8 | Maya でカメラを回すと補正 Shape が自動で混ざる。設定は Look の `character.viewCorrection` | ⬜ |
+| 3-7 | カメラ角度依存の補正 BlendShape（作成支援・角度 → ウェイトのプレビュー） | T-20 | 3 | 1-8 | Maya でカメラを回すと補正 Shape が自動で混ざる。設定は Look の `character.viewCorrection` | ✅ 作る / 登録 / カメラに連動（DG + expression）。式は envmath と一致（誤差 0.01 以内）。彫刻用メッシュは出力対象外 |
 | 3-8 | キャラクター単位の設定を Maya で編集（Look 定義 `character` セクション: ライト平滑化・ステンシル・インナーライン・接地影・表情パラメータ） | T-17 T-23 T-24 T-25 T-29 | 2 | 0-5 | [08](08_unity_port_plan.md) §4.2 の項目をエディタで編集・保存できる。Maya でプレビューできない項目は「Unity でのみ」と表示 | ✅ `characterSettings`（仕様で `character` と衝突するため改名）、キャラクタータブ |
 | 3-9 | 表情パラメータのプレビュー（頬の赤み等をスライダーで動かす） | T-25 | 1 | 3-8 | `expressions` の対応表どおりにプレビューの値が動く | ✅ プレビュー（保存しない・Look の値に戻す） |
 

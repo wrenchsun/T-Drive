@@ -41,6 +41,38 @@ def srgb_color_to_linear(rgba):
     return [srgb_to_linear(x) for x in v[:3]] + v[3:]
 
 
+def _smooth(t: float) -> float:
+    t = min(max(t, 0.0), 1.0)
+    return t * t * (3.0 - 2.0 * t)
+
+
+def view_correction_weights(angle_deg: float) -> dict[str, float]:
+    """カメラ角度（キャラクター正面との水平角、度）→ 補正 BlendShape のウェイト（docs/05 §3.2）。
+
+    Unity の ToonCharacter も同じ式を使う。0°〜90° では和が 1。
+    """
+    a = min(abs(angle_deg), 180.0)
+    front = 1.0 - _smooth(a / 45.0)
+    if a <= 45.0:
+        three_quarter = _smooth(a / 45.0)
+        side = 0.0
+    else:
+        three_quarter = 1.0 - _smooth((a - 45.0) / 45.0)
+        side = _smooth(min(a - 45.0, 45.0) / 45.0)
+    return {"front": front, "threeQuarter": three_quarter, "side": side}
+
+
+def horizontal_angle_deg(forward: tuple[float, float, float], to_camera: tuple[float, float, float]) -> float:
+    """水平面（XZ）上での forward と to_camera の角度（0〜180 度）。"""
+    fx, fz = forward[0], forward[2]
+    cx, cz = to_camera[0], to_camera[2]
+    lf, lc = math.hypot(fx, fz), math.hypot(cx, cz)
+    if lf < 1e-9 or lc < 1e-9:
+        return 0.0
+    c = max(-1.0, min(1.0, (fx * cx + fz * cz) / (lf * lc)))
+    return math.degrees(math.acos(c))
+
+
 def unity_euler_forward(euler_deg: tuple[float, float, float]) -> tuple[float, float, float]:
     """Unity の回転 (x, y, z 度) を掛けた forward (0,0,1)。Unity 座標系で返す。"""
     x, y, _z = (math.radians(a) for a in euler_deg)  # Z 回転は forward に影響しない

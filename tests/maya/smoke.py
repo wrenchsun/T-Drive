@@ -286,6 +286,34 @@ def run() -> None:
     check("奥行き圧縮: 量と中心（顔のメッシュ）がプレビューに渡る", st["depthCompression"] == 0.5 and st["depthPivot"] != (0.0, 0.0, 0.0))
     check("characterSettings を含めて Look が検証を通る", look.validate(s.look) == [], str(look.validate(s.look)))
 
+    # ---- Phase 3: カメラ角度の補正 BlendShape（T-20）
+    import math
+
+    from tdrive_toon import envmath, view_correction
+
+    head = cmds.ls("head_back", long=True)[0]
+    cmds.select(head, replace=True)
+    for key in view_correction.KEYS:
+        target = s.create_view_correction(key)
+        cmds.move(0, 0, 0.5, target + ".vtx[0]", relative=True)
+        s.register_view_correction(key)
+    cam = cmds.camera(name="tdSmokeVCCam")[0]
+    s.connect_view_correction(cam)
+    b = cmds.exactWorldBoundingBox(head)
+    c = ((b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2)
+    worst = 0.0
+    for ang in (0, 30, 60, 90):
+        r = math.radians(ang)
+        cmds.xform(cam, worldSpace=True, translation=(c[0] + math.sin(r) * 200, c[1], c[2] + math.cos(r) * 200))
+        w = view_correction.weights(head)
+        exp = envmath.view_correction_weights(ang)
+        worst = max(worst, *(abs(w[s.setting(f"viewCorrection.{k}")] - exp[k]) for k in view_correction.KEYS))
+    check("カメラ角度補正: カメラ連動のウェイトが式どおり（誤差 0.01 以内）", worst < 0.01, str(worst))
+    s.disconnect_view_correction()
+    check("カメラ角度補正: 彫刻用メッシュは Unity 出力の対象外", not any("_vc_" in m for m in s.export_meshes()))
+    check("カメラ角度補正: Look にメッシュ名とターゲット名が入り検証を通る",
+          s.setting("viewCorrection.mesh") == "head_back" and look.validate(s.look) == [], str(look.validate(s.look)))
+
     # ---- 同名メッシュ（キャラクターの複製）があっても動く（2026-09-28 不具合: Toon に戻らない）
     dup_group = cmds.group(empty=True, name="tdDupTest")
     dup = cmds.duplicate(s.meshes_for("cloth")[0])[0]  # 同じ短い名前（Leg 等）のメッシュが 2 つになる

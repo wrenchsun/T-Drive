@@ -56,3 +56,20 @@ def test_units_per_meter():
     assert math.isclose(envmath.units_per_meter("in"), 39.3700787, rel_tol=1e-6)
     with pytest.raises(ValueError):
         envmath.units_per_meter("furlong")
+
+
+@pytest.mark.parametrize("angle,front,tq,side", [(0, 1, 0, 0), (45, 0, 1, 0), (90, 0, 0, 1), (135, 0, 0, 1), (-45, 0, 1, 0)])
+def test_view_correction_weights_key_angles(angle, front, tq, side):
+    w = envmath.view_correction_weights(angle)
+    assert approx((w["front"], w["threeQuarter"], w["side"]), (front, tq, side))
+
+
+def test_view_correction_weights_sum_to_one():
+    for a in range(0, 91, 5):
+        w = envmath.view_correction_weights(a)
+        assert math.isclose(sum(w.values()), 1.0, abs_tol=1e-9)
+
+
+def test_horizontal_angle():
+    assert math.isclose(envmath.horizontal_angle_deg((0, 0, 1), (1, 5, 0)), 90.0)  # 高さは無視
+    assert math.isclose(envmath.horizontal_angle_deg((0, 0, 1), (0, 0, -3)), 180.0)

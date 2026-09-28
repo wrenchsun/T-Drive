@@ -61,15 +61,37 @@ class CharacterTab(QtWidgets.QWidget):
         self.depth = self._spin(f, "量（0〜1）", "depthCompression", 0.0, 1.0, 0.05)
         f.addRow("", QtWidgets.QLabel("効かせる部位は ルックタブ › 手前に出す › 奥行き圧縮の効かせ具合（例: 顔だけ 1）"))
 
-        # ---- カメラ角度補正 T-20
-        box, f = self._group("カメラ角度補正（BlendShape 名）")
+        # ---- カメラ角度補正 T-20（docs/05 §3.2）
+        box, f = self._group("カメラ角度補正（正面 / 3/4 / 横で顔の形を補正する BlendShape）")
+        self.vc_mesh = QtWidgets.QLabel()
+        f.addRow("対象メッシュ", self.vc_mesh)
         self.vc = {}
         for key, label in (("front", "正面"), ("threeQuarter", "3/4"), ("side", "横")):
+            row = QtWidgets.QHBoxLayout()
             e = QtWidgets.QLineEdit()
             e.setPlaceholderText("（使わない）")
             e.editingFinished.connect(lambda k=key, w=e: self._set(f"viewCorrection.{k}", w.text().strip()))
-            f.addRow(label, e)
+            row.addWidget(e, 1)
+            make = QtWidgets.QPushButton("作る")
+            make.setToolTip("顔メッシュを選んで押す → 複製ができるので、それを彫る")
+            make.clicked.connect(lambda _c=False, k=key: self._vc(self.session.create_view_correction, k))
+            row.addWidget(make)
+            reg = QtWidgets.QPushButton("登録")
+            reg.setToolTip("彫り終わった補正シェイプを BlendShape に登録する")
+            reg.clicked.connect(lambda _c=False, k=key: self._vc(self.session.register_view_correction, k))
+            row.addWidget(reg)
+            f.addRow(label, row)
             self.vc[key] = e
+        row = QtWidgets.QHBoxLayout()
+        link = QtWidgets.QPushButton("カメラに連動（プレビュー）")
+        link.setToolTip("今のビューポートのカメラを回すと、角度に応じて補正が自動で混ざる")
+        link.clicked.connect(lambda: self._vc(self.session.connect_view_correction))
+        unlink = QtWidgets.QPushButton("連動を外す")
+        unlink.clicked.connect(lambda: self._vc(self.session.disconnect_view_correction))
+        row.addWidget(link)
+        row.addWidget(unlink)
+        row.addStretch(1)
+        f.addRow("", row)
 
         # ---- 表情パラメータ T-25（3-9 プレビュー）
         box, v = self._group("表情パラメータ（0〜1 の入力で値を動かす対応表）", form=False)
@@ -130,6 +152,12 @@ class CharacterTab(QtWidgets.QWidget):
         f.addRow("", w)
         return w
 
+    def _vc(self, fn, *args) -> None:
+        try:
+            fn(*args)
+        except Exception as exc:
+            _warn(self, exc)
+
     def _set(self, path: str, value) -> None:
         if self._updating or self.session.look is None:
             return
@@ -164,6 +192,7 @@ class CharacterTab(QtWidgets.QWidget):
                 self.il_parts.addItem(it)
             for key, e in self.vc.items():
                 e.setText(self.session.setting(f"viewCorrection.{key}"))
+            self.vc_mesh.setText(self.session.setting("viewCorrection.mesh") or "（未設定: 顔メッシュを選んで「作る」）")
             current = self.expr.currentText()
             self.expr.blockSignals(True)
             self.expr.clear()
