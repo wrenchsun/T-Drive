@@ -12,7 +12,7 @@ from . import features, look, session
 
 IMPL_LABELS = {features.SH: "シェーダー", features.ME: "メッシュ", features.CO: "コンポーネント", features.RF: "Renderer Feature"}
 PREVIEW_LABELS = {"full": "○", "partial": "△", "none": "×"}
-COLUMNS = ("オン", "機能", "技術", "Unity での実現", "Maya プレビュー", "使用中")
+COLUMNS = ("オン", "機能", "Unity での実現", "Maya プレビュー", "使用中")
 
 
 class FeaturesTab(QtWidgets.QWidget):
@@ -59,16 +59,15 @@ class FeaturesTab(QtWidgets.QWidget):
             name = QtWidgets.QTableWidgetItem(f.label + ("（必須）" if f.required else ""))
             name.setToolTip(_contents(f))
             self.table.setItem(row, 1, name)
-            self.table.setItem(row, 2, QtWidgets.QTableWidgetItem(" ".join(f.techniques)))
-            self.table.setItem(row, 3, QtWidgets.QTableWidgetItem(" + ".join(IMPL_LABELS[i] for i in f.impl)))
+            self.table.setItem(row, 2, QtWidgets.QTableWidgetItem(" + ".join(IMPL_LABELS[i] for i in f.impl)))
             pv = QtWidgets.QTableWidgetItem(PREVIEW_LABELS[f.maya_preview])
             pv.setTextAlignment(QtCore.Qt.AlignCenter)
             pv.setToolTip({"full": "Maya でも同じ見た目で確認できる", "partial": "Maya では簡易表示（Unity で最終確認）",
                            "none": "Maya では確認できない（Unity で確認）"}[f.maya_preview])
-            self.table.setItem(row, 4, pv)
+            self.table.setItem(row, 3, pv)
             used = QtWidgets.QTableWidgetItem()
             used.setTextAlignment(QtCore.Qt.AlignCenter)
-            self.table.setItem(row, 5, used)
+            self.table.setItem(row, 4, used)
             self.used_items[f.id] = used
         self.table.resizeColumnsToContents()
         self.table.horizontalHeader().setSectionResizeMode(1, QtWidgets.QHeaderView.Stretch)

@@ -60,9 +60,10 @@ Unity は T-Drive for Unity パッケージ（Phase U）として実装する（
 | 2-8 | Toon マスクテクスチャ（`_ToonMaskMap`、頂点カラーに乗算） | T-19 | 1 | 1-9 | 頂点密度が足りない目周りの影をテクスチャで補える | ✅ 実装済み機能の確認（R 黒のテクスチャで画素単位の影） |
 | 2-9 | 線幅の距離・FOV 補正（Maya プレビュー側） | T-18 | 0.5 | 1-6 | `_ToonOutlineDistanceScale` 追加。遠景で線が太すぎない | ✅ `_ToonOutlineDistanceScale` / `_ToonOutlineRefDistance`。実測 6px→4px（計算 3.7px） |
 
-## Phase 3: ルック P2（M3 — Maya で仕上げる）
+## Phase 3: ルック P2 — Maya 側（M3）
 
 2026-09-28 方針: **ルックに関わるものを Maya 側で先に仕上げる**。Unity でのみ実現できるもの（コンポーネント・Renderer Feature）も、設定値は Maya で編集して Look 定義に持つ（Maya でプレビューできないものは「Unity でのみ」と表示）。
+**Phase 3 の完了は Maya 側の完了**。Unity でのみ描画されるもの（T-17 / T-23 / T-24 / T-29）は 3-8 で設定値を持てるようになっただけで、描画は Phase 4（Maya プレビュー）と Phase U（Unity）のチケット。対応は [04](04_technique_priority.md) §3 の「チケット」列を参照。
 
 | # | チケット | 技術 | 日数 | 依存 | 受け入れ条件 | 状態 |
 |---|---|---|---|---|---|---|
@@ -72,8 +73,8 @@ Unity は T-Drive for Unity パッケージ（Phase U）として実装する（
 | 3-4 | MatCap（髪・装飾の簡易反射） | T-30 | 0.5 | 1-1 | MatCap テクスチャ・強さで反射が乗る | ✅ `_ToonMatCapMap` / `_ToonMatCapStrength`（ビュー空間法線） |
 | 3-5 | SDF 顔影マップ（顔の影をライト角度で作画どおりに） | T-21 | 3 | 2-2 | 閾値マスク群から SDF を生成するツール + シェーダー。ライトを回すと影が作画どおりの形で進む | ✅ sdf.py（numpy のみ・EDT は総当たりと一致）+ MImage 入出力、生成→顔に設定。ライト回転で影が境界どおりに進むことを実機確認 |
 | 3-6 | ビュー空間の奥行き圧縮（部位マスク付き） | T-22 | 1.5 | 1-9 | 顔だけ奥行きを圧縮しても線・影が破綻しない | ✅ `_ToonDepthCompressWeight`（マテリアル）× `characterSettings.depthCompression`（キャラクター）。中心は効かせる部位の中心 |
-| 3-7 | カメラ角度依存の補正 BlendShape（作成支援・角度 → ウェイトのプレビュー） | T-20 | 3 | 1-8 | Maya でカメラを回すと補正 Shape が自動で混ざる。設定は Look の `character.viewCorrection` | ✅ 作る / 登録 / カメラに連動（DG + expression）。式は envmath と一致（誤差 0.01 以内）。彫刻用メッシュは出力対象外 |
-| 3-8 | キャラクター単位の設定を Maya で編集（Look 定義 `character` セクション: ライト平滑化・ステンシル・インナーライン・接地影・表情パラメータ） | T-17 T-23 T-24 T-25 T-29 | 2 | 0-5 | [08](08_unity_port_plan.md) §4.2 の項目をエディタで編集・保存できる。Maya でプレビューできない項目は「Unity でのみ」と表示 | ✅ `characterSettings`（仕様で `character` と衝突するため改名）、キャラクタータブ |
+| 3-7 | カメラ角度依存の補正 BlendShape（作成支援・角度 → ウェイトのプレビュー） | T-20 | 3 | 1-8 | Maya でカメラを回すと補正 Shape が自動で混ざる。設定は Look の `characterSettings.viewCorrection` | ✅ 作る / 登録 / カメラに連動（DG + expression）。式は envmath と一致（誤差 0.01 以内）。彫刻用メッシュは出力対象外 |
+| 3-8 | キャラクター単位の設定を Maya で編集（Look 定義 `character` セクション: ライト平滑化・ステンシル・インナーライン・接地影・表情パラメータ） | T-17 T-23 T-24 T-25 T-29 | 2 | 0-5 | [08](08_unity_port_plan.md) §4.2 の項目をエディタで編集・保存できる。Maya でプレビューできない項目は「Unity でのみ」と表示 | ✅ 設定値の編集・保存のみ（描画は 4-5〜4-7 / U-5 U-7 U-10 U-11）。`characterSettings`（`character` と衝突するため改名）、キャラクタータブ |
 | 3-9 | 表情パラメータのプレビュー（頬の赤み等をスライダーで動かす） | T-25 | 1 | 3-8 | `expressions` の対応表どおりにプレビューの値が動く | ✅ プレビュー（保存しない・Look の値に戻す） |
 
 ## Phase 4: 機能のオン/オフ（Maya）
@@ -89,6 +90,7 @@ Unity は T-Drive for Unity パッケージ（Phase U）として実装する（
 | 4-5 | ライトの安定化を Maya のライト回転で再現（Unity と同じ平滑化・ヒステリシス） | T-17 | 0.5 | 4-3 | 平滑化を上げると影の追従が遅れ、ヒステリシスで小さな揺れが無視される | ⬜ |
 | 4-6 | 接地影の簡易プレビュー（足元にプレビュー専用の楕円影） | T-29 | 0.5 | 4-3 | 半径・濃さを変えると足元の影が変わる。書き出しには入らない | ⬜ |
 | 4-7 | インナーラインの Maya プレビュー（Render Override で画面上のエッジ検出） | T-23 | 3 | 4-3 | 線を出す部位の境界に線が出る。Unity（U-10）と同じアルゴリズム | ⬜ |
+| 4-8 | スクリーンスペース外側輪郭: 設定（`characterSettings.screenOutline`: 有無・線幅・色）・機能 `screenOutline`・Maya プレビュー（4-7 のエッジ検出を共有） | T-42 | 1.5 | 4-7 | オンにするとキャラクターの外形に画面上一定幅の線が出る。背面押し出しの線と併用 / 置き換えを選べる | ⬜ |
 
 ## Phase U: T-Drive for Unity パッケージ（Unity で再現・一任）
 
@@ -106,6 +108,7 @@ Unity は T-Drive for Unity パッケージ（Phase U）として実装する（
 | U-8 | 表情パラメータ API（`SetExpression`、Timeline/Animator から駆動） | T-25 | 2 | U-5 3-8 | 頬の赤み等を実行時に変えられる | ⬜ |
 | U-9 | カメラ角度補正 BlendShape の実行時駆動 / 奥行き圧縮 | T-20 T-22 | 2 | U-5 3-7 | カメラを回すと補正 Shape が混ざる | ⬜ |
 | U-10 | `ToonRendererFeature`: ToonId パス + スクリーンスペース インナーライン | T-23 | 4 | U-2 | 部位ごとの有無・太さ・色どおりに内側の線が出る | ⬜ |
+| U-17 | `ToonRendererFeature`: スクリーンスペース外側輪郭（U-10 のエッジ検出を共有） | T-42 | 1.5 | U-10 4-8 | Maya（4-8）と同じ設定で外形に線が出る | ⬜ |
 | U-11 | `ToonRendererFeature`: 接地影 | T-29 | 2 | U-10 | 足元に影が残り、キャラクターが浮いて見えない | ⬜ |
 | U-12 | Unity 上のルックエディタ（部位 / ルック / A/B / プレビュー）+ look.json への書き戻し | — | 4 | U-3 | Unity で調整した値を Maya で開ける（往復） | ⬜ |
 | U-13 | D-Drive 互換ブリッジ（MaterialData 変換・ShaderConversionTable・命名規約検証。D-Drive があるときだけ有効） | — | 2 | U-3 | D-Drive 入りのプロジェクトで CharacterLook → MaterialData に変換できる。D-Drive 無しでもコンパイルが通る | ⬜ |
@@ -137,6 +140,6 @@ A 系の詳細仕様は Phase 3 完了時に起こす。
 | 1 | ルック P0（MVP） | 19.5 |
 | 2 | ルック P1 | 10 |
 | 3 | ルック P2（Maya で仕上げる） | 13.5 |
-| 4 | 機能のオン/オフ（Maya） | 8 |
-| U | T-Drive for Unity パッケージ | 33.5 |
+| 4 | 機能のオン/オフ・Unity でのみの機能の Maya プレビュー | 9.5 |
+| U | T-Drive for Unity パッケージ | 35 |
 | A | アニメーション | 22 |

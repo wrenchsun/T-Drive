@@ -11,7 +11,7 @@
 
 | 機能 ID | 名前 | 技術 | 属するもの | 実現 | Maya プレビュー |
 |---|---|---|---|---|---|
-| `shade` | 2 階調影（必須） | T-01 T-04 | `_ToonShadeColor` `_ToonShadeThreshold` `_ToonShadeFeather` `_ToonShadowStrength` | Sh | ○ |
+| `shade` | 2 階調影（必須） | T-01 T-02 T-04 | `_ToonShadeColor` `_ToonShadeThreshold` `_ToonShadeFeather` `_ToonShadowStrength` | Sh | ○ |
 | `outline` | 輪郭線 | T-05 | `_ToonOutlineColor` `_ToonOutlineBaseMix` `_ToonOutlineWidth` + Outline パス | Sh | ○ |
 | `outlineSmoothNormal` | 線のスムーズ法線 | T-06 | `_ToonOutlineSmoothNormal` + UV2 | Sh Me | ○ |
 | `outlineDistance` | 距離で線を細く | T-18 | `_ToonOutlineDistanceScale` `_ToonOutlineRefDistance` | Sh | ○ |
@@ -98,4 +98,5 @@ MS2026/Assets/_Project/Art/Shaders/Generated/TDriveToon_MS2026.shader   "TDrive/
 | lightStabilize | プレビュータブの「ライト回転」に Unity と同じ平滑化・ヒステリシスを掛ける | 4-5 |
 | contactShadow | 足元に簡易の影（プレビュー専用の楕円メッシュ）を置く | 4-6 |
 | innerLine | Maya の Render Override で画面上のエッジ検出を差し込む（Unity の ToonRendererFeature と同じアルゴリズム） | 4-7 |
+| screenOutline（T-42、未実装） | 4-7 の Render Override のエッジ検出を共有して外形に線を出す | 4-8 |
 | stencil | 本物は再現しない（Maya の描画順を制御できない）。「手前に出す」で代用し、Unity で確認 | — |

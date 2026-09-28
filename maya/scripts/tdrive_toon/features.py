@@ -27,7 +27,7 @@ class Feature:
 
 
 FEATURES: tuple[Feature, ...] = (
-    Feature("shade", "2 階調影", ("T-01", "T-04"),
+    Feature("shade", "2 階調影", ("T-01", "T-02", "T-04"),
             ("_ToonShadeColor", "_ToonShadeThreshold", "_ToonShadeFeather", "_ToonShadowStrength"),
             default_on=True, required=True),
     Feature("outline", "輪郭線", ("T-05",), ("_ToonOutlineColor", "_ToonOutlineBaseMix", "_ToonOutlineWidth"),
