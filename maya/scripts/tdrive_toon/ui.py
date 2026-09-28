@@ -13,7 +13,7 @@ from maya import cmds
 from maya.app.general.mayaMixin import MayaQWidgetDockableMixin
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from . import __version__, environment, look, preview, roles, session
+from . import __version__, environment, lifecycle, look, preview, roles, session
 from .ui_ab import ABTab
 from .ui_character import CharacterTab
 from .ui_features import FeaturesTab
@@ -108,6 +108,24 @@ class EditorWindow(MayaQWidgetDockableMixin, QtWidgets.QWidget):
         self.warning.setWordWrap(True)
         self.warning.setStyleSheet("color: #f0a040;")
         layout.addWidget(self.warning)
+        # ツール内のエラー（Qt の操作・描画のコールバック）。スクリプトエディタを見なくても気付けるようにする（lifecycle.py）
+        self.error_bar = QtWidgets.QWidget()
+        eh = QtWidgets.QHBoxLayout(self.error_bar)
+        eh.setContentsMargins(0, 0, 0, 0)
+        self.error_label = QtWidgets.QLabel()
+        self.error_label.setWordWrap(True)
+        self.error_label.setStyleSheet("color: #ff6060;")
+        eh.addWidget(self.error_label, 1)
+        close = QtWidgets.QToolButton()
+        close.setText("×")
+        close.setToolTip("表示を消す（内容はスクリプトエディタに残っています）")
+        close.clicked.connect(lambda: self.error_bar.setVisible(False))
+        eh.addWidget(close)
+        self.error_bar.setVisible(False)
+        layout.addWidget(self.error_bar)
+        self._error_count = 0
+        lifecycle.install_error_hook()
+        lifecycle.add_error_listener(self._on_tool_error)
 
         self.tabs = QtWidgets.QTabWidget()
         self.parts_tab = PartsTab(self.session)
@@ -143,6 +161,7 @@ class EditorWindow(MayaQWidgetDockableMixin, QtWidgets.QWidget):
             pass  # 枠ごと破棄済み
         if self.refresh in self.session.listeners:
             self.session.listeners.remove(self.refresh)
+        lifecycle.remove_error_listener(self._on_tool_error)
 
     def closeEvent(self, event) -> None:  # noqa: N802 (Qt)
         self.detach()
@@ -155,6 +174,15 @@ class EditorWindow(MayaQWidgetDockableMixin, QtWidgets.QWidget):
     def _redo(self) -> None:
         if not self.session.redo():
             cmds.inViewMessage(amg="T-Drive: やり直せる操作がありません", pos="topCenter", fade=True)
+
+    def _on_tool_error(self, summary: str, _detail: str) -> None:
+        try:
+            self._error_count += 1
+            more = f"（ほか {self._error_count - 1} 件）" if self._error_count > 1 else ""
+            self.error_label.setText(f"エラー: {summary}{more} — 詳細はスクリプトエディタ。報告してください")
+            self.error_bar.setVisible(True)
+        except RuntimeError:
+            lifecycle.remove_error_listener(self._on_tool_error)  # 画面が破棄済み
 
     def _refresh_current_if_stale(self, _index: int = 0) -> None:
         tab = self.tabs.currentWidget()

@@ -326,6 +326,20 @@ def run() -> None:
     s.set_feature("contactShadow", False)
     check("接地影: 機能をオフにすると隠れる", not cmds.getAttr(f"{contact_shadow.NODE}.visibility"))
     s.set_feature("contactShadow", True)
+    # ---- Render Override のコールバックの戻り値（Windows の C long = 32 ビット符号付きに収まること。2026-09-28 の OverflowError）
+    from tdrive_toon import screen_line
+
+    ov = screen_line._Override()
+    raw = []
+    for op in ov.ops:
+        for name in ("objectTypeExclusions", "renderFilterOverride"):
+            fn = getattr(type(op), name, None)
+            if fn is not None and hasattr(fn, "__wrapped__"):
+                raw.append((f"{type(op).__name__}.{name}", fn.__wrapped__(op)))
+    raw.append(("supportedDrawAPIs", type(ov).supportedDrawAPIs.__wrapped__(ov)))
+    out_of_range = [(n, v) for n, v in raw if isinstance(v, int) and not -(2**31) <= v < 2**31]
+    check("Render Override のコールバックの int が 32 ビットに収まる", bool(raw) and not out_of_range, str(out_of_range or raw))
+
     # ---- 画面上の線（4-7）: mayapy では VP2 が無いので設定の流れと部位キーだけ確かめる
     s.set_feature("innerLine", True)
     s.set_setting("innerLine.enabled", True)

@@ -23,7 +23,7 @@ import maya.api.OpenMaya as om
 import maya.api.OpenMayaRender as omr
 from maya import cmds
 
-from . import REPO_ROOT
+from . import REPO_ROOT, lifecycle
 
 NAME = "tdToonScreenLine"
 SHADER_FILE = (REPO_ROOT / "maya" / "shaders" / "TDriveScreenLine.fx").as_posix()
@@ -53,16 +53,20 @@ class _ClearOp(omr.MSceneRender):
         super().__init__(name)
         self.ov, self.which = ov, which
 
+    @lifecycle.guarded(None)
     def targetOverrideList(self):  # noqa: N802
         t = self.ov.targets
         return [t["color"], t["depth"]] if self.which == "color" else [t["id"]]
 
+    @lifecycle.guarded(_EXCLUDE_ALL)
     def objectTypeExclusions(self):  # noqa: N802
         return _EXCLUDE_ALL
 
+    @lifecycle.guarded(fallback=lambda self: self.ov.empty_selection)
     def objectSetOverride(self):  # noqa: N802
         return self.ov.empty_selection  # 何も描かない（消去だけ）
 
+    @lifecycle.guarded(fallback=lambda self: self.mClearOperation)
     def clearOperation(self):  # noqa: N802
         c = self.mClearOperation
         c.setMask(omr.MClearOperation.kClearAll)
@@ -84,13 +88,16 @@ class _SceneOp(omr.MSceneRender):
         super().__init__(name)
         self.ov, self.shaded = ov, shaded
 
+    @lifecycle.guarded(None)
     def targetOverrideList(self):  # noqa: N802
         t = self.ov.targets
         return [t["color"], t["id"], t["depth"]] if self.shaded else [t["out"], t["depth"]]
 
+    @lifecycle.guarded(fallback=lambda self: omr.MSceneRender.kRenderShadedItems)
     def renderFilterOverride(self):  # noqa: N802
         return omr.MSceneRender.kRenderShadedItems if self.shaded else omr.MSceneRender.kRenderNonShadedItems
 
+    @lifecycle.guarded(fallback=lambda self: self.mClearOperation)
     def clearOperation(self):  # noqa: N802
         c = self.mClearOperation
         c.setMask(omr.MClearOperation.kClearNone)
@@ -104,6 +111,7 @@ class _QuadOp(omr.MQuadRender):
         self._shader = None
         self._sampler = None
 
+    @lifecycle.guarded(None)
     def shader(self):
         if self._shader is None:
             self._shader = omr.MRenderer.getShaderManager().getEffectsFileShader(SHADER_FILE, "Main", [], False)
@@ -116,23 +124,25 @@ class _QuadOp(omr.MQuadRender):
             return None
         t = self.ov.targets
         w, h = self.ov.size
-        sh.setParameter("gColorTex", t["color"])
-        sh.setParameter("gIdTex", t["id"])
-        sh.setParameter("gPointSampler", self._sampler)
-        sh.setParameter("gScreenSize", [float(w), float(h)])
-        sh.setParameter("gTonemap", int(_params["tonemap"]))
+        set_param(sh, "gColorTex", t["color"])
+        set_param(sh, "gIdTex", t["id"])
+        set_param(sh, "gPointSampler", self._sampler)
+        set_param(sh, "gScreenSize", [w, h])
+        set_param(sh, "gTonemap", _params["tonemap"])
         for key in ("inner", "outer"):
             p = _params[key]
             cap = key.capitalize()
-            sh.setParameter(f"g{cap}Enabled", p is not None)
+            set_param(sh, f"g{cap}Enabled", p is not None)
             if p is not None:
-                sh.setParameter(f"g{cap}Radius", line_radius(p["width"], h))
-                sh.setParameter(f"g{cap}Color", [float(x) for x in p["color"][:3]])
+                set_param(sh, f"g{cap}Radius", line_radius(p["width"], h))
+                set_param(sh, f"g{cap}Color", p["color"][:3])
         return sh
 
+    @lifecycle.guarded(None)
     def targetOverrideList(self):  # noqa: N802
         return [self.ov.targets["out"], self.ov.targets["depth"]]
 
+    @lifecycle.guarded(fallback=lambda self: self.mClearOperation)
     def clearOperation(self):  # noqa: N802
         c = self.mClearOperation
         c.setMask(omr.MClearOperation.kClearNone)
@@ -144,6 +154,7 @@ class _HudOp(omr.MHUDRender):
         super().__init__()
         self.ov = ov
 
+    @lifecycle.guarded(None)
     def targetOverrideList(self):  # noqa: N802
         return [self.ov.targets["out"], self.ov.targets["depth"]]
 
@@ -153,6 +164,7 @@ class _PresentOp(omr.MPresentTarget):
         super().__init__(name)
         self.ov = ov
 
+    @lifecycle.guarded(None)
     def targetOverrideList(self):  # noqa: N802
         return [self.ov.targets["out"], self.ov.targets["depth"]]
 
@@ -176,12 +188,15 @@ class _Override(omr.MRenderOverride):
         self.size = (0, 0)
         self.background = ((0.36, 0.36, 0.36), (0.36, 0.36, 0.36), False)
 
+    @lifecycle.guarded(fallback=lambda self: omr.MRenderer.kDirectX11)
     def supportedDrawAPIs(self):  # noqa: N802
         return omr.MRenderer.kDirectX11
 
+    @lifecycle.guarded("T-Drive Toon")
     def uiName(self):  # noqa: N802
         return "T-Drive Toon（画面上の線）"
 
+    @lifecycle.guarded(None)
     def setup(self, destination) -> None:
         if cmds.displayPref(query=True, displayGradient=True):
             self.background = (
@@ -215,16 +230,20 @@ class _Override(omr.MRenderOverride):
                 mgr.releaseRenderTarget(t)
         self.targets = {}
 
+    @lifecycle.guarded(None)
     def cleanup(self) -> None:
         self.index = 0
 
+    @lifecycle.guarded(False)
     def startOperationIterator(self) -> bool:  # noqa: N802
         self.index = 0
         return True
 
+    @lifecycle.guarded(None)
     def renderOperation(self):  # noqa: N802
         return self.ops[self.index] if self.index < len(self.ops) else None
 
+    @lifecycle.guarded(False)
     def nextRenderOperation(self) -> bool:  # noqa: N802
         self.index += 1
         return self.index < len(self.ops)
@@ -232,18 +251,26 @@ class _Override(omr.MRenderOverride):
 
 _override: _Override | None = None
 
-# Maya は登録した Override の Python オブジェクトを参照として保持しない。モジュールが捨てられても（ツールのリロード）
-# オブジェクトが解放されないよう、リロードの影響を受けない場所（maya.api.OpenMayaRender モジュール）にも参照を置く。
-# 解放済みのオブジェクトを Maya が触ると python311.dll で落ちる（2026-09-28）
-_KEEPALIVE_ATTR = "_tdrive_toon_render_overrides"
-
-
-def _keepalive(ov: "_Override") -> None:
-    held = getattr(omr, _KEEPALIVE_ATTR, None)
-    if held is None:
-        held = []
-        setattr(omr, _KEEPALIVE_ATTR, held)
-    held.append(ov)
+def set_param(shader, name: str, value: Any) -> None:
+    """シェーダーパラメータを**型を確かめて**設定する（int を float に渡して kInvalidParameter になった再発防止）。"""
+    si = omr.MShaderInstance
+    kind = shader.parameterType(name)
+    vectors = {si.kFloat2: 2, si.kFloat3: 3, si.kFloat4: 4}
+    if kind == si.kFloat:
+        shader.setParameter(name, float(value))
+    elif kind == si.kInteger:
+        shader.setParameter(name, int(value))
+    elif kind == si.kBoolean:
+        shader.setParameter(name, bool(value))
+    elif kind in vectors:
+        v = [float(x) for x in value]
+        if len(v) != vectors[kind]:
+            raise ValueError(f"{name}: {vectors[kind]} 要素のところに {len(v)} 要素")
+        shader.setParameter(name, v)
+    elif kind in (si.kTexture2, si.kSampler):
+        shader.setParameter(name, value)
+    else:
+        raise ValueError(f"シェーダーに {name} が無い、または未対応の型（{kind}）")
 
 
 def line_radius(width_px: float, screen_height: float) -> float:
@@ -262,7 +289,9 @@ def register() -> None:
         _release_registered(old)
         omr.MRenderer.deregisterOverride(old)
     _override = _Override()
-    _keepalive(_override)
+    # Maya は登録した Python オブジェクトを保持しない → リロードで解放されると Maya が落ちる（lifecycle.py）
+    lifecycle.keep_alive(_override)
+    lifecycle.on_reload(unregister)
     omr.MRenderer.registerOverride(_override)
 
 

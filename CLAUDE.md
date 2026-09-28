@@ -15,6 +15,12 @@ Maya 2026 用セルルック Look Development ツール。仕様は docs/（索�
 - UnityChan はテスト素体。元のマテリアル（URP Lit / UTS 残骸）は参照しない
 - 元マテリアル・元の割り当てを破壊する処理を書かない
 - Maya 非依存層（params / roles / look）に maya を import しない
+- **Maya / Qt との境界の約束**（2026-09-28 のクラッシュ・エラーの再発防止。`tdrive_toon/lifecycle.py`、`tests/test_ui_patterns.py` が検出）
+  - Maya に Python のオブジェクト・関数を登録したら `lifecycle.keep_alive` と `lifecycle.on_reload(後片付け)`。リロードは後片付けを先に呼ぶ
+  - Maya から呼ばれるコールバック（VP2 の Render Override など）は `@lifecycle.guarded(...)` で包む。戻り値の int は 32 ビット符号付きに収める
+  - シェーダーパラメータは `screen_line.set_param`（型を確かめる）経由
+  - Qt の clicked / toggled に「必須引数 + 既定値付き引数」の lambda をつながない（`lambda *_, x=...:` にする）
+  - `cmds.delete` に空になり得るリストを渡さない
 - 参照リポジトリ（D-Drive: C:\Users\yamag\wrench\unity\D-Drive、MS2026: C:\Users\yamag\wrench\unity\MS2026）は読み取りのみ
 
 ## コマンド

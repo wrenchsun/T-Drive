@@ -61,8 +61,12 @@ class Session:
         for fn in list(self.listeners):
             try:
                 fn()
-            except Exception as exc:  # UI 側の不具合で編集を止めない
-                print(f"[T-Drive] listener error: {exc}")
+            except Exception as exc:  # UI 側の不具合で編集を止めない。ただし見えるように通知する
+                import traceback
+
+                from . import lifecycle
+
+                lifecycle.report_error(f"画面の更新でエラー: {exc}", traceback.format_exc())
 
     # ------------------------------------------------------------ ファイル
     def new(self, character: str, model: str = "") -> None:
