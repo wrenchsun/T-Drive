@@ -52,6 +52,27 @@ PowerShell で:
 - 開発用の登録（`tools/install_maya_module.ps1`、リポジトリを直接指す・MCP 有効）は従来どおり残す
 - アンインストール: `TDriveToon.mod` と `%LOCALAPPDATA%\TDriveToon` を消す（プロジェクトフォルダのデータは残る）
 
+### 2.1 配布用インストーラー（推奨。2026-09-28 追加）
+
+デザイナーには **`tools/distribution/Install-TDriveToon.bat` の 1 ファイルだけ**を配る（リリースごとに GitHub Release にも添付する）。
+
+1. デザイナーが Maya のプロジェクトフォルダ（`workspace.mel` がある所）に置いてダブルクリック
+2. 初回は `%LOCALAPPDATA%\TDriveToon\T-Drive` に clone（LFS なし）、2 回目以降はそのまま
+3. `tools/install.ps1 -Release -ProjectHint <置いたフォルダ>` を実行 → 最新のリリースに固定・プロジェクトを決定・`.mod` を登録
+
+プロジェクトの決め方: `-Project` 指定 > 置いたフォルダ（`workspace.mel` か `looks\` がある）> Maya で最後に開いたプロジェクト
+（`maya/2026/<言語>/prefs/userPrefs.mel` の `lastLocalWS`。日本語版はシステムの文字コードで保存される。Maya の既定プロジェクト `default` は使わない）> フォルダ選択の画面。
+`.mod` に `TDRIVE_PROJECT` と `TDRIVE_INSTALL_PROJECT` を書き、Maya は起動時に `TDRIVE_INSTALL_PROJECT` が新しければ 1 回だけ採用する（その後 Maya で選び直したものは上書きしない）。
+
+- バッチは **ASCII のみ・CRLF**（cmd は UTF-8 のマルチバイト行を読み違えて行が壊れる。日本語の案内は `install.ps1` 側）。`install.ps1` は **BOM 付き UTF-8**（Windows PowerShell 5.1 は BOM が無いと cp932 として読む）。`tests/test_ui_patterns.py` が検査
+- テスト用に `TD_DIR`（導入先）/ `TD_URL`（取得元）/ `TD_EXTRA`（install.ps1 への追加の引数、例 `-ModulesDir … -NoPause`）で差し替えられる
+
+### 2.2 配る人の手順
+
+1. リリースする（§4）。GitHub にタグを push するまで、デザイナーの更新ウィンドウには出ない
+2. デザイナーの GitHub アカウントに `wrenchsun/T-Drive` の読み取り権限を付ける
+3. `Install-TDriveToon.bat` を渡し、[マニュアル「はじめに」](DesignerManual/setup.html) を案内する
+
 ## 3. 更新（Maya のメニュー **T-Drive Toon › 更新…**）
 
 D-Drive の更新ウィンドウと同じ構成。

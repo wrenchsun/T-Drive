@@ -52,12 +52,14 @@
 <tr><td>ゲーム側の仕組みの確認（影の安定化・画面上の線・接地影）</td><td><span class="ok">使える</span></td><td><a href="character.html">キャラクター設定</a> / <a href="preview.html">プレビュー設定</a></td></tr>
 <tr><td>髪越し表示（ステンシル）の確認</td><td>Unity でのみ</td><td><a href="unity-parity.html">Unity との見た目の一致</a></td></tr>
 <tr><td>Unity 出力（見た目の設定 + FBX）</td><td><span class="ok">使える</span></td><td><a href="export.html">Unity 出力</a></td></tr>
+<tr><td>インストーラーで導入（プロジェクトに自動で登録）・Maya の中から更新・前の版に戻す</td><td><span class="ok">使える</span></td><td><a href="setup.html">はじめに</a> / <a href="update.html">更新のしかた</a></td></tr>
 <tr><td>エディタのドッキング（位置を記憶）</td><td><span class="ok">使える</span></td><td><a href="setup.html#dock">はじめに</a></td></tr>
 </table>
 
 <h2>ページ一覧</h2>
 <ul class="pagelinks">
-<li><a href="setup.html">はじめに（導入）</a><p>初回だけ必要な設定と、毎回の起動方法。</p></li>
+<li><a href="setup.html">はじめに（導入）</a><p>インストーラーでの導入、プロジェクトフォルダ、初回だけ必要な設定、毎回の起動方法。</p></li>
+<li><a href="update.html">更新のしかた</a><p>新しい版の確認・更新・元に戻す・更新後の確認。</p></li>
 <li><a href="parts.html">部位の登録</a><p>キャラクターを「顔」「髪」などに分ける。Toon 表示の切り替え。</p></li>
 <li><a href="look-params.html">見た目のパラメータ</a><p>影・固定色・線・マスクの意味と、頂点カラーの塗り方のルール。</p></li>
 <li><a href="ab.html">A/B 比較</a><p>2 つの案を同じ条件で見比べて、良い方を採用する。</p></li>
@@ -73,7 +75,8 @@
 <h2>用語</h2>
 <table>
 <tr><th>用語</th><th>意味</th></tr>
-<tr><td>Look（ルック）</td><td>1 キャラクター分の見た目の設定ファイル（<span class="path">looks/&lt;キャラクター&gt;/look.json</span>）。これが正本で、Unity にもこの内容が渡ります</td></tr>
+<tr><td>プロジェクト（フォルダ）</td><td>Look・Unity 出力・キャプチャを置くフォルダ。ツール本体とは別（<a href="setup.html#project">はじめに</a>）</td></tr>
+<tr><td>Look（ルック）</td><td>1 キャラクター分の見た目の設定ファイル（プロジェクトの <span class="path">looks/&lt;キャラクター&gt;/look.json</span>）。これが正本で、Unity にもこの内容が渡ります</td></tr>
 <tr><td>部位</td><td>名前を付けたマテリアルのまとまり（例: 「face」= 顔と口のマテリアル）</td></tr>
 <tr><td>ロール</td><td>部位の種類（顔 / 髪 / 目 / 眉 …）。登録したときの初期値（プリセット）が決まります</td></tr>
 <tr><td>バリアント</td><td>A/B 比較用の別案。基本の値（base）との差分だけを持ちます</td></tr>

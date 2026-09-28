@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>更新のしかた - T-Drive デザイナーマニュアル</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<nav class="breadcrumb"><a href="Readme.html">トップ</a> › 更新のしかた</nav>
+<h1>更新のしかた</h1>
+<p class="lastupdate">最終更新日: 2026-09-28</p>
+
+<p>T-Drive Toon は<strong>リリース版</strong>（v0.1.0 のような番号の付いた版）だけが配られます。新しい版が出ると Maya の中で知らせが出るので、下の手順で更新します。</p>
+
+<h2>新しい版の知らせ</h2>
+<ul>
+<li>Maya の起動時に<strong>1 日 1 回</strong>確認し、新しい版があればビューポートの上に「T-Drive Toon の新しい版 vX.Y.Z があります」と出ます</li>
+<li>いつでも <strong>T-Drive Toon › 更新…</strong> の「最新の版を確認」で確かめられます</li>
+<li>知らせが不要なら、更新ウィンドウの「Maya の起動時に更新を確認する」を外します</li>
+</ul>
+
+<h2>更新する</h2>
+<ol>
+<li>編集中の Look を<strong>保存</strong>する（念のため。更新しても未保存の変更は残ります）</li>
+<li><strong>T-Drive Toon › 更新…</strong> を開き、<strong>最新の版を確認</strong> を押す</li>
+<li>一覧から版を選ぶと、その版までの<strong>変更点</strong>が表示される。<strong>互換性</strong>の欄を読む</li>
+<li><strong>この版に更新</strong> → 確認で「はい」</li>
+<li>ツールが読み込み直され、<strong>プロジェクトの Look の確認</strong>が自動で行われる。問題が無ければ完了</li>
+</ol>
+<table>
+<tr><th>版の種類</th><th>意味</th><th>更新してよいか</th></tr>
+<tr><td style="color:#80d080">PATCH（例: 0.1.0 → 0.1.1）</td><td>不具合の修正</td><td>いつでも</td></tr>
+<tr><td style="color:#f0c060">MINOR（例: 0.1.0 → 0.2.0）</td><td>機能の追加。今までの Look はそのまま同じ見た目</td><td>いつでも</td></tr>
+<tr><td style="color:#ff6060">MAJOR（例: 1.x → 2.0）</td><td>今までの Look・データの扱いが変わる</td><td><strong>担当者に確認してから</strong>。赤い警告と移行ガイドの案内が出ます</td></tr>
+</table>
+<div class="warn">「Maya の再起動が必要です」と出たときは、Look を保存してから Maya を再起動してください。</div>
+
+<h2>元に戻す</h2>
+<p>更新して困ったときは、更新ウィンドウの <strong>前の版に戻す</strong> を押します。もう一度押すと、戻す前の版に戻ります。
+それより前の版にしたいときは、一覧から古い版を選んで「この版に更新」を押します（古い版にするときは、その版より後に入った変更が表示されます）。</p>
+
+<h2>更新後の確認</h2>
+<p>更新ウィンドウの <strong>プロジェクトの Look を確認する</strong> は、プロジェクトの全 Look を新しい版で読み込んで、問題が無いかを調べます（保存はしません）。
+更新した後にまだ確認していないと、Maya の起動時に「更新後の確認がまだです」と出ます。</p>
+
+<h2>インストーラーでの更新</h2>
+<p><span class="path">Install-TDriveToon.bat</span> をもう一度ダブルクリックしても、最新の版に更新されます（Maya は閉じておく）。更新ウィンドウが開けないときはこちらを使ってください。</p>
+
+<h2>うまくいかないとき</h2>
+<table>
+<tr><th>表示</th><th>対処</th></tr>
+<tr><td>「確認できませんでした: …時間切れ」「…権限」</td><td>ネットワークと、GitHub の wrenchsun/T-Drive を見る権限を確認。インストーラーをもう一度実行すると、GitHub のログイン画面が出ます</td></tr>
+<tr><td>「開発用（ブランチ …）。更新は git で」</td><td>開発用の導入です。更新ウィンドウでは更新しません（開発者は git で更新）</td></tr>
+<tr><td>「ツール本体に変更があります」</td><td>ツール本体のフォルダ（<span class="path">%LOCALAPPDATA%\TDriveToon\T-Drive</span>）を触ってしまっています。フォルダごと消してインストーラーを実行し直してください（プロジェクトのデータは消えません）</td></tr>
+<tr><td>「更新後の確認で問題が見つかりました」</td><td>表示された内容を担当者に報告し、必要なら「前の版に戻す」</td></tr>
+</table>
+
+<p>関連: <a href="setup.html">はじめに（導入）</a> / <a href="troubleshooting.html">困ったとき</a></p>
+
+<footer><a href="Readme.html">トップへ戻る</a></footer>
+</body>
+</html>

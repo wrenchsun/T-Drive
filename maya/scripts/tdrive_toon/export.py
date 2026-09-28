@@ -127,7 +127,7 @@ class ExportJob:
         args = self.work / "args.json"
         payload = {"scene": str(scene), "meshes": meshes, "out": str(path), "result": str(self.result_path)}
         args.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
-        env = dict(os.environ, TDRIVE_ROOT=REPO_ROOT.as_posix(), PYTHONIOENCODING="utf-8")
+        env = dict(os.environ, TDRIVE_ROOT=REPO_ROOT.as_posix(), PYTHONIOENCODING="utf-8", MAYA_DISABLE_CER="1")  # 裏の mayapy のクラッシュ画面を出さない
         self.log = open(self.work / "log.txt", "wb")
         self.proc = subprocess.Popen(
             [str(_mayapy()), str(REPO_ROOT / "tools" / "export_fbx_batch.py"), str(args)],

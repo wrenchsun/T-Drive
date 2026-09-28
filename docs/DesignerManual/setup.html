@@ -13,10 +13,37 @@
 
 <h2>初回だけ必要な設定</h2>
 
-<h3>1. ツールを Maya に登録する</h3>
-<p>リポジトリのフォルダで、次のコマンドを 1 回だけ実行します（PowerShell）。</p>
+<h3>1. ツールを入れる（インストーラー）</h3>
+<p>配布された <span class="path">Install-TDriveToon.bat</span> を使います。</p>
+<ol>
+<li><strong>Git for Windows</strong> が入っていなければ入れる（<a href="https://git-scm.com/">git-scm.com</a>。初期設定のままで OK）</li>
+<li>GitHub の <strong>wrenchsun/T-Drive</strong> を見られるアカウントか、担当者に確認する（非公開のリポジトリです）</li>
+<li><span class="path">Install-TDriveToon.bat</span> を<strong>作業する Maya のプロジェクトフォルダ</strong>（<span class="path">workspace.mel</span> がある所）に置く</li>
+<li>ダブルクリックする。初回は GitHub のログイン画面が出ることがあります</li>
+<li>「導入しました: T-Drive Toon 0.1.0」と出たら Enter で閉じる</li>
+<li>Maya を起動する（起動中なら再起動）。上部のメニューに <strong>T-Drive Toon</strong> が出れば完了</li>
+</ol>
+<figure>
+<pre><code>=== T-Drive Toon の導入 ===
+最新の版を確認しています…
+版: v0.1.0 を導入しました
+プロジェクト: D:\Projects\MS2026_Art（インストーラーを置いたフォルダ）
+
+導入しました: T-Drive Toon 0.1.0</code></pre>
+<figcaption>うまくいったときの表示</figcaption>
+</figure>
+<table>
+<tr><th>インストーラーがすること</th><th>内容</th></tr>
+<tr><td>ツールの取得</td><td><span class="path">%LOCALAPPDATA%\TDriveToon\T-Drive</span> に取得し、<strong>最新のリリース版</strong>に固定します（開発途中の版は入りません）。このフォルダは触らないでください</td></tr>
+<tr><td>プロジェクトの決定</td><td>置いたフォルダが Maya のプロジェクトならそこ。違えば Maya で最後に開いたプロジェクト。どちらでもなければフォルダを選ぶ画面が出ます（<a href="#project">プロジェクト</a>）</td></tr>
+<tr><td>Maya への登録</td><td>Maya の起動時に T-Drive Toon が読み込まれるようにします</td></tr>
+</table>
+<div class="tip">もう一度ダブルクリックすると<strong>最新の版に更新</strong>されます。普段の更新は Maya の中から行えます（<a href="update.html">更新のしかた</a>）。</div>
+<details>
+<summary>開発者向け: リポジトリをそのまま使う</summary>
+<p>このリポジトリで開発する人は、リポジトリのフォルダで次を実行します（版を固定しない。プロジェクト = リポジトリ）。</p>
 <pre><code>powershell -ExecutionPolicy Bypass -File tools\install_maya_module.ps1</code></pre>
-<p>「Installed: …TDriveToon.mod」と出れば OK です。</p>
+</details>
 
 <h3>2. Maya の表示方式を DirectX 11 にする</h3>
 <ol>
@@ -32,6 +59,21 @@
 色の設定（カラーマネジメント）は<strong>ツールが自動で</strong>ゲームと同じにします。自分で変える必要はありません。
 </div>
 
+<h2 id="project">プロジェクト</h2>
+<p>Look（見た目の設定）・Unity 出力・キャプチャは<strong>プロジェクトフォルダ</strong>に保存されます。ツール本体とは別の場所です。</p>
+<table>
+<tr><th>プロジェクトフォルダの中</th><th>内容</th></tr>
+<tr><td><span class="path">looks\&lt;キャラクター&gt;\look.json</span></td><td>Look</td></tr>
+<tr><td><span class="path">build\unity\</span></td><td>Unity 出力</td></tr>
+<tr><td><span class="path">captures\</span></td><td>A/B・パリティのキャプチャ</td></tr>
+<tr><td><span class="path">looks\_env\</span></td><td>環境プロファイル（あればツール同梱のものより優先）</td></tr>
+</table>
+<ul>
+<li>今のプロジェクトはエディタの上部に表示されます</li>
+<li>変えるときは <strong>T-Drive Toon › プロジェクトを選ぶ…</strong></li>
+<li>テクスチャはプロジェクトフォルダの中に置くと、どの PC でも同じシーンが開けます（パスがプロジェクト基準で保存されます）</li>
+</ul>
+
 <h2>毎回の起動</h2>
 <ol>
 <li>Maya 2026 を起動すると、上部のメニューに <strong>「T-Drive Toon」</strong> が追加されます</li>
@@ -46,8 +88,8 @@
 <li>Maya を再起動しても、ドッキングしていた場所に復元されます（<strong>再起動後の復元は確認中</strong>。うまく戻らない場合はメニューから開き直してください）</li>
 </ul>
 
-<h3>テスト用シーン</h3>
-<p>リポジトリ直下の <span class="path">T-Drive.mb</span> はテスト用のシーンです（テスト素体としてユニティちゃんが入っています）。開くとすでに Toon 表示になっています。</p>
+<h3>テスト用シーン（開発用のみ）</h3>
+<p>開発用のリポジトリ直下の <span class="path">T-Drive.mb</span> はテスト用のシーンです（インストーラーで入れたツールには含まれません）（テスト素体としてユニティちゃんが入っています）。開くとすでに Toon 表示になっています。</p>
 <div class="tip">
 開いたときに白っぽい表示のままなら、ビューポートで <strong>キーボードの 6</strong>（テクスチャ表示）を押してください。エディタで Look を開くと自動でテクスチャ表示になります。
 </div>
@@ -59,9 +101,12 @@
 <table>
 <tr><th>項目</th><th>内容</th></tr>
 <tr><td>エディタ</td><td>エディタを開く</td></tr>
+<tr><td>プロジェクトを選ぶ…</td><td>Look・出力を置くフォルダを選ぶ（<a href="#project">プロジェクト</a>）</td></tr>
 <tr><td>Toon 表示 ON/OFF</td><td>Toon 表示と元の見た目を切り替える（エディタの「表示」と同じ）</td></tr>
+<tr><td>マニュアルを開く</td><td>このマニュアルをブラウザで開く</td></tr>
+<tr><td>更新…</td><td>新しい版の確認・更新・前の版に戻す（<a href="update.html">更新のしかた</a>）</td></tr>
 <tr><td>ツールをリロード</td><td>ツールを最新の状態に読み込み直す（ツールが更新されたとき）。<strong>保存していない Look の変更・元に戻す履歴・ライトの向き・エディタの位置はそのまま</strong>です</td></tr>
-<tr><td>MCP ポートを開く / 閉じる</td><td>AI アシスタント（Claude）から Maya を操作するための接続口。通常は起動時に自動で開きます</td></tr>
+<tr><td>MCP ポートを開く / 閉じる</td><td>AI アシスタント（Claude）から Maya を操作するための接続口。開発用では起動時に自動で開きます（インストーラーで入れた場合は開きません）</td></tr>
 </table>
 
 <footer><a href="Readme.html">トップへ戻る</a></footer>

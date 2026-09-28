@@ -96,3 +96,15 @@ def test_no_delete_of_possibly_empty_list():
     bad = [f"{f.name}:{i}" for f in TOOL_FILES for i, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1)
            if re.search(r"cmds\.delete\(\s*\[", line)]
     assert not bad, bad
+
+
+def test_distribution_bat_is_ascii_crlf():
+    """配布用バッチは ASCII のみ・CRLF（cmd は UTF-8 のマルチバイト行を読み違えて行が壊れる。2026-09-28 に確認）。"""
+    raw = (ROOT / "tools/distribution/Install-TDriveToon.bat").read_bytes()
+    assert all(b < 128 for b in raw), "日本語などは install.ps1 側に書く"
+    assert b"\r\n" in raw and b"\n" not in raw.replace(b"\r\n", b"")
+
+
+def test_install_ps1_has_bom():
+    """Windows PowerShell 5.1 は BOM の無い UTF-8 を ANSI（cp932）として読み、日本語が化けて構文エラーになる。"""
+    assert (ROOT / "tools/install.ps1").read_bytes().startswith(b"\xef\xbb\xbf")

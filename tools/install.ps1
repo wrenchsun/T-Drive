@@ -69,7 +69,9 @@ if ($Release) {
         if ($current -eq $target) { Say "版: $target（最新です）" }
         else {
             Invoke-Git -c advice.detachedHead=false checkout --quiet $target | Out-Null
-            if ($current) { Say "版: $current → $target に更新しました" } else { Say "版: $target を導入しました" }
+            if (-not $current) { Say "版: $target を導入しました" }
+            elseif ((Parse-Version $target) -lt (Parse-Version $current)) { Say "版: $current → $target に戻しました" }
+            else { Say "版: $current → $target に更新しました" }
         }
         # マニュアルの画像だけ取る（Git LFS がある場合）
         if (Get-Command git-lfs -ErrorAction SilentlyContinue) {
