@@ -255,7 +255,7 @@ class Session:
     def set_setting(self, path: str, value: Any, notify: bool = True) -> None:
         look.set_setting(self.require(), path, value)
         self.dirty = True
-        if path == "depthCompression" or path.startswith(("faceShadow", "contactShadow", "innerLine")):
+        if path == "depthCompression" or path.startswith(("faceShadow", "contactShadow", "innerLine", "screenOutline")):
             self._sync_character_preview()
         if notify:
             self._changed()
@@ -282,8 +282,10 @@ class Session:
         preview.set_face_axes(fs["forward"], fs["right"])
         preview.set_line_keys(look.line_part_keys(lk))
         il = cs["innerLine"]
+        so = cs["screenOutline"]
         inner = {"width": il["width"], "color": envmath.srgb_color_to_linear(il["color"])[:3]} if il["enabled"] else None
-        screen_line.update(environment.model_panel(), inner, None, preview.environment_state()["tonemap"], visible=preview.is_active())
+        outer = {"width": so["width"], "color": envmath.srgb_color_to_linear(so["color"])[:3]} if so["enabled"] else None
+        screen_line.update(environment.model_panel(), inner, outer, preview.environment_state()["tonemap"], visible=preview.is_active())
         if cs["contactShadow"].get("enabled") or contact_shadow.exists():
             contact_shadow.update(self.export_meshes(), cs["contactShadow"], visible=preview.is_active())
 

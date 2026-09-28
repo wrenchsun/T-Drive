@@ -48,12 +48,20 @@ class CharacterTab(QtWidgets.QWidget):
         self.il_enabled = self._check(f, "使う", "innerLine.enabled")
         self.il_width = self._spin(f, "線幅（px@1080p）", "innerLine.width", 0.0, 10.0, 0.1)
         self.il_color = QtWidgets.QPushButton()
-        self.il_color.clicked.connect(self._pick_line_color)
+        self.il_color.clicked.connect(lambda: self._pick_color("innerLine.color"))
         f.addRow("線色", self.il_color)
         self.il_parts = QtWidgets.QListWidget()
         self.il_parts.setMaximumHeight(110)
         self.il_parts.itemChanged.connect(self._on_parts_changed)
         f.addRow("線を出す部位", self.il_parts)
+
+        # ---- 外側輪郭 T-42
+        box, f = self._group("画面上の外側輪郭（キャラクターの外形に一定の太さの線）", feature="screenOutline")
+        self.so_enabled = self._check(f, "使う（背面押し出しの線と置き換えるなら機能タブで「輪郭線」をオフ）", "screenOutline.enabled")
+        self.so_width = self._spin(f, "線幅（px@1080p）", "screenOutline.width", 0.0, 10.0, 0.1)
+        self.so_color = QtWidgets.QPushButton()
+        self.so_color.clicked.connect(lambda: self._pick_color("screenOutline.color"))
+        f.addRow("線色", self.so_color)
 
         # ---- 接地影 T-29
         box, f = self._group("接地影（Maya では足元の板に簡易表示）", feature="contactShadow")
@@ -226,8 +234,9 @@ class CharacterTab(QtWidgets.QWidget):
             for w in self.findChildren(QtWidgets.QCheckBox):
                 if w.property("path"):
                     w.setChecked(bool(self.session.setting(w.property("path"))))
-            r, g, b, _a = self.session.setting("innerLine.color")
-            self.il_color.setStyleSheet(f"background-color: rgb({int(r * 255)},{int(g * 255)},{int(b * 255)}); border: 1px solid #888;")
+            for button, path in ((self.il_color, "innerLine.color"), (self.so_color, "screenOutline.color")):
+                r, g, b, _a = self.session.setting(path)
+                button.setStyleSheet(f"background-color: rgb({int(r * 255)},{int(g * 255)},{int(b * 255)}); border: 1px solid #888;")
             chosen = set(self.session.setting("innerLine.parts"))
             self.il_parts.clear()
             for part in sorted(lk["parts"]):
@@ -273,11 +282,11 @@ class CharacterTab(QtWidgets.QWidget):
             self._updating = was
 
     # -------------------------------------------------------------- 操作
-    def _pick_line_color(self) -> None:
-        c = self.session.setting("innerLine.color")
+    def _pick_color(self, path: str) -> None:
+        c = self.session.setting(path)
         picked = QtWidgets.QColorDialog.getColor(QtGui.QColor.fromRgbF(*c), self, "線色（Unity のインスペクターと同じ値）")
         if picked.isValid():
-            self._set("innerLine.color", [round(picked.redF(), 4), round(picked.greenF(), 4), round(picked.blueF(), 4), 1.0])
+            self._set(path, [round(picked.redF(), 4), round(picked.greenF(), 4), round(picked.blueF(), 4), 1.0])
 
     def _on_parts_changed(self, _item) -> None:
         parts = [self.il_parts.item(i).text() for i in range(self.il_parts.count()) if self.il_parts.item(i).checkState() == QtCore.Qt.Checked]

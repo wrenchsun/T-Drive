@@ -81,15 +81,17 @@
 ## 4.1 characterSettings（キャラクター単位の設定、2026-09-28 追加 = MINOR）
 
 マテリアルでなくキャラクター全体に掛かる設定。主に T-Drive for Unity のコンポーネント・Renderer Feature が使う（[08](08_unity_port_plan.md) §3）。
-Maya でプレビューできない項目もここで編集して持つ（エディタでは「Unity でのみ」と表示）。
+Maya でプレビューできない項目もここで編集して持つ（エディタでは「Unity でのみ」と表示）。2026-09-28 時点で Maya で確認できないのはステンシルだけ（他は Phase 4 でプレビュー可能）。
 
 ```jsonc
 "characterSettings": {
-  "light":          { "smoothing": 0.15, "hysteresisDeg": 3.0 },         // T-17 影の安定化（秒 / 度）   Unity のみ
+  "light":          { "smoothing": 0.15, "hysteresisDeg": 3.0 },         // T-17 影の安定化（秒 / 度）   Maya: プレビュータブ
   "stencil":        { "enabled": false },                                 // T-24 髪越し表示（ステンシル）Unity のみ
-  "innerLine":      { "enabled": false, "width": 1.0,                    // T-23 画面上の内側の線         Unity のみ
+  "innerLine":      { "enabled": false, "width": 1.0,                    // T-23 画面上の内側の線（px@1080p）
                       "color": [0.2, 0.15, 0.15, 1.0], "parts": ["cloth"] },
-  "contactShadow":  { "enabled": false, "radius": 0.25, "strength": 0.5 },// T-29 接地影（m / 0–1）       Unity のみ
+  "screenOutline":  { "enabled": false, "width": 2.0,                    // T-42 画面上の外側輪郭（px@1080p）2026-09-28 追加（MINOR）
+                      "color": [0.2, 0.15, 0.15, 1.0] },
+  "contactShadow":  { "enabled": false, "radius": 0.25, "strength": 0.5 },// T-29 接地影（m / 0–1）       Maya: 足元の板で簡易表示
   "viewCorrection": { "mesh": "", "front": "", "threeQuarter": "", "side": "" },  // T-20 補正 BlendShape を持つメッシュ名とターゲット名
   "depthCompression": 0.0,                                                // T-22 奥行き圧縮（0–1）
   "faceShadow":     { "forward": [0, 0, 1], "right": [-1, 0, 0] },       // T-21 顔の正面・右（Maya ワールド。Unity では頭のボーンから）
@@ -104,6 +106,7 @@ Maya でプレビューできない項目もここで編集して持つ（エデ
 | light | smoothing ≥ 0、hysteresisDeg ≥ 0 |
 | innerLine.parts | 登録済みの部位名のみ |
 | innerLine.color | [r, g, b, a]（sRGB 値） |
+| screenOutline | width ≥ 0、color = [r, g, b, a]（sRGB 値） |
 | contactShadow | radius > 0、strength 0–1 |
 | viewCorrection | すべて文字列。mesh = 補正 BlendShape（`tdViewCorrection_<mesh>`）を持つメッシュ名、front / threeQuarter / side = ターゲット名（空 = その角度は使わない） |
 | depthCompression | 0–1 |

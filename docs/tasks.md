@@ -90,7 +90,7 @@ Unity は T-Drive for Unity パッケージ（Phase U）として実装する（
 | 4-5 | ライトの安定化を Maya のライト回転で再現（Unity と同じ平滑化・ヒステリシス） | T-17 | 0.5 | 4-3 | 平滑化を上げると影の追従が遅れ、ヒステリシスで小さな揺れが無視される | ✅ envmath.LightStabilizer（Unity は移植）+ プレビュータブ（安定化・小さく揺らす）。式をテストで担保 |
 | 4-6 | 接地影の簡易プレビュー（足元にプレビュー専用の楕円影） | T-29 | 0.5 | 4-3 | 半径・濃さを変えると足元の影が変わる。書き出しには入らない | ✅ `Toon_ContactShadow`（ToonCore、Unity と共有）+ 足ジョイント追従の板。登録・出力の対象外をスモークで担保、実機で表示確認 |
 | 4-7 | インナーラインの Maya プレビュー（Render Override で画面上のエッジ検出） | T-23 | 3 | 4-3 | 線を出す部位の境界に線が出る。Unity（U-10）と同じアルゴリズム | ✅ Render Override（MRT で ToonId → `Toon_LineInnerPair` で合成）。判定式は ToonCore（Unity と共有）。実機で部位境界・折れ目・髪の束に線を確認 |
-| 4-8 | スクリーンスペース外側輪郭: 設定（`characterSettings.screenOutline`: 有無・線幅・色）・機能 `screenOutline`・Maya プレビュー（4-7 のエッジ検出を共有） | T-42 | 1.5 | 4-7 | オンにするとキャラクターの外形に画面上一定幅の線が出る。背面押し出しの線と併用 / 置き換えを選べる | ⬜ |
+| 4-8 | スクリーンスペース外側輪郭: 設定（`characterSettings.screenOutline`: 有無・線幅・色）・機能 `screenOutline`・Maya プレビュー（4-7 のエッジ検出を共有） | T-42 | 1.5 | 4-7 | オンにするとキャラクターの外形に画面上一定幅の線が出る。背面押し出しの線と併用 / 置き換えを選べる | ✅ `characterSettings.screenOutline`・機能 `screenOutline`・`Toon_LineOuterPair`。置き換えは機能 `outline` をオフ。輪郭線パスも ToonId を書く（穴で体の内側に線が出る不具合を修正） |
 
 ## Phase U: T-Drive for Unity パッケージ（Unity で再現・一任）
 

@@ -97,8 +97,7 @@ RasterizerState RS_CullBack  { CullMode = Back;  FrontCounterClockwise = true; }
 RasterizerState RS_CullFront { CullMode = Front; FrontCounterClockwise = true; };
 RasterizerState RS_CullNone  { CullMode = None;  FrontCounterClockwise = true; };
 DepthStencilState DS_Default { DepthEnable = true; DepthWriteMask = ALL; DepthFunc = LESS_EQUAL; };
-// 描画先 1 = ToonId（Render Override 使用時だけ存在する）。本体パスだけが書き、アウトラインパスは書かない
-BlendState BS_Opaque { BlendEnable[0] = false; RenderTargetWriteMask[0] = 0x0F; BlendEnable[1] = false; RenderTargetWriteMask[1] = 0x00; };
+// 描画先 1 = ToonId（Render Override 使用時だけ存在する）。本体パス・アウトラインパスとも書く（docs/03 §10.1）
 BlendState BS_OpaqueWithId { BlendEnable[0] = false; RenderTargetWriteMask[0] = 0x0F; BlendEnable[1] = false; RenderTargetWriteMask[1] = 0x0F; };
 
 // ------------------------------------------------------------------ 頂点入出力
@@ -244,7 +243,7 @@ PSOutWithId PS_Opaque(VSOut i, bool frontFace : SV_IsFrontFace)
     float3 N = normalize(i.normalWS) * (frontFace ? 1.0 : -1.0);
     float3 normalVS = normalize(mul(float4(N, 0.0), gView).xyz);
     float depthM = -mul(float4(i.positionWS, 1.0), gView).z / PreviewUnitScale;
-    o.id = PreviewLineKey > 0.5 ? Toon_LineIdValue(normalVS, depthM, PreviewLineKey) : float4(0.0, 0.0, 0.0, 0.0);
+    o.id = PreviewLineKey > 0.5 ? Toon_LineIdValue(normalVS, depthM, PreviewLineKey, false) : float4(0.0, 0.0, 0.0, 0.0);
     return o;
 }
 
@@ -284,15 +283,21 @@ VSOut VS_Outline(VSIn v)
     return o;
 }
 
-float4 PS_Outline(VSOut i) : SV_Target
+PSOutWithId PS_Outline(VSOut i)
 {
     if (ToonOutlineWidth <= 0.0 || i.vertexMask.g <= 0.0)
         discard;
     float4 base = SampleBase(i.uv);
     if (AlphaClip && base.a < Cutoff)
         discard;
+    PSOutWithId o;
     float3 col = Toon_OutlineColor(base.rgb, ToonOutlineColor.rgb, ToonOutlineBaseMix);
-    return float4(Toon_Tonemap(col, PreviewTonemap), 1.0);
+    o.color = float4(Toon_Tonemap(col, PreviewTonemap), 1.0);
+    // ToonId に穴を作らない（輪郭線の画素も同じ部位として書く。docs/03 §10.1）
+    float3 normalVS = normalize(mul(float4(normalize(i.normalWS), 0.0), gView).xyz);
+    float depthM = -mul(float4(i.positionWS, 1.0), gView).z / PreviewUnitScale;
+    o.id = PreviewLineKey > 0.5 ? Toon_LineIdValue(normalVS, depthM, PreviewLineKey, true) : float4(0.0, 0.0, 0.0, 0.0);
+    return o;
 }
 
 // ------------------------------------------------------------------ テクニック
@@ -309,7 +314,7 @@ technique11 Opaque
         SetPixelShader(CompileShader(ps_5_0, PS_Outline()));
         SetRasterizerState(RS_CullFront);
         SetDepthStencilState(DS_Default, 0);
-        SetBlendState(BS_Opaque, float4(0.0, 0.0, 0.0, 0.0), 0xFFFFFFFF);
+        SetBlendState(BS_OpaqueWithId, float4(0.0, 0.0, 0.0, 0.0), 0xFFFFFFFF);
     }
     pass Main < string drawContext = "colorPass"; >
     {
@@ -335,7 +340,7 @@ technique11 OpaqueDoubleSided
         SetPixelShader(CompileShader(ps_5_0, PS_Outline()));
         SetRasterizerState(RS_CullFront);
         SetDepthStencilState(DS_Default, 0);
-        SetBlendState(BS_Opaque, float4(0.0, 0.0, 0.0, 0.0), 0xFFFFFFFF);
+        SetBlendState(BS_OpaqueWithId, float4(0.0, 0.0, 0.0, 0.0), 0xFFFFFFFF);
     }
     pass Main < string drawContext = "colorPass"; >
     {

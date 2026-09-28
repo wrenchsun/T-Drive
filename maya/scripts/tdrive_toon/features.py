@@ -52,6 +52,7 @@ FEATURES: tuple[Feature, ...] = (
     Feature("lightStabilize", "ライトの安定化", ("T-17",), (), ("light",), (CO,)),
     Feature("stencil", "髪越し表示（ステンシル）", ("T-24",), (), ("stencil",), (SH, CO), "none"),
     Feature("innerLine", "画面上のインナーライン", ("T-23",), (), ("innerLine",), (RF,)),
+    Feature("screenOutline", "画面上の外側輪郭", ("T-42",), (), ("screenOutline",), (RF,)),
     Feature("contactShadow", "接地影", ("T-29",), (), ("contactShadow",), (RF,), "partial"),
     Feature("viewCorrection", "カメラ角度補正", ("T-20",), (), ("viewCorrection",), (ME, CO)),
     Feature("expressions", "表情パラメータ", ("T-25",), (), ("expressions",), (CO,)),

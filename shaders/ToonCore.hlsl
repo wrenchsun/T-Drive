@@ -233,10 +233,11 @@ float2 Toon_OctahedralEncode(float3 n)
     return e;
 }
 
-// ToonId バッファに書く値。normalVS は正規化済み、depthM はビュー空間の奥行き（m）、partKey = 部位番号 × 2 + 線フラグ
-float4 Toon_LineIdValue(float3 normalVS, float depthM, float partKey)
+// ToonId バッファに書く値。normalVS は正規化済み、depthM はビュー空間の奥行き（m）、partKey = 部位番号 × 2 + 線フラグ。
+// 背面押し出しの輪郭線のパスは isOutline = true（A を −奥行きにして印を付ける。外形には含め、内側の線の判定からは外す）
+float4 Toon_LineIdValue(float3 normalVS, float depthM, float partKey, bool isOutline)
 {
-    return float4(Toon_OctahedralEncode(normalVS), partKey, depthM);
+    return float4(Toon_OctahedralEncode(normalVS), partKey, isOutline ? -depthM : depthM);
 }
 
 // 線を出す間隔 r（画素）。widthPx は px@1080p、screenHeight は実際の画面の高さ
@@ -250,6 +251,8 @@ float Toon_LineInnerPair(float4 p, float4 q)
 {
     if (p.b < 1.5 || q.b < 1.5)
         return 0.0;  // どちらかが Toon でない（外側輪郭は Toon_LineOuterPair）
+    if (p.a < 0.0 || q.a < 0.0)
+        return 0.0;  // 背面押し出しの輪郭線の画素（A = −奥行き）は内側の線の判定に使わない
     float partP = floor(p.b * 0.5 + 0.25), partQ = floor(q.b * 0.5 + 0.25);
     float lineP = p.b - partP * 2.0, lineQ = q.b - partQ * 2.0;
     if (partP != partQ)

@@ -43,6 +43,7 @@ CHARACTER_DEFAULTS: dict[str, Any] = {
     "light": {"smoothing": 0.15, "hysteresisDeg": 3.0},
     "stencil": {"enabled": False},
     "innerLine": {"enabled": False, "width": 1.0, "color": [0.2, 0.15, 0.15, 1.0], "parts": []},
+    "screenOutline": {"enabled": False, "width": 2.0, "color": [0.2, 0.15, 0.15, 1.0]},
     "contactShadow": {"enabled": False, "radius": 0.25, "strength": 0.5},
     "viewCorrection": {"mesh": "", "front": "", "threeQuarter": "", "side": ""},
     "depthCompression": 0.0,
@@ -233,6 +234,10 @@ def _validate_settings(look: dict[str, Any]) -> list[str]:
     for part in il.get("parts", []):
         if part not in look.get("parts", {}):
             errors.append(f"{w}.innerLine.parts に未登録の部位 {part}")
+    so = cs.get("screenOutline", {})
+    num("screenOutline.width", so.get("width", 2), 0, None)
+    if not (isinstance(so.get("color", [0, 0, 0, 1]), list) and len(so.get("color", [0, 0, 0, 1])) == 4):
+        errors.append(f"{w}.screenOutline.color は [r, g, b, a]")
     cs_shadow = cs.get("contactShadow", {})
     num("contactShadow.radius", cs_shadow.get("radius", 0.25), 0, None)
     num("contactShadow.strength", cs_shadow.get("strength", 0.5), 0, 1)
