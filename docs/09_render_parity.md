@@ -117,3 +117,4 @@ MS2026 自体が開発中で、色空間以外（トーンマップ・ライト�
 | Maya がフリーズ | 描画中の dx11Shader に `dx11Shader -reload` | 使わない。`.fx` 更新時はプレビューノードを作り直す（`preview.reload_shader_file`） |
 | float4 の色に setAttr できない | dx11Shader は `color1x4` を `<名前>RGB` + `<名前>A` に分ける | 子アトリビュートに個別に設定 |
 | 頂点カラー・UV2 が届かない | 既定の取得元が `color:colorSet` / `uv:map3` | `Color0_Source = color:tdToonMask`、`TexCoord2_Source = uv:tdSmoothNormal` を設定 |
+| スキン付きメッシュに書いた UV Set が見えない | 変形後に書くとヒストリ再評価で消える。Orig に書いた直後は `polyUVSet -q` が変形後シェイプの古い名前一覧を返す | 書き込みは Orig（中間オブジェクト）へ。存在確認は評価済みデータ（`MFnMesh.getUVSetNames`）で |

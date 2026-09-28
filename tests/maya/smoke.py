@@ -175,6 +175,14 @@ def run() -> None:
           all(v == 0.0 for v in mask.read_channel(shape, "G"))
           and all(v == 1.0 for ch in "RBA" for v in mask.read_channel(shape, ch)))
 
+    # ---- スムーズ法線
+    from tdrive_toon import smooth_normals
+
+    baked = s.bake_smooth_normals("hair")
+    check("スムーズ法線: スキン付きメッシュは Orig シェイプに焼かれ、出力シェイプに UV Set が出る",
+          all(k.endswith("Orig") for k in baked) and all(smooth_normals.has_smooth_normals(m) for m in s.meshes_for("hair")),
+          str(list(baked)))
+
     # 後片付け
     preview.delete_all()
     check("delete_all: プレビューノードが残らない", not preview.preview_shaders())

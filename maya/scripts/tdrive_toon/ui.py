@@ -458,6 +458,10 @@ class MaskBox(QtWidgets.QGroupBox):
         init.setToolTip("対象メッシュに Color Set tdToonMask を作り白で埋める（既にあれば何もしない）")
         init.clicked.connect(self.on_init)
         row.addWidget(init)
+        bake = QtWidgets.QPushButton("スムーズ法線を焼く")
+        bake.setToolTip("アウトラインが角で割れないよう、平均化した法線を UV Set tdSmoothNormal に焼く（形状を変えたら焼き直す）")
+        bake.clicked.connect(lambda: self._run(self.session.bake_smooth_normals, self._target()))
+        row.addWidget(bake)
         row.addWidget(QtWidgets.QLabel("  塗る:"))
         self.paint_buttons = {}
         for ch in mask.CHANNELS:

@@ -198,6 +198,14 @@ class Session:
             self.show(self.shown)  # 頂点マスクの有効 / 無効を更新
         return created
 
+    def bake_smooth_normals(self, target: str | None = None) -> dict[str, int]:
+        from . import smooth_normals
+
+        done = smooth_normals.bake(self.meshes_for(target))
+        if self.look is not None and preview.is_active():
+            self.show(self.shown)
+        return done
+
     def begin_mask_paint(self, channel: str, target: str | None = None) -> None:
         from . import mask
 
