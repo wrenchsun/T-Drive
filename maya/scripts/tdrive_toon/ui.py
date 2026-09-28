@@ -174,6 +174,10 @@ class HeaderBar(QtWidgets.QWidget):
             b = QtWidgets.QPushButton(text)
             b.clicked.connect(fn)
             row.addWidget(b)
+        self.export_btn = QtWidgets.QPushButton("Unity 出力")
+        self.export_btn.setToolTip("build/unity/<キャラクター>/ に materialdata.json と FBX を書き出す（FBX はバックグラウンド。開いているシーンは変わらない）")
+        self.export_btn.clicked.connect(self.on_export)
+        row.addWidget(self.export_btn)
         row.addStretch(1)
         row.addWidget(QtWidgets.QLabel("表示:"))
         self.toon = QtWidgets.QRadioButton("Toon")
@@ -244,6 +248,50 @@ class HeaderBar(QtWidgets.QWidget):
                 self.session.save(path)
             except Exception as exc:
                 _error(self, exc)
+
+    def on_export(self) -> None:
+        lk = self.session.look
+        if lk is None:
+            return
+        variants = look.variant_names(lk)
+        variant = look.BASE
+        if len(variants) > 1:
+            variant, ok = QtWidgets.QInputDialog.getItem(self, "Unity 出力", "書き出すバリアント:", variants, 0, False)
+            if not ok:
+                return
+        try:
+            json_path, self._job = self.session.start_unity_export(variant)
+        except Exception as exc:
+            _error(self, exc)
+            return
+        self._json_path = json_path
+        self.export_btn.setEnabled(False)
+        self.export_btn.setText("出力中…（FBX）")
+        self._timer = QtCore.QTimer(self)
+        self._timer.setInterval(500)
+        self._timer.timeout.connect(self._poll_export)
+        self._timer.start()
+
+    def _poll_export(self) -> None:
+        if not self._job.poll():
+            return
+        self._timer.stop()
+        self.export_btn.setEnabled(True)
+        self.export_btn.setText("Unity 出力")
+        try:
+            res = self._job.result()
+        except Exception as exc:
+            _error(self, exc)
+            return
+        warnings = res.get("warnings", [])
+        text = (
+            f"書き出しました:\n{preview.to_repo_path(str(self._json_path))}\n{preview.to_repo_path(res['path'])}"
+            + (f"\n\n注意 {len(warnings)} 件（詳細）" if warnings else "")
+        )
+        box = QtWidgets.QMessageBox(QtWidgets.QMessageBox.Information, "Unity 出力", text, parent=self)
+        if warnings:
+            box.setDetailedText("\n".join(warnings))
+        box.exec()
 
     def on_toggle_preview(self, checked: bool) -> None:
         try:

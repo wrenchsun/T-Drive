@@ -183,6 +183,31 @@ def run() -> None:
           all(k.endswith("Orig") for k in baked) and all(smooth_normals.has_smooth_normals(m) for m in s.meshes_for("hair")),
           str(list(baked)))
 
+    # ---- Unity 向け FBX（別プロセスの mayapy で整形・書き出し。開いているシーンは変わらない）
+    from maya.api import OpenMaya as om
+
+    from tdrive_toon import export
+
+    probe = s.meshes_for("hair")[0]
+    probe_shape = mask._shapes([probe])[0]
+    before_sets = cmds.polyColorSet(probe_shape, query=True, allColorSets=True)
+    fbx = export.export_fbx(s.export_meshes(), tmp / "out.fbx")
+    check("FBX 書き出し後も開いているシーンは変わらない",
+          cmds.polyColorSet(probe_shape, query=True, allColorSets=True) == before_sets)
+    scene_now = cmds.file(query=True, sceneName=True)
+    cmds.file(new=True, force=True)
+    cmds.loadPlugin("fbxmaya", quiet=True)
+    cmds.file(fbx["path"], i=True, type="FBX", ignoreVersion=True)
+    bad = []
+    for shp in cmds.ls(type="mesh", long=True, noIntermediate=True):
+        uvs = list(om.MFnMesh(om.MSelectionList().add(shp).getDagPath(0)).getUVSetNames())
+        if (cmds.polyColorSet(shp, query=True, allColorSets=True) or []) != [mask.MASK] or uvs[0] != "map1" or (
+            len(uvs) > 2 and uvs[2] != preview.SMOOTH_NORMAL_UV
+        ):
+            bad.append(shp)
+    check("FBX: 頂点カラーは tdToonMask のみ、UV は map1 / 予備 / tdSmoothNormal の順", not bad and fbx["meshes"] > 0, str(bad[:3]))
+    cmds.file(scene_now, open=True, force=True)
+
     # 後片付け
     preview.delete_all()
     check("delete_all: プレビューノードが残らない", not preview.preview_shaders())

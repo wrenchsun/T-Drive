@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unity 出力 - T-Drive デザイナーマニュアル</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<nav class="breadcrumb"><a href="Readme.html">トップ</a> › Unity 出力</nav>
+<h1>Unity 出力</h1>
+<p class="lastupdate">最終更新日: 2026-09-28</p>
+
+<p>作った見た目を Unity（MS2026）に渡すためのファイルを書き出します。エディタ上部の <strong>Unity 出力</strong> を押すだけです。</p>
+
+<h2>書き出されるもの</h2>
+<table>
+<tr><th>ファイル</th><th>中身</th></tr>
+<tr><td><span class="path">build/unity/&lt;キャラクター&gt;/&lt;キャラクター&gt;_&lt;案&gt;.materialdata.json</span></td><td>見た目の設定（部位ごとの影・線・色など）。Unity 側で D-Drive のマテリアルデータになります</td></tr>
+<tr><td><span class="path">build/unity/&lt;キャラクター&gt;/&lt;キャラクター&gt;.fbx</span></td><td>モデル。<a href="look-params.html#mask">Toon マスク</a>（頂点カラー）と<a href="look-params.html">スムーズ法線</a>が Unity で読める形で入ります</td></tr>
+</table>
+
+<h2>使い方</h2>
+<ol>
+<li>エディタ上部の <strong>Unity 出力</strong> を押す</li>
+<li>A/B の案（バリアント）がある場合は、どの案を書き出すか選ぶ（ふだんは <strong>base</strong>）</li>
+<li>ボタンが「出力中…（FBX）」になります。<strong>その間も Maya は普通に使えます</strong>（1 分ほどかかります）</li>
+<li>終わると書き出したファイルの場所が表示されます</li>
+</ol>
+
+<div class="tip">
+<strong>開いているシーンは変わりません。</strong> Unity 用に頂点カラーや UV の並びを整える作業は、裏で別の Maya（画面なし）がシーンのコピーに対して行います。
+</div>
+<div class="warn">
+「注意 ○ 件」と出た場合は <strong>詳細</strong> を見てください。よくあるのは「スムーズ法線が未ベイク」です。角で線が割れて困る部位は、部位タブで <strong>スムーズ法線を焼く</strong> をしてから書き出し直してください（そのままでも書き出しはできます）。
+</div>
+
+<footer><a href="Readme.html">トップへ戻る</a></footer>
+</body>
+</html>

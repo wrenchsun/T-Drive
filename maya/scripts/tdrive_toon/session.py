@@ -442,6 +442,23 @@ class Session:
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         return path
 
+    def export_meshes(self) -> list[str]:
+        """Look に登録されたマテリアルが付いているメッシュ（FBX に入れるもの）。"""
+        scene = preview.scene_materials()
+        return sorted({m for mat in self.require()["materials"] for m in scene.get(mat, [])})
+
+    def fbx_path(self, out_dir: Path | None = None) -> Path:
+        char = self.require()["character"]
+        return (out_dir or EXPORT_DIR) / char / f"{char}.fbx"
+
+    def start_unity_export(self, variant: str = look.BASE, out_dir: Path | None = None):
+        """materialdata.json を書き、FBX の書き出しをバックグラウンドで始める。(json パス, ExportJob) を返す。"""
+        from . import export
+
+        json_path = self.export_unity(variant, out_dir)
+        job = export.ExportJob(self.export_meshes(), self.fbx_path(out_dir))
+        return json_path, job
+
 
 _current = Session()
 
