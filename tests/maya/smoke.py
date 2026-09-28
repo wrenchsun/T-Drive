@@ -46,7 +46,7 @@ def run() -> None:
         build_unitychan_scene.build()
     cmds.file(str(FIXTURE), open=True, force=True)
 
-    from tdrive_toon import look, preview, session
+    from tdrive_toon import environment, look, preview, session
 
     tmp = Path(tempfile.mkdtemp(prefix="tdrive_smoke_"))
     s = session.current()
@@ -150,6 +150,15 @@ def run() -> None:
     check("採用: B が base に確定し B は消える", "B" not in s.look["variants"] and s.ab == ["base", "base"])
     s.undo()
     check("採用の取り消し（Undo）", "B" in s.look["variants"])
+
+    # ---- プレビュー条件（環境・ライト）の保存と復元
+    preview.use_profile(environment.list_profiles()[0])
+    preview.set_light_euler(10.0, 123.0)
+    saved = s.save_preview_settings()
+    preview.set_light_euler(60.0, 0.0)
+    s.open(look_path)
+    check("preview.json からライトの向きを復元", saved.exists() and preview.environment_state()["lightEuler"] == (10.0, 123.0),
+          str(preview.environment_state()["lightEuler"]))
 
     # 後片付け
     preview.delete_all()

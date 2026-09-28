@@ -23,7 +23,13 @@ MASK_COLOR_SET = "tdToonMask"  # docs/03 §4
 SMOOTH_NORMAL_UV = "tdSmoothNormal"  # docs/03 §5
 
 # 現在のプレビュー環境（プロファイル + ツールでの上書き）。Look には保存しない
-_env: dict[str, Any] = {"profile": None, "lightDir": (0.4, 0.6, 0.7), "lightColor": (1.0, 1.0, 1.0), "tonemap": 0}
+_env: dict[str, Any] = {
+    "profile": None,
+    "lightEuler": (35.0, 180.0),  # Unity と同じ表現（ピッチ x, ヨー y 度）。ヨー 180 = キャラクターの正面から照らす
+    "lightDir": envmath.light_dir_to_light_maya((35.0, 180.0, 0.0)),
+    "lightColor": (1.0, 1.0, 1.0),
+    "tonemap": 0,
+}
 
 
 # ---------------------------------------------------------------- 準備
@@ -340,11 +346,57 @@ def environment_state() -> dict[str, Any]:
 def use_profile(name: str) -> list[str]:
     """環境プロファイルを適用する。警告（未対応の値など）を返す。"""
     prof = environment.load_profile(name)
-    direction, color = environment.character_light(prof)
-    _env.update(profile=name, lightDir=direction, lightColor=color, tonemap=environment.tonemap_mode(prof))
+    _direction, color = environment.character_light(prof)
+    rx, ry, _rz = prof["characterLight"]["rotation"]
+    _env.update(profile=name, lightColor=color, tonemap=environment.tonemap_mode(prof))
+    set_light_euler(rx, ry, apply=False)
     environment.apply_color_management()
     apply_environment()
     return environment.profile_warnings(prof)
+
+
+# ライトのプリセット（Unity のオイラー角 x, y）。キャラクターは +Z を向き、画面右 = Maya +X
+LIGHT_PRESETS = {
+    "正面上": (35.0, 180.0),
+    "右前上": (40.0, 140.0),
+    "左前上": (40.0, 220.0),
+    "真上": (89.0, 180.0),
+    "逆光": (20.0, 0.0),
+}
+
+
+def set_light_euler(pitch: float, yaw: float, apply: bool = True) -> None:
+    """キャラクターライトの向きを Unity のオイラー角で指定する。"""
+    _env["lightEuler"] = (float(pitch), float(yaw) % 360.0)
+    _env["lightDir"] = envmath.light_dir_to_light_maya((float(pitch), float(yaw), 0.0))
+    if apply:
+        apply_environment()
+
+
+def reset_light_to_profile() -> None:
+    """ライトを環境プロファイル（ゲームと同じ）の値に戻す。"""
+    if _env["profile"]:
+        rx, ry, _ = environment.load_profile(_env["profile"])["characterLight"]["rotation"]
+        set_light_euler(rx, ry)
+
+
+def save_preview_settings(path: Path, extra: dict[str, Any] | None = None) -> None:
+    """プレビュー条件（環境・ライト・カメラ）を保存し、A/B 比較の条件を再現できるようにする。"""
+    data = {"profile": _env["profile"], "lightEuler": list(_env["lightEuler"]), **(extra or {})}
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    path.write_text(text, encoding="utf-8", newline="\n")
+
+
+def load_preview_settings(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if data.get("profile") in environment.list_profiles():
+        use_profile(data["profile"])
+    if "lightEuler" in data:
+        set_light_euler(*data["lightEuler"])
+    return data
 
 
 def set_light(direction: tuple[float, float, float] | None = None, color: tuple[float, float, float] | None = None) -> None:

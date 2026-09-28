@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>プレビュー設定 - T-Drive デザイナーマニュアル</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<nav class="breadcrumb"><a href="Readme.html">トップ</a> › プレビュー設定</nav>
+<h1>プレビュー設定</h1>
+<p class="lastupdate">最終更新日: 2026-09-28</p>
+
+<p>「プレビュー」タブでは、<strong>ゲームと同じ条件</strong>（環境プロファイル）で、決まったカメラ・ライトから見られます。</p>
+
+<figure>
+<img src="images/editor_preview.png" alt="プレビュータブ">
+<figcaption>プレビュータブ。上から 環境 / カメラ / キャラクターライト / Unity とのパリティ</figcaption>
+</figure>
+
+<h2>環境</h2>
+<p>ゲームのどの画面の条件で見るかを選びます（今は <strong>ms2026_ingame</strong> = ゲーム中の画面）。明るさの圧縮（トーンマップ）・カメラの画角・キャラクターライトがその画面と同じになります。</p>
+
+<h2>カメラ</h2>
+<table>
+<tr><th>操作</th><th>内容</th></tr>
+<tr><td>範囲: 顔 / 全身</td><td>顔のアップか、全身が入る距離か</td></tr>
+<tr><td>正面 / 3/4 / 横 / 後ろ / 3/4 左</td><td>その向きから見るカメラ（<span class="path">tdPreviewCam</span>）に切り替えます。画角はゲームのカメラと同じです</td></tr>
+</table>
+<div class="tip">カメラを切り替えたあとも、普段どおり Alt + ドラッグで自由に動かせます。</div>
+
+<h2>キャラクターライト</h2>
+<table>
+<tr><th>操作</th><th>内容</th></tr>
+<tr><td>正面上 / 右前上 / 左前上 / 真上 / 逆光</td><td>よく使う向き（右・左は画面から見た向き）</td></tr>
+<tr><td>ゲームと同じ</td><td>環境プロファイル（ゲーム）のライトの向きに戻します</td></tr>
+<tr><td>ヨー（水平）/ ピッチ（高さ）</td><td>向きを細かく変えます。値は Unity のライトの回転（X = ピッチ、Y = ヨー）と同じです</td></tr>
+<tr><td>ライト回転 ▶</td><td>ライトをぐるぐる回します。<strong>影の境界がチラつかないか・変な所に影が出ないか</strong>を確かめるのに使います。もう一度押すと止まります</td></tr>
+</table>
+<div class="warn">
+ゲーム中のライトは<strong>キャラクターの後ろ上から</strong>当たっています（InGame の設定）。正面から見ると顔がほぼ影側になるので、顔の調整は「正面上」などで確認し、最後に「ゲームと同じ」で見え方を確かめてください。
+</div>
+
+<h2>Unity とのパリティ</h2>
+<p>Maya 側の設定がゲームと同じ見た目になる状態かを一覧します。「要確認」があれば直してください。色の設定は <strong>色の設定を Unity に合わせる</strong> で直ります。表示方式（DirectX 11）は <a href="setup.html">はじめに</a> を参照。</p>
+
+<h2>この条件を保存</h2>
+<p>環境とライトの向きを <span class="path">looks/&lt;キャラクター&gt;/preview.json</span> に保存します。次に Look を開いたとき同じ条件に戻るので、<strong>A/B 比較の条件をそろえる</strong>のに使えます。</p>
+
+<footer><a href="Readme.html">トップへ戻る</a></footer>
+</body>
+</html>

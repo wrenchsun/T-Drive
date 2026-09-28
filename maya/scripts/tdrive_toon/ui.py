@@ -16,6 +16,7 @@ from PySide6 import QtCore, QtWidgets
 from . import __version__, environment, look, preview, roles, session
 from .ui_ab import ABTab
 from .ui_look import LookTab
+from .ui_preview import PreviewTab
 
 WINDOW_NAME = "TDriveToonEditor"
 CHARACTER_ID = re.compile(r"^[a-z0-9_]+$")
@@ -71,13 +72,15 @@ class EditorWindow(MayaQWidgetDockableMixin, QtWidgets.QWidget):
         self.ab_tab = ABTab(self.session)
         self.ab_tab.open_in_look.connect(self._open_in_look)
         self.tabs.addTab(self.ab_tab, "A/B")
-        self.tabs.addTab(_placeholder("プレビュー設定は 1-8 で実装予定"), "プレビュー")
+        self.preview_tab = PreviewTab(self.session)
+        self.tabs.addTab(self.preview_tab, "プレビュー")
         layout.addWidget(self.tabs, 1)
 
         self.session.listeners.append(self.refresh)
         self.refresh()
 
     def detach(self) -> None:
+        self.preview_tab.timer.stop()
         if self.refresh in self.session.listeners:
             self.session.listeners.remove(self.refresh)
 
@@ -94,6 +97,7 @@ class EditorWindow(MayaQWidgetDockableMixin, QtWidgets.QWidget):
         self.parts_tab.refresh()
         self.look_tab.refresh()
         self.ab_tab.refresh()
+        self.preview_tab.refresh()
         problems = environment.parity_problems()
         self.warning.setText("Unity とのパリティ: " + " / ".join(problems) if problems else "")
         self.warning.setVisible(bool(problems))

@@ -66,6 +66,7 @@ class Session:
         names = look.variant_names(self.look)
         self.ab = [look.BASE, names[1] if len(names) > 1 else look.BASE]
         preview.remember_look_path(str(self.path))
+        preview.load_preview_settings(self.preview_settings_path())  # 保存したプレビュー条件（環境・ライト）を復元
         self.show(look.BASE)
         self._changed(dirty=False)
 
@@ -80,6 +81,15 @@ class Session:
         self.dirty = False
         self._changed(dirty=False)
         return self.path
+
+    def preview_settings_path(self) -> Path:
+        base = self.path.parent if self.path else LOOKS_DIR / self.require()["character"]
+        return base / "preview.json"
+
+    def save_preview_settings(self) -> Path:
+        path = self.preview_settings_path()
+        preview.save_preview_settings(path)
+        return path
 
     # ------------------------------------------------------------ 部位登録
     def auto_register(self, overwrite: bool = False) -> dict[str, str]:
