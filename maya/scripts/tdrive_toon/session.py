@@ -228,9 +228,20 @@ class Session:
         lk = self.require()
         look.set_feature(lk, feature_id, on)
         if preview.is_active():
-            preview.enable(look.resolve(lk, self.shown))
-            self._sync_character_preview()
+            self._refresh_feature_preview([feature_id])
         self._changed()
+
+    def _refresh_feature_preview(self, feature_ids: list[str]) -> None:
+        """機能を切り替えた後のプレビュー更新。必要な所だけ（クリックごとに全体を作り直すと 0.3 秒かかっていた）。"""
+        resolved = look.resolve(self.require(), self.shown)
+        if "vertexMask" in feature_ids:
+            preview.enable(resolved)  # 頂点マスクはメッシュ側の頂点ストリーム設定も変わる
+        else:
+            for mat, values in resolved.items():
+                if cmds.objExists(preview.preview_shader_of(mat)):
+                    preview.apply_values(mat, values)
+        if any(features.BY_ID[f].settings for f in feature_ids):
+            self._sync_character_preview()  # キャラクター設定を持つ機能（接地影・画面上の線など）
 
     @undoable
     def disable_unused_features(self) -> list[str]:
@@ -242,8 +253,7 @@ class Session:
         for fid in off:
             look.set_feature(lk, fid, False)
         if off and preview.is_active():
-            preview.enable(look.resolve(lk, self.shown))
-            self._sync_character_preview()
+            self._refresh_feature_preview(off)
         self._changed(dirty=bool(off))
         return off
 

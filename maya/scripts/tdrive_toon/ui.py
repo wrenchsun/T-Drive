@@ -124,6 +124,8 @@ class EditorWindow(MayaQWidgetDockableMixin, QtWidgets.QWidget):
         self.preview_tab = PreviewTab(self.session)
         self.tabs.addTab(self.preview_tab, "プレビュー")
         layout.addWidget(self.tabs, 1)
+        self._stale: set[QtWidgets.QWidget] = set()  # 表示していないタブは次に開いたときに更新する（部位タブの更新は ~0.1 秒）
+        self.tabs.currentChanged.connect(self._refresh_current_if_stale)
 
         # エディタ内 Undo（Look の値）。どのタブにフォーカスがあっても効く。Maya の Undo とは別
         for key, fn in (("Ctrl+Z", self._undo), ("Ctrl+Y", self._redo), ("Ctrl+Shift+Z", self._redo)):
@@ -154,18 +156,26 @@ class EditorWindow(MayaQWidgetDockableMixin, QtWidgets.QWidget):
         if not self.session.redo():
             cmds.inViewMessage(amg="T-Drive: やり直せる操作がありません", pos="topCenter", fade=True)
 
+    def _refresh_current_if_stale(self, _index: int = 0) -> None:
+        tab = self.tabs.currentWidget()
+        if tab in self._stale:
+            self._stale.discard(tab)
+            tab.refresh()
+
     def _open_in_look(self, target: str) -> None:
         self.tabs.setCurrentWidget(self.look_tab)
         self.look_tab.select_target(target)
 
     def refresh(self) -> None:
         self.header.refresh()
-        self.parts_tab.refresh()
-        self.look_tab.refresh()
-        self.character_tab.refresh()
-        self.features_tab.refresh()
-        self.ab_tab.refresh()
-        self.preview_tab.refresh()
+        self.preview_tab.refresh()  # 軽い。ライト安定化の設定値もここで追従させる
+        current = self.tabs.currentWidget()
+        for tab in (self.parts_tab, self.look_tab, self.character_tab, self.features_tab, self.ab_tab):
+            if tab is current:
+                tab.refresh()
+                self._stale.discard(tab)
+            else:
+                self._stale.add(tab)
         problems = environment.parity_problems()
         self.warning.setText("Unity とのパリティ: " + " / ".join(problems) if problems else "")
         self.warning.setVisible(bool(problems))

@@ -52,7 +52,8 @@ class FeaturesTab(QtWidgets.QWidget):
             h.setContentsMargins(6, 0, 0, 0)
             check = QtWidgets.QCheckBox()
             check.setEnabled(not f.required)
-            check.clicked.connect(lambda on, fid=f.id: self._toggle(fid, on))
+            # PySide6 は既定値付き引数の lambda に clicked(bool) の値を渡さない（呼び出しが失敗して反映されなかった）→ 状態はチェックから読む
+            check.clicked.connect(lambda *_, fid=f.id, c=check: self._toggle(fid, c.isChecked()))
             h.addWidget(check)
             self.table.setCellWidget(row, 0, cell)
             self.checks[f.id] = check
