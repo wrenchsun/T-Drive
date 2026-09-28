@@ -29,28 +29,18 @@ _editing: dict[str, object] = {"channel": None, "meshes": []}
 # ---------------------------------------------------------------- 基本
 
 
-def _shapes(meshes: list[str]) -> list[str]:
-    shapes = []
-    for m in meshes:
-        if cmds.nodeType(m) == "mesh":
-            shapes.append(m)
-        else:
-            shapes += cmds.listRelatives(m, shapes=True, noIntermediate=True, fullPath=True, type="mesh") or []
-    return shapes
-
-
 def _fn(shape: str) -> om.MFnMesh:
     return om.MFnMesh(om.MSelectionList().add(shape).getDagPath(0))
 
 
 def has_mask(mesh: str) -> bool:
-    return all(MASK in (cmds.polyColorSet(s, query=True, allColorSets=True) or []) for s in _shapes([mesh]))
+    return all(MASK in (cmds.polyColorSet(s, query=True, allColorSets=True) or []) for s in preview.mesh_shapes([mesh]))
 
 
 def init(meshes: list[str]) -> list[str]:
     """Color Set tdToonMask を作って白で埋める。既にあるメッシュは触らない。作ったメッシュを返す。"""
     created = []
-    for shape in _shapes(meshes):
+    for shape in preview.mesh_shapes(meshes):
         if MASK in (cmds.polyColorSet(shape, query=True, allColorSets=True) or []):
             continue
         _fill(shape, MASK, (1.0, 1.0, 1.0, 1.0))
@@ -101,7 +91,7 @@ def begin_paint(meshes: list[str], channel: str) -> None:
         raise ValueError(channel)
     if editing():
         commit()
-    shapes = _shapes(meshes)
+    shapes = preview.mesh_shapes(meshes)
     if not shapes:
         raise RuntimeError("メッシュを選択してください")
     init(shapes)

@@ -256,13 +256,16 @@ class ParamRow:
         return int(round((v - self.lo) / (self.hi - self.lo) * 1000)) if self.hi > self.lo else 0
 
     def _on_slider(self, pos: int) -> None:
-        if not self.slider.isSliderDown():
-            return
         v = self.lo + (self.hi - self.lo) * pos / 1000
         self.spin.blockSignals(True)
         self.spin.setValue(v)
         self.spin.blockSignals(False)
-        self.tab.set(self.key, round(v, 4), live=True)
+        if self.slider.isSliderDown():
+            self.tab.set(self.key, round(v, 4), live=True)  # ドラッグ中（Undo の区切りは押した時に 1 回）
+        else:
+            # 溝のクリック・矢印キー・ホイールは 1 回の編集として反映する（表示だけ動いて値が変わらない不具合の修正）
+            self.tab.begin()
+            self.tab.set(self.key, round(v, 4))
 
     def _on_spin(self) -> None:
         if self.spin.specialValueText() and self.spin.value() == self.spin.minimum():

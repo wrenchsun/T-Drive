@@ -10,7 +10,24 @@ from __future__ import annotations
 
 import math
 
-UNITY_TO_MAYA_LENGTH = 100.0  # m → cm
+# Maya のシーン単位（cmds.currentUnit(linear=True) の値）1 m あたりの数。Unity は 1 unit = 1 m
+_UNITS_PER_METER = {
+    "mm": 1000.0, "millimeter": 1000.0,
+    "cm": 100.0, "centimeter": 100.0,
+    "m": 1.0, "meter": 1.0,
+    "km": 0.001, "kilometer": 0.001,
+    "in": 1 / 0.0254, "inch": 1 / 0.0254,
+    "ft": 1 / 0.3048, "foot": 1 / 0.3048,
+    "yd": 1 / 0.9144, "yard": 1 / 0.9144,
+}
+
+
+def units_per_meter(maya_linear_unit: str) -> float:
+    """Unity の 1 m が Maya のシーン単位でいくつか。cm 固定を前提にしない（m 単位のシーンでも一致させる）。"""
+    try:
+        return _UNITS_PER_METER[maya_linear_unit]
+    except KeyError:
+        raise ValueError(f"未対応の Maya 長さ単位: {maya_linear_unit}") from None
 
 
 def srgb_to_linear(c: float) -> float:

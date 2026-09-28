@@ -79,7 +79,7 @@ clip.xy += dirPx * px / (screenSize / 2) * clip.w          // ピクセル → N
 ## 3.1 デプスオフセット（P1 T-09: 眉・目を髪の上に）
 
 ```
-posWS += normalize(cameraPosWS - posWS) * _ToonDepthOffset    // _ToonDepthOffset は m（Unity 単位）。Maya ラッパーは ×100
+posWS += normalize(cameraPosWS - posWS) * _ToonDepthOffset    // _ToonDepthOffset は m（Unity 単位）。Maya ラッパーはシーン単位へ換算（cm なら ×100、`environment.units_per_meter`）
 ```
 
 - 頂点を**視線方向に沿って**カメラへ寄せる。画面上の位置（投影）は変わらず、深度だけが手前になる → 前髪に隠れていた眉・目が見える
@@ -134,7 +134,7 @@ Maya の uniform 名は先頭の `_` を除いた名前。定義の実体は `ma
 | プロパティ | 型 | 既定 | 範囲 | 説明 | 技術 |
 |---|---|---|---|---|---|
 | `_ToonLightColorInfluence` | Float | 1 | 0–1 | ライト色の影響（0 = 受けない。P1、既定で従来と同じ） | T-11 |
-| `_ToonDepthOffset` | Float | 0 | 0–0.2 | カメラ方向への寄せ量（**m**。Maya ラッパーで ×100）（P1） | T-09 |
+| `_ToonDepthOffset` | Float | 0 | 0–0.2 | カメラ方向への寄せ量（**m**。Maya ラッパーでシーン単位へ換算）（P1） | T-09 |
 | `_ToonRimColor` | Color | (1, 1, 1, 1) | | リム色（P1） | T-13 |
 | `_ToonRimPower` | Float | 4 | 0.5–16 | リムの鋭さ（P1） | T-13 |
 | `_ToonRimStrength` | Float | 0 | 0–1 | リムの強さ（0 = なし。P1） | T-13 |

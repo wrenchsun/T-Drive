@@ -93,6 +93,17 @@ def scene_materials() -> dict[str, list[str]]:
     return {k: sorted(v) for k, v in sorted(result.items())}
 
 
+def mesh_shapes(nodes: list[str]) -> list[str]:
+    """transform / mesh の一覧を、描画される（中間オブジェクトでない）mesh シェイプの完全パスにする。"""
+    shapes: list[str] = []
+    for n in nodes:
+        if cmds.nodeType(n) == "mesh":
+            shapes += cmds.ls(n, long=True)
+        else:
+            shapes += cmds.listRelatives(n, shapes=True, noIntermediate=True, fullPath=True, type="mesh") or []
+    return shapes
+
+
 def short_name(path: str) -> str:
     return path.split("|")[-1]
 
@@ -194,13 +205,14 @@ def enable(materials: dict[str, dict[str, Any]]) -> list[str]:
     """resolve 済みのマテリアル値でプレビューを有効化する。シーンに無かったマテリアル名を返す。"""
     ensure_plugin()
     missing = []
+    scene = scene_materials()  # マテリアルごとに走査し直さない（全 SG の走査は重い）
     for mat, values in materials.items():
         if not cmds.objExists(mat):
             missing.append(mat)
             continue
         shader = _ensure_preview_shader(mat)
         apply_values(mat, values)
-        _update_mesh_streams(mat, shader)
+        _update_mesh_streams(shader, scene.get(mat, []))
         _swap(_shading_group(mat), _shading_group(shader))
     apply_environment()
     return missing
@@ -244,9 +256,8 @@ def _ensure_preview_shader(mat: str) -> str:
     return shader
 
 
-def _update_mesh_streams(mat: str, shader: str) -> None:
+def _update_mesh_streams(shader: str, meshes: list[str]) -> None:
     """頂点カラー tdToonMask を全メッシュが持つときだけ頂点マスクを有効にする（無いメッシュを黒で壊さない）。"""
-    meshes = meshes_of(mat)
     has_mask = bool(meshes) and all(MASK_COLOR_SET in (cmds.polyColorSet(m, query=True, allColorSets=True) or []) for m in meshes)
     _set(shader, "VertexMaskEnabled", has_mask)
     # dx11Shader の頂点ストリームの取得元（既定は color:colorSet / uv:map3）
@@ -285,10 +296,12 @@ def apply_values(mat: str, values: dict[str, Any]) -> None:
         return
     common = values.get("common", {})
     if "blend" in common or "doubleSided" in common:
-        current = {"blend": _get_blend(shader), "doubleSided": cmds.getAttr(f"{shader}.technique") == "OpaqueDoubleSided"}
-        current.update({k: common[k] for k in ("blend", "doubleSided") if k in common})
-        _set_technique(shader, technique_for(current))
-        _set(shader, "AlphaClip", current["blend"] == "Cutout")
+        # テクニック名からは復元できない（Transparent は両面かどうかを持たない）ので、状態はノードの属性に持つ
+        state = _render_state(shader)
+        state.update({k: common[k] for k in ("blend", "doubleSided") if k in common})
+        _store_render_state(shader, state)
+        _set_technique(shader, technique_for(state))
+        _set(shader, "AlphaClip", state["blend"] == "Cutout")
     if "cutoff" in common:
         _set(shader, "Cutoff", common["cutoff"])
     if "albedoTint" in common:
@@ -309,7 +322,25 @@ def apply_values(mat: str, values: dict[str, Any]) -> None:
             _set(shader, p.maya, value)
 
 
+STATE_ATTR = "tdRenderState"  # {"blend": ..., "doubleSided": ...}（Look の common と同じ値）
+
+
+def _render_state(shader: str) -> dict[str, Any]:
+    if cmds.attributeQuery(STATE_ATTR, node=shader, exists=True):
+        raw = cmds.getAttr(f"{shader}.{STATE_ATTR}")
+        if raw:
+            return json.loads(raw)
+    return {"blend": _get_blend(shader), "doubleSided": cmds.getAttr(f"{shader}.technique") == "OpaqueDoubleSided"}
+
+
+def _store_render_state(shader: str, state: dict[str, Any]) -> None:
+    if not cmds.attributeQuery(STATE_ATTR, node=shader, exists=True):
+        cmds.addAttr(shader, longName=STATE_ATTR, dataType="string")
+    cmds.setAttr(f"{shader}.{STATE_ATTR}", json.dumps(state), type="string")
+
+
 def _get_blend(shader: str) -> str:
+    """状態属性が無い古いノード用の推測（Transparent / Cutout / Opaque）。"""
     if cmds.getAttr(f"{shader}.technique") == "Transparent":
         return "Transparent"
     return "Cutout" if _get(shader, "AlphaClip") else "Opaque"
@@ -453,6 +484,8 @@ def apply_environment() -> None:
         _set(shader, "PreviewLightDir", list(_env["lightDir"]))
         _set(shader, "PreviewLightColor", list(_env["lightColor"]))
         _set(shader, "PreviewTonemap", int(_env["tonemap"]))
+        # m で定義したパラメータ（手前に出す量・線の距離補正）をシーン単位へ換算する係数
+        _set(shader, "PreviewUnitScale", environment.units_per_meter())
 
 
 # ---------------------------------------------------------------- キャプチャ

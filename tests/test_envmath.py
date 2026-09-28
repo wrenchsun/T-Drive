@@ -48,3 +48,11 @@ def test_srgb_to_linear_matches_unity_curve():
     assert math.isclose(envmath.srgb_to_linear(1.0), 1.0)
     assert math.isclose(envmath.srgb_to_linear(0.5), 0.21404, abs_tol=1e-4)
     assert envmath.srgb_color_to_linear([0.5, 0.5, 0.5, 0.5])[3] == 0.5  # α は変換しない
+
+
+def test_units_per_meter():
+    assert envmath.units_per_meter("cm") == 100.0
+    assert envmath.units_per_meter("m") == 1.0
+    assert math.isclose(envmath.units_per_meter("in"), 39.3700787, rel_tol=1e-6)
+    with pytest.raises(ValueError):
+        envmath.units_per_meter("furlong")

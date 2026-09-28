@@ -17,16 +17,6 @@ UV_SET = preview.SMOOTH_NORMAL_UV
 TANGENT_UV_SET = "map1"
 
 
-def _shapes(meshes: list[str]) -> list[str]:
-    out = []
-    for m in meshes:
-        if cmds.nodeType(m) == "mesh":
-            out.append(m)
-        else:
-            out += cmds.listRelatives(m, shapes=True, noIntermediate=True, fullPath=True, type="mesh") or []
-    return out
-
-
 def write_target(shape: str) -> str:
     """書き込み先のシェイプ。デフォーマの上流にある Orig（中間オブジェクト）があればそちら。"""
     for node in cmds.listHistory(shape, pruneDagObjects=False) or []:
@@ -37,11 +27,32 @@ def write_target(shape: str) -> str:
     return shape
 
 
+def construction_history(target: str) -> list[str]:
+    """書き込み先の上流にある（デフォーマー以外の）形状のヒストリ。
+
+    これがあると上流が再計算されたとき、API で書いた UV の値が消える（UV Set 自体は残って中身が空になる。
+    2026-09-28 に polyCube + polySoftEdge で確認）。法線は Maya が polyNormalPerVertex を挟むので消えない。
+    """
+    return [n for n in (cmds.listHistory(target, pruneDagObjects=True) or []) if n != target]
+
+
 def bake(meshes: list[str], tolerance: float = 1e-3) -> dict[str, int]:
-    """メッシュごとにスムーズ法線を焼く。{書き込み先シェイプ: フェース頂点数} を返す。"""
+    """メッシュごとにスムーズ法線を焼く。{書き込み先シェイプ: フェース頂点数} を返す。
+
+    形状のヒストリがあるメッシュは焼いても後で消えるので、何もせずにエラーにする。
+    """
+    targets = [(shape, write_target(shape)) for shape in preview.mesh_shapes(meshes)]
+    blocked = {t: construction_history(t) for _s, t in targets}
+    blocked = {t: h for t, h in blocked.items() if h}
+    if blocked:
+        names = ", ".join(f"{preview.short_name(t)}（{', '.join(sorted({cmds.nodeType(n) for n in h}))}）" for t, h in blocked.items())
+        raise RuntimeError(
+            "形状のヒストリがあるメッシュには焼けません（あとで上流が再計算されると消えるため）: "
+            + names
+            + "\nEdit › Delete by Type › Non-Deformer History（デフォーマー以外のヒストリを削除）をしてから実行してください"
+        )
     done = {}
-    for shape in _shapes(meshes):
-        target = write_target(shape)
+    for shape, target in targets:
         done[target] = _bake_one(target, tolerance)
     return done
 
@@ -88,5 +99,5 @@ def has_smooth_normals(mesh: str) -> bool:
     描画・書き出しが使う評価済みデータ（MFnMesh）で判定する。
     """
     return all(
-        UV_SET in om.MFnMesh(om.MSelectionList().add(s).getDagPath(0)).getUVSetNames() for s in _shapes([mesh])
+        UV_SET in om.MFnMesh(om.MSelectionList().add(s).getDagPath(0)).getUVSetNames() for s in preview.mesh_shapes([mesh])
     )

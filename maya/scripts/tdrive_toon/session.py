@@ -142,8 +142,11 @@ class Session:
 
     def _register(self, part: str, role: str, mats: list[str], preset_for: list[str]) -> None:
         lk = self.require()
-        # プリセットは新しく入るマテリアルにだけ適用し、既存メンバーの調整値は保持する
-        keep = {m: lk["materials"][m] for m in mats if m in lk["materials"] and m not in preset_for}
+        # プリセットは新しく入るマテリアルにだけ適用し、既存メンバーの調整値は保持する。
+        # register_part はマテリアルの dict をその場で書き換えるので、参照ではなく複製を退避する
+        import copy
+
+        keep = {m: copy.deepcopy(lk["materials"][m]) for m in mats if m in lk["materials"] and m not in preset_for}
         look.register_part(lk, part, role, mats, apply_preset=True)
         lk["materials"].update(keep)
         for m in preset_for:

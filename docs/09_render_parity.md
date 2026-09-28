@@ -60,7 +60,7 @@ MS2026 自体が開発中で、色空間以外（トーンマップ・ライト�
 | メインライト | InGame: Directional 強度 2・色温度 5000K・回転 (50, -30, 0) | **キャラクターライトはシーンライトと独立**（D-4）。Maya/Unity とも環境プロファイルの `characterLight` を使う。シーンライトは参考値として `sceneMainLight` に記録 |
 | 環境光 | P0 の式では使わない | 同左。式に環境光を足す場合は ToonCore に入れ、プロファイルから SH/単色を渡す |
 | カメラ | Cinemachine 縦 FOV **40°**・Near 0.1・Far 5000（Player.prefab。シーンの Camera 60° は Cinemachine が上書き） | カメラプリセットは **縦 FOV 指定**（Unity の Gate Fit=Vertical と同じ）で焦点距離を逆算。Near/Far もプロファイル値 |
-| 単位 | 1 unit = 1 m（UnityChan FBX globalScale 0.01） | Maya は cm。**長さを持つパラメータは Unity 単位（m）で定義**し、Maya ラッパーで ×100 する |
+| 単位 | 1 unit = 1 m（UnityChan FBX globalScale 0.01） | Maya は cm。**長さを持つパラメータは Unity 単位（m）で定義**し、Maya ラッパーでシーン単位へ換算する（`cmds.currentUnit` から。cm 固定にしない） |
 | 解像度・線幅 | 画面高さ基準 | 線幅は「画面高さに対する割合」で定義済み（[03](03_shader_spec.md) §3）なので解像度非依存で一致。キャプチャは 1920×1080 に統一 |
 | アンチエイリアス | MSAA なし（`m_MSAA: 1`）、ポスト AA は要確認 | パリティキャプチャ時は VP2 のマルチサンプルを OFF |
 | 法線・接線 | FBX の法線/接線を Import | FBX 出力時に法線・接線（MikkTSpace）を書き出す。Maya 側プレビューも同じ接線を使う |

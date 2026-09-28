@@ -1,25 +1,24 @@
-"""T-Drive Toon モジュールの Maya 起動時処理。
+"""T-Drive Toon モジュールの Maya 起動時処理（画面ありの Maya だけ）。
 
 - MCP 用の commandPort を localhost:7001 で開く（環境変数 TDRIVE_MCP_PORT=0 で無効化）
-- メインメニュー「T-Drive Toon」を追加（エディタ実装後。docs/tasks.md 1-4）
+- シーンを開いたら記録された Look を自動で開く（SceneOpened）
+- メインメニュー「T-Drive Toon」を追加
+
+mayapy / バッチ（Unity 出力の別プロセス・スモークテスト）では何もしない。
+そこでポートを開くと、画面ありの Maya が無いときに MCP の接続先が一時的な裏の Maya になってしまうため。
 """
 
 import maya.utils
+from maya import cmds
 
 
 def _tdrive_startup():
-    from maya import cmds
-
-    from tdrive_toon import mcp_bridge
+    from tdrive_toon import mcp_bridge, menu
 
     mcp_bridge.open_from_env()
-    # シーンを開いたら、そのシーンに記録された Look を自動で開く
     cmds.scriptJob(event=["SceneOpened", "from tdrive_toon import session; session.on_scene_opened()"], protected=True)
-    try:
-        from tdrive_toon import menu
-    except ImportError:
-        return  # エディタ未実装の段階ではメニューを出さない
     menu.install()
 
 
-maya.utils.executeDeferred(_tdrive_startup)
+if not cmds.about(batch=True):
+    maya.utils.executeDeferred(_tdrive_startup)

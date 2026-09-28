@@ -8,14 +8,14 @@ from __future__ import annotations
 from maya import cmds
 from maya.api import OpenMaya as om
 
-from . import smooth_normals
+from . import preview, smooth_normals
 
 PROXY = "tdFaceNormalProxy"
 
 
 def create_proxy(meshes: list[str]) -> str:
     """対象メッシュのバウンディングボックスに合わせた楕円体を作る（既にあれば合わせ直す）。"""
-    shapes = smooth_normals._shapes(meshes)
+    shapes = preview.mesh_shapes(meshes)
     if not shapes:
         raise RuntimeError("メッシュを選択するか、表で部位を選んでください")
     xmin, ymin, zmin, xmax, ymax, zmax = cmds.exactWorldBoundingBox(shapes)
@@ -70,23 +70,34 @@ def transfer(meshes: list[str], weight: float = 1.0, selected_vertices: dict[str
     if not cmds.objExists(PROXY):
         raise RuntimeError("先に「プロキシ作成」をしてください")
     pm = om.MMatrix(cmds.xform(PROXY, query=True, worldSpace=True, matrix=True))
+    import json
+
     done = {}
-    for shape in smooth_normals._shapes(meshes):
+    for shape in preview.mesh_shapes(meshes):
+        if selected_vertices is not None and shape not in selected_vertices:
+            continue  # 「選択した頂点だけ」で、このメッシュには選択頂点が無い
         src = om.MFnMesh(om.MSelectionList().add(shape).getDagPath(0))
         target = smooth_normals.write_target(shape)
         _backup(target)
-        # 変形前シェイプは同じ transform の下にあるので、ワールド空間での書き込みがそのまま使える
-        dst = om.MFnMesh(om.MSelectionList().add(target).getDagPath(0))
+        # 混ぜる元は「最初の転写前」の法線（バックアップ）。今の法線から混ぜると転写を繰り返すたびに強さが重なる。
+        # フェース頂点ごとに扱うので、ハードエッジ（割れた法線）も強さ 0 なら元のまま保たれる
+        backup = json.loads(cmds.getAttr(f"{target}.{BACKUP_ATTR}"))
+        dag = om.MSelectionList().add(target).getDagPath(0)
+        to_world = dag.inclusiveMatrix().inverse().transpose()  # 法線はワールド行列の逆転置で変換する
         points = src.getPoints(om.MSpace.kWorld)
-        ids = selected_vertices.get(shape) if selected_vertices else None
-        ids = ids if ids is not None else list(range(len(points)))
-        normals = om.MVectorArray()
-        for vid in ids:
-            orig = src.getVertexNormal(vid, True, om.MSpace.kWorld)
-            target_n = ellipsoid_normal(points[vid], pm)
-            normals.append((orig * (1.0 - weight) + target_n * weight).normal())
-        dst.setVertexNormals(normals, om.MIntArray(ids), om.MSpace.kWorld)
-        done[target] = len(ids)
+        only = set(selected_vertices[shape]) if selected_vertices is not None else None
+        faces, verts, normals = om.MIntArray(), om.MIntArray(), om.MVectorArray()
+        for face_id, vid, x, y, z in backup["rows"]:
+            if only is not None and vid not in only:
+                continue
+            orig = (om.MVector(x, y, z) * to_world).normal()
+            n = orig * (1.0 - weight) + ellipsoid_normal(points[vid], pm) * weight
+            faces.append(face_id)
+            verts.append(vid)
+            normals.append(n.normal() if n.length() > 1e-8 else orig)
+        # 変形前シェイプは同じ transform の下にあるので、ワールド空間での書き込みがそのまま使える
+        om.MFnMesh(dag).setFaceVertexNormals(normals, faces, verts, om.MSpace.kWorld)
+        done[target] = len(verts)
     return done
 
 
@@ -95,21 +106,35 @@ def reset(meshes: list[str]) -> list[str]:
     import json
 
     done = []
-    for shape in smooth_normals._shapes(meshes):
+    for shape in preview.mesh_shapes(meshes):
         target = smooth_normals.write_target(shape)
         if not cmds.attributeQuery(BACKUP_ATTR, node=target, exists=True):
             continue
         data = json.loads(cmds.getAttr(f"{target}.{BACKUP_ATTR}"))
-        dst = om.MFnMesh(om.MSelectionList().add(target).getDagPath(0))
-        if data["locked"]:
-            rows = data["rows"]
-            normals = om.MVectorArray([om.MVector(r[2], r[3], r[4]) for r in rows])
-            dst.setFaceVertexNormals(normals, om.MIntArray([r[0] for r in rows]), om.MIntArray([r[1] for r in rows]), om.MSpace.kObject)
-        else:
-            dst.unlockVertexNormals(om.MIntArray(range(dst.numVertices)))  # 元が計算法線なら解除で完全に戻る
+        dag = om.MSelectionList().add(target).getDagPath(0)
+        rows = data["rows"]
+        faces, verts = om.MIntArray([r[0] for r in rows]), om.MIntArray([r[1] for r in rows])
+        normals = om.MVectorArray([om.MVector(r[2], r[3], r[4]) for r in rows])
+        # まずバックアップの値そのものを書き戻す（作者のカスタム法線も含めて確実に元の見た目）
+        om.MFnMesh(dag).setFaceVertexNormals(normals, faces, verts, om.MSpace.kObject)
+        if not data["locked"]:
+            # 元がロックされていなければ解除を試し、解除で値が変わる場合（FBX 由来の法線等）は書き戻した値のままにする
+            om.MFnMesh(dag).unlockFaceVertexNormals(faces, verts)
+            if _max_deviation(dag, rows) > 1e-5:
+                om.MFnMesh(dag).setFaceVertexNormals(normals, faces, verts, om.MSpace.kObject)
         cmds.deleteAttr(f"{target}.{BACKUP_ATTR}")
         done.append(target)
     return done
+
+
+def _max_deviation(dag: om.MDagPath, rows: list[list[float]]) -> float:
+    """今のフェース頂点法線とバックアップの差の最大値（1 - cos）。"""
+    fn = om.MFnMesh(dag)
+    worst = 0.0
+    for face_id, vid, x, y, z in rows:
+        n = fn.getFaceVertexNormal(face_id, vid, om.MSpace.kObject)
+        worst = max(worst, 1.0 - n.normal() * om.MVector(x, y, z).normal())
+    return worst
 
 
 def selected_vertex_ids() -> dict[str, list[int]]:

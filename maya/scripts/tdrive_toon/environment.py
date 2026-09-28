@@ -61,6 +61,11 @@ def character_light(prof: dict[str, Any]) -> tuple[tuple[float, float, float], t
     return direction, color
 
 
+def units_per_meter() -> float:
+    """現在のシーン単位で Unity の 1 m がいくつか（cm なら 100、m なら 1）。"""
+    return envmath.units_per_meter(cmds.currentUnit(query=True, linear=True))
+
+
 # ---------------------------------------------------------------- 色管理
 
 
@@ -138,8 +143,9 @@ def frame_camera(prof: dict[str, Any], yaw_deg: float, target: str = "head", fit
     cmds.setAttr(f"{shape}.filmFit", 2)  # Vertical = Unity と同じ縦 FOV 基準
     vfa = cmds.getAttr(f"{shape}.verticalFilmAperture")
     cmds.setAttr(f"{shape}.focalLength", envmath.focal_length_for_vertical_fov(cam_prof["verticalFov"], vfa))
-    cmds.setAttr(f"{shape}.nearClipPlane", cam_prof["near"] * envmath.UNITY_TO_MAYA_LENGTH)
-    cmds.setAttr(f"{shape}.farClipPlane", cam_prof["far"] * envmath.UNITY_TO_MAYA_LENGTH)
+    upm = units_per_meter()
+    cmds.setAttr(f"{shape}.nearClipPlane", cam_prof["near"] * upm)
+    cmds.setAttr(f"{shape}.farClipPlane", cam_prof["far"] * upm)
 
     import math
 

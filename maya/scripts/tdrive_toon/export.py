@@ -91,7 +91,7 @@ def export_in_place(meshes: list[str], path: str | Path) -> dict[str, object]:
     """開いているシーンを直接整形して書き出す（破壊的）。mayapy（tools/export_fbx_batch.py）専用。"""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    shapes = smooth_normals._shapes(meshes)
+    shapes = preview.mesh_shapes(meshes)
     if not shapes:
         raise RuntimeError("書き出すメッシュがありません")
     cmds.loadPlugin("fbxmaya", quiet=True)
@@ -132,6 +132,8 @@ class ExportJob:
         self.proc = subprocess.Popen(
             [str(_mayapy()), str(REPO_ROOT / "tools" / "export_fbx_batch.py"), str(args)],
             stdout=self.log, stderr=subprocess.STDOUT, env=env,
+            # mayapy はコンソールアプリなので、指定しないと黒いウィンドウが書き出し中ずっと出る（閉じると失敗する）
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
 
     def poll(self) -> bool:
@@ -148,5 +150,9 @@ class ExportJob:
 def export_fbx(meshes: list[str], path: str | Path, timeout: float = 600.0) -> dict[str, object]:
     """開いているシーンを変更せずに Unity 向け FBX を書き出す（完了まで待つ。MCP・テスト用）。"""
     job = ExportJob(meshes, path)
-    job.proc.wait(timeout=timeout)
+    try:
+        job.proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        job.proc.kill()  # 裏の mayapy を残さない
+        raise
     return job.result()

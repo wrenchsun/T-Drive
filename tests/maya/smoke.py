@@ -170,7 +170,7 @@ def run() -> None:
 
     face_meshes = s.meshes_for("face")
     created = s.init_mask("face")
-    shape = mask._shapes(face_meshes)[0]
+    shape = preview.mesh_shapes(face_meshes)[0]
     check("マスク初期化: tdToonMask が白で作られる",
           created and all(v == 1.0 for ch in mask.CHANNELS for v in mask.read_channel(shape, ch)))
     check("マスク初期化は冪等", s.init_mask("face") == [])
@@ -192,7 +192,7 @@ def run() -> None:
     from tdrive_toon import face_normals
 
     face_meshes = s.meshes_for("face")
-    probe = [x for x in smooth_normals._shapes(face_meshes)][0]
+    probe = [x for x in preview.mesh_shapes(face_meshes)][0]
 
     def fv_normals(shape):
         it = om.MItMeshFaceVertex(om.MSelectionList().add(shape).getDagPath(0))
@@ -215,6 +215,59 @@ def run() -> None:
     cmds.delete(face_normals.PROXY)
     check("目のロール: ライト色の影響 0・手前に出す", roles.ROLE_PRESETS["eye"]["specific"]["_ToonLightColorInfluence"] == 0.0
           and roles.ROLE_PRESETS["eye"]["specific"]["_ToonDepthOffset"] > 0)
+
+    # ---- コードレビュー（2026-09-28）の修正の回帰テスト
+    # #1 部位に別のマテリアルを追加しても、既存メンバーの調整値は残る
+    s.set_value("hair", "_ToonOutlineWidth", 2.0)
+    s.move_material("mat_cheek", "hair")
+    check("#1 部位への追加で既存メンバーの調整値が残る", s.value("hair", "_ToonOutlineWidth") == 2.0,
+          str(s.value("hair", "_ToonOutlineWidth")))
+    s.undo()
+
+    # #2 両面 → Transparent → Opaque で両面が保たれる
+    preview.apply_value("hair", "common.doubleSided", True)
+    preview.apply_value("hair", "common.blend", "Transparent")
+    preview.apply_value("hair", "common.blend", "Opaque")
+    check("#2 ブレンドを往復しても両面表示が保たれる",
+          cmds.getAttr(preview.preview_shader_of("hair") + ".technique") == "OpaqueDoubleSided")
+    s.show(s.shown)
+
+    # #3 顔の法線: 強さは重ならない / 強さ 0 は元のまま（ハードエッジ含む）
+    before_fv = fv_normals(probe)
+    s.create_face_proxy("face")
+    s.transfer_face_normals("face", 0.0)
+    err0 = max(1 - a[1] * b[1] for a, b in zip(before_fv, fv_normals(probe)))
+    s.transfer_face_normals("face", 0.5)
+    once = fv_normals(probe)
+    s.transfer_face_normals("face", 0.5)
+    err_twice = max(1 - a[1] * b[1] for a, b in zip(once, fv_normals(probe)))
+    check("#3 強さ 0 の転写で法線が変わらない", err0 < 1e-6, str(err0))
+    check("#3 同じ強さで 2 回転写しても重ならない", err_twice < 1e-6, str(err_twice))
+    s.reset_face_normals("face")
+    cmds.delete(face_normals.PROXY)
+
+    # #5 画面なしの Maya では MCP ポートを開かない
+    try:
+        ports = cmds.commandPort(query=True, listPorts=True) or []
+    except RuntimeError:
+        ports = []  # バッチでは commandPort の問い合わせ自体が使えないことがある（= 開いていない）
+    check("#5 バッチでは commandPort :7001 を開かない", ":7001" not in ports, str(ports))
+
+    # #7 形状のヒストリがあるメッシュにはスムーズ法線を焼かない（あとで消えるため）
+    cube = cmds.polyCube(name="tdHistProbe")[0]
+    try:
+        smooth_normals.bake([cube])
+        blocked = False
+    except RuntimeError:
+        blocked = True
+    check("#7 形状のヒストリがあるメッシュへのベイクはエラーにする", blocked)
+    cmds.delete(cube)
+
+    # #8 シーン単位（m）でも換算が合う
+    unit = cmds.currentUnit(query=True, linear=True)
+    cmds.currentUnit(linear="m")
+    check("#8 m 単位のシーンでは換算係数 1", environment.units_per_meter() == 1.0)
+    cmds.currentUnit(linear=unit)
 
     # ---- 同名メッシュ（キャラクターの複製）があっても動く（2026-09-28 不具合: Toon に戻らない）
     dup_group = cmds.group(empty=True, name="tdDupTest")
@@ -247,7 +300,7 @@ def run() -> None:
     from tdrive_toon import export
 
     probe = s.meshes_for("hair")[0]
-    probe_shape = mask._shapes([probe])[0]
+    probe_shape = preview.mesh_shapes([probe])[0]
     before_sets = cmds.polyColorSet(probe_shape, query=True, allColorSets=True)
     fbx = export.export_fbx(s.export_meshes(), tmp / "out.fbx")
     check("FBX 書き出し後も開いているシーンは変わらない",
