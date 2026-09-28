@@ -46,7 +46,9 @@ def run() -> None:
         build_unitychan_scene.build()
     cmds.file(str(FIXTURE), open=True, force=True)
 
-    from tdrive_toon import environment, look, preview, session
+    from maya.api import OpenMaya as om
+
+    from tdrive_toon import environment, look, preview, roles, session
 
     tmp = Path(tempfile.mkdtemp(prefix="tdrive_smoke_"))
     s = session.current()
@@ -185,6 +187,34 @@ def run() -> None:
     check("スムーズ法線: スキン付きメッシュは Orig シェイプに焼かれ、出力シェイプに UV Set が出る",
           all(k.endswith("Orig") for k in baked) and all(smooth_normals.has_smooth_normals(m) for m in s.meshes_for("hair")),
           str(list(baked)))
+
+    # ---- Phase 2: 顔の法線（Toon Normal）
+    from tdrive_toon import face_normals
+
+    face_meshes = s.meshes_for("face")
+    probe = [x for x in smooth_normals._shapes(face_meshes)][0]
+
+    def fv_normals(shape):
+        it = om.MItMeshFaceVertex(om.MSelectionList().add(shape).getDagPath(0))
+        out = []
+        while not it.isDone():
+            out.append((it.vertexId(), it.getNormal(om.MSpace.kWorld)))
+            it.next()
+        return out
+
+    before_n = fv_normals(probe)
+    s.create_face_proxy("face")
+    s.transfer_face_normals("face", 1.0)
+    pm = om.MMatrix(cmds.xform(face_normals.PROXY, query=True, worldSpace=True, matrix=True))
+    pts = om.MFnMesh(om.MSelectionList().add(probe).getDagPath(0)).getPoints(om.MSpace.kWorld)
+    err = max(1 - n * face_normals.ellipsoid_normal(pts[vid], pm) for vid, n in fv_normals(probe))
+    check("顔の法線: 転写（強さ 1）で楕円体の法線になる", err < 1e-6, str(err))
+    s.reset_face_normals("face")
+    err_reset = max(1 - a[1] * b[1] for a, b in zip(before_n, fv_normals(probe)))
+    check("顔の法線: リセットで転写前に戻る", err_reset < 1e-6, str(err_reset))
+    cmds.delete(face_normals.PROXY)
+    check("目のロール: ライト色の影響 0・手前に出す", roles.ROLE_PRESETS["eye"]["specific"]["_ToonLightColorInfluence"] == 0.0
+          and roles.ROLE_PRESETS["eye"]["specific"]["_ToonDepthOffset"] > 0)
 
     # ---- 同名メッシュ（キャラクターの複製）があっても動く（2026-09-28 不具合: Toon に戻らない）
     dup_group = cmds.group(empty=True, name="tdDupTest")

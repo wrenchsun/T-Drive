@@ -40,11 +40,27 @@ float4 ToonOutlineColor < string UIGroup = "Outline"; string UIWidget = "ColorPi
 float ToonOutlineBaseMix < string UIGroup = "Outline"; float UIMin = 0.0; float UIMax = 1.0; int UIOrder = 41; > = 0.5;
 float ToonOutlineWidth < string UIGroup = "Outline"; float UIMin = 0.0; float UIMax = 10.0; int UIOrder = 42; > = 1.0;
 float ToonOutlineSmoothNormal < string UIGroup = "Outline"; float UIMin = 0.0; float UIMax = 1.0; int UIOrder = 43; > = 1.0;
+float ToonOutlineDistanceScale < string UIGroup = "Outline"; float UIMin = 0.0; float UIMax = 1.0; int UIOrder = 44; > = 0.0;
+float ToonOutlineRefDistance < string UIGroup = "Outline"; float UIMin = 0.1; float UIMax = 20.0; int UIOrder = 45; > = 2.0;
+
+// ---- P1（既定値では P0 と同じ見た目）
+float ToonLightColorInfluence < string UIGroup = "Light"; float UIMin = 0.0; float UIMax = 1.0; int UIOrder = 50; > = 1.0;
+float ToonDepthOffset < string UIGroup = "Depth"; string UIName = "Depth Offset (m)"; float UIMin = 0.0; float UIMax = 0.2; int UIOrder = 51; > = 0.0;
+float4 ToonRimColor < string UIGroup = "Rim"; string UIWidget = "ColorPicker"; int UIOrder = 52; > = {1.0, 1.0, 1.0, 1.0};
+float ToonRimPower < string UIGroup = "Rim"; float UIMin = 0.5; float UIMax = 16.0; int UIOrder = 53; > = 4.0;
+float ToonRimStrength < string UIGroup = "Rim"; float UIMin = 0.0; float UIMax = 1.0; int UIOrder = 54; > = 0.0;
+Texture2D ToonHairHighlightMap < string UIGroup = "Hair"; string ResourceName = ""; string UIWidget = "FilePicker"; string ResourceType = "2D"; int UIOrder = 55; >;
+bool ToonHairHighlightMapEnabled < string UIGroup = "Hair"; int UIOrder = 56; > = false;
+float4 ToonHairHighlightColor < string UIGroup = "Hair"; string UIWidget = "ColorPicker"; int UIOrder = 57; > = {1.0, 1.0, 0.95, 1.0};
+float ToonHairHighlightShift < string UIGroup = "Hair"; float UIMin = -0.5; float UIMax = 0.5; int UIOrder = 58; > = 0.0;
 
 // ------------------------------------------------------------------ プレビュー環境（Unity では キャラクターライト / ポスト）
 float3 PreviewLightDir < string UIGroup = "Preview"; string UIName = "Character Light Dir (to light, world)"; int UIOrder = 90; > = {0.4, 0.6, 0.7};
 float3 PreviewLightColor < string UIGroup = "Preview"; string UIWidget = "ColorPicker"; int UIOrder = 91; > = {1.0, 1.0, 1.0};
 int PreviewTonemap < string UIGroup = "Preview"; string UIName = "Tonemap"; string UIFieldNames = "None:Neutral"; int UIOrder = 92; > = 1;
+// Maya の長さ単位（cm）/ Unity 単位（m）。m で定義したパラメータ（DepthOffset・距離）の換算に使う
+float PreviewUnitScale < string UIGroup = "Preview"; int UIOrder = 94; > = 100.0;
+static const float3 kUp = float3(0.0, 1.0, 0.0);
 // チャンネル単体表示・不具合調査用（docs/05 §3「チャンネル単体表示」）
 int PreviewDebug < string UIGroup = "Preview"; string UIName = "Debug View"; string UIFieldNames = "Off:UV0:Normal:Lit:Mask R:Mask G:Mask B:Mask A:Base Map:Smooth Normal UV2"; int UIOrder = 93; > = 0;
 
@@ -109,12 +125,24 @@ float4 SampleBase(float2 uv)
 }
 
 // ------------------------------------------------------------------ 本体
+float3 CameraPosWS()
+{
+    return gViewI[3].xyz;
+}
+
+// T-09: 視線方向にカメラへ寄せたワールド位置（本体・アウトライン共通）
+float3 OffsetPositionWS(float3 positionWS)
+{
+    return Toon_DepthOffsetWS(positionWS, CameraPosWS(), ToonDepthOffset * PreviewUnitScale);
+}
+
 VSOut VS_Main(VSIn v)
 {
     VSOut o;
     float4 p = float4(v.position, 1.0);
-    o.positionCS = mul(p, gWVP);
-    o.positionWS = mul(p, gWorld).xyz;
+    float3 posWS = OffsetPositionWS(mul(p, gWorld).xyz);
+    o.positionCS = mul(float4(posWS, 1.0), gVP);
+    o.positionWS = posWS;
     o.normalWS = normalize(mul(float4(v.normal, 0.0), gWIT).xyz);
     o.uv = v.uv;
     o.vertexMask = VertexMask(v.color, v.color1);
@@ -142,7 +170,15 @@ float4 ShadeMain(VSOut i, bool frontFace)
         else if (PreviewDebug == 9) d = float3(i.uv2 * 0.5 + 0.5, 0.0);
         return float4(d, 1.0);
     }
-    float3 col = Toon_Shade(base.rgb, lit, ToonShadeColor.rgb, PreviewLightColor);
+    float3 V = normalize(CameraPosWS() - i.positionWS);
+    float3 lightC = Toon_LightColor(PreviewLightColor, ToonLightColorInfluence);
+    float3 col = Toon_Shade(base.rgb, lit, ToonShadeColor.rgb, lightC);
+    col += ToonRimColor.rgb * Toon_Rim(N, V, ToonRimPower, ToonRimStrength, lit) * lightC;
+    if (ToonHairHighlightMapEnabled)
+    {
+        float h = ToonHairHighlightMap.Sample(SamLinearWrap, Toon_HairHighlightUV(i.uv, V, kUp, ToonHairHighlightShift)).r;
+        col += ToonHairHighlightColor.rgb * h * lit * lightC;
+    }
     col = Toon_ApplyTint(col, mask, ToonTintColor.rgb, ToonTintStrength);
     col = Toon_Tonemap(col, PreviewTonemap);
     return float4(col, base.a);
@@ -173,11 +209,14 @@ VSOut VS_Outline(VSIn v)
         n = Toon_SmoothNormalWS(v.uv2, normalWS, tangentWS, v.tangent.w < 0.0 ? -1.0 : 1.0);
     }
     float4 mask = Toon_CombineMask(VertexMask(v.color, v.color1), MaskMapSampleLevel0(v.uv));
-    float4 clip = mul(p, gWVP);
+    float3 posWS = OffsetPositionWS(mul(p, gWorld).xyz);
+    float4 clip = mul(float4(posWS, 1.0), gVP);
     float2 nClip = mul(float4(n, 0.0), gVP).xy;
-    clip.xy += Toon_OutlineClipOffset(nClip, ToonOutlineWidth, mask, clip.w, gViewportPixelSize);
+    float distM = length(CameraPosWS() - posWS) / PreviewUnitScale;
+    float width = ToonOutlineWidth * Toon_OutlineDistanceFactor(distM, ToonOutlineRefDistance, ToonOutlineDistanceScale);
+    clip.xy += Toon_OutlineClipOffset(nClip, width, mask, clip.w, gViewportPixelSize);
     o.positionCS = clip;
-    o.positionWS = mul(p, gWorld).xyz;
+    o.positionWS = posWS;
     o.normalWS = normalWS;
     o.uv = v.uv;
     o.vertexMask = mask;  // アウトラインでは頂点で合成済みのマスクを渡す

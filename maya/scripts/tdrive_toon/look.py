@@ -35,8 +35,25 @@ def new_look(character: str, model: str) -> dict[str, Any]:
     }
 
 
+def upgrade(look: dict[str, Any]) -> list[str]:
+    """後から追加されたパラメータ（既定値で従来と同じ見た目になるもの）を base に補う。補った項目名を返す。
+
+    追加のみの自動マイグレーション（docs/06 §2 の MINOR）。保存すると補った値もファイルに入る。
+    """
+    added = set()
+    defaults = params.default_specific()
+    for mat in look.get("materials", {}).values():
+        spec = mat.setdefault("specific", {})
+        for k, v in defaults.items():
+            if k not in spec:
+                spec[k] = copy.deepcopy(v)
+                added.add(k)
+    return sorted(added)
+
+
 def load(path: str | Path) -> dict[str, Any]:
     look = json.loads(Path(path).read_text(encoding="utf-8"))
+    upgrade(look)
     errors = validate(look)
     if errors:
         raise ValueError(f"Look 定義が不正です ({path}):\n  " + "\n  ".join(errors))

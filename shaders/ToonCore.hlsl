@@ -43,6 +43,38 @@ float3 Toon_ApplyTint(float3 color, float4 mask, float3 tintColor, float tintStr
     return lerp(color, color * tintColor, t);
 }
 
+// ------------------------------------------------------------------ P1（docs/03 §2 / §3.1）
+// T-11: ライト色の影響（0 = 受けない）
+float3 Toon_LightColor(float3 lightColor, float influence)
+{
+    return lerp(float3(1.0, 1.0, 1.0), lightColor, influence);
+}
+
+// T-13: リム（明側のみ）。戻り値はリム色に掛ける係数
+float Toon_Rim(float3 N, float3 V, float power, float strength, float lit)
+{
+    return pow(1.0 - saturate(dot(N, V)), power) * strength * lit;
+}
+
+// T-12: 髪ハイライトの帯をサンプルする UV（カメラの上下の角度で縦にずらす）
+float2 Toon_HairHighlightUV(float2 uv, float3 V, float3 up, float shift)
+{
+    return uv + float2(0.0, shift * dot(V, up));
+}
+
+// T-09: 視線方向に沿ってカメラへ寄せる（投影位置は変わらず深度だけ手前になる）。offset はワールド単位
+float3 Toon_DepthOffsetWS(float3 positionWS, float3 cameraPosWS, float offset)
+{
+    return positionWS + normalize(cameraPosWS - positionWS) * offset;
+}
+
+// T-18: 線幅の距離補正係数。distance / refDistance は同じ単位（m）
+float Toon_OutlineDistanceFactor(float distance, float refDistance, float scale)
+{
+    float k = saturate(refDistance / max(distance, 1e-4));
+    return lerp(1.0, k, scale);
+}
+
 // ------------------------------------------------------------------ アウトライン（docs/03 §3）
 // widthPx は「1080p 換算の px」= 画面高さの 1/1080 単位。クリップ空間で押し出すため距離によらず一定。
 // 方向はピクセル空間で正規化する（NDC のまま正規化すると横向きの輪郭で線が 幅/高さ 倍に太る）

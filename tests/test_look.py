@@ -37,6 +37,20 @@ def test_variant_override_and_diff():
     assert lk["variants"] == {}
 
 
+def test_upgrade_fills_new_params_with_defaults(tmp_path):
+    """古い Look（P1 の項目が無い）を読むと既定値が補われ、検証を通る。"""
+    lk = _sample()
+    for mat in lk["materials"].values():
+        mat["specific"].pop("_ToonRimStrength", None)
+        mat["specific"].pop("_ToonDepthOffset", None)
+    p = tmp_path / "old.json"
+    p.write_text(look.dumps(lk), encoding="utf-8")
+    loaded = look.load(p)
+    assert loaded["materials"]["face"]["specific"]["_ToonRimStrength"] == 0.0
+    assert loaded["materials"]["face"]["specific"]["_ToonDepthOffset"] == 0.0
+    assert look.validate(loaded) == []
+
+
 def test_roundtrip(tmp_path):
     lk = _sample()
     p = tmp_path / "look.json"

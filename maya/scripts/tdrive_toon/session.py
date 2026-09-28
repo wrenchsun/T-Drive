@@ -231,6 +231,26 @@ class Session:
             self.show(self.shown)
         return done
 
+    # ------------------------------------------------------------ 顔の法線（Toon Normal、T-10）
+    def create_face_proxy(self, target: str | None = None) -> str:
+        from . import face_normals
+
+        return face_normals.create_proxy(self.meshes_for(target))
+
+    def transfer_face_normals(self, target: str | None = None, weight: float = 1.0, selected_only: bool = False) -> dict[str, int]:
+        from . import face_normals
+
+        verts = face_normals.selected_vertex_ids() if selected_only else None
+        if selected_only and not verts:
+            raise RuntimeError("頂点を選択してください（「選択した頂点だけ」がオン）")
+        meshes = sorted({cmds.listRelatives(s, parent=True, fullPath=True)[0] for s in verts}) if verts else self.meshes_for(target)
+        return face_normals.transfer(meshes, weight, verts)
+
+    def reset_face_normals(self, target: str | None = None) -> list[str]:
+        from . import face_normals
+
+        return face_normals.reset(self.meshes_for(target))
+
     def begin_mask_paint(self, channel: str, target: str | None = None) -> None:
         from . import mask
 

@@ -359,6 +359,7 @@ class PartsTab(QtWidgets.QWidget):
         v.addWidget(self.hint)
         self.mask_box = MaskBox(self.session, self._selected_parts)
         v.addWidget(self.mask_box)
+        v.addWidget(FaceNormalBox(self.session, self._selected_parts))
         self._updating = False
 
     # -------------------------------------------------------------- 表示
@@ -580,3 +581,44 @@ class MaskBox(QtWidgets.QGroupBox):
             self.status.setText(f"<b>{editing}</b> を編集中: {self.mask.CHANNEL_HELP[editing]}。Paint Vertex Color Tool で黒く塗り、終わったら <b>確定</b>。")
         else:
             self.status.setText("表で部位を選ぶとその部位、選ばなければ Maya で選択中のメッシュが対象。R/G/B/A を押すとそのチャンネルを塗り始めます。")
+
+
+class FaceNormalBox(QtWidgets.QGroupBox):
+    """顔の法線（Toon Normal、docs/05 §3.1）: 楕円体プロキシの法線へ寄せて影を単純にする。"""
+
+    def __init__(self, s: session.Session, selected_parts) -> None:
+        super().__init__("顔の法線（楕円体に寄せて顔の影を単純にする）")
+        self.session, self.selected_parts = s, selected_parts
+        row = QtWidgets.QHBoxLayout(self)
+        proxy = QtWidgets.QPushButton("プロキシ作成")
+        proxy.setToolTip("対象の大きさに合わせた楕円体（tdFaceNormalProxy）を作る。移動・回転・スケールで顔の形に合わせる")
+        proxy.clicked.connect(lambda: self._run(self.session.create_face_proxy, self._target()))
+        row.addWidget(proxy)
+        row.addWidget(QtWidgets.QLabel("強さ"))
+        self.weight = QtWidgets.QDoubleSpinBox()
+        self.weight.setRange(0.0, 1.0)
+        self.weight.setSingleStep(0.1)
+        self.weight.setValue(0.7)
+        row.addWidget(self.weight)
+        self.selected_only = QtWidgets.QCheckBox("選択した頂点だけ")
+        row.addWidget(self.selected_only)
+        apply = QtWidgets.QPushButton("転写")
+        apply.clicked.connect(
+            lambda: self._run(self.session.transfer_face_normals, self._target(), self.weight.value(), self.selected_only.isChecked())
+        )
+        row.addWidget(apply)
+        reset = QtWidgets.QPushButton("リセット")
+        reset.setToolTip("最初に転写する前の法線に戻す")
+        reset.clicked.connect(lambda: self._run(self.session.reset_face_normals, self._target()))
+        row.addWidget(reset)
+        row.addStretch(1)
+
+    def _target(self) -> str | None:
+        parts = self.selected_parts()
+        return parts[0] if parts else None
+
+    def _run(self, fn, *args) -> None:
+        try:
+            fn(*args)
+        except Exception as exc:
+            _error(self, exc)

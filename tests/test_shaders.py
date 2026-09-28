@@ -35,6 +35,11 @@ def test_core_compiles_standalone(tmp_path):
         "  col += Toon_SmoothNormalWS(c.xy, normalize(n), float3(1,0,0), 1.0) * 0.001;\n"
         "  col += Toon_OutlineColor(col, float3(0.2,0.2,0.2), 0.5) * 0.001;\n"
         "  col.xy += Toon_OutlineClipOffset(c.xy, 1.0, m, 1.0, float2(1920, 1080)) * 0.001;\n"
+        "  col *= Toon_LightColor(float3(1,0.9,0.8), 0.5);\n"
+        "  col += Toon_Rim(normalize(n), float3(0,0,1), 4.0, 0.5, lit);\n"
+        "  col.xy += Toon_HairHighlightUV(c.xy, float3(0,0,1), float3(0,1,0), 0.1) * 0.001;\n"
+        "  col += Toon_DepthOffsetWS(c.xyz, float3(0,1,5), 0.03) * 0.001;\n"
+        "  col *= Toon_OutlineDistanceFactor(5.0, 2.0, 0.5);\n"
         "  return float4(Toon_Tonemap(col, TOON_TONEMAP_NEUTRAL), 1);\n"
         "}\n",
         encoding="utf-8",

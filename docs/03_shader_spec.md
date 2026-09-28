@@ -4,7 +4,7 @@
 これを include する薄いラッパーで、同じパラメータ名を使う（[09_render_parity.md](09_render_parity.md) D-5）。
 この文書が式の仕様であり、変更時は この文書 → ToonCore.hlsl → パリティテスト の順に行う。
 
-対象は P0 技術（[04](04_technique_priority.md) T-01〜T-08）。P1 以降は §7 に予約名のみ定義する。
+対象は P0 技術（[04](04_technique_priority.md) T-01〜T-08）と、P1 のうちシェーダーで行うもの（T-09 / T-11 / T-12 / T-13 / T-18）。P2 以降は §7.3 に予約名のみ定義する。
 
 ## 1. 入力
 
@@ -29,7 +29,16 @@ lit    = smoothstep(_ToonShadeThreshold - _ToonShadeFeather,
 lit    = lerp(1, lit, _ToonShadowStrength)                // 0 = 影を出さない（顔を弱く）
 
 base   = _BaseMap(uv) * _BaseColor
-col    = lerp(base.rgb * _ToonShadeColor.rgb, base.rgb, lit) * lightColor
+lightC = lerp(1, lightColor, _ToonLightColorInfluence)   // P1 T-11: 0 = ライト色の影響を受けない（目のハイライト等）
+col    = lerp(base.rgb * _ToonShadeColor.rgb, base.rgb, lit) * lightC
+
+// P1 T-13 リム（明側のみ）
+rim    = pow(1 - saturate(dot(N, V)), _ToonRimPower) * _ToonRimStrength * lit
+col   += _ToonRimColor.rgb * rim * lightC
+
+// P1 T-12 髪ハイライト（テクスチャの帯を、カメラの上下の角度で縦にずらす。明側のみ）
+huv    = uv + float2(0, _ToonHairHighlightShift * dot(V, up))   // up = ワールド上方向
+col   += _ToonHairHighlightColor.rgb * _ToonHairHighlightMap(huv).r * lit * lightC   // マップ未設定 = 黒 = 出ない
 
 tint   = (1 - mask.a) * _ToonTintStrength                 // A 黒 → 固定色（頬・耳・口内）
 col    = lerp(col, col * _ToonTintColor.rgb, saturate(tint))
@@ -61,7 +70,22 @@ clip.xy += dirPx * px / (screenSize / 2) * clip.w          // ピクセル → N
 
 - 線幅 0 の部位（目・眉等）は描画しない
 - `screenSize` は描画先のピクセルサイズ（Unity: `_ScreenParams.xy`、Maya: `ViewportPixelSize`）。横縦比を無視すると横向きの輪郭で線が W/H 倍に太る（2026-09-28 の計測で判明）
-- 距離補正（T-18）は P1
+- **距離補正（P1 T-18）**: 遠いほど細くする。`dist` はカメラまでの距離（m）
+  ```
+  k   = saturate(_ToonOutlineRefDistance / dist)          // 基準距離より近ければ 1（細くしない）
+  px *= lerp(1, k, _ToonOutlineDistanceScale)             // 0 = 補正なし（画面上で常に一定）
+  ```
+
+## 3.1 デプスオフセット（P1 T-09: 眉・目を髪の上に）
+
+```
+posWS += normalize(cameraPosWS - posWS) * _ToonDepthOffset    // _ToonDepthOffset は m（Unity 単位）。Maya ラッパーは ×100
+```
+
+- 頂点を**視線方向に沿って**カメラへ寄せる。画面上の位置（投影）は変わらず、深度だけが手前になる → 前髪に隠れていた眉・目が見える
+- 本体・アウトラインの両パスに適用する（線だけ置いて行かれないように）
+- 寄せすぎると、横顔で眉が頭の外に出る／髪の外側まで手前に出る。部位ロール「眉」「目」の既定値は小さく（数 cm）に留め、キャラクターごとに A/B で決める
+- Maya/Unity 同式で再現できる（ステンシル方式 T-24 は Unity のみ。docs/04 D-2）
 
 ## 4. 頂点カラー（Toon マスク）のチャンネル割当
 
@@ -105,10 +129,20 @@ Maya の uniform 名は先頭の `_` を除いた名前。定義の実体は `ma
 （`_Surface` `_Blend` `_SrcBlend` `_DstBlend` `_ZWrite` `_AlphaClip` `_Cutoff` `_Cull` `_QueueOffset` …）。
 値は D-Drive の `MaterialCommonBinding` が Common から流し込むので、Look 定義では `common` に書く。
 
-### 7.2 Specific（P0）
+### 7.2 Specific（P0 / P1）
 
 | プロパティ | 型 | 既定 | 範囲 | 説明 | 技術 |
 |---|---|---|---|---|---|
+| `_ToonLightColorInfluence` | Float | 1 | 0–1 | ライト色の影響（0 = 受けない。P1、既定で従来と同じ） | T-11 |
+| `_ToonDepthOffset` | Float | 0 | 0–0.2 | カメラ方向への寄せ量（**m**。Maya ラッパーで ×100）（P1） | T-09 |
+| `_ToonRimColor` | Color | (1, 1, 1, 1) | | リム色（P1） | T-13 |
+| `_ToonRimPower` | Float | 4 | 0.5–16 | リムの鋭さ（P1） | T-13 |
+| `_ToonRimStrength` | Float | 0 | 0–1 | リムの強さ（0 = なし。P1） | T-13 |
+| `_ToonHairHighlightMap` | Texture | black | | 髪ハイライトの帯（R を使う。未設定 = 出ない）（P1） | T-12 |
+| `_ToonHairHighlightColor` | Color | (1, 1, 0.95, 1) | | 髪ハイライトの色（P1） | T-12 |
+| `_ToonHairHighlightShift` | Float | 0 | -0.5–0.5 | カメラの上下に応じて帯を縦にずらす量（UV）（P1） | T-12 |
+| `_ToonOutlineDistanceScale` | Float | 0 | 0–1 | 遠いほど線を細くする度合い（0 = 補正なし）（P1） | T-18 |
+| `_ToonOutlineRefDistance` | Float | 2 | 0.1–20 | 線を細くし始める距離（m）（P1） | T-18 |
 | `_ToonShadeColor` | Color | (0.78, 0.72, 0.86, 1) | | 影の乗算色 | T-01 |
 | `_ToonShadeThreshold` | Float | 0.5 | 0–1 | 影の境界 | T-01 |
 | `_ToonShadeFeather` | Float | 0.02 | 0.001–0.5 | 境界のぼかし幅 | T-01 |
@@ -121,14 +155,10 @@ Maya の uniform 名は先頭の `_` を除いた名前。定義の実体は `ma
 | `_ToonOutlineWidth` | Float | 1.0 | 0–10 | 線幅（1080p 換算 px） | T-05 |
 | `_ToonOutlineSmoothNormal` | Float | 1 | 0/1 | UV2 のスムーズ法線を使う | T-06 |
 
-### 7.3 予約名（P1 以降。名前だけ先に確定し、追加時は MINOR）
+### 7.3 予約名（P2 以降。名前だけ先に確定し、追加時は MINOR）
 
 | プロパティ | 技術 |
 |---|---|
-| `_ToonDepthOffset`（Float, **m（Unity 単位）**, カメラ方向への寄せ量。Maya ラッパーで ×100） | T-09 |
-| `_ToonRimColor` `_ToonRimPower` `_ToonRimStrength` | T-13 |
-| `_ToonHairHighlightMap` `_ToonHairHighlightColor` `_ToonHairHighlightShift` | T-12 |
-| `_ToonOutlineDistanceScale` | T-18 |
 | `_ToonFaceShadowMap` `_ToonFaceForward` `_ToonFaceRight` | T-21 |
 | `_ToonShade2Color` `_ToonShade2Threshold` | T-27 |
 

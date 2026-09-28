@@ -68,14 +68,26 @@ SPECIFIC_PARAMS: tuple[Param, ...] = (
     Param("_ToonOutlineBaseMix", FLOAT, 0.5, "Outline", "線色にベース色を混ぜる", 0.0, 1.0),
     Param("_ToonOutlineWidth", FLOAT, 1.0, "Outline", "線幅 (px@1080p)", 0.0, 10.0),
     Param("_ToonOutlineSmoothNormal", FLOAT, 1.0, "Outline", "スムーズ法線を使う (0/1)", 0.0, 1.0),
+    # ---------------- P1（v0.2 で追加。既定値では P0 と同じ見た目 = MINOR） ----------------
+    # --- 線幅の距離補正 T-18 ---
+    Param("_ToonOutlineDistanceScale", FLOAT, 0.0, "Outline", "遠いほど線を細く", 0.0, 1.0),
+    Param("_ToonOutlineRefDistance", FLOAT, 2.0, "Outline", "細くし始める距離 (m)", 0.1, 20.0),
+    # --- ライト色の影響 T-11（0 = ライトの色に影響されない。目のハイライト等） ---
+    Param("_ToonLightColorInfluence", FLOAT, 1.0, "Light", "ライト色の影響", 0.0, 1.0),
+    # --- 眉・目を髪の上に T-09（視線方向にカメラへ寄せる。m 単位） ---
+    Param("_ToonDepthOffset", FLOAT, 0.0, "Depth", "手前に出す量 (m)", 0.0, 0.2),
+    # --- リム T-13（明側のみ） ---
+    Param("_ToonRimColor", COLOR, [1.0, 1.0, 1.0, 1.0], "Rim", "リム色"),
+    Param("_ToonRimPower", FLOAT, 4.0, "Rim", "リムの鋭さ", 0.5, 16.0),
+    Param("_ToonRimStrength", FLOAT, 0.0, "Rim", "リムの強さ", 0.0, 1.0),
+    # --- 髪ハイライト T-12（帯のテクスチャ R をカメラの上下でずらす。未設定 = 出ない） ---
+    Param("_ToonHairHighlightMap", TEXTURE, None, "Hair", "ハイライトの帯（R）"),
+    Param("_ToonHairHighlightColor", COLOR, [1.0, 1.0, 0.95, 1.0], "Hair", "ハイライト色"),
+    Param("_ToonHairHighlightShift", FLOAT, 0.0, "Hair", "視線で帯をずらす量", -0.5, 0.5),
 )
 
-# 名前だけ先に確定している P1 以降のパラメータ（docs/03 §7.3）。追加時にここから SPECIFIC_PARAMS へ移す
+# 名前だけ先に確定している P2 以降のパラメータ（docs/03 §7.3）。追加時にここから SPECIFIC_PARAMS へ移す
 RESERVED_NAMES = (
-    "_ToonDepthOffset",
-    "_ToonRimColor", "_ToonRimPower", "_ToonRimStrength",
-    "_ToonHairHighlightMap", "_ToonHairHighlightColor", "_ToonHairHighlightShift",
-    "_ToonOutlineDistanceScale",
     "_ToonFaceShadowMap", "_ToonFaceForward", "_ToonFaceRight",
     "_ToonShade2Color", "_ToonShade2Threshold",
 )

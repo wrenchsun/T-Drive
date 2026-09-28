@@ -18,7 +18,10 @@ COMMON_ROWS = (
     ("common.doubleSided", "両面表示", "bool", 0, 0),
     ("renderQueueOffset", "描画順オフセット（Unity のみ）", "int", -100, 100),
 )
-GROUP_LABELS = {"Common": "共通", "Shadow": "影", "Mask": "マスク", "Tint": "固定色", "Outline": "線"}
+GROUP_LABELS = {
+    "Common": "共通", "Shadow": "影", "Mask": "マスク", "Tint": "固定色", "Outline": "線",
+    "Light": "ライト", "Depth": "手前に出す（眉・目を髪の上に）", "Rim": "リム", "Hair": "髪ハイライト",
+}
 
 
 def _warn(parent: QtWidgets.QWidget, exc: Exception) -> None:
