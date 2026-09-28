@@ -183,3 +183,20 @@ def test_promote_does_not_bake_off_values():
     look.promote(lk, "B")  # rim はオフのまま
     assert lk["materials"]["hair"]["specific"]["_ToonRimStrength"] == 0.6
     assert "features" not in lk["materials"]["hair"]
+
+
+def test_line_part_keys_follow_sorted_part_names_and_line_flag():
+    lk = _sample()
+    parts = sorted(lk["parts"])
+    first = parts[0]
+    keys = look.line_part_keys(lk)
+    assert all(k % 2 == 0 for k in keys.values())  # インナーラインがオフ: 線フラグなし
+    look.set_feature(lk, "innerLine", True)
+    look.set_setting(lk, "innerLine.enabled", True)
+    look.set_setting(lk, "innerLine.parts", [first])
+    keys = look.line_part_keys(lk)
+    for i, part in enumerate(parts, start=1):
+        for mat in lk["parts"][part]["materials"]:
+            assert keys[mat] == i * 2 + (1 if part == first else 0)
+    look.set_feature(lk, "innerLine", False)
+    assert all(k % 2 == 0 for k in look.line_part_keys(lk).values())  # 機能オフでも線フラグなし

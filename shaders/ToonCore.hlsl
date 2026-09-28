@@ -220,4 +220,52 @@ float Toon_ContactShadow(float d, float h, float radius, float strength)
     return strength * (1.0 - smoothstep(0.0, r, d)) * saturate(1.0 - max(h, 0.0) / r);
 }
 
+// ------------------------------------------------------------------ 画面上の線（T-23 / T-42、docs/03 §10）
+#define TOON_LINE_CREASE_DEG 60.0
+#define TOON_LINE_DEPTH_REL 0.03
+
+float2 Toon_OctahedralEncode(float3 n)
+{
+    n /= (abs(n.x) + abs(n.y) + abs(n.z));
+    float2 e = n.xy;
+    if (n.z < 0.0)
+        e = (1.0 - abs(e.yx)) * float2(e.x >= 0.0 ? 1.0 : -1.0, e.y >= 0.0 ? 1.0 : -1.0);
+    return e;
+}
+
+// ToonId バッファに書く値。normalVS は正規化済み、depthM はビュー空間の奥行き（m）、partKey = 部位番号 × 2 + 線フラグ
+float4 Toon_LineIdValue(float3 normalVS, float depthM, float partKey)
+{
+    return float4(Toon_OctahedralEncode(normalVS), partKey, depthM);
+}
+
+// 線を出す間隔 r（画素）。widthPx は px@1080p、screenHeight は実際の画面の高さ
+float Toon_LineRadius(float widthPx, float screenHeight)
+{
+    return max(1.0, round(widthPx * screenHeight / 1080.0 * 0.5));
+}
+
+// p と q（ToonId の値）の間に内側の線があるか（0 / 1）
+float Toon_LineInnerPair(float4 p, float4 q)
+{
+    if (p.b < 1.5 || q.b < 1.5)
+        return 0.0;  // どちらかが Toon でない（外側輪郭は Toon_LineOuterPair）
+    float partP = floor(p.b * 0.5 + 0.25), partQ = floor(q.b * 0.5 + 0.25);
+    float lineP = p.b - partP * 2.0, lineQ = q.b - partQ * 2.0;
+    if (partP != partQ)
+        return (lineP > 0.5 || lineQ > 0.5) ? 1.0 : 0.0;
+    if (lineP < 0.5)
+        return 0.0;
+    float3 nP = Toon_OctahedralDecode(p.rg), nQ = Toon_OctahedralDecode(q.rg);
+    if (dot(nP, nQ) < cos(radians(TOON_LINE_CREASE_DEG)))
+        return 1.0;
+    return abs(p.a - q.a) > min(p.a, q.a) * TOON_LINE_DEPTH_REL ? 1.0 : 0.0;
+}
+
+// p と q の片方だけが Toon のとき外側輪郭（T-42）
+float Toon_LineOuterPair(float4 p, float4 q)
+{
+    return ((p.b > 1.5) != (q.b > 1.5)) ? 1.0 : 0.0;
+}
+
 #endif // TDRIVE_TOON_CORE_INCLUDED

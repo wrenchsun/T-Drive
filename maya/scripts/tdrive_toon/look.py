@@ -113,6 +113,20 @@ def enabled_features(look: dict[str, Any]) -> list[str]:
     return sorted(f.id for f in features.FEATURES if enabled(look, f.id))
 
 
+def line_part_keys(look: dict[str, Any]) -> dict[str, float]:
+    """マテリアル → ToonId の部位キー（docs/03 §10.1）。部位番号 = 部位名の昇順で 1 始まり、線フラグ = innerLine.parts に含まれる。
+
+    インナーラインがオフ（機能・設定）のときは線フラグがすべて 0。部位に属さないマテリアルは含めない（= 0: ToonId を書かない）。
+    """
+    il = resolved_settings(look)["innerLine"]
+    line_parts = set(il["parts"]) if il["enabled"] else set()
+    keys = {}
+    for i, part in enumerate(sorted(look.get("parts", {})), start=1):
+        for mat in look["parts"][part]["materials"]:
+            keys[mat] = float(i * 2 + (1 if part in line_parts else 0))
+    return keys
+
+
 def set_feature(look: dict[str, Any], feature_id: str, on: bool) -> None:
     f = features.BY_ID[feature_id]
     if f.required and not on:

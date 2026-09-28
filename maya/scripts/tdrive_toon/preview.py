@@ -236,10 +236,11 @@ def disable() -> None:
 
 @outside_maya_undo
 def delete_all() -> None:
-    from . import contact_shadow
+    from . import contact_shadow, screen_line
 
     disable()
     contact_shadow.delete()
+    screen_line.update(None, None, None, 1, visible=False)  # 画面上の線の Override も外す
     for shader in preview_shaders():
         nodes = [shader, _shading_group(shader), *(cmds.listConnections(shader, type="file") or [])]
         cmds.delete([n for n in nodes if n and cmds.objExists(n)])
@@ -500,6 +501,13 @@ def apply_environment() -> None:
         _set(shader, "PreviewDepthPivot", list(_env["depthPivot"]))
         _set(shader, "PreviewFaceForward", list(_env["faceForward"]))
         _set(shader, "PreviewFaceRight", list(_env["faceRight"]))
+
+
+@outside_maya_undo
+def set_line_keys(keys: dict[str, float]) -> None:
+    """ToonId の部位キー（docs/03 §10.1、look.line_part_keys）を各プレビューシェーダーへ。"""
+    for shader in preview_shaders():
+        _set(shader, "PreviewLineKey", float(keys.get(source_material(shader), 0.0)))
 
 
 def set_face_axes(forward, right) -> None:

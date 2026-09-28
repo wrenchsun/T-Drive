@@ -156,6 +156,7 @@ class Session:
             common["blend"] = preview.source_blend(m)  # Blend は元マテリアルから継承（roles.py 参照）
         if preview.is_active():
             preview.enable({m: look.resolve(lk, self.shown)[m] for m in mats})
+            self._sync_character_preview()  # 部位が増えると部位キー（画面上の線）が変わる
 
     @undoable
     def unregister(self, part: str) -> None:
@@ -163,6 +164,7 @@ class Session:
         lk["parts"].pop(part, None)
         il = lk.get(look.SETTINGS, {}).get("innerLine", {})
         il["parts"] = [p for p in il.get("parts", []) if p != part]  # インナーライン対象からも外す
+        self._sync_character_preview()
         self._changed()
 
     @undoable
@@ -189,6 +191,7 @@ class Session:
         lk["parts"] = {(new if k == old else k): v for k, v in lk["parts"].items()}
         il = lk.get(look.SETTINGS, {}).get("innerLine", {})
         il["parts"] = [new if p == old else p for p in il.get("parts", [])]  # インナーライン対象の部位名も追従
+        self._sync_character_preview()
         self._changed()
 
     @undoable
@@ -252,14 +255,14 @@ class Session:
     def set_setting(self, path: str, value: Any, notify: bool = True) -> None:
         look.set_setting(self.require(), path, value)
         self.dirty = True
-        if path == "depthCompression" or path.startswith(("faceShadow", "contactShadow")):
+        if path == "depthCompression" or path.startswith(("faceShadow", "contactShadow", "innerLine")):
             self._sync_character_preview()
         if notify:
             self._changed()
 
     def _sync_character_preview(self) -> None:
         """キャラクター単位の設定のうち Maya でプレビューできるもの（奥行き圧縮・顔影・接地影）をプレビューへ反映する。"""
-        from . import contact_shadow
+        from . import contact_shadow, envmath, screen_line
 
         lk = self.look
         if lk is None:
@@ -277,6 +280,10 @@ class Session:
         preview.set_depth_compression(amount, pivot)
         fs = cs["faceShadow"]
         preview.set_face_axes(fs["forward"], fs["right"])
+        preview.set_line_keys(look.line_part_keys(lk))
+        il = cs["innerLine"]
+        inner = {"width": il["width"], "color": envmath.srgb_color_to_linear(il["color"])[:3]} if il["enabled"] else None
+        screen_line.update(environment.model_panel(), inner, None, preview.environment_state()["tonemap"], visible=preview.is_active())
         if cs["contactShadow"].get("enabled") or contact_shadow.exists():
             contact_shadow.update(self.export_meshes(), cs["contactShadow"], visible=preview.is_active())
 

@@ -326,6 +326,14 @@ def run() -> None:
     s.set_feature("contactShadow", False)
     check("接地影: 機能をオフにすると隠れる", not cmds.getAttr(f"{contact_shadow.NODE}.visibility"))
     s.set_feature("contactShadow", True)
+    # ---- 画面上の線（4-7）: mayapy では VP2 が無いので設定の流れと部位キーだけ確かめる
+    s.set_feature("innerLine", True)
+    s.set_setting("innerLine.enabled", True)
+    s.set_setting("innerLine.parts", ["face"])
+    keys = look.line_part_keys(s.look)
+    check("画面上の線: 線を出す部位だけ線フラグが立つ",
+          all((k % 2 == 1) == (m in s.look["parts"]["face"]["materials"]) for m, k in keys.items()) and keys, str(keys))
+    s.set_feature("innerLine", False)
     preview.delete_all()
     check("接地影: delete_all で消える", not contact_shadow.exists())
     s.show(s.shown)

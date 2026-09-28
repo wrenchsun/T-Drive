@@ -44,7 +44,7 @@ class CharacterTab(QtWidgets.QWidget):
         self.stencil = self._check(f, "使う（眉・目・アイラインを前髪の上に。Maya では「手前に出す」で代わりに確認）", "stencil.enabled")
 
         # ---- インナーライン T-23
-        box, f = self._group(f"画面上の内側の線（インナーライン） {UNITY_ONLY}", feature="innerLine")
+        box, f = self._group("画面上の内側の線（インナーライン）", feature="innerLine")
         self.il_enabled = self._check(f, "使う", "innerLine.enabled")
         self.il_width = self._spin(f, "線幅（px@1080p）", "innerLine.width", 0.0, 10.0, 0.1)
         self.il_color = QtWidgets.QPushButton()

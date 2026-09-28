@@ -16,7 +16,7 @@ def _fxc(*args: str) -> subprocess.CompletedProcess:
 
 
 @needs_fxc
-@pytest.mark.parametrize("name", ["TDriveToon.fx", "TDriveContactShadow.fx"])
+@pytest.mark.parametrize("name", ["TDriveToon.fx", "TDriveContactShadow.fx", "TDriveScreenLine.fx"])
 def test_maya_fx_compiles(tmp_path, name):
     r = _fxc("/T", "fx_5_0", "/D", "_MAYA_", "/Fo", str(tmp_path / "out.fxo"), str(ROOT / "maya/shaders" / name))
     assert r.returncode == 0, r.stdout + r.stderr

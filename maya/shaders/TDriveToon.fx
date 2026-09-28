@@ -85,6 +85,8 @@ float3 PreviewFaceForward < string UIGroup = "Preview"; int UIOrder = 97; > = {0
 float3 PreviewFaceRight < string UIGroup = "Preview"; int UIOrder = 98; > = {-1.0, 0.0, 0.0};
 static const float3 kUp = float3(0.0, 1.0, 0.0);
 // チャンネル単体表示・不具合調査用（docs/05 §3「チャンネル単体表示」）
+// 画面上の線（docs/03 §10）: 部位キー = 部位番号 × 2 + 線フラグ。0 = ToonId を書かない。Render Override（4-7）が 2 枚目の描画先として受ける
+float PreviewLineKey < string UIGroup = "Preview"; string UIName = "Line Part Key"; int UIOrder = 99; > = 0.0;
 int PreviewDebug < string UIGroup = "Preview"; string UIName = "Debug View"; string UIFieldNames = "Off:UV0:Normal:Lit:Mask R:Mask G:Mask B:Mask A:Base Map:Smooth Normal UV2"; int UIOrder = 93; > = 0;
 
 SamplerState SamLinearWrap { Filter = MIN_MAG_MIP_LINEAR; AddressU = Wrap; AddressV = Wrap; };
@@ -95,7 +97,9 @@ RasterizerState RS_CullBack  { CullMode = Back;  FrontCounterClockwise = true; }
 RasterizerState RS_CullFront { CullMode = Front; FrontCounterClockwise = true; };
 RasterizerState RS_CullNone  { CullMode = None;  FrontCounterClockwise = true; };
 DepthStencilState DS_Default { DepthEnable = true; DepthWriteMask = ALL; DepthFunc = LESS_EQUAL; };
-BlendState BS_Opaque { BlendEnable[0] = false; RenderTargetWriteMask[0] = 0x0F; };
+// 描画先 1 = ToonId（Render Override 使用時だけ存在する）。本体パスだけが書き、アウトラインパスは書かない
+BlendState BS_Opaque { BlendEnable[0] = false; RenderTargetWriteMask[0] = 0x0F; BlendEnable[1] = false; RenderTargetWriteMask[1] = 0x00; };
+BlendState BS_OpaqueWithId { BlendEnable[0] = false; RenderTargetWriteMask[0] = 0x0F; BlendEnable[1] = false; RenderTargetWriteMask[1] = 0x0F; };
 
 // ------------------------------------------------------------------ 頂点入出力
 struct VSIn
@@ -227,9 +231,21 @@ float4 ShadeMain(VSOut i, bool frontFace)
     return float4(col, base.a);
 }
 
-float4 PS_Opaque(VSOut i, bool frontFace : SV_IsFrontFace) : SV_Target
+struct PSOutWithId
 {
-    return ShadeMain(i, frontFace);
+    float4 color : SV_Target0;
+    float4 id    : SV_Target1;
+};
+
+PSOutWithId PS_Opaque(VSOut i, bool frontFace : SV_IsFrontFace)
+{
+    PSOutWithId o;
+    o.color = ShadeMain(i, frontFace);
+    float3 N = normalize(i.normalWS) * (frontFace ? 1.0 : -1.0);
+    float3 normalVS = normalize(mul(float4(N, 0.0), gView).xyz);
+    float depthM = -mul(float4(i.positionWS, 1.0), gView).z / PreviewUnitScale;
+    o.id = PreviewLineKey > 0.5 ? Toon_LineIdValue(normalVS, depthM, PreviewLineKey) : float4(0.0, 0.0, 0.0, 0.0);
+    return o;
 }
 
 // Maya の透明描画はプリマルチプライドα前提
@@ -302,7 +318,7 @@ technique11 Opaque
         SetPixelShader(CompileShader(ps_5_0, PS_Opaque()));
         SetRasterizerState(RS_CullBack);
         SetDepthStencilState(DS_Default, 0);
-        SetBlendState(BS_Opaque, float4(0.0, 0.0, 0.0, 0.0), 0xFFFFFFFF);
+        SetBlendState(BS_OpaqueWithId, float4(0.0, 0.0, 0.0, 0.0), 0xFFFFFFFF);
     }
 }
 
@@ -328,7 +344,7 @@ technique11 OpaqueDoubleSided
         SetPixelShader(CompileShader(ps_5_0, PS_Opaque()));
         SetRasterizerState(RS_CullNone);
         SetDepthStencilState(DS_Default, 0);
-        SetBlendState(BS_Opaque, float4(0.0, 0.0, 0.0, 0.0), 0xFFFFFFFF);
+        SetBlendState(BS_OpaqueWithId, float4(0.0, 0.0, 0.0, 0.0), 0xFFFFFFFF);
     }
 }
 

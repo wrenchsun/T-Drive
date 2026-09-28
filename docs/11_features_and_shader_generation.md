@@ -30,7 +30,7 @@
 | `faceShadowSdf` | SDF 顔影マップ | T-21 | `_ToonFaceShadow*` + `characterSettings.faceShadow` | Sh Co | ○ |
 | `lightStabilize` | ライトの安定化 | T-17 | `characterSettings.light` | Co | ○（プレビュータブで同じ式を掛ける。4-5） |
 | `stencil` | 髪越し表示（ステンシル） | T-24 | `characterSettings.stencil` + ステンシル状態 | Sh Co | △（手前に出すで代用） |
-| `innerLine` | 画面上のインナーライン | T-23 | `characterSettings.innerLine` + ToonId パス | RF | ×（4-7 で △） |
+| `innerLine` | 画面上のインナーライン | T-23 | `characterSettings.innerLine` + ToonId パス | RF | ○（Render Override で同じ判定式。4-7） |
 | `contactShadow` | 接地影 | T-29 | `characterSettings.contactShadow` | RF | △（足元の板に同じ式で描く。地面は無いので背景に落ちる。4-6） |
 | `viewCorrection` | カメラ角度補正 | T-20 | `characterSettings.viewCorrection` + BlendShape | Me Co | ○ |
 | `expressions` | 表情パラメータ | T-25 | `characterSettings.expressions` | Co | ○（プレビュー） |
@@ -97,6 +97,6 @@ MS2026/Assets/_Project/Art/Shaders/Generated/TDriveToon_MS2026.shader   "TDrive/
 |---|---|---|
 | lightStabilize | プレビュータブの「ライト回転」に Unity と同じ平滑化・ヒステリシスを掛ける | 4-5 |
 | contactShadow | 足元にプレビュー専用の板を置き、足のジョイントに追従する影を `Toon_ContactShadow` で描く | 4-6 ✅ |
-| innerLine | Maya の Render Override で画面上のエッジ検出を差し込む（Unity の ToonRendererFeature と同じアルゴリズム） | 4-7 |
+| innerLine | Maya の Render Override（`screen_line.py`）で ToonId を MRT に書き、`Toon_LineInnerPair`（ToonCore、Unity と共有）でエッジ検出 | 4-7 ✅ |
 | screenOutline（T-42、未実装） | 4-7 の Render Override のエッジ検出を共有して外形に線を出す | 4-8 |
 | stencil | 本物は再現しない（Maya の描画順を制御できない）。「手前に出す」で代用し、Unity で確認 | — |
