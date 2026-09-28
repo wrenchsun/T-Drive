@@ -19,6 +19,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
+import maya.api.OpenMaya as om
 import maya.api.OpenMayaRender as omr
 from maya import cmds
 
@@ -39,6 +40,12 @@ def maya_useNewAPI() -> None:  # noqa: N802 (Maya の規約)
     """Python API 2.0 を使う印。"""
 
 
+# 全種類を除外したいが、Python API は戻り値を C の long（Windows では 32 ビット符号付き）に変換するため
+# kExcludeAll（0xFFFF…FFFF）も 62 ビットの値も OverflowError になる。31 ビットまで（メッシュ等を含む）を立て、
+# それ以上の種類（プラグインのシェイプ等）は objectSetOverride の空の選択で描かないようにする（docs/09 §6）
+_EXCLUDE_ALL = 0x7FFFFFFF
+
+
 class _ClearOp(omr.MSceneRender):
     """何も描かずに描画先を消去するだけの操作。"""
 
@@ -51,7 +58,10 @@ class _ClearOp(omr.MSceneRender):
         return [t["color"], t["depth"]] if self.which == "color" else [t["id"]]
 
     def objectTypeExclusions(self):  # noqa: N802
-        return omr.MFrameContext.kExcludeAll
+        return _EXCLUDE_ALL
+
+    def objectSetOverride(self):  # noqa: N802
+        return self.ov.empty_selection  # 何も描かない（消去だけ）
 
     def clearOperation(self):  # noqa: N802
         c = self.mClearOperation
@@ -161,6 +171,7 @@ class _Override(omr.MRenderOverride):
             _PresentOp(f"{NAME}_present", self),
         ]
         self.index = 0
+        self.empty_selection = om.MSelectionList()
         self.targets: dict[str, Any] = {}
         self.size = (0, 0)
         self.background = ((0.36, 0.36, 0.36), (0.36, 0.36, 0.36), False)
@@ -236,8 +247,11 @@ def _keepalive(ov: "_Override") -> None:
 
 
 def line_radius(width_px: float, screen_height: float) -> float:
-    """docs/03 §10.2（Toon_LineRadius と同じ）: 境界の両側に r 画素ずつ。"""
-    return max(1.0, round(float(width_px) * float(screen_height) / 1080.0 * 0.5))
+    """docs/03 §10.2（Toon_LineRadius と同じ）: 境界の両側に r 画素ずつ。
+
+    必ず float で返す（round() は int を返し、float のシェーダーパラメータへ渡すと kInvalidParameter になっていた）。
+    """
+    return float(max(1.0, round(float(width_px) * float(screen_height) / 1080.0 * 0.5)))
 
 
 def register() -> None:

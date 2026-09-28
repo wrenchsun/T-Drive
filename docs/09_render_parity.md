@@ -120,5 +120,6 @@ MS2026 自体が開発中で、色空間以外（トーンマップ・ライト�
 | スキン付きメッシュに書いた UV Set が見えない | 変形後に書くとヒストリ再評価で消える。Orig に書いた直後は `polyUVSet -q` が変形後シェイプの古い名前一覧を返す | 書き込みは Orig（中間オブジェクト）へ。存在確認は評価済みデータ（`MFnMesh.getUVSetNames`）で |
 | FBX 書き出し後にシーンが戻らない | 並べ替えを Undo で戻そうとしたが `FBXExport` が Undo 履歴を消す | シーンを一時ファイルへ書き出し、別プロセスの mayapy で整形・書き出し（開いているシーンは触らない） |
 | ツールのリロード後に画面上の線を触ると Maya が落ちる（python311.dll のアクセス違反） | Maya は登録した Render Override の Python オブジェクトを参照として保持しない。リロードで古いモジュールと一緒に解放され、Maya が解放済みのメモリを触った | リロード前に `screen_line.unregister()`。登録したオブジェクトはリロードの影響を受けない場所（`maya.api.OpenMayaRender` の属性）からも参照して解放させない |
+| Render Override で毎フレーム OverflowError / kInvalidParameter | `MFrameContext.kExcludeAll`（0xFFFF…FFFF）が Python の戻り値として符号付き long に収まらない。`round()` の int を float のパラメータに渡した | 戻り値は Windows の C long（32 ビット符号付き）に収める。除外は `0x7FFFFFFF` + `objectSetOverride` に空の選択（消去だけの操作）。シェーダーパラメータは型を合わせて渡す（float / int / bool） |
 | Render Override の描画先が None になる / テクスチャが読めない | 解放し忘れた同名の描画先があると acquire が None。Python では `MRenderTargetAssignment` が効かず、サンプラー未設定だと結び付かない | 描画先の名前を登録ごとに固有に。`setParameter` に MRenderTarget を直接、サンプラーを明示 |
 | Unity で頂点カラー・スムーズ法線が別のものになる | Unity は UV・頂点カラーを名前でなく順番で読む（頂点カラーは先頭のみ） | 書き出し時に頂点カラーを tdToonMask だけ、UV を map1 / 予備 / tdSmoothNormal の順にする |

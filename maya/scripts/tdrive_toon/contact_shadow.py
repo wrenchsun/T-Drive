@@ -83,7 +83,9 @@ def update(meshes: list[str], settings: dict, visible: bool) -> None:
 @outside_maya_undo
 def delete() -> None:
     nodes = [NODE, SHADER, f"{SHADER}SG", _decompose_name("L"), _decompose_name("R")]
-    cmds.delete([n for n in nodes if cmds.objExists(n)])
+    existing = [n for n in nodes if cmds.objExists(n)]
+    if existing:  # 空で呼ぶと「何も選択されていません」の警告が出る
+        cmds.delete(existing)
 
 
 def _ensure() -> None:

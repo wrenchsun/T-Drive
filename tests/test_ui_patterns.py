@@ -22,3 +22,10 @@ def test_reload_unregisters_render_override_before_dropping_modules():
     src = (ROOT / "maya/mcp_scripts/reload_tdrive.py").read_text(encoding="utf-8")
     assert "screen_line" in src and ".unregister()" in src
     assert src.index(".unregister()") < src.index("del sys.modules[name]")
+
+
+def test_line_radius_is_float():
+    """シェーダーの float パラメータへ渡す値は float（int だと kInvalidParameter）。screen_line は maya を import するので式だけ確認する。"""
+    src = (ROOT / "maya/scripts/tdrive_toon/screen_line.py").read_text(encoding="utf-8")
+    assert "return float(max(1.0, round(" in src
+    assert "_EXCLUDE_ALL = 0x7FFFFFFF" in src  # Windows の C long（32 ビット符号付き）に収める

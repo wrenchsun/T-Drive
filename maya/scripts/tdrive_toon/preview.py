@@ -243,7 +243,9 @@ def delete_all() -> None:
     screen_line.update(None, None, None, 1, visible=False)  # 画面上の線の Override も外す
     for shader in preview_shaders():
         nodes = [shader, _shading_group(shader), *(cmds.listConnections(shader, type="file") or [])]
-        cmds.delete([n for n in nodes if n and cmds.objExists(n)])
+        existing = [n for n in nodes if n and cmds.objExists(n)]
+        if existing:
+            cmds.delete(existing)
 
 
 def _swap(src_sg: str | None, dst_sg: str | None) -> None:
