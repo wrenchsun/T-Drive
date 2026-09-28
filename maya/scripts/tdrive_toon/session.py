@@ -122,6 +122,45 @@ class Session:
         lk["parts"].pop(part, None)
         self._changed()
 
+    def set_role(self, part: str, role: str, apply_preset: bool) -> None:
+        """部位のロールを変える。apply_preset=True なら所属マテリアルにロールのプリセットを再適用する。"""
+        lk = self.require()
+        mats = list(lk["parts"][part]["materials"])
+        if apply_preset:
+            self._register(part, role, mats, preset_for=mats)
+        else:
+            if role not in roles.ROLES:
+                raise ValueError(f"不明なロール: {role}")
+            lk["parts"][part]["role"] = role
+        self._changed()
+
+    def rename_part(self, old: str, new: str) -> None:
+        lk = self.require()
+        new = new.strip()
+        if not new or new == old:
+            return
+        if new in lk["parts"]:
+            raise ValueError(f"部位 '{new}' は既にあります")
+        lk["parts"] = {(new if k == old else k): v for k, v in lk["parts"].items()}
+        self._changed()
+
+    def move_material(self, material: str, part: str, role: str | None = None) -> None:
+        """マテリアルを別の部位へ移す（部位が無ければ作る）。移動先のプリセットはそのマテリアルにだけ適用する。"""
+        lk = self.require()
+        existing = lk["parts"].get(part)
+        role = role or (existing["role"] if existing else roles.guess_role(material))
+        mats = sorted(set(existing["materials"] if existing else []) | {material})
+        self._register(part, role, mats, preset_for=[material])
+        self._changed()
+
+    def set_preview(self, on: bool) -> None:
+        """Toon 表示 ⇔ 元の見た目。"""
+        if on:
+            self.show(self.shown)
+        else:
+            preview.disable()
+            self._changed(dirty=False)
+
     def select_part(self, part: str) -> None:
         meshes = preview.scene_materials()
         targets = [m for mat in self.require()["parts"][part]["materials"] for m in meshes.get(mat, [])]

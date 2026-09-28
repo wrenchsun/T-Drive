@@ -99,6 +99,24 @@ def run() -> None:
     face = {x["Property"]: x["Value"] for x in data["materials"]["face"]["Specific"]}
     check("Unity 出力: B の値が入る", face["_ToonShadowStrength"]["FloatValue"] == 0.1)
 
+    # ---- 部位タブの操作（UI から呼ぶセッション API）
+    s.rename_part("hair", "kami")
+    check("部位名変更", "kami" in s.look["parts"] and "hair" not in s.look["parts"])
+    before_face = dict(s.look["materials"]["face"]["specific"])
+    s.set_role("face", "skin", apply_preset=False)
+    check("ロール変更（プリセット再適用なし）で値が変わらない",
+          s.look["parts"]["face"]["role"] == "skin" and s.look["materials"]["face"]["specific"] == before_face)
+    s.set_role("face", "face", apply_preset=True)
+    check("ロール変更（プリセット再適用あり）", s.look["materials"]["face"]["specific"]["_ToonShadowStrength"] == 0.35)
+    s.move_material("mat_cheek", "face")
+    check("マテリアルを別部位へ移動（元の部位は空なら消える）",
+          "mat_cheek" in s.look["parts"]["face"]["materials"] and "blush" not in s.look["parts"])
+    s.set_preview(False)
+    off = not preview.is_active()
+    s.set_preview(True)
+    check("表示切替 Toon ⇔ 元の見た目", off and preview.is_active())
+    check("操作後も Look が検証を通る", look.validate(s.look) == [], str(look.validate(s.look)))
+
     # 後片付け
     preview.delete_all()
     check("delete_all: プレビューノードが残らない", not preview.preview_shaders())
