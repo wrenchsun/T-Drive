@@ -24,19 +24,62 @@ CHARACTER_ID = re.compile(r"^[a-z0-9_]+$")
 _window: "EditorWindow | None" = None
 
 
+CONTROL_NAME = f"{WINDOW_NAME}WorkspaceControl"
+# Maya がレイアウトを復元するとき（再起動後・ワークスペース切替時）に呼ぶスクリプト
+RESTORE_SCRIPT = "from tdrive_toon import ui; ui.restore()"
+
+
 def show() -> "EditorWindow":
+    """エディタを開く。前回ドッキングした位置があればそこに開く。
+
+    × で閉じても枠（workspaceControl）は残す（retain）ので、次に開くと同じ位置に戻る。
+    Maya 再起動後は保存されたレイアウトから uiScript（RESTORE_SCRIPT）で中身が作り直される。
+    """
     global _window
-    close()
+    exists = cmds.workspaceControl(CONTROL_NAME, exists=True)
+    if exists and _window is None:
+        # 中身を失った枠（モジュール再読み込み後など）は作り直す。
+        # ※ workspaceControl -q -uiScript は設定済みでも None を返すので判定に使えない
+        cmds.deleteUI(CONTROL_NAME)
+        exists = False
+    if exists:
+        cmds.workspaceControl(CONTROL_NAME, edit=True, visible=True)
+        cmds.workspaceControl(CONTROL_NAME, edit=True, restore=True)
+        _window.refresh()  # type: ignore[union-attr]
+        return _window  # type: ignore[return-value]
+    if _window is not None:
+        _window.detach()
     _window = EditorWindow()
-    _window.show(dockable=True, floating=True, area="right")
+    _window.show(dockable=True, floating=True, area="right", retain=True, uiScript=RESTORE_SCRIPT)
     return _window
 
 
-def close() -> None:
+def restore(control: str | None = None) -> None:
+    """workspaceControl の uiScript から呼ばれる。保存されたドッキング位置に中身を作り直す。"""
     global _window
-    ctrl = f"{WINDOW_NAME}WorkspaceControl"
-    if cmds.workspaceControl(ctrl, exists=True):
-        cmds.deleteUI(ctrl)
+    from maya import OpenMayaUI as omui
+    from shiboken6 import getCppPointer
+
+    from shiboken6 import wrapInstance
+
+    parent = control or omui.MQtUtil.getCurrentParent()
+    if _window is not None:
+        _window.detach()
+    ptr = omui.MQtUtil.findControl(parent) if isinstance(parent, str) else parent
+    # モジュール再読み込み後などで枠に古いエディタが残っていれば片付ける（二重表示を防ぐ）
+    holder = wrapInstance(int(ptr), QtWidgets.QWidget)
+    for old in holder.findChildren(QtWidgets.QWidget, WINDOW_NAME):
+        old.setParent(None)
+        old.deleteLater()
+    _window = EditorWindow()
+    omui.MQtUtil.addWidgetToMayaLayout(int(getCppPointer(_window)[0]), int(ptr))
+
+
+def close() -> None:
+    """エディタを閉じる（ドッキング位置の記録も消す）。"""
+    global _window
+    if cmds.workspaceControl(CONTROL_NAME, exists=True):
+        cmds.deleteUI(CONTROL_NAME)
     if _window is not None:
         _window.detach()
         _window = None
@@ -80,7 +123,10 @@ class EditorWindow(MayaQWidgetDockableMixin, QtWidgets.QWidget):
         self.refresh()
 
     def detach(self) -> None:
-        self.preview_tab.timer.stop()
+        try:
+            self.preview_tab.timer.stop()
+        except RuntimeError:
+            pass  # 枠ごと破棄済み
         if self.refresh in self.session.listeners:
             self.session.listeners.remove(self.refresh)
 
@@ -249,6 +295,8 @@ class PartsTab(QtWidgets.QWidget):
         self.hint = QtWidgets.QLabel("部位名はダブルクリックで変更。別の部位名を入力するとマテリアルがその部位へ移動します。")
         self.hint.setEnabled(False)
         v.addWidget(self.hint)
+        self.mask_box = MaskBox(self.session, self._selected_parts)
+        v.addWidget(self.mask_box)
         self._updating = False
 
     # -------------------------------------------------------------- 表示
@@ -292,6 +340,7 @@ class PartsTab(QtWidgets.QWidget):
             self.table.setColumnWidth(2, 170)
         finally:
             self._updating = False
+        self.mask_box.refresh()
 
     def _selected_parts(self) -> list[str]:
         lk = self.session.look
@@ -393,3 +442,73 @@ class RegisterDialog(QtWidgets.QDialog):
 
     def values(self) -> tuple[str, str]:
         return self.part.currentText().strip(), self.role.currentData()
+
+
+class MaskBox(QtWidgets.QGroupBox):
+    """Toon マスク（頂点カラー）: 初期化・チャンネル単位ペイント・チャンネル単体表示（docs/05 §3）。"""
+
+    def __init__(self, s: session.Session, selected_parts) -> None:
+        super().__init__("Toon マスク（頂点カラー。白 = 何もしない、効かせたい所を黒く塗る）")
+        from . import mask
+
+        self.session, self.selected_parts, self.mask = s, selected_parts, mask
+        v = QtWidgets.QVBoxLayout(self)
+        row = QtWidgets.QHBoxLayout()
+        init = QtWidgets.QPushButton("マスク初期化")
+        init.setToolTip("対象メッシュに Color Set tdToonMask を作り白で埋める（既にあれば何もしない）")
+        init.clicked.connect(self.on_init)
+        row.addWidget(init)
+        row.addWidget(QtWidgets.QLabel("  塗る:"))
+        self.paint_buttons = {}
+        for ch in mask.CHANNELS:
+            b = QtWidgets.QPushButton(ch)
+            b.setToolTip(mask.CHANNEL_HELP[ch])
+            b.setFixedWidth(34)
+            b.clicked.connect(lambda _c=False, c=ch: self.on_paint(c))
+            row.addWidget(b)
+            self.paint_buttons[ch] = b
+        self.commit_btn = QtWidgets.QPushButton("確定")
+        self.cancel_btn = QtWidgets.QPushButton("キャンセル")
+        self.commit_btn.clicked.connect(lambda: self._run(self.session.end_mask_paint, True))
+        self.cancel_btn.clicked.connect(lambda: self._run(self.session.end_mask_paint, False))
+        row.addWidget(self.commit_btn)
+        row.addWidget(self.cancel_btn)
+        row.addStretch(1)
+        row.addWidget(QtWidgets.QLabel("表示:"))
+        self.view = QtWidgets.QComboBox()
+        self.view.addItem("通常", None)
+        for ch in mask.CHANNELS:
+            self.view.addItem(f"{ch} だけ（白黒）", ch)
+        self.view.currentIndexChanged.connect(lambda _i: mask.show_channel(self.view.currentData()))
+        row.addWidget(self.view)
+        v.addLayout(row)
+        self.status = QtWidgets.QLabel()
+        self.status.setWordWrap(True)
+        v.addWidget(self.status)
+
+    def _target(self) -> str | None:
+        parts = self.selected_parts()
+        return parts[0] if parts else None  # 表で部位を選んでいればその部位、無ければ Maya の選択
+
+    def _run(self, fn, *args):
+        try:
+            fn(*args)
+        except Exception as exc:
+            _error(self, exc)
+
+    def on_init(self) -> None:
+        self._run(self.session.init_mask, self._target())
+
+    def on_paint(self, channel: str) -> None:
+        self._run(self.session.begin_mask_paint, channel, self._target())
+
+    def refresh(self) -> None:
+        editing = self.mask.editing()
+        self.commit_btn.setEnabled(bool(editing))
+        self.cancel_btn.setEnabled(bool(editing))
+        for ch, b in self.paint_buttons.items():
+            b.setStyleSheet("background-color: #3a6ea5;" if ch == editing else "")
+        if editing:
+            self.status.setText(f"<b>{editing}</b> を編集中: {self.mask.CHANNEL_HELP[editing]}。Paint Vertex Color Tool で黒く塗り、終わったら <b>確定</b>。")
+        else:
+            self.status.setText("表で部位を選ぶとその部位、選ばなければ Maya で選択中のメッシュが対象。R/G/B/A を押すとそのチャンネルを塗り始めます。")

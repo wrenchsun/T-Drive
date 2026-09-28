@@ -30,6 +30,8 @@ float ToonShadowStrength < string UIGroup = "Shadow"; float UIMin = 0.0; float U
 Texture2D ToonMaskMap < string UIGroup = "Mask"; string ResourceName = ""; string UIWidget = "FilePicker"; string ResourceType = "2D"; int UIOrder = 20; >;
 bool ToonMaskMapEnabled < string UIGroup = "Mask"; int UIOrder = 21; > = false;
 bool VertexMaskEnabled < string UIGroup = "Mask"; string UIName = "Vertex Mask Enabled (tdToonMask)"; int UIOrder = 22; > = false;
+// マスクのチャンネル単位ペイント中だけ使う（Maya プレビュー専用）: 0 = なし / 1..4 = R G B A を作業用カラーセット（COLOR1）の値で置き換える
+int MaskEditChannel < string UIGroup = "Mask"; string UIName = "Mask Edit Channel"; string UIFieldNames = "None:R:G:B:A"; int UIOrder = 23; > = 0;
 
 float4 ToonTintColor < string UIGroup = "Tint"; string UIWidget = "ColorPicker"; int UIOrder = 30; > = {1.0, 0.6, 0.6, 1.0};
 float ToonTintStrength < string UIGroup = "Tint"; float UIMin = 0.0; float UIMax = 1.0; int UIOrder = 31; > = 0.0;
@@ -65,6 +67,7 @@ struct VSIn
     float2 uv       : TEXCOORD0;
     float2 uv2      : TEXCOORD2; // tdSmoothNormal（八面体エンコード・接空間）
     float4 color    : COLOR0;    // tdToonMask
+    float4 color1   : COLOR1;    // tdToonMaskEdit（チャンネル単位ペイントの作業用）
 };
 
 struct VSOut
@@ -79,9 +82,12 @@ struct VSOut
 
 static const float4 kWhite = float4(1.0, 1.0, 1.0, 1.0);
 
-float4 VertexMask(float4 vertexColor)
+float4 VertexMask(float4 vertexColor, float4 editColor)
 {
-    return VertexMaskEnabled ? vertexColor : kWhite;
+    float4 m = VertexMaskEnabled ? vertexColor : kWhite;
+    // 作業用カラーセットは白黒で塗る。動的添字への代入は不可なので選択ベクトルで合成する
+    float4 sel = float4(MaskEditChannel == 1, MaskEditChannel == 2, MaskEditChannel == 3, MaskEditChannel == 4);
+    return lerp(m, editColor.rrrr, sel);
 }
 
 float4 MaskMapSample(float2 uv)
@@ -111,7 +117,7 @@ VSOut VS_Main(VSIn v)
     o.positionWS = mul(p, gWorld).xyz;
     o.normalWS = normalize(mul(float4(v.normal, 0.0), gWIT).xyz);
     o.uv = v.uv;
-    o.vertexMask = VertexMask(v.color);
+    o.vertexMask = VertexMask(v.color, v.color1);
     o.uv2 = v.uv2;
     return o;
 }
@@ -166,7 +172,7 @@ VSOut VS_Outline(VSIn v)
         float3 tangentWS = normalize(mul(float4(v.tangent.xyz, 0.0), gWorld).xyz);
         n = Toon_SmoothNormalWS(v.uv2, normalWS, tangentWS, v.tangent.w < 0.0 ? -1.0 : 1.0);
     }
-    float4 mask = Toon_CombineMask(VertexMask(v.color), MaskMapSampleLevel0(v.uv));
+    float4 mask = Toon_CombineMask(VertexMask(v.color, v.color1), MaskMapSampleLevel0(v.uv));
     float4 clip = mul(p, gWVP);
     float2 nClip = mul(float4(n, 0.0), gVP).xy;
     clip.xy += Toon_OutlineClipOffset(nClip, ToonOutlineWidth, mask, clip.w, gViewportPixelSize);

@@ -76,8 +76,23 @@
 <tr><td>スムーズ法線を使う</td><td>角ばった所で線が割れないようにする（1 = 使う）</td><td>スムーズ法線の作成は<span class="soon">準備中</span>。作成前は 1 でも普通の法線で描きます</td></tr>
 </table>
 
-<h2 id="mask">Toon マスク（頂点カラーで塗る）<span class="soon">準備中</span></h2>
-<p>「首の下はいつも影」「頬の線は描かない」のような<strong>場所ごとの指定</strong>は、モデルの頂点カラーに塗って指定します。Maya の Paint Vertex Color Tool でモデルに直接塗れて、<strong>塗った瞬間にプレビューに反映</strong>されます（塗る機能は準備中）。</p>
+<h2 id="mask">Toon マスク（頂点カラーで塗る）</h2>
+<p>「首の下はいつも影」「頬の線は描かない」のような<strong>場所ごとの指定</strong>は、モデルの頂点カラーに塗って指定します。<strong>塗った瞬間にプレビューに反映</strong>されます。</p>
+
+<h3>塗り方（部位タブの下「Toon マスク」）</h3>
+<ol>
+<li>部位タブの表で<strong>部位を選ぶ</strong>（選ばない場合は Maya で選択中のメッシュが対象）</li>
+<li><strong>マスク初期化</strong>（初回だけ。全体が白 = 何もしない状態で作られます）</li>
+<li>塗りたいチャンネルのボタン <strong>R / G / B / A</strong> を押す → Maya の Paint Vertex Color Tool が<strong>黒</strong>で起動します</li>
+<li>モデルに塗る（戻したい所は白で塗る）。塗っている最中からプレビューに反映されます</li>
+<li>終わったら <strong>確定</strong>（やめる場合は <strong>キャンセル</strong>）</li>
+</ol>
+<div class="tip">
+右の <strong>表示</strong> を「R だけ（白黒）」などにすると、そのチャンネルだけを白黒で確認できます。塗り残しや塗りすぎの確認に便利です。
+</div>
+<div class="warn">
+1 回に塗れるのは 1 チャンネルだけです（R を塗っている間に G を押すと、R を確定してから G に切り替わります）。
+</div>
 
 <div class="tip">
 <strong>ルールは 1 つだけ: 「白 = 何もしない」。効かせたい所を黒く塗る。</strong><br>

@@ -160,6 +160,21 @@ def run() -> None:
     check("preview.json からライトの向きを復元", saved.exists() and preview.environment_state()["lightEuler"] == (10.0, 123.0),
           str(preview.environment_state()["lightEuler"]))
 
+    # ---- Toon マスク（頂点カラー）
+    from tdrive_toon import mask
+
+    face_meshes = s.meshes_for("face")
+    created = s.init_mask("face")
+    shape = mask._shapes(face_meshes)[0]
+    check("マスク初期化: tdToonMask が白で作られる",
+          created and all(v == 1.0 for ch in mask.CHANNELS for v in mask.read_channel(shape, ch)))
+    check("マスク初期化は冪等", s.init_mask("face") == [])
+    n = len(mask.read_channel(shape, "R"))
+    mask.write_channel(shape, "G", [0.0] * n)
+    check("チャンネル書き込み: G だけ変わり R/B/A は白のまま",
+          all(v == 0.0 for v in mask.read_channel(shape, "G"))
+          and all(v == 1.0 for ch in "RBA" for v in mask.read_channel(shape, ch)))
+
     # 後片付け
     preview.delete_all()
     check("delete_all: プレビューノードが残らない", not preview.preview_shaders())

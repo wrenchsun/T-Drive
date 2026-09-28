@@ -182,6 +182,37 @@ class Session:
         targets = [m for mat in self.require()["parts"][part]["materials"] for m in meshes.get(mat, [])]
         cmds.select(targets, replace=True)
 
+    # ------------------------------------------------------------ Toon マスク（頂点カラー）
+    def meshes_for(self, target: str | None) -> list[str]:
+        """target（部位 / マテリアル）のメッシュ。None なら選択中のメッシュ。"""
+        if target is None:
+            return cmds.ls(selection=True, long=True, type="transform") or []
+        scene = preview.scene_materials()
+        return sorted({m for mat in self.materials_of(target) for m in scene.get(mat, [])})
+
+    def init_mask(self, target: str | None = None) -> list[str]:
+        from . import mask
+
+        created = mask.init(self.meshes_for(target))
+        if self.look is not None and preview.is_active():
+            self.show(self.shown)  # 頂点マスクの有効 / 無効を更新
+        return created
+
+    def begin_mask_paint(self, channel: str, target: str | None = None) -> None:
+        from . import mask
+
+        mask.begin_paint(self.meshes_for(target), channel)
+        if self.look is not None:
+            self.show(self.shown)
+            mask._set_edit_channel(mask.CHANNELS.index(channel) + 1)
+        self._changed(dirty=False)
+
+    def end_mask_paint(self, commit: bool = True) -> None:
+        from . import mask
+
+        mask.commit() if commit else mask.cancel()
+        self._changed(dirty=False)
+
     # ------------------------------------------------------------ 編集
     def materials_of(self, target: str) -> list[str]:
         """target は部位名かマテリアル名。"""
