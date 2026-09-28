@@ -221,6 +221,19 @@ class _Override(omr.MRenderOverride):
 
 _override: _Override | None = None
 
+# Maya は登録した Override の Python オブジェクトを参照として保持しない。モジュールが捨てられても（ツールのリロード）
+# オブジェクトが解放されないよう、リロードの影響を受けない場所（maya.api.OpenMayaRender モジュール）にも参照を置く。
+# 解放済みのオブジェクトを Maya が触ると python311.dll で落ちる（2026-09-28）
+_KEEPALIVE_ATTR = "_tdrive_toon_render_overrides"
+
+
+def _keepalive(ov: "_Override") -> None:
+    held = getattr(omr, _KEEPALIVE_ATTR, None)
+    if held is None:
+        held = []
+        setattr(omr, _KEEPALIVE_ATTR, held)
+    held.append(ov)
+
 
 def line_radius(width_px: float, screen_height: float) -> float:
     """docs/03 §10.2（Toon_LineRadius と同じ）: 境界の両側に r 画素ずつ。"""
@@ -235,6 +248,7 @@ def register() -> None:
         _release_registered(old)
         omr.MRenderer.deregisterOverride(old)
     _override = _Override()
+    _keepalive(_override)
     omr.MRenderer.registerOverride(_override)
 
 

@@ -26,6 +26,15 @@ if old_ui is not None:
     if getattr(old_ui, "_window", None) is not None:
         old_ui._window.detach()  # 古いエディタの変更通知・タイマーを止める
 
+# Maya に登録した Python オブジェクト（Render Override）は、モジュールを捨てる前に登録を外す。
+# 外さないと古いモジュールと一緒にオブジェクトが解放され、Maya が解放済みのメモリを触って落ちる（2026-09-28 のクラッシュ）
+old_screen_line = sys.modules.get("tdrive_toon.screen_line")
+if old_screen_line is not None:
+    try:
+        old_screen_line.unregister()
+    except Exception as exc:  # noqa: BLE001  リロード自体は続ける
+        print(f"[T-Drive] 画面上の線の Override の登録解除に失敗: {exc}")
+
 for name in sorted([m for m in sys.modules if m == "tdrive_toon" or m.startswith("tdrive_toon.")], reverse=True):
     del sys.modules[name]
 
