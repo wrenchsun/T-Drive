@@ -108,6 +108,13 @@ float2 Toon_MatCapUV(float3 normalVS)
     return normalVS.xy * 0.5 + 0.5;
 }
 
+// T-22: ビュー空間で中心の奥行きへ寄せる（xy はそのまま = 遠近感が弱まる）。k = 量 × 効かせ具合
+float3 Toon_DepthCompressVS(float3 positionVS, float3 pivotVS, float k)
+{
+    positionVS.z = lerp(positionVS.z, pivotVS.z, saturate(k));
+    return positionVS;
+}
+
 // T-26: 線の太さの方向依存（影側・下向きの面を太く）
 float Toon_OutlineDirectionFactor(float3 normalWS, float3 L, float shadowSide, float bottom)
 {

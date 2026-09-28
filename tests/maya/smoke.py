@@ -269,6 +269,23 @@ def run() -> None:
     check("#8 m 単位のシーンでは換算係数 1", environment.units_per_meter() == 1.0)
     cmds.currentUnit(linear=unit)
 
+    # ---- Phase 3: キャラクター単位の設定（characterSettings）
+    check("characterSettings の既定値がある", s.setting("contactShadow.radius") == 0.25)
+    s.set_setting("innerLine.parts", ["hair"])
+    s.rename_part("hair", "kami2")
+    check("部位名の変更にインナーライン対象が追従", s.setting("innerLine.parts") == ["kami2"])
+    s.undo()
+    s.set_setting("expressions", {"blush": [{"material": "face", "property": "_ToonTintStrength", "min": 0.0, "max": 0.8}]})
+    rows = s.preview_expression("blush", 0.5)
+    check("表情プレビューは対応表どおりの値で、Look には保存されない",
+          rows == [("face", "_ToonTintStrength", 0.4)] and s.look["materials"]["face"]["specific"]["_ToonTintStrength"] == 0.0)
+    s.checkpoint()
+    s.set_value("face", "_ToonDepthCompressWeight", 1.0)
+    s.set_setting("depthCompression", 0.5)
+    st = preview.environment_state()
+    check("奥行き圧縮: 量と中心（顔のメッシュ）がプレビューに渡る", st["depthCompression"] == 0.5 and st["depthPivot"] != (0.0, 0.0, 0.0))
+    check("characterSettings を含めて Look が検証を通る", look.validate(s.look) == [], str(look.validate(s.look)))
+
     # ---- 同名メッシュ（キャラクターの複製）があっても動く（2026-09-28 不具合: Toon に戻らない）
     dup_group = cmds.group(empty=True, name="tdDupTest")
     dup = cmds.duplicate(s.meshes_for("cloth")[0])[0]  # 同じ短い名前（Leg 等）のメッシュが 2 つになる

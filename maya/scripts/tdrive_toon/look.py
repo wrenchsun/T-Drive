@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -32,7 +33,31 @@ def new_look(character: str, model: str) -> dict[str, Any]:
         "parts": {},
         "materials": {},
         "variants": {},
+        SETTINGS: copy.deepcopy(CHARACTER_DEFAULTS),
     }
+
+
+# キャラクター単位の設定の既定値（docs/02 §4.1）
+CHARACTER_DEFAULTS: dict[str, Any] = {
+    "light": {"smoothing": 0.15, "hysteresisDeg": 3.0},
+    "stencil": {"enabled": False},
+    "innerLine": {"enabled": False, "width": 1.0, "color": [0.2, 0.15, 0.15, 1.0], "parts": []},
+    "contactShadow": {"enabled": False, "radius": 0.25, "strength": 0.5},
+    "viewCorrection": {"front": "", "threeQuarter": "", "side": ""},
+    "depthCompression": 0.0,
+    "expressions": {},
+}
+EXPRESSION_NAME = re.compile(r"^[A-Za-z0-9_]+$")
+SETTINGS = "characterSettings"  # トップレベルの "character" はキャラクター ID
+
+
+def _fill_defaults(target: dict[str, Any], defaults: dict[str, Any], prefix: str, added: set[str]) -> None:
+    for k, v in defaults.items():
+        if k not in target:
+            target[k] = copy.deepcopy(v)
+            added.add(f"{prefix}{k}")
+        elif isinstance(v, dict) and isinstance(target[k], dict) and k != "expressions":
+            _fill_defaults(target[k], v, f"{prefix}{k}.", added)
 
 
 def upgrade(look: dict[str, Any]) -> list[str]:
@@ -41,6 +66,7 @@ def upgrade(look: dict[str, Any]) -> list[str]:
     追加のみの自動マイグレーション（docs/06 §2 の MINOR）。保存すると補った値もファイルに入る。
     """
     added = set()
+    _fill_defaults(look.setdefault(SETTINGS, {}), CHARACTER_DEFAULTS, f"{SETTINGS}.", added)
     defaults = params.default_specific()
     for mat in look.get("materials", {}).values():
         spec = mat.setdefault("specific", {})
@@ -106,7 +132,78 @@ def validate(look: dict[str, Any]) -> list[str]:
             if mat_name not in mats:
                 errors.append(f"variants.{var_name} が未定義のマテリアル {mat_name} を上書き")
             errors += _validate_material(f"variants.{var_name}.{mat_name}", ov, partial=True)
+    if SETTINGS in look:
+        errors += _validate_settings(look)
     return errors
+
+
+def _validate_settings(look: dict[str, Any]) -> list[str]:
+    """characterSettings の検証（docs/02 §4.1）。"""
+    cs = look[SETTINGS]
+    w = SETTINGS
+    errors = []
+
+    def num(path: str, v: Any, lo: float | None = None, hi: float | None = None) -> None:
+        if not isinstance(v, (int, float)) or isinstance(v, bool):
+            errors.append(f"{w}.{path} は数値")
+        elif (lo is not None and v < lo) or (hi is not None and v > hi):
+            errors.append(f"{w}.{path} は {lo}〜{hi} の範囲")
+
+    light = cs.get("light", {})
+    num("light.smoothing", light.get("smoothing", 0), 0, None)
+    num("light.hysteresisDeg", light.get("hysteresisDeg", 0), 0, None)
+    il = cs.get("innerLine", {})
+    num("innerLine.width", il.get("width", 1), 0, None)
+    color = il.get("color", [0, 0, 0, 1])
+    if not (isinstance(color, list) and len(color) == 4):
+        errors.append(f"{w}.innerLine.color は [r, g, b, a]")
+    for part in il.get("parts", []):
+        if part not in look.get("parts", {}):
+            errors.append(f"{w}.innerLine.parts に未登録の部位 {part}")
+    cs_shadow = cs.get("contactShadow", {})
+    num("contactShadow.radius", cs_shadow.get("radius", 0.25), 0, None)
+    num("contactShadow.strength", cs_shadow.get("strength", 0.5), 0, 1)
+    num("depthCompression", cs.get("depthCompression", 0), 0, 1)
+    for key, v in cs.get("viewCorrection", {}).items():
+        if not isinstance(v, str):
+            errors.append(f"{w}.viewCorrection.{key} は文字列（BlendShape 名）")
+    for name, entries in cs.get("expressions", {}).items():
+        if not EXPRESSION_NAME.match(name):
+            errors.append(f"{w}.expressions の名前 {name} は英数字と _ のみ")
+        for i, e in enumerate(entries):
+            where = f"{w}.expressions.{name}[{i}]"
+            if e.get("material") not in look.get("materials", {}):
+                errors.append(f"{where}.material が未登録: {e.get('material')}")
+            p = params.PARAMS_BY_UNITY.get(e.get("property"))
+            if p is None or p.kind != params.FLOAT:
+                errors.append(f"{where}.property は Float のパラメータ契約（_Toon*）: {e.get('property')}")
+            num(f"expressions.{name}[{i}].min", e.get("min", 0))
+            num(f"expressions.{name}[{i}].max", e.get("max", 1))
+    return errors
+
+
+def get_setting(look: dict[str, Any], path: str) -> Any:
+    """characterSettings の値を "innerLine.width" のようなパスで取る。"""
+    node: Any = look.get(SETTINGS, {})
+    for key in path.split("."):
+        node = node[key]
+    return node
+
+
+def set_setting(look: dict[str, Any], path: str, value: Any) -> None:
+    node = look.setdefault(SETTINGS, copy.deepcopy(CHARACTER_DEFAULTS))
+    keys = path.split(".")
+    for key in keys[:-1]:
+        node = node.setdefault(key, {})
+    node[keys[-1]] = copy.deepcopy(value)
+
+
+def expression_values(look: dict[str, Any], name: str, t: float) -> list[tuple[str, str, float]]:
+    """表情パラメータ name を t（0–1）にしたときの (material, property, 値) の一覧（T-25）。"""
+    out = []
+    for e in look.get(SETTINGS, {}).get("expressions", {}).get(name, []):
+        out.append((e["material"], e["property"], e["min"] + (e["max"] - e["min"]) * t))
+    return out
 
 
 def _validate_material(where: str, mat: dict[str, Any], partial: bool) -> list[str]:

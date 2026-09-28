@@ -96,20 +96,7 @@ T-31〜T-39 はコンポーネント（例: `ToonFollowThrough` = 階層遅延�
 
 ### 4.2 look.json の拡張（schemaVersion 1 のまま追加 = MINOR）
 
-```jsonc
-"character": {
-  "light":          { "smoothing": 0.15, "hysteresisDeg": 3.0 },                 // T-17
-  "stencil":        { "enabled": true },                                           // T-24（Ref/Comp はロールから自動）
-  "innerLine":      { "enabled": false, "width": 1.0, "color": [0.2, 0.15, 0.15, 1],
-                      "parts": { "cloth": true, "face": false } },                 // T-23
-  "contactShadow":  { "enabled": false, "radius": 0.25, "strength": 0.5 },        // T-29
-  "viewCorrection": { "front": "", "threeQuarter": "", "side": "" },               // T-20（BlendShape 名）
-  "depthCompression": 0.0,                                                         // T-22
-  "expressions": {                                                                 // T-25
-    "blush": [ { "material": "face", "property": "_ToonTintStrength", "min": 0, "max": 1 } ]
-  }
-}
-```
+項目・既定値・検証は [02](02_look_definition_spec.md) §4.1（`characterSettings` セクション）が正。
 
 - Maya ツールでも同じ項目を編集できるようにする。プレビューできるものは Maya でも再現し、できないものは「Unity でのみ」と表示する（[09](09_render_parity.md) §4）
 

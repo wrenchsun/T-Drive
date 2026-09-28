@@ -161,6 +161,8 @@ class Session:
     def unregister(self, part: str) -> None:
         lk = self.require()
         lk["parts"].pop(part, None)
+        il = lk.get(look.SETTINGS, {}).get("innerLine", {})
+        il["parts"] = [p for p in il.get("parts", []) if p != part]  # インナーライン対象からも外す
         self._changed()
 
     @undoable
@@ -185,6 +187,8 @@ class Session:
         if new in lk["parts"]:
             raise ValueError(f"部位 '{new}' は既にあります")
         lk["parts"] = {(new if k == old else k): v for k, v in lk["parts"].items()}
+        il = lk.get(look.SETTINGS, {}).get("innerLine", {})
+        il["parts"] = [new if p == old else p for p in il.get("parts", [])]  # インナーライン対象の部位名も追従
         self._changed()
 
     @undoable
@@ -209,6 +213,45 @@ class Session:
         meshes = preview.scene_materials()
         targets = [m for mat in self.require()["parts"][part]["materials"] for m in meshes.get(mat, [])]
         cmds.select(targets, replace=True)
+
+    # ------------------------------------------------------------ キャラクター単位の設定（docs/02 §4.1）
+    def setting(self, path: str) -> Any:
+        return look.get_setting(self.require(), path)
+
+    @undoable
+    def set_setting(self, path: str, value: Any, notify: bool = True) -> None:
+        look.set_setting(self.require(), path, value)
+        self.dirty = True
+        if path == "depthCompression":
+            self._sync_character_preview()
+        if notify:
+            self._changed()
+
+    def _sync_character_preview(self) -> None:
+        """キャラクター単位の設定のうち Maya でプレビューできるもの（奥行き圧縮）をプレビューへ反映する。"""
+        lk = self.look
+        if lk is None:
+            return
+        amount = float(lk.get(look.SETTINGS, {}).get("depthCompression", 0.0))
+        resolved = look.resolve(lk, self.shown)
+        weighted = [m for m, v in resolved.items() if v["specific"].get("_ToonDepthCompressWeight", 0) > 0]
+        scene = preview.scene_materials()
+        meshes = [x for m in weighted for x in scene.get(m, [])]
+        pivot = None
+        if meshes:
+            b = cmds.exactWorldBoundingBox(meshes)
+            pivot = ((b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2)
+        preview.set_depth_compression(amount, pivot)
+
+    def preview_expression(self, name: str, t: float) -> list[tuple[str, str, float]]:
+        """表情パラメータを t（0–1）にしたときの見た目をプレビューする（Look には保存しない。T-25）。
+
+        対応表の値をプレビューに流すだけなので、表示を切り替える（show）と Look の値に戻る。
+        """
+        rows = look.expression_values(self.require(), name, t)
+        for material, prop, value in rows:
+            preview.apply_value(material, prop, value)
+        return rows
 
     # ------------------------------------------------------------ Toon マスク（頂点カラー）
     def meshes_for(self, target: str | None) -> list[str]:
@@ -289,6 +332,8 @@ class Session:
         self.require()
         for mat in self.materials_of(target):
             self._set_one(mat, key, value)
+        if key == "_ToonDepthCompressWeight":
+            self._sync_character_preview()  # 効かせる部位が変わると中心も変わる
         if notify:
             self._changed()
 
@@ -423,6 +468,7 @@ class Session:
             # リロード直後などで環境未設定なら既定のプロファイルを当てる（色管理・トーンマップ・ライト）
             preview.use_profile(name)
         failed = preview.enable(look.resolve(lk, variant))
+        self._sync_character_preview()
         if failed:
             print(f"[T-Drive] シーンに存在しないマテリアル: {', '.join(failed)}")
         self._changed(dirty=False)

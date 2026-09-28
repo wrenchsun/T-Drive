@@ -98,6 +98,8 @@ SPECIFIC_PARAMS: tuple[Param, ...] = (
     # --- MatCap T-30（未設定 = 黒 = 何も足さない） ---
     Param("_ToonMatCapMap", TEXTURE, None, "MatCap", "MatCap テクスチャ"),
     Param("_ToonMatCapStrength", FLOAT, 0.0, "MatCap", "MatCap の強さ", 0.0, 1.0),
+    # --- 奥行き圧縮 T-22（量はキャラクター単位 characterSettings.depthCompression） ---
+    Param("_ToonDepthCompressWeight", FLOAT, 0.0, "Depth", "奥行き圧縮の効かせ具合", 0.0, 1.0),
 )
 
 # 名前だけ先に確定しているパラメータ（docs/03 §7.3）。追加時にここから SPECIFIC_PARAMS へ移す

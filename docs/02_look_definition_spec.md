@@ -78,6 +78,40 @@
 - 解決規則: `resolve(v) = base に overrides[v] を common/specific はキー単位でマージ、renderQueueOffset は置換`
 - 「採用 (promote)」: バリアントの解決結果を base に確定し、バリアントを削除
 
+## 4.1 characterSettings（キャラクター単位の設定、2026-09-28 追加 = MINOR）
+
+マテリアルでなくキャラクター全体に掛かる設定。主に T-Drive for Unity のコンポーネント・Renderer Feature が使う（[08](08_unity_port_plan.md) §3）。
+Maya でプレビューできない項目もここで編集して持つ（エディタでは「Unity でのみ」と表示）。
+
+```jsonc
+"characterSettings": {
+  "light":          { "smoothing": 0.15, "hysteresisDeg": 3.0 },         // T-17 影の安定化（秒 / 度）   Unity のみ
+  "stencil":        { "enabled": false },                                 // T-24 髪越し表示（ステンシル）Unity のみ
+  "innerLine":      { "enabled": false, "width": 1.0,                    // T-23 画面上の内側の線         Unity のみ
+                      "color": [0.2, 0.15, 0.15, 1.0], "parts": ["cloth"] },
+  "contactShadow":  { "enabled": false, "radius": 0.25, "strength": 0.5 },// T-29 接地影（m / 0–1）       Unity のみ
+  "viewCorrection": { "front": "", "threeQuarter": "", "side": "" },     // T-20 カメラ角度補正の BlendShape 名
+  "depthCompression": 0.0,                                                // T-22 奥行き圧縮（0–1）
+  "expressions": {                                                        // T-25 表情パラメータ（0–1 の入力 → 値）
+    "blush": [ { "material": "face", "property": "_ToonTintStrength", "min": 0.0, "max": 1.0 } ]
+  }
+}
+```
+
+| 項目 | 検証 |
+|---|---|
+| light | smoothing ≥ 0、hysteresisDeg ≥ 0 |
+| innerLine.parts | 登録済みの部位名のみ |
+| innerLine.color | [r, g, b, a]（sRGB 値） |
+| contactShadow | radius > 0、strength 0–1 |
+| viewCorrection | 文字列（空 = 使わない） |
+| depthCompression | 0–1 |
+| expressions | 名前は英数字と `_`。各項目の material は登録済みマテリアル、property は Float 型のパラメータ契約（`_Toon*`） |
+
+- セクション名は `characterSettings`（トップレベルの `character` はキャラクター ID なので別名にする）
+- 読み込み時に `characterSettings` が無ければ既定値で補う（`look.upgrade`）
+- バリアント（A/B）の対象外（キャラクター単位の設定は base のみ）
+
 ## 5. ロール
 
 | ロール | 表示名 | 既定 RQ オフセット | 主なプリセット |

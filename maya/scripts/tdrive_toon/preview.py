@@ -29,6 +29,8 @@ _env: dict[str, Any] = {
     "lightDir": envmath.light_dir_to_light_maya((35.0, 180.0, 0.0)),
     "lightColor": (1.0, 1.0, 1.0),
     "tonemap": 0,
+    "depthCompression": 0.0,  # T-22 キャラクター単位（Look の characterSettings から session が設定）
+    "depthPivot": (0.0, 0.0, 0.0),
 }
 
 
@@ -486,6 +488,16 @@ def apply_environment() -> None:
         _set(shader, "PreviewTonemap", int(_env["tonemap"]))
         # m で定義したパラメータ（手前に出す量・線の距離補正）をシーン単位へ換算する係数
         _set(shader, "PreviewUnitScale", environment.units_per_meter())
+        _set(shader, "PreviewDepthCompression", float(_env["depthCompression"]))
+        _set(shader, "PreviewDepthPivot", list(_env["depthPivot"]))
+
+
+def set_depth_compression(amount: float, pivot: tuple[float, float, float] | None = None) -> None:
+    """T-22 奥行き圧縮の量（キャラクター単位）と中心（ワールド）をプレビューに設定する。"""
+    _env["depthCompression"] = float(amount)
+    if pivot is not None:
+        _env["depthPivot"] = tuple(pivot)
+    apply_environment()
 
 
 # ---------------------------------------------------------------- キャプチャ

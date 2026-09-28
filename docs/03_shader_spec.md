@@ -95,6 +95,19 @@ clip.xy += dirPx * px / (screenSize / 2) * clip.w          // ピクセル → N
   px  *= lerp(1, _ToonOutlineBottom, saturate(-n_world.y)) // 下向きの面ほど _ToonOutlineBottom 倍
   ```
 
+## 3.2 奥行き圧縮（P2 T-22: 顔を「ぺったんこ」にして 2D 作画に寄せる）
+
+```
+posVS    = View * posWS ; pivotVS = View * pivotWS                // ビュー空間
+k        = depthCompression * _ToonDepthCompressWeight           // キャラクター単位の量 × マテリアル単位の効かせ具合
+posVS.z  = lerp(posVS.z, pivotVS.z, k)                           // 中心の奥行きへ寄せる（xy はそのまま → 遠近感が弱まる）
+posWS    = ViewInverse * posVS
+```
+
+- `depthCompression`（0–1）と中心 `pivotWS` はキャラクター単位（Look の `characterSettings.depthCompression`）。Unity では `ToonCharacter` が頭のボーン位置を中心にしてグローバル / キャラクター定数で渡す。Maya プレビューでは効かせるマテリアル（重み > 0）のメッシュのバウンディングボックス中心
+- `_ToonDepthCompressWeight`（マテリアル単位、既定 0 = 効かない）で「顔だけ」などを選ぶ
+- 本体・アウトラインの両パスに適用（デプスオフセットの前）
+
 ## 3.1 デプスオフセット（P1 T-09: 眉・目を髪の上に）
 
 ```
@@ -171,6 +184,7 @@ Maya の uniform 名は先頭の `_` を除いた名前。定義の実体は `ma
 | `_ToonOutlineBottom` | Float | 1 | 0–3 | 下向きの面の線の太さ倍率（P2） | T-26 |
 | `_ToonMatCapMap` | Texture | black | | MatCap（球面）テクスチャ（未設定 = 足さない）（P2） | T-30 |
 | `_ToonMatCapStrength` | Float | 0 | 0–1 | MatCap の強さ（P2） | T-30 |
+| `_ToonDepthCompressWeight` | Float | 0 | 0–1 | 奥行き圧縮の効かせ具合（量はキャラクター単位 `depthCompression`）（P2） | T-22 |
 | `_ToonShadeColor` | Color | (0.78, 0.72, 0.86, 1) | | 影の乗算色 | T-01 |
 | `_ToonShadeThreshold` | Float | 0.5 | 0–1 | 影の境界 | T-01 |
 | `_ToonShadeFeather` | Float | 0.02 | 0.001–0.5 | 境界のぼかし幅 | T-01 |

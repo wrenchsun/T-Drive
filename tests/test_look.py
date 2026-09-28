@@ -109,3 +109,28 @@ def test_contract_matches_shader_spec_doc():
 
 def test_reserved_names_not_in_use():
     assert not set(params.RESERVED_NAMES) & set(params.PARAMS_BY_UNITY)
+
+
+def test_character_settings_defaults_and_validation():
+    lk = _sample()
+    assert lk[look.SETTINGS]["stencil"]["enabled"] is False
+    assert lk["character"] == "unitychan"  # キャラクター ID とは別のセクション
+    look.set_setting(lk, "innerLine.parts", ["hair"])
+    look.set_setting(lk, "expressions", {"blush": [{"material": "face", "property": "_ToonTintStrength", "min": 0.0, "max": 0.8}]})
+    assert look.validate(lk) == []
+    assert look.expression_values(lk, "blush", 0.5) == [("face", "_ToonTintStrength", 0.4)]
+    look.set_setting(lk, "innerLine.parts", ["nope"])
+    look.set_setting(lk, "expressions", {"bad name": [{"material": "x", "property": "_ToonTintColor", "min": 0, "max": 1}]})
+    errors = look.validate(lk)
+    assert any("未登録の部位" in e for e in errors)
+    assert any("英数字" in e for e in errors)
+    assert any("material が未登録" in e for e in errors)
+    assert any("Float のパラメータ契約" in e for e in errors)
+
+
+def test_old_look_gets_character_settings(tmp_path):
+    lk = _sample()
+    del lk[look.SETTINGS]
+    p = tmp_path / "old.json"
+    p.write_text(look.dumps(lk), encoding="utf-8")
+    assert look.load(p)[look.SETTINGS]["contactShadow"]["radius"] == 0.25

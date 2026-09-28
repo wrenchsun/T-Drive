@@ -45,6 +45,7 @@ def test_core_compiles_standalone(tmp_path):
         "  col = Toon_ColorCorrect(col, 1.2, 0.9);\n"
         "  col.xy += Toon_MatCapUV(normalize(n)) * 0.001;\n"
         "  col *= Toon_OutlineDirectionFactor(normalize(n), float3(0,1,0), 1.5, 1.2);\n"
+        "  col += Toon_DepthCompressVS(c.xyz, float3(0,0,-3), 0.5) * 0.001;\n"
         "  return float4(Toon_Tonemap(col, TOON_TONEMAP_NEUTRAL), 1);\n"
         "}\n",
         encoding="utf-8",

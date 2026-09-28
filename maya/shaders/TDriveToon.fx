@@ -73,6 +73,10 @@ float3 PreviewLightColor < string UIGroup = "Preview"; string UIWidget = "ColorP
 int PreviewTonemap < string UIGroup = "Preview"; string UIName = "Tonemap"; string UIFieldNames = "None:Neutral"; int UIOrder = 92; > = 1;
 // Maya の長さ単位（cm）/ Unity 単位（m）。m で定義したパラメータ（DepthOffset・距離）の換算に使う
 float PreviewUnitScale < string UIGroup = "Preview"; int UIOrder = 94; > = 100.0;
+// T-22 奥行き圧縮のキャラクター単位の量と中心（Unity では ToonCharacter が渡す）
+float PreviewDepthCompression < string UIGroup = "Preview"; float UIMin = 0.0; float UIMax = 1.0; int UIOrder = 95; > = 0.0;
+float3 PreviewDepthPivot < string UIGroup = "Preview"; int UIOrder = 96; > = {0.0, 0.0, 0.0};
+float ToonDepthCompressWeight < string UIGroup = "Depth"; float UIMin = 0.0; float UIMax = 1.0; int UIOrder = 52; > = 0.0;
 static const float3 kUp = float3(0.0, 1.0, 0.0);
 // チャンネル単体表示・不具合調査用（docs/05 §3「チャンネル単体表示」）
 int PreviewDebug < string UIGroup = "Preview"; string UIName = "Debug View"; string UIFieldNames = "Off:UV0:Normal:Lit:Mask R:Mask G:Mask B:Mask A:Base Map:Smooth Normal UV2"; int UIOrder = 93; > = 0;
@@ -144,8 +148,16 @@ float3 CameraPosWS()
 }
 
 // T-09: 視線方向にカメラへ寄せたワールド位置（本体・アウトライン共通）
+// T-22 奥行き圧縮 → T-09 デプスオフセットの順に適用したワールド位置（本体・アウトライン共通）
 float3 OffsetPositionWS(float3 positionWS)
 {
+    float k = PreviewDepthCompression * ToonDepthCompressWeight;
+    if (k > 0.0)
+    {
+        float3 posVS = mul(float4(positionWS, 1.0), gView).xyz;
+        float3 pivotVS = mul(float4(PreviewDepthPivot, 1.0), gView).xyz;
+        positionWS = mul(float4(Toon_DepthCompressVS(posVS, pivotVS, k), 1.0), gViewI).xyz;
+    }
     return Toon_DepthOffsetWS(positionWS, CameraPosWS(), ToonDepthOffset * PreviewUnitScale);
 }
 
