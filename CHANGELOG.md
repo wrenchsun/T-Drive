@@ -5,6 +5,11 @@
 
 ## [Unreleased]
 
+### 互換性
+- （リリース前に記入）
+
+## [0.1.0] - 2026-09-29
+
 ### 追加
 - プロジェクト雛形（.gitignore / .gitattributes（Git LFS）/ VERSION / CLAUDE.md / README）
 - 仕様書一式（docs/00〜09, docs/tasks.md）
