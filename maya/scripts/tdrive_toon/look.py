@@ -45,6 +45,7 @@ CHARACTER_DEFAULTS: dict[str, Any] = {
     "contactShadow": {"enabled": False, "radius": 0.25, "strength": 0.5},
     "viewCorrection": {"mesh": "", "front": "", "threeQuarter": "", "side": ""},
     "depthCompression": 0.0,
+    "faceShadow": {"forward": [0.0, 0.0, 1.0], "right": [-1.0, 0.0, 0.0]},
     "expressions": {},
 }
 EXPRESSION_NAME = re.compile(r"^[A-Za-z0-9_]+$")
@@ -164,6 +165,10 @@ def _validate_settings(look: dict[str, Any]) -> list[str]:
     num("contactShadow.radius", cs_shadow.get("radius", 0.25), 0, None)
     num("contactShadow.strength", cs_shadow.get("strength", 0.5), 0, 1)
     num("depthCompression", cs.get("depthCompression", 0), 0, 1)
+    for key in ("forward", "right"):
+        v = cs.get("faceShadow", {}).get(key, [0, 0, 1])
+        if not (isinstance(v, list) and len(v) == 3 and all(isinstance(c, (int, float)) for c in v)) or (v[0] ** 2 + v[2] ** 2) < 1e-8:
+            errors.append(f"{w}.faceShadow.{key} は水平成分のある [x, y, z]")
     for key, v in cs.get("viewCorrection", {}).items():
         if not isinstance(v, str):
             errors.append(f"{w}.viewCorrection.{key} は文字列（BlendShape 名）")

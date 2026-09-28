@@ -61,6 +61,22 @@ class CharacterTab(QtWidgets.QWidget):
         self.depth = self._spin(f, "量（0〜1）", "depthCompression", 0.0, 1.0, 0.05)
         f.addRow("", QtWidgets.QLabel("効かせる部位は ルックタブ › 手前に出す › 奥行き圧縮の効かせ具合（例: 顔だけ 1）"))
 
+        # ---- SDF 顔影マップ T-21（docs/05 §3.3）
+        box, f = self._group("顔影マップ（SDF。ライトの角度で顔の影を作画どおりに進める）")
+        gen = QtWidgets.QPushButton("マスクから生成…")
+        gen.setToolTip("角度ごとの白黒マスク（face_shadow_000.png, _030 … _180）が入ったフォルダを選ぶ → 顔マテリアルに設定")
+        gen.clicked.connect(self._generate_face_shadow)
+        self.fs_size = QtWidgets.QComboBox()
+        self.fs_size.addItems(["256", "512", "1024"])
+        self.fs_size.setCurrentText("512")
+        row = QtWidgets.QHBoxLayout()
+        row.addWidget(gen)
+        row.addWidget(QtWidgets.QLabel("解像度"))
+        row.addWidget(self.fs_size)
+        row.addStretch(1)
+        f.addRow("", row)
+        f.addRow("", QtWidgets.QLabel("効かせ具合はルックタブ › 顔影マップ（SDF）。顔はキャラクターが +Z（正面）を向いている前提"))
+
         # ---- カメラ角度補正 T-20（docs/05 §3.2）
         box, f = self._group("カメラ角度補正（正面 / 3/4 / 横で顔の形を補正する BlendShape）")
         self.vc_mesh = QtWidgets.QLabel()
@@ -151,6 +167,20 @@ class CharacterTab(QtWidgets.QWidget):
         w.setProperty("path", path)
         f.addRow("", w)
         return w
+
+    def _generate_face_shadow(self) -> None:
+        folder = QtWidgets.QFileDialog.getExistingDirectory(self, "角度別マスクのフォルダ")
+        if not folder:
+            return
+        QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
+        try:
+            path = self.session.generate_face_shadow(folder, int(self.fs_size.currentText()))
+        except Exception as exc:
+            _warn(self, exc)
+            return
+        finally:
+            QtWidgets.QApplication.restoreOverrideCursor()
+        QtWidgets.QMessageBox.information(self, "T-Drive Toon", f"生成して顔に設定しました:\n{path}")
 
     def _vc(self, fn, *args) -> None:
         try:

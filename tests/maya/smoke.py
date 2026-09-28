@@ -314,6 +314,27 @@ def run() -> None:
     check("カメラ角度補正: Look にメッシュ名とターゲット名が入り検証を通る",
           s.setting("viewCorrection.mesh") == "head_back" and look.validate(s.look) == [], str(look.validate(s.look)))
 
+    # ---- Phase 3: SDF 顔影マップ（T-21）
+    import numpy as np
+
+    from tdrive_toon import sdf, sdf_maya
+
+    mask_dir = tmp / "sdf_masks"
+    mask_dir.mkdir()
+    xs = np.arange(64)[None, :].repeat(64, 0)
+    for ang, edge in ((0, 60), (90, 32), (180, 4)):
+        sdf_maya.write_map((xs < edge).astype(float), mask_dir / f"face_shadow_{ang:03d}.png")
+    s.checkpoint()
+    rel = s.generate_face_shadow(str(mask_dir), size=64)
+    ref = sdf.combine([xs < e for e in (60, 32, 4)], [0, 90, 180])
+    img = om.MImage()
+    img.readFromFile(str(mask_dir / "face_shadow_sdf.png"))
+    got = sdf_maya.read_gray(img)[::-1, :]
+    check("顔影マップ: 生成結果が計算どおり（8bit の誤差以内）", float(np.abs(got - ref).max()) < 2 / 255)
+    check("顔影マップ: 顔の部位に設定され効かせ具合が 1 になる",
+          s.value("face", "_ToonFaceShadowMap") == rel and s.value("face", "_ToonFaceShadowWeight") == 1.0)
+    s.undo()
+
     # ---- 同名メッシュ（キャラクターの複製）があっても動く（2026-09-28 不具合: Toon に戻らない）
     dup_group = cmds.group(empty=True, name="tdDupTest")
     dup = cmds.duplicate(s.meshes_for("cloth")[0])[0]  # 同じ短い名前（Leg 等）のメッシュが 2 つになる

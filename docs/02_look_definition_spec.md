@@ -92,6 +92,7 @@ Maya でプレビューできない項目もここで編集して持つ（エデ
   "contactShadow":  { "enabled": false, "radius": 0.25, "strength": 0.5 },// T-29 接地影（m / 0–1）       Unity のみ
   "viewCorrection": { "mesh": "", "front": "", "threeQuarter": "", "side": "" },  // T-20 補正 BlendShape を持つメッシュ名とターゲット名
   "depthCompression": 0.0,                                                // T-22 奥行き圧縮（0–1）
+  "faceShadow":     { "forward": [0, 0, 1], "right": [-1, 0, 0] },       // T-21 顔の正面・右（Maya ワールド。Unity では頭のボーンから）
   "expressions": {                                                        // T-25 表情パラメータ（0–1 の入力 → 値）
     "blush": [ { "material": "face", "property": "_ToonTintStrength", "min": 0.0, "max": 1.0 } ]
   }
@@ -106,6 +107,7 @@ Maya でプレビューできない項目もここで編集して持つ（エデ
 | contactShadow | radius > 0、strength 0–1 |
 | viewCorrection | すべて文字列。mesh = 補正 BlendShape（`tdViewCorrection_<mesh>`）を持つメッシュ名、front / threeQuarter / side = ターゲット名（空 = その角度は使わない） |
 | depthCompression | 0–1 |
+| faceShadow | forward / right は長さのある 3 要素のベクトル（水平成分で使う） |
 | expressions | 名前は英数字と `_`。各項目の material は登録済みマテリアル、property は Float 型のパラメータ契約（`_Toon*`） |
 
 - セクション名は `characterSettings`（トップレベルの `character` はキャラクター ID なので別名にする）

@@ -100,12 +100,13 @@ SPECIFIC_PARAMS: tuple[Param, ...] = (
     Param("_ToonMatCapStrength", FLOAT, 0.0, "MatCap", "MatCap の強さ", 0.0, 1.0),
     # --- 奥行き圧縮 T-22（量はキャラクター単位 characterSettings.depthCompression） ---
     Param("_ToonDepthCompressWeight", FLOAT, 0.0, "Depth", "奥行き圧縮の効かせ具合", 0.0, 1.0),
+    # --- SDF 顔影マップ T-21（顔の向きはキャラクター単位 characterSettings.faceShadow） ---
+    Param("_ToonFaceShadowMap", TEXTURE, None, "FaceShadow", "顔影マップ（SDF、R）"),
+    Param("_ToonFaceShadowWeight", FLOAT, 0.0, "FaceShadow", "顔影マップの効かせ具合", 0.0, 1.0),
 )
 
 # 名前だけ先に確定しているパラメータ（docs/03 §7.3）。追加時にここから SPECIFIC_PARAMS へ移す
-RESERVED_NAMES = (
-    "_ToonFaceShadowMap", "_ToonFaceForward", "_ToonFaceRight",
-)
+RESERVED_NAMES: tuple[str, ...] = ()
 
 PARAMS_BY_UNITY = {p.unity: p for p in SPECIFIC_PARAMS}
 GROUPS = tuple(dict.fromkeys(p.group for p in SPECIFIC_PARAMS))

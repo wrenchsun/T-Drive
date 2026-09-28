@@ -108,6 +108,26 @@ float2 Toon_MatCapUV(float3 normalVS)
     return normalVS.xy * 0.5 + 0.5;
 }
 
+// T-21: SDF 顔影マップ（docs/03 §2.1）。F / R は顔の正面・右（ワールド）、L は表面 → 光源
+float Toon_FaceLightAngle01(float3 F, float3 L)
+{
+    float2 f = normalize(F.xz + float2(1e-6, 0.0));
+    float2 l = normalize(L.xz + float2(1e-6, 0.0));
+    return acos(clamp(dot(f, l), -1.0, 1.0)) / 3.14159265;
+}
+
+float2 Toon_FaceShadowUV(float2 uv, float3 R, float3 L)
+{
+    return dot(R.xz, L.xz) >= 0.0 ? uv : float2(1.0 - uv.x, uv.y);  // マップは「右から照らす」向きで作る
+}
+
+// value = マップの R（明るいままでいられる最大角度）。戻り値は影の強さ・効かせ具合を合成した lit
+float Toon_FaceShadowLit(float lit, float value, float angle01, float feather, float shadowStrength, float weight)
+{
+    float litF = smoothstep(angle01 - feather, angle01 + feather, value);
+    return lerp(lit, lerp(1.0, litF, shadowStrength), weight);
+}
+
 // T-22: ビュー空間で中心の奥行きへ寄せる（xy はそのまま = 遠近感が弱まる）。k = 量 × 効かせ具合
 float3 Toon_DepthCompressVS(float3 positionVS, float3 pivotVS, float k)
 {

@@ -77,6 +77,12 @@ float PreviewUnitScale < string UIGroup = "Preview"; int UIOrder = 94; > = 100.0
 float PreviewDepthCompression < string UIGroup = "Preview"; float UIMin = 0.0; float UIMax = 1.0; int UIOrder = 95; > = 0.0;
 float3 PreviewDepthPivot < string UIGroup = "Preview"; int UIOrder = 96; > = {0.0, 0.0, 0.0};
 float ToonDepthCompressWeight < string UIGroup = "Depth"; float UIMin = 0.0; float UIMax = 1.0; int UIOrder = 52; > = 0.0;
+// T-21 SDF 顔影マップ（顔の向きはキャラクター単位。Unity では頭のボーンから）
+Texture2D ToonFaceShadowMap < string UIGroup = "FaceShadow"; string ResourceName = ""; string UIWidget = "FilePicker"; string ResourceType = "2D"; int UIOrder = 70; >;
+bool ToonFaceShadowMapEnabled < string UIGroup = "FaceShadow"; int UIOrder = 71; > = false;
+float ToonFaceShadowWeight < string UIGroup = "FaceShadow"; float UIMin = 0.0; float UIMax = 1.0; int UIOrder = 72; > = 0.0;
+float3 PreviewFaceForward < string UIGroup = "Preview"; int UIOrder = 97; > = {0.0, 0.0, 1.0};
+float3 PreviewFaceRight < string UIGroup = "Preview"; int UIOrder = 98; > = {-1.0, 0.0, 0.0};
 static const float3 kUp = float3(0.0, 1.0, 0.0);
 // チャンネル単体表示・不具合調査用（docs/05 §3「チャンネル単体表示」）
 int PreviewDebug < string UIGroup = "Preview"; string UIName = "Debug View"; string UIFieldNames = "Off:UV0:Normal:Lit:Mask R:Mask G:Mask B:Mask A:Base Map:Smooth Normal UV2"; int UIOrder = 93; > = 0;
@@ -184,6 +190,11 @@ float4 ShadeMain(VSOut i, bool frontFace)
     float3 L = normalize(PreviewLightDir);
     float4 mask = Toon_CombineMask(i.vertexMask, MaskMapSample(i.uv));
     float lit = Toon_LitFactor(N, L, mask, ToonShadeThreshold, ToonShadeFeather, ToonShadowStrength);
+    if (ToonFaceShadowMapEnabled && ToonFaceShadowWeight > 0.0)
+    {
+        float value = ToonFaceShadowMap.Sample(SamLinearWrap, Toon_FaceShadowUV(i.uv, PreviewFaceRight, L)).r;
+        lit = Toon_FaceShadowLit(lit, value, Toon_FaceLightAngle01(PreviewFaceForward, L), ToonShadeFeather, ToonShadowStrength, ToonFaceShadowWeight);
+    }
     if (PreviewDebug != 0)
     {
         float3 d = float3(0.0, 0.0, 0.0);

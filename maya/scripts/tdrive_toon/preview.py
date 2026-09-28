@@ -31,6 +31,8 @@ _env: dict[str, Any] = {
     "tonemap": 0,
     "depthCompression": 0.0,  # T-22 キャラクター単位（Look の characterSettings から session が設定）
     "depthPivot": (0.0, 0.0, 0.0),
+    "faceForward": (0.0, 0.0, 1.0),  # T-21 顔の向き（Look の characterSettings.faceShadow から session が設定）
+    "faceRight": (-1.0, 0.0, 0.0),
 }
 
 
@@ -490,6 +492,15 @@ def apply_environment() -> None:
         _set(shader, "PreviewUnitScale", environment.units_per_meter())
         _set(shader, "PreviewDepthCompression", float(_env["depthCompression"]))
         _set(shader, "PreviewDepthPivot", list(_env["depthPivot"]))
+        _set(shader, "PreviewFaceForward", list(_env["faceForward"]))
+        _set(shader, "PreviewFaceRight", list(_env["faceRight"]))
+
+
+def set_face_axes(forward, right) -> None:
+    """T-21 顔の正面・右（ワールド）をプレビューに設定する。"""
+    _env["faceForward"] = tuple(float(c) for c in forward)
+    _env["faceRight"] = tuple(float(c) for c in right)
+    apply_environment()
 
 
 def set_depth_compression(amount: float, pivot: tuple[float, float, float] | None = None) -> None:

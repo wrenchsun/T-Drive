@@ -4,7 +4,7 @@
 これを include する薄いラッパーで、同じパラメータ名を使う（[09_render_parity.md](09_render_parity.md) D-5）。
 この文書が式の仕様であり、変更時は この文書 → ToonCore.hlsl → パリティテスト の順に行う。
 
-対象は P0 技術（[04](04_technique_priority.md) T-01〜T-08）と、P1 / P2 のうちシェーダーで行うもの（T-09 / T-11 / T-12 / T-13 / T-18 / T-26 / T-27 / T-28 / T-30）。それ以外は §7.3 に予約名のみ定義する。
+対象は P0 技術（[04](04_technique_priority.md) T-01〜T-08）と、P1 / P2 のうちシェーダーで行うもの（T-09 / T-11 / T-12 / T-13 / T-18 / T-21 / T-22 / T-26 / T-27 / T-28 / T-30）。それ以外は §7.3 に予約名のみ定義する。
 
 ## 1. 入力
 
@@ -94,6 +94,23 @@ clip.xy += dirPx * px / (screenSize / 2) * clip.w          // ピクセル → N
   px  *= lerp(_ToonOutlineShadowSide, 1, litV)             // 影側ほど _ToonOutlineShadowSide 倍
   px  *= lerp(1, _ToonOutlineBottom, saturate(-n_world.y)) // 下向きの面ほど _ToonOutlineBottom 倍
   ```
+
+## 2.1 SDF 顔影マップ（P2 T-21）
+
+顔の明暗を法線ではなく「ライトの水平角度」と「作画どおりの影の進み方を焼いたテクスチャ」で決める。
+
+```
+F, R   = 顔の正面・右（ワールド、水平）。キャラクター単位（characterSettings.faceShadow）/ Unity では頭のボーン
+Lh     = normalize(L.xz)
+angle  = acos(dot(Fh, Lh)) / π                    // 0 = 正面から照らす / 1 = 真後ろから
+uvF    = dot(Rh, Lh) >= 0 ? uv : float2(1 - uv.x, uv.y)   // マップは「右から照らす」向きで作る。左からは左右反転
+value  = _ToonFaceShadowMap(uvF).r                // その画素が明るいままでいられる最大の角度（0〜1）
+litF   = smoothstep(angle - _ToonShadeFeather, angle + _ToonShadeFeather, value)
+lit    = lerp(lit, lerp(1, litF, _ToonShadowStrength), _ToonFaceShadowWeight)   // 0 = 使わない（従来の法線の影）
+```
+
+- マップは 1 チャンネル（R）・リニア・なるべく 16bit。作り方は docs/05 §3.3（角度ごとの白黒マスク → SDF 合成）
+- 顔の UV が左右対称である前提（非対称なら左右 2 枚が必要。今回は対象外）
 
 ## 3.2 奥行き圧縮（P2 T-22: 顔を「ぺったんこ」にして 2D 作画に寄せる）
 
@@ -185,6 +202,8 @@ Maya の uniform 名は先頭の `_` を除いた名前。定義の実体は `ma
 | `_ToonMatCapMap` | Texture | black | | MatCap（球面）テクスチャ（未設定 = 足さない）（P2） | T-30 |
 | `_ToonMatCapStrength` | Float | 0 | 0–1 | MatCap の強さ（P2） | T-30 |
 | `_ToonDepthCompressWeight` | Float | 0 | 0–1 | 奥行き圧縮の効かせ具合（量はキャラクター単位 `depthCompression`）（P2） | T-22 |
+| `_ToonFaceShadowMap` | Texture | black | | SDF 顔影マップ（R、リニア）（P2） | T-21 |
+| `_ToonFaceShadowWeight` | Float | 0 | 0–1 | 顔影マップの効かせ具合（0 = 使わず法線の影）（P2） | T-21 |
 | `_ToonShadeColor` | Color | (0.78, 0.72, 0.86, 1) | | 影の乗算色 | T-01 |
 | `_ToonShadeThreshold` | Float | 0.5 | 0–1 | 影の境界 | T-01 |
 | `_ToonShadeFeather` | Float | 0.02 | 0.001–0.5 | 境界のぼかし幅 | T-01 |
@@ -201,7 +220,7 @@ Maya の uniform 名は先頭の `_` を除いた名前。定義の実体は `ma
 
 | プロパティ | 技術 |
 |---|---|
-| `_ToonFaceShadowMap` `_ToonFaceForward` `_ToonFaceRight` | T-21 |
+| （なし。顔の向き F / R はマテリアルでなくキャラクター単位 `characterSettings.faceShadow`） | T-21 |
 
 ### 7.4 命名規則
 

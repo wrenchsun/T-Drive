@@ -222,7 +222,7 @@ class Session:
     def set_setting(self, path: str, value: Any, notify: bool = True) -> None:
         look.set_setting(self.require(), path, value)
         self.dirty = True
-        if path == "depthCompression":
+        if path == "depthCompression" or path.startswith("faceShadow"):
             self._sync_character_preview()
         if notify:
             self._changed()
@@ -242,6 +242,8 @@ class Session:
             b = cmds.exactWorldBoundingBox(meshes)
             pivot = ((b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2)
         preview.set_depth_compression(amount, pivot)
+        fs = lk.get(look.SETTINGS, {}).get("faceShadow", look.CHARACTER_DEFAULTS["faceShadow"])
+        preview.set_face_axes(fs["forward"], fs["right"])
 
     # ------------------------------------------------------------ カメラ角度の補正 BlendShape（T-20）
     def _vc_mesh(self) -> str:
@@ -282,6 +284,25 @@ class Session:
         from . import view_correction
 
         view_correction.disconnect_driver(self._vc_mesh())
+
+    # ------------------------------------------------------------ SDF 顔影マップ（T-21）
+    @undoable
+    def generate_face_shadow(self, folder: str, size: int = 512, target: str | None = None) -> str:
+        """角度別マスクのフォルダから顔影マップを作り、顔マテリアル（既定: ロール face の部位）に設定する。"""
+        from . import sdf_maya
+
+        path = sdf_maya.generate(folder, size=size)
+        rel = preview.to_repo_path(path)
+        lk = self.require()
+        targets = [target] if target else [p for p, v in lk["parts"].items() if v["role"] == "face"]
+        if not targets:
+            raise RuntimeError("顔の部位（ロール face）がありません。部位を指定してください")
+        for part in targets:
+            self.set_value(part, "_ToonFaceShadowMap", rel, notify=False)
+            if self.value(self.materials_of(part)[0], "_ToonFaceShadowWeight") == 0.0:
+                self.set_value(part, "_ToonFaceShadowWeight", 1.0, notify=False)
+        self._changed()
+        return rel
 
     def preview_expression(self, name: str, t: float) -> list[tuple[str, str, float]]:
         """表情パラメータを t（0–1）にしたときの見た目をプレビューする（Look には保存しない。T-25）。

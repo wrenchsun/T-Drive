@@ -21,7 +21,7 @@ COMMON_ROWS = (
 GROUP_LABELS = {
     "Common": "共通", "Shadow": "影", "Mask": "マスク", "Tint": "固定色", "Outline": "線",
     "Light": "ライト", "Depth": "手前に出す（眉・目を髪の上に）", "Rim": "リム", "Hair": "髪ハイライト",
-    "Color": "色補正", "MatCap": "MatCap（簡易反射）",
+    "Color": "色補正", "MatCap": "MatCap（簡易反射）", "FaceShadow": "顔影マップ（SDF）",
 }
 
 
@@ -30,6 +30,7 @@ TEXTURE_PLACEHOLDER = {
     "_ToonMaskMap": "なし（白 = 何もしない）",
     "_ToonHairHighlightMap": "なし（ハイライトなし）",
     "_ToonMatCapMap": "なし（反射なし）",
+    "_ToonFaceShadowMap": "なし（キャラクタータブの「マスクから生成」で作る）",
 }
 
 

@@ -70,7 +70,7 @@ Unity は T-Drive for Unity パッケージ（Phase U）として実装する（
 | 3-2 | 部位別の色補正（彩度・明るさ） | T-28 | 0.5 | 1-1 | 部位ごとに彩度・明るさを調整できる。既定で従来と同じ | ✅ `_ToonSaturation` / `_ToonBrightness` |
 | 3-3 | 線の太さの方向依存（下側・影側を太く） | T-26 | 1 | 1-6 | 影側の線が太くなる。既定で従来と同じ | ✅ `_ToonOutlineShadowSide` / `_ToonOutlineBottom` |
 | 3-4 | MatCap（髪・装飾の簡易反射） | T-30 | 0.5 | 1-1 | MatCap テクスチャ・強さで反射が乗る | ✅ `_ToonMatCapMap` / `_ToonMatCapStrength`（ビュー空間法線） |
-| 3-5 | SDF 顔影マップ（顔の影をライト角度で作画どおりに） | T-21 | 3 | 2-2 | 閾値マスク群から SDF を生成するツール + シェーダー。ライトを回すと影が作画どおりの形で進む | ⬜ |
+| 3-5 | SDF 顔影マップ（顔の影をライト角度で作画どおりに） | T-21 | 3 | 2-2 | 閾値マスク群から SDF を生成するツール + シェーダー。ライトを回すと影が作画どおりの形で進む | ✅ sdf.py（numpy のみ・EDT は総当たりと一致）+ MImage 入出力、生成→顔に設定。ライト回転で影が境界どおりに進むことを実機確認 |
 | 3-6 | ビュー空間の奥行き圧縮（部位マスク付き） | T-22 | 1.5 | 1-9 | 顔だけ奥行きを圧縮しても線・影が破綻しない | ✅ `_ToonDepthCompressWeight`（マテリアル）× `characterSettings.depthCompression`（キャラクター）。中心は効かせる部位の中心 |
 | 3-7 | カメラ角度依存の補正 BlendShape（作成支援・角度 → ウェイトのプレビュー） | T-20 | 3 | 1-8 | Maya でカメラを回すと補正 Shape が自動で混ざる。設定は Look の `character.viewCorrection` | ✅ 作る / 登録 / カメラに連動（DG + expression）。式は envmath と一致（誤差 0.01 以内）。彫刻用メッシュは出力対象外 |
 | 3-8 | キャラクター単位の設定を Maya で編集（Look 定義 `character` セクション: ライト平滑化・ステンシル・インナーライン・接地影・表情パラメータ） | T-17 T-23 T-24 T-25 T-29 | 2 | 0-5 | [08](08_unity_port_plan.md) §4.2 の項目をエディタで編集・保存できる。Maya でプレビューできない項目は「Unity でのみ」と表示 | ✅ `characterSettings`（仕様で `character` と衝突するため改名）、キャラクタータブ |
