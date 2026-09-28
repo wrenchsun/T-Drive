@@ -12,6 +12,7 @@
 | 07 | [07_maya_mcp_setup.md](07_maya_mcp_setup.md) | Maya MCP 導入手順 |
 | 08 | [08_unity_port_plan.md](08_unity_port_plan.md) | MS2026 への移植計画・D-Drive 適合チェック・要合意事項 |
 | 09 | [09_render_parity.md](09_render_parity.md) | Maya プレビューと Unity 描画の一致（パリティ）方針 |
+| 11 | [11_features_and_shader_generation.md](11_features_and_shader_generation.md) | 機能のオン/オフと、プロジェクト専用シェーダーの生成 |
 | 10 | [10_manual_verification_2026-09-28.md](10_manual_verification_2026-09-28.md) | 人による確認項目（Phase 1 + 2） |
 | — | [tasks.md](tasks.md) | 優先順位順のチケット一覧 |
 | — | [DesignerManual/Readme.html](DesignerManual/Readme.html) | **デザイナーマニュアル**（HTML。デザイナー向けの使い方） |
