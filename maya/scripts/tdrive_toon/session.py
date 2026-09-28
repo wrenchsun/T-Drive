@@ -110,8 +110,10 @@ class Session:
         look.register_part(lk, part, role, mats, apply_preset=True)
         lk["materials"].update(keep)
         for m in preset_for:
-            if not lk["materials"][m]["common"].get("albedo"):
-                lk["materials"][m]["common"]["albedo"] = preview.base_texture_of(m)
+            common = lk["materials"][m]["common"]
+            if not common.get("albedo"):
+                common["albedo"] = preview.base_texture_of(m)
+            common["blend"] = preview.source_blend(m)  # Blend は元マテリアルから継承（roles.py 参照）
         if preview.is_active():
             preview.enable({m: look.resolve(lk, self.shown)[m] for m in mats})
 

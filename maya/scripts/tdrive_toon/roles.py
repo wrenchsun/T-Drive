@@ -9,6 +9,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+# Blend（Opaque/Cutout/Transparent）はロールでは決めない。部位登録時に元マテリアルの透明設定から継承する
+# （同じ「目」でも白目は不透明・瞳は透明など、モデルごとに違うため）。
 # renderQueueOffset は D-Drive の Blend 帯（Opaque=2000）からのオフセット。
 # 「後から描く部位ほど上に出せる」ための予約値で、眉・目の髪越し表示（Phase 2）で使う。
 ROLE_PRESETS: dict[str, dict[str, Any]] = {
@@ -30,7 +32,6 @@ ROLE_PRESETS: dict[str, dict[str, Any]] = {
     "eye": {
         "label": "目",
         "renderQueueOffset": 20,
-        "common": {"blend": "Transparent"},
         "specific": {"_ToonShadowStrength": 0.0, "_ToonOutlineWidth": 0.0},
     },
     "brow": {
@@ -41,7 +42,6 @@ ROLE_PRESETS: dict[str, dict[str, Any]] = {
     "eyeline": {
         "label": "アイライン・まつ毛",
         "renderQueueOffset": 25,
-        "common": {"blend": "Transparent"},
         "specific": {"_ToonShadowStrength": 0.0, "_ToonOutlineWidth": 0.0},
     },
     "mouth": {
@@ -52,7 +52,6 @@ ROLE_PRESETS: dict[str, dict[str, Any]] = {
     "blush": {
         "label": "頬・紅潮（オーバーレイ）",
         "renderQueueOffset": 40,
-        "common": {"blend": "Transparent"},
         "specific": {"_ToonShadowStrength": 0.0, "_ToonOutlineWidth": 0.0},
     },
     "cloth": {

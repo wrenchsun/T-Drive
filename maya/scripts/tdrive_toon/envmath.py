@@ -13,6 +13,17 @@ import math
 UNITY_TO_MAYA_LENGTH = 100.0  # m → cm
 
 
+def srgb_to_linear(c: float) -> float:
+    """Unity (Linear 色空間) が Color プロパティ・ライト色をシェーダーへ渡す前に行う変換と同じ。"""
+    return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+
+def srgb_color_to_linear(rgba):
+    """RGB だけ変換し、アルファはそのまま（Unity と同じ）。"""
+    v = [float(x) for x in rgba]
+    return [srgb_to_linear(x) for x in v[:3]] + v[3:]
+
+
 def unity_euler_forward(euler_deg: tuple[float, float, float]) -> tuple[float, float, float]:
     """Unity の回転 (x, y, z 度) を掛けた forward (0,0,1)。Unity 座標系で返す。"""
     x, y, _z = (math.radians(a) for a in euler_deg)  # Z 回転は forward に影響しない

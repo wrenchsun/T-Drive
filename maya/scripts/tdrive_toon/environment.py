@@ -50,7 +50,8 @@ def character_light(prof: dict[str, Any]) -> tuple[tuple[float, float, float], t
     """(表面→光源 方向 [Maya 座標], 色 × 強度)。"""
     cl = prof["characterLight"]
     direction = envmath.light_dir_to_light_maya(tuple(cl["rotation"]))
-    color = tuple(c * cl.get("intensity", 1.0) for c in cl["color"])
+    # Unity の Light.color も sRGB 値としてリニア化され、強度が掛かる
+    color = tuple(c * cl.get("intensity", 1.0) for c in envmath.srgb_color_to_linear(cl["color"]))
     return direction, color
 
 

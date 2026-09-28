@@ -41,6 +41,7 @@ col    = Tonemap(col, 環境プロファイルの tonemapping)     // None / Neu
 ```
 
 - 計算はすべて **リニア空間**（MS2026 は Linear カラースペース）。ベースマップは sRGB → リニア化済みの値を受け取る
+- **Look 定義・パラメータ契約の色（Color 型）は sRGB 値**（Unity のインスペクター / `Material.SetColor` と同じ）。Unity は Linear 色空間でこれをリニアへ変換してシェーダーに渡すので、Maya ラッパーも同じ変換（`envmath.srgb_color_to_linear`、RGB のみ・α はそのまま）をしてから渡す。ライト色も同様
 
 - 影色は **乗算色**。暗くするだけでなく色相をずらす（肌 → 赤紫寄り等）ことを前提にした既定値にする
 - ライトの強度・環境光・受け影（シャドウマップ）は P0 では扱わない（T-16/T-17 で Unity 側に追加）

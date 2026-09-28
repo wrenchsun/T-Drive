@@ -13,7 +13,7 @@ from typing import Any
 
 from maya import cmds
 
-from . import REPO_ROOT, environment, params
+from . import REPO_ROOT, environment, envmath, params
 
 SHADER_FILE = (REPO_ROOT / "maya" / "shaders" / "TDriveToon.fx").as_posix()
 NODE_TYPE = "dx11Shader"
@@ -96,6 +96,23 @@ def base_texture_of(material: str) -> str | None:
         if files:
             return to_repo_path(cmds.getAttr(f"{files[0]}.computedFileTextureNamePattern"))
     return None
+
+
+def source_blend(material: str) -> str:
+    """元マテリアルの透明設定から D-Drive の Blend を推定する（透明度に接続 or 値あり → Transparent）。"""
+    for attr in ("transparency", "opacity", "transmission"):
+        if not cmds.attributeQuery(attr, node=material, exists=True):
+            continue
+        if cmds.listConnections(f"{material}.{attr}", source=True, destination=False):
+            return "Transparent"
+        value = cmds.getAttr(f"{material}.{attr}")
+        value = value[0] if isinstance(value, list) else value
+        values = value if isinstance(value, tuple) else (value,)
+        if attr == "opacity" and any(v < 1.0 for v in values):
+            return "Transparent"
+        if attr != "opacity" and any(v > 0.0 for v in values):
+            return "Transparent"
+    return "Opaque"
 
 
 def meshes_of(material: str) -> list[str]:
@@ -197,10 +214,13 @@ def _set_string(node: str, attr: str, value: str) -> None:
         cmds.setAttr(f"{node}.{attr}", value, type="string")
 
 
-def reload_shader_file() -> None:
-    """.fx / ToonCore.hlsl を編集した後に呼ぶ。全プレビューシェーダーを再コンパイルする。"""
-    for shader in preview_shaders():
-        cmds.dx11Shader(shader, edit=True, reload=True)
+def reload_shader_file(materials: dict[str, dict[str, Any]]) -> list[str]:
+    """.fx / ToonCore.hlsl を編集した後に呼ぶ。プレビューノードを作り直して再コンパイルする。
+
+    `dx11Shader -reload` は描画中のノードに対して実行すると Maya がフリーズした（2026-09-28）ため使わない。
+    """
+    delete_all()
+    return enable(materials)
 
 
 # ---------------------------------------------------------------- 値の反映
@@ -226,7 +246,7 @@ def apply_values(mat: str, values: dict[str, Any]) -> None:
     if "cutoff" in common:
         _set(shader, "Cutoff", common["cutoff"])
     if "albedoTint" in common:
-        _set(shader, "BaseColor", common["albedoTint"])
+        _set(shader, "BaseColor", envmath.srgb_color_to_linear(common["albedoTint"]))
     if "albedo" in common:
         _set_texture(shader, "BaseMap", common["albedo"], srgb=True)
     # normal / emission は P0 の式で使わない（Unity 側でのみ使用）
@@ -236,6 +256,9 @@ def apply_values(mat: str, values: dict[str, Any]) -> None:
             continue
         if p.kind == params.TEXTURE:
             _set_texture(shader, p.maya, value, srgb=False)
+        elif p.kind == params.COLOR:
+            # Look の色は sRGB 値（Unity のインスペクターと同じ）。Unity と同じくリニアにしてシェーダーへ渡す
+            _set(shader, p.maya, envmath.srgb_color_to_linear(value))
         else:
             _set(shader, p.maya, value)
 

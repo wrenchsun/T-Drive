@@ -52,6 +52,7 @@ MS2026 自体が開発中で、色空間以外（トーンマップ・ライト�
 | 色空間 | **Linear**（`m_ActiveColorSpace: 1`） | OCIO 有効・レンダリング空間 scene-linear Rec.709-sRGB。シェーダー内の計算はすべてリニア |
 | ベースカラーテクスチャ | sRGB テクスチャ（ハードウェアでリニア化） | file ノード colorSpace = sRGB（VP2 がリニア化） |
 | マスク・法線系 | リニア（sRGB OFF） | colorSpace = Raw |
+| マテリアルの色・ライト色 | インスペクター値（sRGB）をリニアへ変換してシェーダーへ | Look の色は sRGB 値で保存し、Maya ラッパーで同じ変換をしてから setAttr（2026-09-28 のパリティ確認で判明） |
 | 頂点カラー | そのまま（変換なし） | そのまま（Color Set の値を変換しない） |
 | HDR | ON | 浮動小数のまま計算し、最後にトーンマップ |
 | トーンマップ | **InGame = Neutral**（SampleSceneProfile）。Title/Lobby 等 Volume の無いシーンは DefaultVolumeProfile = None | プロファイルの値に従い、シェーダー最終段で `ToonCore` の同じトーンマップ関数を適用。Maya のビュー変換は **Un-tone-mapped (sRGB)** に固定（ACES 等を掛けない） |
@@ -104,3 +105,15 @@ MS2026 自体が開発中で、色空間以外（トーンマップ・ライト�
 | 比較 | `tools/parity/compare.py`: キャラクター画素（背景マスク外）の平均絶対差・最大差・差分ヒートマップ画像を出力 |
 | 合格基準（初期値） | 平均絶対差 ≤ 2/255、アウトライン縁 ±1px を除いた最大差 ≤ 8/255 |
 | 実施タイミング | シェーダー式・ToonCore を変更したとき、リリース前（[06](06_release_versioning.md) §5 に追加） |
+
+## 6. 実装メモ（Maya dx11Shader の落とし穴、2026-09-28 の実機確認で判明）
+
+| 症状 | 原因 | 対策 |
+|---|---|---|
+| dx11Shader にテクニック・アトリビュートが出ない | VP2 が OpenGL のまま | レンダリングエンジンを DirectX 11 にして Maya 再起動 |
+| Toon 表示にならず既定のスムースシェーディングになる | ビューポートのテクスチャ表示 OFF | プレビュー有効化時にモデルパネルのテクスチャ表示を ON にする |
+| 部位ごとにテクスチャの 1 色でくすんで見える | `overridesDrawState = true` では DirectX 既定（時計回り = 表面）になり、カリングが逆転してアウトラインが表面を覆っていた | ラスタライザステートに `FrontCounterClockwise = true` |
+| 線色・影色が想定より明るい | Unity は Color を sRGB → リニア変換してから渡すが、Maya ではリニアのまま渡していた | Look の色は sRGB 値。Maya ラッパーで `srgb_color_to_linear` してから setAttr |
+| Maya がフリーズ | 描画中の dx11Shader に `dx11Shader -reload` | 使わない。`.fx` 更新時はプレビューノードを作り直す（`preview.reload_shader_file`） |
+| float4 の色に setAttr できない | dx11Shader は `color1x4` を `<名前>RGB` + `<名前>A` に分ける | 子アトリビュートに個別に設定 |
+| 頂点カラー・UV2 が届かない | 既定の取得元が `color:colorSet` / `uv:map3` | `Color0_Source = color:tdToonMask`、`TexCoord2_Source = uv:tdSmoothNormal` を設定 |

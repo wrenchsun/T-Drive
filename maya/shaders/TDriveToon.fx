@@ -48,9 +48,10 @@ int PreviewDebug < string UIGroup = "Preview"; string UIName = "Debug View"; str
 SamplerState SamLinearWrap { Filter = MIN_MAG_MIP_LINEAR; AddressU = Wrap; AddressV = Wrap; };
 
 // ------------------------------------------------------------------ 描画ステート（Opaque テクニックは overridesDrawState = true）
-RasterizerState RS_CullBack  { CullMode = Back; };
-RasterizerState RS_CullFront { CullMode = Front; };
-RasterizerState RS_CullNone  { CullMode = None; };
+// Maya のメッシュは反時計回りが表面。自前ステートでは DirectX 既定（時計回り = 表面）になるため明示する
+RasterizerState RS_CullBack  { CullMode = Back;  FrontCounterClockwise = true; };
+RasterizerState RS_CullFront { CullMode = Front; FrontCounterClockwise = true; };
+RasterizerState RS_CullNone  { CullMode = None;  FrontCounterClockwise = true; };
 DepthStencilState DS_Default { DepthEnable = true; DepthWriteMask = ALL; DepthFunc = LESS_EQUAL; };
 BlendState BS_Opaque { BlendEnable[0] = false; RenderTargetWriteMask[0] = 0x0F; };
 

@@ -41,3 +41,10 @@ def test_orbit_camera_looks_at_target():
     pos, rot = envmath.orbit_camera((0, 150, 0), 100, yaw_deg=90)
     assert approx(pos, (100, 150, 0))
     assert approx(rot, (0, 90, 0))  # Maya カメラは -Z を見るので Y+90 で -X（= target 方向）を向く
+
+
+def test_srgb_to_linear_matches_unity_curve():
+    assert envmath.srgb_to_linear(0.0) == 0.0
+    assert math.isclose(envmath.srgb_to_linear(1.0), 1.0)
+    assert math.isclose(envmath.srgb_to_linear(0.5), 0.21404, abs_tol=1e-4)
+    assert envmath.srgb_color_to_linear([0.5, 0.5, 0.5, 0.5])[3] == 0.5  # α は変換しない
