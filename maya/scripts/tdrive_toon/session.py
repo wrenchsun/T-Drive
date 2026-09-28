@@ -485,5 +485,23 @@ class Session:
 _current = Session()
 
 
+def on_scene_opened() -> None:
+    """SceneOpened イベント（userSetup.py で登録）: シーンに記録された Look があれば開く。
+
+    編集中の Look に未保存の変更があるときは上書きしない（作業を消さない）。
+    """
+    path = preview.remembered_look_path()
+    if not path or not Path(path).exists():
+        return
+    if _current.dirty:
+        print(f"[T-Drive] 未保存の Look があるため自動では開きません: {path}")
+        return
+    try:
+        _current.open(path)
+        print(f"[T-Drive] Look を開きました: {preview.to_repo_path(path)}")
+    except Exception as exc:  # 壊れた Look でシーンを開く操作自体は止めない
+        print(f"[T-Drive] Look を開けませんでした: {exc}")
+
+
 def current() -> Session:
     return _current

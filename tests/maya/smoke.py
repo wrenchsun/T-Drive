@@ -83,6 +83,9 @@ def run() -> None:
     cmds.file(new=True, force=True)
     cmds.file(str(scene_path), open=True, force=True)
     check("保存後: fileInfo から Look のパスが復元できる", Path(preview.remembered_look_path()).resolve() == look_path.resolve())
+    s.look, s.path, s.dirty = None, None, False
+    session.on_scene_opened()  # userSetup.py が SceneOpened で呼ぶもの
+    check("シーンを開くと記録された Look が自動で開く", s.look is not None and Path(s.path).resolve() == look_path.resolve())
     preview.disable()
     check("保存後: 開き直しても元の割り当てに戻せる",
           membership_without_preview(membership()) == membership_without_preview(original))

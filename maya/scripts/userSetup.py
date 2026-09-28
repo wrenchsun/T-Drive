@@ -8,9 +8,13 @@ import maya.utils
 
 
 def _tdrive_startup():
+    from maya import cmds
+
     from tdrive_toon import mcp_bridge
 
     mcp_bridge.open_from_env()
+    # シーンを開いたら、そのシーンに記録された Look を自動で開く
+    cmds.scriptJob(event=["SceneOpened", "from tdrive_toon import session; session.on_scene_opened()"], protected=True)
     try:
         from tdrive_toon import menu
     except ImportError:
