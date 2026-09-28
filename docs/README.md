@@ -14,7 +14,7 @@
 | 09 | [09_render_parity.md](09_render_parity.md) | Maya プレビューと Unity 描画の一致（パリティ）方針 |
 | 11 | [11_features_and_shader_generation.md](11_features_and_shader_generation.md) | 機能のオン/オフと、プロジェクト専用シェーダーの生成 |
 | 12 | [12_substance_painter.md](12_substance_painter.md) | Substance Painter の扱い（検討メモ・確認待ち） |
-| 10 | [10_manual_verification_2026-09-28.md](10_manual_verification_2026-09-28.md) | 人による確認項目（Phase 1 + 2） |
+| 10 | [10_manual_verification_2026-09-28.md](10_manual_verification_2026-09-28.md) | 人による確認項目（Phase 1〜4） |
 | — | [tasks.md](tasks.md) | 優先順位順のチケット一覧 |
 | — | [DesignerManual/Readme.html](DesignerManual/Readme.html) | **デザイナーマニュアル**（HTML。デザイナー向けの使い方） |
 
