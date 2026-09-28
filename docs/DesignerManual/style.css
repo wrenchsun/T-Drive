@@ -1,0 +1,37 @@
+/* T-Drive デザイナーマニュアル共通スタイル（D-Drive デザイナーマニュアルと同じ見た目に揃える） */
+body {
+    font-family: "Yu Gothic UI", "Hiragino Sans", "Meiryo", sans-serif;
+    line-height: 1.8;
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 24px 20px 80px;
+    color: #2b2b2b;
+    background: #fafafa;
+}
+h1 { border-bottom: 3px solid #4a7edb; padding-bottom: 8px; }
+h2 { border-left: 6px solid #4a7edb; padding-left: 10px; margin-top: 2.2em; }
+h3 { margin-top: 1.8em; color: #2c4a80; }
+nav.breadcrumb { background: #eef3fb; padding: 8px 14px; border-radius: 6px; font-size: 0.95em; margin-bottom: 20px; }
+nav.breadcrumb a { margin-right: 4px; }
+table { border-collapse: collapse; width: 100%; margin: 1em 0; background: #fff; }
+th, td { border: 1px solid #ccc; padding: 8px 10px; text-align: left; vertical-align: top; }
+th { background: #e8eef8; white-space: nowrap; }
+code, .path { background: #eee; padding: 1px 6px; border-radius: 4px; font-family: Consolas, monospace; font-size: 0.92em; }
+pre { background: #2b2b2b; color: #f0f0f0; padding: 12px 14px; border-radius: 6px; overflow-x: auto; }
+pre code { background: none; color: inherit; padding: 0; }
+.tip { background: #e7f6e7; border-left: 5px solid #4caf50; padding: 10px 14px; margin: 1em 0; border-radius: 0 6px 6px 0; }
+.warn { background: #fdf0e3; border-left: 5px solid #ef8c00; padding: 10px 14px; margin: 1em 0; border-radius: 0 6px 6px 0; }
+.term { border-bottom: 1px dotted #4a7edb; cursor: help; }
+figure { margin: 1.2em 0; text-align: center; }
+figure img { max-width: 100%; border: 1px solid #ccc; border-radius: 6px; }
+figcaption { font-size: 0.9em; color: #666; margin-top: 6px; }
+.pagelinks { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin: 1.5em 0; padding: 0; list-style: none; }
+.pagelinks li { background: #fff; border: 1px solid #d0d8e8; border-radius: 8px; padding: 14px; }
+.pagelinks li a { font-weight: bold; font-size: 1.05em; }
+.pagelinks li p { margin: 6px 0 0; font-size: 0.92em; color: #555; }
+footer { margin-top: 48px; font-size: 0.85em; color: #888; border-top: 1px solid #ddd; padding-top: 12px; }
+.lastupdate { margin: -0.4em 0 1.2em; font-size: 0.85em; color: #777; text-align: right; }
+/* T-Drive 追加: まだ使えない機能の目印 */
+.soon { display: inline-block; font-size: 0.78em; background: #9aa6b8; color: #fff; border-radius: 4px; padding: 0 6px; margin-left: 4px; vertical-align: middle; }
+.ok { display: inline-block; font-size: 0.78em; background: #4caf50; color: #fff; border-radius: 4px; padding: 0 6px; margin-left: 4px; vertical-align: middle; }
+.swatch { display: inline-block; width: 14px; height: 14px; border: 1px solid #888; vertical-align: middle; margin-right: 4px; }

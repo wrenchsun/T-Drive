@@ -6,6 +6,7 @@ Unity 移植（U）は「のちに」だが、M1 到達後に並行で着手で�
 - 粒度: 1 チケット = 0.5〜3 人日。依存は `←` の先行チケット
 - 状態: ✅ 完了 / 🔶 ドラフトあり（仕様確定後に見直し） / ⬜ 未着手
 - 受け入れ条件（AC）を満たしたら ✅。チケット番号はコミットメッセージに入れる（[06](06_release_versioning.md) §6）
+- **共通の完了条件**: デザイナーが触る機能は [デザイナーマニュアル](DesignerManual/Readme.html) の該当ページを同じコミットで更新していること
 
 ---
 
@@ -14,6 +15,7 @@ Unity 移植（U）は「のちに」だが、M1 到達後に並行で着手で�
 | # | チケット | 技術 | 日数 | 依存 | 受け入れ条件 | 状態 |
 |---|---|---|---|---|---|---|
 | 0-1 | リポジトリ雛形（.gitignore / .gitattributes + Git LFS / VERSION / CHANGELOG / CLAUDE.md / README） | — | 0.5 | — | バイナリ（fbx/tga/png/mb）が LFS 管理。`captures/` `build/` が管理外 | ✅ |
+| 0-8 | デザイナーマニュアル（HTML、D-Drive と同形式）: トップ / 導入 / 部位の登録 / パラメータ / Unity との一致 / 困ったとき | — | 1 | 1-4 | 実装済み機能と準備中機能が区別され、実装と食い違う記述が無い | ✅ 以後チケットごとに更新 |
 | 0-2 | 仕様書一式（docs/00〜08, tasks.md） | — | 1 | — | 目的・制約・優先順位・Look 仕様・シェーダー仕様・ツール仕様・リリース運用・移植計画が揃う | ✅ |
 | 0-3 | **Maya MCP 導入**（GG_MayaMCP 0.6.1 / `.mcp.json` / ランチャー / Maya モジュール / commandPort 自動オープン） | — | 0.5 | 0-1 | Claude Code から `health.check` → `scene.info` が成功（Maya 起動状態で確認） | 🔶 設定済み・疎通未確認 |
 | 0-4 | UnityChan テスト素体の取り込み（D-Drive から FBX・テクスチャ・ライセンス） | — | 0.5 | 0-1 | `assets/unitychan/` に配置。Maya で FBX を読み込み、マテリアル一覧が取れる | ✅ CgFX マテリアル消失はフィクスチャ `tools/fixtures/build_unitychan_scene.py` 側で吸収（ツールには持ち込まない） |

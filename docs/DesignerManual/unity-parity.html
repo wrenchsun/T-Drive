@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unity との見た目の一致 - T-Drive デザイナーマニュアル</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<nav class="breadcrumb"><a href="Readme.html">トップ</a> › Unity との見た目の一致</nav>
+<h1>Unity との見た目の一致</h1>
+<p class="lastupdate">最終更新日: 2026-09-28</p>
+
+<p>Maya のプレビューは、<strong>ゲーム（Unity / MS2026）と同じ見た目</strong>になるように作られています。Maya で決めた見た目がゲームでズレないことが、このツールの一番大事な約束です。</p>
+
+<h2>同じにしているもの</h2>
+<table>
+<tr><th>項目</th><th>どうしているか</th></tr>
+<tr><td>影・線の計算式</td><td>Maya と Unity で<strong>同じシェーダーのプログラム</strong>を使っています（片方だけ直ってズレる、が起きません）</td></tr>
+<tr><td>色の扱い</td><td>ゲームと同じ色の計算方法（リニア）と、同じ明るさの圧縮（トーンマップ）を使います</td></tr>
+<tr><td>パラメータの色</td><td>Unity のインスペクターと同じ値です</td></tr>
+<tr><td>テクスチャ</td><td>色のテクスチャとマスク用のテクスチャで、ゲームと同じ読み方をします</td></tr>
+<tr><td>カメラの画角</td><td>ゲームのカメラと同じ縦の画角（今は 40°）で見られます <span class="soon">カメラのプリセットは準備中</span></td></tr>
+<tr><td>キャラクター用のライト</td><td>ゲームと同じ向き・色のライトで照らします。ツールで向きを変えて確かめることもできます <span class="soon">準備中</span></td></tr>
+</table>
+
+<h2>環境プロファイル</h2>
+<p>ゲームの明るさの扱い・ライト・カメラの設定を<strong>「環境プロファイル」</strong>としてまとめ、プレビューはそれに合わせて表示します。今は <strong>ms2026_ingame</strong>（ゲーム中の画面）を使っています。</p>
+<div class="warn">
+MS2026 はまだ開発中なので、ゲーム側の設定（明るさの扱い・カメラなど）は変わることがあります。変わったときは環境プロファイルが更新され、プレビューも追従します。デザイナーの作業は変わりません。
+</div>
+
+<h2>一致しないもの（ゲームで確認してください）</h2>
+<table>
+<tr><th>項目</th><th>理由</th></tr>
+<tr><td>描く順番（眉を髪の上に出す など）</td><td>Maya では描く順番を指定できないため。ゲームでは設定どおりに描かれます</td></tr>
+<tr><td>他の物からキャラクターに落ちる影</td><td>ゲームの影の仕組みは Maya では再現しません</td></tr>
+<tr><td>画面全体の効果（光のにじみ＝Bloom、周辺減光＝Vignette）</td><td>ゲーム画面全体に掛かる効果のため</td></tr>
+<tr><td>時間で変わるもの（影のチラつき防止など）</td><td>ゲーム中の動きで決まるため</td></tr>
+</table>
+
+<h2>髪の内側に暗い帯が見えるとき</h2>
+<p>片面だけのポリゴン（髪の房など）の<strong>裏側から線が見えている</strong>状態です。ゲームでも同じように見えます。気になる場合は、その部位を<strong>両面表示</strong>にするか、モデル側で裏面を作ってください（両面の切り替えはルックタブで <span class="soon">準備中</span>）。</p>
+
+<footer><a href="Readme.html">トップへ戻る</a></footer>
+</body>
+</html>

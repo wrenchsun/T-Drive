@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>困ったとき - T-Drive デザイナーマニュアル</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<nav class="breadcrumb"><a href="Readme.html">トップ</a> › 困ったとき</nav>
+<h1>困ったとき</h1>
+<p class="lastupdate">最終更新日: 2026-09-28</p>
+
+<table>
+<tr><th>症状</th><th>対処</th></tr>
+<tr>
+<td>Toon 表示にならない（白っぽい・つるっとした表示のまま）</td>
+<td>
+<ol>
+<li>ビューポートで <strong>6</strong> を押してテクスチャ表示にする</li>
+<li>エディタ上部にオレンジ色の警告が出ていないか確認。「VP2 レンダリングエンジン」が出ていれば <a href="setup.html">DirectX 11 の設定</a>をして Maya を再起動</li>
+<li>エディタの「表示」が <strong>Toon</strong> になっているか確認</li>
+</ol>
+</td>
+</tr>
+<tr>
+<td>エディタ上部にオレンジ色の警告（Unity とのパリティ）が出る</td>
+<td>ゲームと同じ見た目にするための設定がずれています。表示されている項目を確認してください。色の設定（カラーマネジメント）は、Look を開き直すと自動で直ります</td>
+</tr>
+<tr>
+<td>色がくすんで見える・影が変</td>
+<td>ツールが古い可能性があります。<strong>T-Drive Toon › ツールをリロード</strong> を実行してください</td>
+</tr>
+<tr>
+<td>髪の内側に暗い帯が見える</td>
+<td>片面ポリゴンの裏側から線が見えています（ゲームでも同じ）。<a href="unity-parity.html">Unity との見た目の一致</a> を参照</td>
+</tr>
+<tr>
+<td>「未保存の変更があります」と出る</td>
+<td>Look を保存していない変更があります。必要なら <strong>保存</strong>、不要なら破棄して続けます</td>
+</tr>
+<tr>
+<td>Maya が固まった</td>
+<td>しばらく待っても戻らない場合は、タスクマネージャーで Maya を終了して再起動してください。Look（<span class="path">looks/…/look.json</span>）は保存した時点の内容が残っています。症状と直前の操作を開発者に伝えてください</td>
+</tr>
+<tr>
+<td>「T-Drive Toon」メニューが無い</td>
+<td><a href="setup.html">ツールの登録</a>（install_maya_module.ps1）をして Maya を再起動してください</td>
+</tr>
+</table>
+
+<div class="tip">
+困ったことや分かりにくいところがあったら、開発者に伝えてください。このページに追記します。
+</div>
+
+<footer><a href="Readme.html">トップへ戻る</a></footer>
+</body>
+</html>

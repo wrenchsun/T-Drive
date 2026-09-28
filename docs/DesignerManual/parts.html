@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>部位の登録 - T-Drive デザイナーマニュアル</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<nav class="breadcrumb"><a href="Readme.html">トップ</a> › 部位の登録</nav>
+<h1>部位の登録</h1>
+<p class="lastupdate">最終更新日: 2026-09-28</p>
+
+<p>キャラクターを<strong>「顔」「髪」「目」などの部位</strong>に分けて登録します。部位ごとに見た目を調整できるようになり、登録した瞬間に部位に合った初期値（プリセット）が入ります。</p>
+
+<h2>はじめの一歩（3 クリックで Toon 表示）</h2>
+<ol>
+<li>キャラクターのシーンを開き、<strong>T-Drive Toon › エディタ</strong> を開く</li>
+<li><strong>新規</strong> を押し、キャラクター ID（英小文字・数字・<code>_</code>）を入れて OK</li>
+<li>「部位」タブの <strong>自動登録</strong> を押す → マテリアル名から部位が推定されて登録され、<strong>Toon 表示</strong>になります</li>
+<li>推定が違うところだけ直して、<strong>保存</strong></li>
+</ol>
+
+<figure>
+<img src="images/editor_parts.png" alt="エディタの部位タブ">
+<figcaption>部位タブ。マテリアルごとに「部位」と「ロール」が付きます</figcaption>
+</figure>
+
+<div class="tip">
+<strong>部位はマテリアル単位です。</strong> ゲーム（Unity）のマテリアルと 1 対 1 に対応させるためです。1 つのマテリアルの中で分けたい場合（顔のテクスチャの中の眉など）は、モデル側でマテリアルを分けるか、<a href="look-params.html#mask">Toon マスク</a>で塗り分けます。
+</div>
+
+<h2>画面の説明</h2>
+<h3>上部（ヘッダー）</h3>
+<table>
+<tr><th>項目</th><th>内容</th></tr>
+<tr><td>Look: …</td><td>開いている Look ファイル、キャラクター ID、版（v0.1.0 など）。<strong>●未保存</strong> が出ていたら保存していない変更があります</td></tr>
+<tr><td>新規 / 開く / 保存 / 別名保存</td><td>Look ファイルの操作。保存先の既定は <span class="path">looks/&lt;キャラクター ID&gt;/look.json</span></td></tr>
+<tr><td id="preview">表示: Toon / 元の見た目</td><td>Toon 表示と、元のマテリアルの見た目を切り替えます。<strong>元のマテリアルは消えたり書き換わったりしません</strong></td></tr>
+</table>
+
+<h3>部位タブ</h3>
+<table>
+<tr><th>ボタン / 列</th><th>内容</th></tr>
+<tr><td>自動登録</td><td>まだ登録していないマテリアルを、名前から部位を推定して登録します（例: 名前に hair → 髪、eye → 目）</td></tr>
+<tr><td>選択から登録…</td><td>Maya でメッシュ（または面）を選んでから押すと、そのマテリアルを指定した部位・ロールで登録します</td></tr>
+<tr><td>部位を選択</td><td>表で選んだ行の部位に属するメッシュを Maya で選択します。「どこがこの部位か」を目で確かめるのに使います</td></tr>
+<tr><td>登録解除</td><td>表で選んだ行の部位を登録から外します（調整した値は Look に残ります）</td></tr>
+<tr><td>部位（列）</td><td><strong>ダブルクリックで名前を変更</strong>。別の部位名を入れると、そのマテリアルがその部位へ移動します</td></tr>
+<tr><td>ロール（列）</td><td>部位の種類。変えると「プリセットを入れ直すか」を聞かれます（いいえ = 調整した値はそのまま）</td></tr>
+<tr><td>メッシュ（列）</td><td>そのマテリアルが付いているメッシュ</td></tr>
+</table>
+
+<h2>ロールとプリセット</h2>
+<p>ロールを選ぶと、その部位に合った<strong>“アニメ的な嘘”の初期値</strong>が入ります。初期値は登録したときに 1 回入るだけで、その後の調整は上書きされません。</p>
+<table>
+<tr><th>ロール</th><th>主な初期値</th></tr>
+<tr><td>顔 (face)</td><td>影を弱く（影の強さ 0.35）、線を細く（0.6）</td></tr>
+<tr><td>肌（体） (skin)</td><td>影を肌らしい赤寄りの色に、線 0.9</td></tr>
+<tr><td>髪 (hair)</td><td>線を太めに（1.3）。描く順番を顔より後に</td></tr>
+<tr><td>目 (eye)</td><td>影なし・線なし</td></tr>
+<tr><td>アイライン・まつ毛 (eyeline)</td><td>影なし・線なし</td></tr>
+<tr><td>眉 (brow)</td><td>影なし・線なし。描く順番を最後の方に（髪の上に出すための準備）</td></tr>
+<tr><td>口 (mouth)</td><td>影を弱く（0.2）、線を細く（0.4）</td></tr>
+<tr><td>頬・紅潮 (blush)</td><td>影なし・線なし（頬に重ねる板など）</td></tr>
+<tr><td>服 (cloth) / 装飾 (accessory)</td><td>線 1.0 / 0.8</td></tr>
+<tr><td>その他 (other)</td><td>初期値なし</td></tr>
+</table>
+<div class="tip">
+<strong>透明かどうかは元のマテリアルから引き継ぎます。</strong> 同じ「目」でも白目は不透明、瞳は透明…とモデルによって違うためです。元のマテリアルの透明度（Transparency）にテクスチャや値が入っていれば透明として扱われます。
+</div>
+
+<h2>注意点</h2>
+<ul>
+<li>Look を保存すると、シーン（.mb / .ma）にも「どの Look を使っているか」が記録されます。ただし<strong>シーンを開いたときに Look を自動で開く機能は<span class="soon">準備中</span></strong>です。今はエディタの <strong>開く</strong> で <span class="path">looks/&lt;キャラクター ID&gt;/look.json</span> を開いてください</li>
+<li>Toon 表示のままシーンを保存しても問題ありません。いつでも「元の見た目」に戻せます</li>
+</ul>
+
+<footer><a href="Readme.html">トップへ戻る</a></footer>
+</body>
+</html>

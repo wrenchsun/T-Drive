@@ -27,6 +27,12 @@ def list_profiles() -> list[str]:
     return sorted(p.stem for p in PROFILE_DIR.glob("*.json"))
 
 
+def default_profile() -> str | None:
+    """プロファイル未選択時に使うもの（一覧の先頭）。値をコードに書かないため名前も固定しない。"""
+    names = list_profiles()
+    return names[0] if names else None
+
+
 def load_profile(name: str) -> dict[str, Any]:
     prof = json.loads((PROFILE_DIR / f"{name}.json").read_text(encoding="utf-8"))
     prof.setdefault("name", name)

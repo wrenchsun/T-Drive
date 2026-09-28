@@ -220,6 +220,9 @@ class Session:
         lk = self.require()
         self.shown = variant
         environment.prepare_panel()
+        if preview.environment_state()["profile"] is None and (name := environment.default_profile()):
+            # リロード直後などで環境未設定なら既定のプロファイルを当てる（色管理・トーンマップ・ライト）
+            preview.use_profile(name)
         failed = preview.enable(look.resolve(lk, variant))
         if failed:
             print(f"[T-Drive] シーンに存在しないマテリアル: {', '.join(failed)}")

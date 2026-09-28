@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>はじめに（導入） - T-Drive デザイナーマニュアル</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<nav class="breadcrumb"><a href="Readme.html">トップ</a> › はじめに（導入）</nav>
+<h1>はじめに（導入）</h1>
+<p class="lastupdate">最終更新日: 2026-09-28</p>
+
+<h2>初回だけ必要な設定</h2>
+
+<h3>1. ツールを Maya に登録する</h3>
+<p>リポジトリのフォルダで、次のコマンドを 1 回だけ実行します（PowerShell）。</p>
+<pre><code>powershell -ExecutionPolicy Bypass -File tools\install_maya_module.ps1</code></pre>
+<p>「Installed: …TDriveToon.mod」と出れば OK です。</p>
+
+<h3>2. Maya の表示方式を DirectX 11 にする</h3>
+<ol>
+<li>Maya のメニュー <strong>Windows › Settings/Preferences › Preferences</strong> を開く</li>
+<li>左の一覧から <strong>Display</strong> を選ぶ</li>
+<li><strong>Viewport 2.0 › Rendering engine</strong> を <strong>DirectX 11</strong> にする</li>
+<li><strong>Save</strong> を押して、<strong>Maya を再起動</strong>する</li>
+</ol>
+<div class="warn">
+<strong>DirectX 11 にしないと Toon 表示になりません。</strong> ゲーム（Unity）と同じシェーダーの計算式を Maya でも使うために必要です。エディタ上部にオレンジ色の警告が出ている場合は、ここを確認してください。
+</div>
+<div class="tip">
+色の設定（カラーマネジメント）は<strong>ツールが自動で</strong>ゲームと同じにします。自分で変える必要はありません。
+</div>
+
+<h2>毎回の起動</h2>
+<ol>
+<li>Maya 2026 を起動すると、上部のメニューに <strong>「T-Drive Toon」</strong> が追加されます</li>
+<li><strong>T-Drive Toon › エディタ</strong> でエディタが開きます</li>
+</ol>
+
+<h3>テスト用シーン</h3>
+<p>リポジトリ直下の <span class="path">T-Drive.mb</span> はテスト用のシーンです（テスト素体としてユニティちゃんが入っています）。開くとすでに Toon 表示になっています。</p>
+<div class="tip">
+開いたときに白っぽい表示のままなら、ビューポートで <strong>キーボードの 6</strong>（テクスチャ表示）を押してください。エディタで Look を開くと自動でテクスチャ表示になります。
+</div>
+<div class="warn">
+ユニティちゃんは<strong>確認用の素体</strong>です。ゲーム（MS2026）では使いません。ツールは特定のモデルに依存しない作りなので、本番のキャラクターでも同じ手順で使えます。
+</div>
+
+<h2>メニュー「T-Drive Toon」</h2>
+<table>
+<tr><th>項目</th><th>内容</th></tr>
+<tr><td>エディタ</td><td>エディタを開く</td></tr>
+<tr><td>Toon 表示 ON/OFF</td><td>Toon 表示と元の見た目を切り替える（エディタの「表示」と同じ）</td></tr>
+<tr><td>ツールをリロード</td><td>ツールを最新の状態に読み込み直す（ツールが更新されたとき）</td></tr>
+<tr><td>MCP ポートを開く / 閉じる</td><td>AI アシスタント（Claude）から Maya を操作するための接続口。通常は起動時に自動で開きます</td></tr>
+</table>
+
+<footer><a href="Readme.html">トップへ戻る</a></footer>
+</body>
+</html>

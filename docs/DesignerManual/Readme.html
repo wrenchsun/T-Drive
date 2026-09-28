@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>T-Drive デザイナーマニュアル</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<!-- 運用メモ: このフォルダ (docs/DesignerManual) の *.html / style.css / images が正本。
+     機能を追加・変更したら同じコミットで該当ページを更新し、最終更新日と「今できること」の表を直すこと（CLAUDE.md）。 -->
+
+<h1>T-Drive デザイナーマニュアル</h1>
+<p class="lastupdate">最終更新日: 2026-09-28（ツール v0.1.0 開発中）</p>
+
+<p>このマニュアルは、<strong>T-Drive Toon</strong>（Maya 2026 でセルルック＝アニメ調のキャラクターの見た目を作るツール）をデザイナーが使うためのガイドです。プログラムの知識は必要ありません。</p>
+
+<h2>T-Drive Toon とは？（30秒で分かる説明）</h2>
+<p>3D のキャラクターを<strong>アニメの絵のように見せるための「見た目の設定」</strong>を、Maya の上で作って確かめる道具です。</p>
+<ul>
+<li>キャラクターを<strong>「顔」「髪」「目」などの部位</strong>に分けて登録します</li>
+<li>部位ごとに<strong>影の色・影の出方・線の太さ</strong>などを調整します（例: 顔だけ影を弱くする）</li>
+<li><strong>A 案と B 案を並べて比べて</strong>、良い方を採用できます</li>
+<li>作った設定はそのまま <strong>Unity（MS2026）で同じ見た目</strong>になるように作られています</li>
+</ul>
+
+<div class="tip">
+<strong>大事な考え方:</strong> 3D として正しいかより、<strong>絵として伝わるか</strong>を優先します。「顔に影を落とさない」「眉を髪の上に出す」のような<strong>“アニメ的な嘘”</strong>を、キャラクターごと・部位ごとの設定として持つのがこのツールの役目です。
+</div>
+
+<div class="tip">
+<strong>Maya と Unity で同じ見た目:</strong> Maya のプレビューは、ゲーム（Unity）と<strong>同じ計算式・同じ色の扱い・同じカメラの画角</strong>で表示します。Maya で決めた見た目が、そのままゲームで出ることを目指しています。詳しくは <a href="unity-parity.html">Unity との見た目の一致</a>。
+</div>
+
+<h2>今できること</h2>
+<table>
+<tr><th>機能</th><th>状態</th><th>ページ</th></tr>
+<tr><td>ツールの導入・起動</td><td><span class="ok">使える</span></td><td><a href="setup.html">はじめに（導入）</a></td></tr>
+<tr><td>Look（見た目の設定ファイル）の新規作成・開く・保存</td><td><span class="ok">使える</span></td><td><a href="parts.html">部位の登録</a></td></tr>
+<tr><td>部位の登録（自動 / 選択から）・ロールの変更</td><td><span class="ok">使える</span></td><td><a href="parts.html">部位の登録</a></td></tr>
+<tr><td>Toon 表示 ⇔ 元の見た目 の切り替え</td><td><span class="ok">使える</span></td><td><a href="parts.html#preview">部位の登録</a></td></tr>
+<tr><td>部位ごとの見た目の調整（スライダー）</td><td><span class="soon">準備中</span></td><td><a href="look-params.html">見た目のパラメータ</a></td></tr>
+<tr><td>A/B 比較</td><td><span class="soon">準備中</span></td><td>—</td></tr>
+<tr><td>カメラ・ライトのプリセット（正面 / 3/4 / 横 …）</td><td><span class="soon">準備中</span></td><td><a href="unity-parity.html">Unity との見た目の一致</a></td></tr>
+<tr><td>頂点カラーで影・線を塗る（Toon マスク）</td><td><span class="soon">準備中</span></td><td><a href="look-params.html#mask">見た目のパラメータ</a></td></tr>
+</table>
+
+<h2>ページ一覧</h2>
+<ul class="pagelinks">
+<li><a href="setup.html">はじめに（導入）</a><p>初回だけ必要な設定と、毎回の起動方法。</p></li>
+<li><a href="parts.html">部位の登録</a><p>キャラクターを「顔」「髪」などに分ける。Toon 表示の切り替え。</p></li>
+<li><a href="look-params.html">見た目のパラメータ</a><p>影・固定色・線・マスクの意味と、頂点カラーの塗り方のルール。</p></li>
+<li><a href="unity-parity.html">Unity との見た目の一致</a><p>何が一致して、何が一致しないか。</p></li>
+<li><a href="troubleshooting.html">困ったとき</a><p>Toon 表示にならない・色がおかしい・Maya が固まった など。</p></li>
+</ul>
+
+<h2>用語</h2>
+<table>
+<tr><th>用語</th><th>意味</th></tr>
+<tr><td>Look（ルック）</td><td>1 キャラクター分の見た目の設定ファイル（<span class="path">looks/&lt;キャラクター&gt;/look.json</span>）。これが正本で、Unity にもこの内容が渡ります</td></tr>
+<tr><td>部位</td><td>名前を付けたマテリアルのまとまり（例: 「face」= 顔と口のマテリアル）</td></tr>
+<tr><td>ロール</td><td>部位の種類（顔 / 髪 / 目 / 眉 …）。登録したときの初期値（プリセット）が決まります</td></tr>
+<tr><td>バリアント</td><td>A/B 比較用の別案。基本の値（base）との差分だけを持ちます</td></tr>
+<tr><td>環境プロファイル</td><td>ゲーム（Unity）側の明るさの扱い・ライト・カメラの画角をまとめたもの。プレビューをゲームと同じ条件にするために使います</td></tr>
+</table>
+
+<footer>T-Drive Toon デザイナーマニュアル / 仕様の詳細はリポジトリの docs/（プログラマー・TA 向け）を参照</footer>
+</body>
+</html>

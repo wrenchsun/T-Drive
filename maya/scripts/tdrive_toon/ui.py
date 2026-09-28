@@ -243,6 +243,8 @@ class PartsTab(QtWidgets.QWidget):
             lk = self.session.look
             scene = preview.scene_materials()
             names = sorted(set(scene) | set(lk["materials"] if lk else []))
+            # 一度空にしてセル内ウィジェット（ロールのコンボ）を確実に破棄する。残ると前回の表示が重なる
+            self.table.setRowCount(0)
             self.table.setRowCount(len(names))
             for row, mat in enumerate(names):
                 part = look.part_of(lk, mat) if lk else None

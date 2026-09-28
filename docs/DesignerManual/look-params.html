@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>見た目のパラメータ - T-Drive デザイナーマニュアル</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<nav class="breadcrumb"><a href="Readme.html">トップ</a> › 見た目のパラメータ</nav>
+<h1>見た目のパラメータ</h1>
+<p class="lastupdate">最終更新日: 2026-09-28</p>
+
+<div class="warn">
+<strong>スライダーで調整する「ルック」タブは<span class="soon">準備中</span>です。</strong> このページではパラメータの意味を先に説明します。
+</div>
+
+<figure>
+<img src="images/toon_preview.png" alt="Toon プレビュー">
+<figcaption>Toon 表示の例（影が 2 段階でくっきり分かれる。頬は固定色）</figcaption>
+</figure>
+
+<h2>影（2 段階の影）</h2>
+<p>光の当たり方で「明るい所」と「影」の 2 段階に塗り分けます。グラデーションではなく、アニメのように境界がくっきり出ます。</p>
+<table>
+<tr><th>名前</th><th>意味</th><th>コツ</th></tr>
+<tr><td>影色</td><td>影の部分に掛ける色</td><td>黒や灰色ではなく、<strong>色味をずらす</strong>とアニメらしくなります（肌 → 赤紫寄り、服 → 青寄り など）</td></tr>
+<tr><td>影の境界</td><td>どこから影にするか（0〜1）</td><td>大きいほど影の面積が広がります</td></tr>
+<tr><td>境界ぼかし</td><td>境界のぼけ具合</td><td>小さいほどくっきり。0.01〜0.03 くらいがセルらしい</td></tr>
+<tr><td>影の強さ</td><td>影をどれだけ出すか（0 = 影なし）</td><td><strong>顔は弱く</strong>（0.2〜0.4）すると綺麗に見えます</td></tr>
+</table>
+
+<h2>固定色（頬・耳・口の中）</h2>
+<p>光に関係なく、決まった場所にいつも色を乗せます。頬の赤み、耳の赤み、口の中を暗くする、などに使います。場所は <a href="#mask">Toon マスク</a> の A（アルファ）で塗ります。</p>
+<table>
+<tr><th>名前</th><th>意味</th></tr>
+<tr><td>固定色</td><td>乗せる色（掛け算）</td></tr>
+<tr><td>固定色の強さ</td><td>0 = 乗せない / 1 = しっかり乗せる</td></tr>
+</table>
+
+<h2>線（アウトライン）</h2>
+<p>キャラクターの外側の輪郭線です。</p>
+<table>
+<tr><th>名前</th><th>意味</th><th>コツ</th></tr>
+<tr><td>線色</td><td>線の色</td><td>真っ黒より、<strong>暗い茶・暗い赤</strong>などにすると柔らかく見えます</td></tr>
+<tr><td>線色にベース色を混ぜる</td><td>線色に、その場所の元の色（テクスチャ）を混ぜる割合</td><td>0.5 前後にすると、肌は赤っぽい線・髪は髪色の線になります</td></tr>
+<tr><td>線幅</td><td>線の太さ。<strong>1 = フル HD（1080p）の画面で 1 ピクセル</strong></td><td>カメラの距離を変えても画面上の太さは変わりません。顔は細く、髪は太めが基本</td></tr>
+</table>
+
+<h2 id="mask">Toon マスク（頂点カラーで塗る）<span class="soon">準備中</span></h2>
+<p>「首の下はいつも影」「頬の線は描かない」のような<strong>場所ごとの指定</strong>は、モデルの頂点カラーに塗って指定します。Maya の Paint Vertex Color Tool でモデルに直接塗れて、<strong>塗った瞬間にプレビューに反映</strong>されます（塗る機能は準備中）。</p>
+
+<div class="tip">
+<strong>ルールは 1 つだけ: 「白 = 何もしない」。効かせたい所を黒く塗る。</strong><br>
+塗っていない所・塗り忘れた所はそのまま普通の見た目になるので、失敗しても壊れません。
+</div>
+
+<table>
+<tr><th>チャンネル</th><th>黒く塗ると</th><th>使い道の例</th></tr>
+<tr><td><span class="swatch" style="background:#e33"></span>R（赤）</td><td>いつも影になる</td><td>首の下、目の周り、鼻の下、前髪の下、髪の内側</td></tr>
+<tr><td><span class="swatch" style="background:#3b3"></span>G（緑）</td><td>線が細くなる・消える</td><td>頬・鼻・顎の線を消す、毛先の線を細く</td></tr>
+<tr><td><span class="swatch" style="background:#36e"></span>B（青）</td><td>いつも明るくなる</td><td>顔の真ん中をいつも明るく、鼻の影を消す</td></tr>
+<tr><td><span class="swatch" style="background:#888"></span>A（アルファ）</td><td>固定色が乗る</td><td>頬・耳の赤み、口の中を暗く</td></tr>
+</table>
+<p>灰色で塗ると「半分だけ効く」になります。</p>
+
+<h2>色の値について</h2>
+<p>パラメータの色は <strong>Unity のインスペクターで見る色と同じ値</strong>です。Maya で決めた色を Unity に持っていっても、同じ色に見えます。</p>
+
+<footer><a href="Readme.html">トップへ戻る</a></footer>
+</body>
+</html>

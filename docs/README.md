@@ -13,5 +13,6 @@
 | 08 | [08_unity_port_plan.md](08_unity_port_plan.md) | MS2026 への移植計画・D-Drive 適合チェック・要合意事項 |
 | 09 | [09_render_parity.md](09_render_parity.md) | Maya プレビューと Unity 描画の一致（パリティ）方針 |
 | — | [tasks.md](tasks.md) | 優先順位順のチケット一覧 |
+| — | [DesignerManual/Readme.html](DesignerManual/Readme.html) | **デザイナーマニュアル**（HTML。デザイナー向けの使い方） |
 
 読む順番: 00 → 04 → tasks → 必要に応じて 01〜03, 05〜09。
