@@ -36,6 +36,15 @@ shaders/ToonCore.hlsl            ← 式の唯一の実装（03_shader_spec.md �
    └─ MS2026/…/Toon/MS2026_Toon.shader    (URP ラッパー: CBUFFER・サンプリング・パス)  ← U-2 でコピー or サブモジュール
 ```
 
+### MS2026 はプロトタイプ（値は変わる前提）
+
+MS2026 自体が開発中で、色空間以外（トーンマップ・ライト・カメラ・ポスト・解像度）は今後変わりうる。そのため:
+
+- **ツールのコードに MS2026 の値を書かない**。値はすべて環境プロファイル（データ）に置き、プロファイルを差し替えれば追従する
+- ツール側は URP の選択肢を網羅的に扱う（トーンマップ None / Neutral / ACES、任意の FOV・解像度）。未対応の値（現状 ACES）は警告を出してプレビュー上「要確認」と表示する
+- プロファイルには取得元と日付を残す。U-0 以降は Unity 側の書き出しで更新し、**手入力値は暫定**とする
+- 下表の「Unity」列は 2026-09-28 時点のスナップショット。変わったら表とプロファイルを同時に更新する
+
 ## 2. 一致させる項目（パリティ表）
 
 | 項目 | Unity（MS2026、2026-09-28 調査） | Maya プレビューでの合わせ方 |
@@ -45,32 +54,33 @@ shaders/ToonCore.hlsl            ← 式の唯一の実装（03_shader_spec.md �
 | マスク・法線系 | リニア（sRGB OFF） | colorSpace = Raw |
 | 頂点カラー | そのまま（変換なし） | そのまま（Color Set の値を変換しない） |
 | HDR | ON | 浮動小数のまま計算し、最後にトーンマップ |
-| トーンマップ | DefaultVolumeProfile = **None**、SampleSceneProfile = Neutral（**本番シーンでどちらか要確認**） | プロファイルの値に従い、シェーダー最終段で `ToonCore` の同じトーンマップ関数を適用。Maya のビュー変換は **Un-tone-mapped (sRGB)** に固定（ACES 等を掛けない） |
+| トーンマップ | **InGame = Neutral**（SampleSceneProfile）。Title/Lobby 等 Volume の無いシーンは DefaultVolumeProfile = None | プロファイルの値に従い、シェーダー最終段で `ToonCore` の同じトーンマップ関数を適用。Maya のビュー変換は **Un-tone-mapped (sRGB)** に固定（ACES 等を掛けない） |
 | 出力 | sRGB 表示 | 同上（Un-tone-mapped = リニア → sRGB のみ） |
-| メインライト | Directional の色 × 強度 | 環境プロファイルの値をキャラクターライトとして使う（キャラクターライト方向はツールで回せる） |
+| メインライト | InGame: Directional 強度 2・色温度 5000K・回転 (50, -30, 0) | **キャラクターライトはシーンライトと独立**（D-4）。Maya/Unity とも環境プロファイルの `characterLight` を使う。シーンライトは参考値として `sceneMainLight` に記録 |
 | 環境光 | P0 の式では使わない | 同左。式に環境光を足す場合は ToonCore に入れ、プロファイルから SH/単色を渡す |
-| カメラ | Cinemachine 縦 FOV **40°**（Player.prefab）、シーン既定 60° | カメラプリセットは **縦 FOV 指定**（Unity の Gate Fit=Vertical と同じ）で焦点距離を逆算。Near/Far もプロファイル値 |
+| カメラ | Cinemachine 縦 FOV **40°**・Near 0.1・Far 5000（Player.prefab。シーンの Camera 60° は Cinemachine が上書き） | カメラプリセットは **縦 FOV 指定**（Unity の Gate Fit=Vertical と同じ）で焦点距離を逆算。Near/Far もプロファイル値 |
 | 単位 | 1 unit = 1 m（UnityChan FBX globalScale 0.01） | Maya は cm。**長さを持つパラメータは Unity 単位（m）で定義**し、Maya ラッパーで ×100 する |
 | 解像度・線幅 | 画面高さ基準 | 線幅は「画面高さに対する割合」で定義済み（[03](03_shader_spec.md) §3）なので解像度非依存で一致。キャプチャは 1920×1080 に統一 |
 | アンチエイリアス | MSAA なし（`m_MSAA: 1`）、ポスト AA は要確認 | パリティキャプチャ時は VP2 のマルチサンプルを OFF |
 | 法線・接線 | FBX の法線/接線を Import | FBX 出力時に法線・接線（MikkTSpace）を書き出す。Maya 側プレビューも同じ接線を使う |
+| ポスト | InGame は Bloom・Vignette が有効 | 再現しない（既知ギャップ）。パリティキャプチャは Unity 側で Bloom/Vignette を切って撮る |
 | 背面カリング | `_Cull` = Back（DoubleSided で Off） | シェイプの Backface Culling をマテリアルの doubleSided に合わせて設定 |
 
 ## 3. Unity 環境プロファイル
 
 `looks/_env/<profile>.json`（例: `ms2026_ingame.json`）。Unity 側の小さなエディタ拡張で現在のシーンから書き出す（U チケット）。書き出せるようになるまでは手入力の既定値を使う。
 
-```jsonc
-{
-  "name": "ms2026_ingame",
-  "source": "MS2026 Assets/_Project/Scenes/Main/InGame.unity",
-  "colorSpace": "Linear",
-  "tonemapping": "None",              // None | Neutral | ACES
-  "mainLight": { "color": [1, 0.96, 0.9], "intensity": 1.0, "rotation": [50, -30, 0] },
-  "camera": { "verticalFov": 40, "near": 0.3, "far": 1000 },
-  "captureSize": [1920, 1080]
-}
-```
+実例: [looks/_env/ms2026_ingame.json](../looks/_env/ms2026_ingame.json)
+
+| キー | 内容 | 使う側 |
+|---|---|---|
+| `colorSpace` | `Linear` のみ対応 | 検証のみ |
+| `tonemapping` | `None` / `Neutral` | Maya ラッパーが最終段で ToonCore の同関数を適用 |
+| `characterLight` | 色・強度・回転（Unity のオイラー角、度） | Maya プレビューライト / Unity のキャラクターライト既定値（D-4） |
+| `sceneMainLight` / `ambientSkyColor` | シーンのライト（参考値） | 現状未使用。環境光を式に入れる場合に使う |
+| `camera` | 縦 FOV・Near・Far（m） | Maya カメラプリセット |
+| `post` | 有効なポスト | 既知ギャップの表示用 |
+| `captureSize` | パリティキャプチャ解像度 | 両方 |
 
 - プレビュータブで「環境」を選ぶと Maya のライト・カメラ・トーンマップ・ビュー変換がこの値に揃う
 - キャプチャのファイル名に環境名を含め、A/B・パリティ比較の条件を必ず揃える

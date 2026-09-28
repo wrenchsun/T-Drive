@@ -1,65 +1,57 @@
-"""Viewport 2.0 プレビュー: 元マテリアルを T-Drive Toon の GLSLShader に差し替え、Look の値を流し込む。
+"""Viewport 2.0 プレビュー: 元マテリアルを T-Drive Toon の dx11Shader に差し替え、Look の値を流し込む。
 
-- 元マテリアルは削除しない。プレビュー用 SG へ面を移し、元の割り当ては JSON で記録して復元できる。
-- Look 値の反映は setAttr だけなので、スライダー操作に追従できる速さで動く。
+- 元マテリアル・元の割り当ては変更しない。プレビュー用 SG に面を移し、解除時に元の SG へ戻す
+- 値の反映は setAttr だけ（シェーダー再コンパイルなし）なのでスライダーに追従できる
+- ツールが前提にするのは「標準の Maya マテリアルが割り当てられたメッシュ」だけ（特定モデルの事情は持ち込まない）
 """
 
 from __future__ import annotations
 
 import json
-import math
 from pathlib import Path
 from typing import Any
 
 from maya import cmds
 
-from . import REPO_ROOT, params
+from . import REPO_ROOT, environment, params
 
-SHADER_FILE = (REPO_ROOT / "maya" / "shaders" / "TDriveToon.ogsfx").as_posix()
+SHADER_FILE = (REPO_ROOT / "maya" / "shaders" / "TDriveToon.fx").as_posix()
+NODE_TYPE = "dx11Shader"
 SUFFIX = "_tdToon"
 SOURCE_ATTR = "tdSourceMaterial"  # プレビューシェーダー → 元マテリアル名
-MEMBERS_ATTR = "tdSourceMembers"  # 元 SG のメンバー（復元用 JSON）
+MASK_COLOR_SET = "tdToonMask"  # docs/03 §4
+SMOOTH_NORMAL_UV = "tdSmoothNormal"  # docs/03 §5
 
-# プレビュー環境（Look には保存しない。Unity ではシーンのライト等に相当）
-_env = {"lightYaw": 35.0, "lightPitch": 35.0, "lightColor": [1.0, 1.0, 1.0], "refHeight": 1080.0}
+# 現在のプレビュー環境（プロファイル + ツールでの上書き）。Look には保存しない
+_env: dict[str, Any] = {"profile": None, "lightDir": (0.4, 0.6, 0.7), "lightColor": (1.0, 1.0, 1.0), "tonemap": 0}
 
 
 # ---------------------------------------------------------------- 準備
 
 
 def ensure_plugin() -> None:
-    if not cmds.pluginInfo("glslShader", query=True, loaded=True):
-        cmds.loadPlugin("glslShader", quiet=True)
-
-
-def rendering_engine_warning() -> str | None:
-    """GLSLShader は OpenGL でしか描画されない。DirectX 11 なら警告文を返す。"""
-    engine = cmds.optionVar(query="vp2RenderingEngine") if cmds.optionVar(exists="vp2RenderingEngine") else ""
-    if engine and "OpenGL" not in engine:
-        return (
-            "Viewport 2.0 のレンダリングエンジンが OpenGL ではありません。\n"
-            "Windows > Settings/Preferences > Preferences > Display > Viewport 2.0 > Rendering engine を\n"
-            "「OpenGL - Core Profile」にして Maya を再起動してください。"
-        )
-    return None
+    if not cmds.pluginInfo(NODE_TYPE, query=True, loaded=True):
+        cmds.loadPlugin(NODE_TYPE, quiet=True)
 
 
 # ---------------------------------------------------------------- シーン走査
 
 
 def scene_materials() -> dict[str, list[str]]:
-    """メッシュに割り当てられている元マテリアル名 → メッシュ(transform)一覧。"""
+    """メッシュに割り当てられている元マテリアル名 → メッシュ(transform)一覧。割り当ての無いメッシュは対象外。"""
     result: dict[str, set[str]] = {}
     for sg in cmds.ls(type="shadingEngine"):
         shader = _surface_shader(sg)
         if not shader:
             continue
-        mat = source_material(shader)
-        members = cmds.sets(sg, query=True) or []
-        meshes = {m.split(".")[0] for m in members}
-        meshes = {cmds.listRelatives(m, parent=True, fullPath=False)[0] if cmds.nodeType(m) == "mesh" else m for m in meshes}
+        meshes = set()
+        for m in cmds.sets(sg, query=True) or []:
+            node = m.split(".")[0]
+            if cmds.nodeType(node) == "mesh":
+                node = cmds.listRelatives(node, parent=True)[0]
+            meshes.add(node)
         if meshes:
-            result.setdefault(mat, set()).update(meshes)
+            result.setdefault(source_material(shader), set()).update(meshes)
     return {k: sorted(v) for k, v in sorted(result.items())}
 
 
@@ -75,18 +67,18 @@ def _surface_shader(sg: str) -> str | None:
 
 
 def _shading_group(shader: str) -> str | None:
-    sgs = cmds.listConnections(shader, type="shadingEngine") or []
+    sgs = cmds.listConnections(f"{shader}.outColor", type="shadingEngine") or []
     return sgs[0] if sgs else None
 
 
 def materials_on_selection() -> list[str]:
     """選択中のメッシュ / 面に割り当てられている元マテリアル名。"""
     sel = cmds.ls(selection=True, long=True) or []
-    shapes = cmds.ls(sel, dagObjects=True, type="mesh", long=True) or []
+    shapes = cmds.ls(sel, dagObjects=True, type="mesh", long=True, noIntermediate=True) or []
     faces = cmds.filterExpand(sel, selectionMask=34) or []
     mats: set[str] = set()
     for sg in cmds.listConnections(shapes, type="shadingEngine") or []:
-        if (sh := _surface_shader(sg)):
+        if sh := _surface_shader(sg):
             mats.add(source_material(sh))
     for f in faces:
         for sg in cmds.listSets(object=f, type=1) or []:
@@ -97,20 +89,24 @@ def materials_on_selection() -> list[str]:
 
 def base_texture_of(material: str) -> str | None:
     """元マテリアルのカラーに繋がる file テクスチャのパス（リポジトリ内ならリポジトリ相対）。"""
-    for attr in ("color", "baseColor", "diffuseColor"):
+    for attr in ("color", "baseColor", "base_color", "diffuseColor"):
         if not cmds.attributeQuery(attr, node=material, exists=True):
             continue
         files = cmds.listConnections(f"{material}.{attr}", type="file") or []
         if files:
-            return to_repo_path(cmds.getAttr(f"{files[0]}.fileTextureName"))
+            return to_repo_path(cmds.getAttr(f"{files[0]}.computedFileTextureNamePattern"))
     return None
+
+
+def meshes_of(material: str) -> list[str]:
+    return scene_materials().get(material, [])
 
 
 def to_repo_path(path: str) -> str:
     p = Path(path)
     try:
-        return p.resolve().relative_to(REPO_ROOT).as_posix()
-    except ValueError:
+        return p.resolve().relative_to(REPO_ROOT.resolve()).as_posix()
+    except (ValueError, OSError):
         return p.as_posix()
 
 
@@ -126,53 +122,58 @@ def preview_shader_of(material: str) -> str:
     return f"{material}{SUFFIX}"
 
 
+def preview_shaders() -> list[str]:
+    return cmds.ls(f"*{SUFFIX}", type=NODE_TYPE) or []
+
+
 def is_active() -> bool:
-    return bool(cmds.ls(f"*{SUFFIX}", type="GLSLShader")) and any(
-        cmds.sets(_shading_group(s), query=True) for s in cmds.ls(f"*{SUFFIX}", type="GLSLShader") if _shading_group(s)
-    )
+    return any(cmds.sets(sg, query=True) for s in preview_shaders() if (sg := _shading_group(s)))
 
 
 def enable(materials: dict[str, dict[str, Any]]) -> list[str]:
-    """resolve 済みのマテリアル値でプレビューを有効化。作れなかったマテリアル名を返す。"""
+    """resolve 済みのマテリアル値でプレビューを有効化する。シーンに無かったマテリアル名を返す。"""
     ensure_plugin()
-    failed = []
+    missing = []
     for mat, values in materials.items():
         if not cmds.objExists(mat):
-            failed.append(mat)
+            missing.append(mat)
             continue
         shader = _ensure_preview_shader(mat)
         apply_values(mat, values)
-        _swap(mat, shader)
+        _update_mesh_streams(mat, shader)
+        _swap(_shading_group(mat), _shading_group(shader))
     apply_environment()
-    return failed
+    return missing
 
 
 def disable() -> None:
     """元マテリアルの割り当てに戻す（プレビューシェーダーは残し、次回すぐ有効化できるようにする）。"""
-    for shader in cmds.ls(f"*{SUFFIX}", type="GLSLShader"):
-        sg = _shading_group(shader)
+    for shader in preview_shaders():
         src = source_material(shader)
-        src_sg = _shading_group(src) if cmds.objExists(src) else None
-        if not (sg and src_sg):
-            continue
-        members = cmds.sets(sg, query=True) or []
-        if members:
-            cmds.sets(members, edit=True, forceElement=src_sg)
+        if cmds.objExists(src):
+            _swap(_shading_group(shader), _shading_group(src))
 
 
 def delete_all() -> None:
     disable()
-    for shader in cmds.ls(f"*{SUFFIX}", type="GLSLShader"):
-        sg = _shading_group(shader)
-        files = [n for n in (cmds.listConnections(shader, type="file") or [])]
-        cmds.delete([n for n in (shader, sg, *files) if n and cmds.objExists(n)])
+    for shader in preview_shaders():
+        nodes = [shader, _shading_group(shader), *(cmds.listConnections(shader, type="file") or [])]
+        cmds.delete([n for n in nodes if n and cmds.objExists(n)])
+
+
+def _swap(src_sg: str | None, dst_sg: str | None) -> None:
+    if not (src_sg and dst_sg):
+        return
+    members = cmds.sets(src_sg, query=True) or []
+    if members:
+        cmds.sets(members, edit=True, forceElement=dst_sg)
 
 
 def _ensure_preview_shader(mat: str) -> str:
     name = preview_shader_of(mat)
     if cmds.objExists(name):
         return name
-    shader = cmds.shadingNode("GLSLShader", asShader=True, name=name)
+    shader = cmds.shadingNode(NODE_TYPE, asShader=True, name=name)
     cmds.setAttr(f"{shader}.shader", SHADER_FILE, type="string")
     cmds.addAttr(shader, longName=SOURCE_ATTR, dataType="string")
     cmds.setAttr(f"{shader}.{SOURCE_ATTR}", mat, type="string")
@@ -181,22 +182,34 @@ def _ensure_preview_shader(mat: str) -> str:
     return shader
 
 
-def _swap(mat: str, shader: str) -> None:
-    src_sg = _shading_group(mat)
-    dst_sg = _shading_group(shader)
-    members = (cmds.sets(src_sg, query=True) or []) if src_sg else []
-    if members:
-        cmds.sets(members, edit=True, forceElement=dst_sg)
+def _update_mesh_streams(mat: str, shader: str) -> None:
+    """頂点カラー tdToonMask を全メッシュが持つときだけ頂点マスクを有効にする（無いメッシュを黒で壊さない）。"""
+    meshes = meshes_of(mat)
+    has_mask = bool(meshes) and all(MASK_COLOR_SET in (cmds.polyColorSet(m, query=True, allColorSets=True) or []) for m in meshes)
+    _set(shader, "VertexMaskEnabled", has_mask)
+    # dx11Shader の頂点ストリームの取得元（既定は color:colorSet / uv:map3）
+    _set_string(shader, "Color0_Source", f"color:{MASK_COLOR_SET}")
+    _set_string(shader, "TexCoord2_Source", f"uv:{SMOOTH_NORMAL_UV}")
+
+
+def _set_string(node: str, attr: str, value: str) -> None:
+    if cmds.attributeQuery(attr, node=node, exists=True) and cmds.getAttr(f"{node}.{attr}") != value:
+        cmds.setAttr(f"{node}.{attr}", value, type="string")
 
 
 def reload_shader_file() -> None:
-    """ogsfx を編集した後に呼ぶ。全プレビューシェーダーを再コンパイルする。"""
-    for shader in cmds.ls(f"*{SUFFIX}", type="GLSLShader"):
-        cmds.setAttr(f"{shader}.shader", "", type="string")
-        cmds.setAttr(f"{shader}.shader", SHADER_FILE, type="string")
+    """.fx / ToonCore.hlsl を編集した後に呼ぶ。全プレビューシェーダーを再コンパイルする。"""
+    for shader in preview_shaders():
+        cmds.dx11Shader(shader, edit=True, reload=True)
 
 
 # ---------------------------------------------------------------- 値の反映
+
+
+def technique_for(common: dict[str, Any]) -> str:
+    if common.get("blend") == "Transparent":
+        return "Transparent"
+    return "OpaqueDoubleSided" if common.get("doubleSided") else "Opaque"
 
 
 def apply_values(mat: str, values: dict[str, Any]) -> None:
@@ -204,173 +217,146 @@ def apply_values(mat: str, values: dict[str, Any]) -> None:
     shader = preview_shader_of(mat)
     if not cmds.objExists(shader):
         return
-    for field, value in values.get("common", {}).items():
-        _apply_common(shader, field, value)
+    common = values.get("common", {})
+    if "blend" in common or "doubleSided" in common:
+        current = {"blend": _get_blend(shader), "doubleSided": cmds.getAttr(f"{shader}.technique") == "OpaqueDoubleSided"}
+        current.update({k: common[k] for k in ("blend", "doubleSided") if k in common})
+        _set_technique(shader, technique_for(current))
+        _set(shader, "AlphaClip", current["blend"] == "Cutout")
+    if "cutoff" in common:
+        _set(shader, "Cutoff", common["cutoff"])
+    if "albedoTint" in common:
+        _set(shader, "BaseColor", common["albedoTint"])
+    if "albedo" in common:
+        _set_texture(shader, "BaseMap", common["albedo"], srgb=True)
+    # normal / emission は P0 の式で使わない（Unity 側でのみ使用）
     for key, value in values.get("specific", {}).items():
         p = params.PARAMS_BY_UNITY.get(key)
         if p is None:
             continue
         if p.kind == params.TEXTURE:
-            _set_texture(shader, p.maya, value)
+            _set_texture(shader, p.maya, value, srgb=False)
         else:
             _set(shader, p.maya, value)
+
+
+def _get_blend(shader: str) -> str:
+    if cmds.getAttr(f"{shader}.technique") == "Transparent":
+        return "Transparent"
+    return "Cutout" if _get(shader, "AlphaClip") else "Opaque"
 
 
 def apply_value(mat: str, key: str, value: Any) -> None:
     """1 項目だけ反映（スライダー操作用）。key は look.set_value と同じ形式。"""
     if key == "renderQueueOffset":
-        return  # Maya プレビューでは描画順を再現しない（Phase 2）
+        return  # Maya では描画順を再現しない（docs/09 §4）
     if key.startswith("common."):
         apply_values(mat, {"common": {key.split(".", 1)[1]: value}})
     else:
         apply_values(mat, {"specific": {key: value}})
 
 
-def _apply_common(shader: str, field: str, value: Any) -> None:
-    if field == "blend":
-        _set(shader, "technique", "Transparent" if value == "Transparent" else "Opaque")
-        _set(shader, "AlphaClip", value == "Cutout")
-    elif field == "cutoff":
-        _set(shader, "Cutoff", value)
-    elif field == "albedoTint":
-        _set(shader, "BaseColor", value)
-    elif field == "albedo":
-        _set_texture(shader, "BaseMap", value)
-    # normal / emission / doubleSided は Maya プレビュー対象外（Unity 側でのみ使用）
+def _set_technique(shader: str, technique: str) -> None:
+    if cmds.getAttr(f"{shader}.technique") != technique:
+        cmds.setAttr(f"{shader}.technique", technique, type="string")
+
+
+def _get(node: str, attr: str) -> Any:
+    return cmds.getAttr(f"{node}.{attr}") if cmds.attributeQuery(attr, node=node, exists=True) else None
 
 
 def _set(node: str, attr: str, value: Any) -> None:
-    plug = f"{node}.{attr}"
-    if attr == "technique":
-        if cmds.getAttr(plug) != value:
-            cmds.setAttr(plug, value, type="string")
-        return
     if not cmds.attributeQuery(attr, node=node, exists=True):
         return
+    plug = f"{node}.{attr}"
     if isinstance(value, bool):
         cmds.setAttr(plug, value)
     elif isinstance(value, (int, float)):
-        cmds.setAttr(plug, float(value))
-    elif isinstance(value, list):
-        children = cmds.attributeQuery(attr, node=node, listChildren=True) or []
-        if len(children) >= 3:
-            cmds.setAttr(plug, *[float(v) for v in value[: len(children)]], type=f"double{len(children)}" if len(children) > 3 else "double3")
-        # float4 の色は Maya 側で color(float3) + <name>A に分かれることがある
-        for alpha in (f"{attr}A", f"{attr}_A", f"{attr}Alpha"):
-            if len(value) == 4 and cmds.attributeQuery(alpha, node=node, exists=True):
-                cmds.setAttr(f"{node}.{alpha}", float(value[3]))
+        cmds.setAttr(plug, value)
+    elif isinstance(value, (list, tuple)):
+        v = [float(x) for x in value]
+        # dx11Shader の float4 色（color1x4）は <name>RGB(float3) + <name>A に分かれる
+        if cmds.attributeQuery(f"{attr}RGB", node=node, exists=True):
+            cmds.setAttr(f"{node}.{attr}RGB", *v[:3], type="double3")
+            if len(v) == 4:
+                cmds.setAttr(f"{node}.{attr}A", v[3])
+        else:
+            cmds.setAttr(plug, *v[:3], type="double3")
 
 
-def _set_texture(shader: str, attr: str, path: str | None) -> None:
+def _set_texture(shader: str, attr: str, path: str | None, srgb: bool) -> None:
+    enabled = f"{attr}Enabled"
+    if not path:
+        _set(shader, enabled, False)
+        return
     if not cmds.attributeQuery(attr, node=shader, exists=True):
         return
-    enabled = f"{attr}Enabled"
     file_node = f"{shader}_{attr}"
-    if not path:
-        if cmds.attributeQuery(enabled, node=shader, exists=True):
-            cmds.setAttr(f"{shader}.{enabled}", False)
-        return
     if not cmds.objExists(file_node):
         file_node = cmds.shadingNode("file", asTexture=True, isColorManaged=True, name=file_node)
         cmds.connectAttr(f"{file_node}.outColor", f"{shader}.{attr}", force=True)
     full = from_repo_path(path)
     if cmds.getAttr(f"{file_node}.fileTextureName") != full:
         cmds.setAttr(f"{file_node}.fileTextureName", full, type="string")
-    if attr != "BaseMap":
-        # マスク類はデータなので色管理しない
+    # ベースカラーは sRGB（Unity の sRGB テクスチャ）、マスク類はリニア（docs/09 §2）
+    space = environment.pick_texture_space(srgb)
+    if space:
         cmds.setAttr(f"{file_node}.ignoreColorSpaceFileRules", True)
-        cmds.setAttr(f"{file_node}.colorSpace", "Raw", type="string")
-    if cmds.attributeQuery(enabled, node=shader, exists=True):
-        cmds.setAttr(f"{shader}.{enabled}", True)
+        cmds.setAttr(f"{file_node}.colorSpace", space, type="string")
+    _set(shader, enabled, True)
 
 
-# ---------------------------------------------------------------- 環境（ライト / カメラ）
+# ---------------------------------------------------------------- 環境（キャラクターライト / トーンマップ）
 
 
-def environment() -> dict[str, Any]:
+def environment_state() -> dict[str, Any]:
     return dict(_env)
 
 
-def set_environment(**kwargs: Any) -> None:
-    _env.update(kwargs)
+def use_profile(name: str) -> list[str]:
+    """環境プロファイルを適用する。警告（未対応の値など）を返す。"""
+    prof = environment.load_profile(name)
+    direction, color = environment.character_light(prof)
+    _env.update(profile=name, lightDir=direction, lightColor=color, tonemap=environment.tonemap_mode(prof))
+    environment.apply_color_management()
+    apply_environment()
+    return environment.profile_warnings(prof)
+
+
+def set_light(direction: tuple[float, float, float] | None = None, color: tuple[float, float, float] | None = None) -> None:
+    if direction is not None:
+        _env["lightDir"] = tuple(direction)
+    if color is not None:
+        _env["lightColor"] = tuple(color)
     apply_environment()
 
 
-def light_dir() -> list[float]:
-    yaw, pitch = math.radians(_env["lightYaw"]), math.radians(_env["lightPitch"])
-    return [math.sin(yaw) * math.cos(pitch), math.sin(pitch), math.cos(yaw) * math.cos(pitch)]
-
-
 def apply_environment() -> None:
-    d = light_dir()
-    for shader in cmds.ls(f"*{SUFFIX}", type="GLSLShader"):
-        _set(shader, "PreviewLightDir", d)
-        _set(shader, "PreviewLightColor", _env["lightColor"])
-        _set(shader, "PreviewViewportHeight", _env["refHeight"])
+    for shader in preview_shaders():
+        _set(shader, "PreviewLightDir", list(_env["lightDir"]))
+        _set(shader, "PreviewLightColor", list(_env["lightColor"]))
+        _set(shader, "PreviewTonemap", int(_env["tonemap"]))
 
 
-CAMERA_PRESETS = {"正面": 0.0, "3/4": 35.0, "横": 90.0, "後ろ": 180.0, "3/4 左": -35.0}
-CAMERA_NAME = "tdPreviewCam"
+# ---------------------------------------------------------------- キャプチャ
 
 
-def frame_camera(yaw_deg: float, target: str = "head", fov_fit: float = 1.4) -> str:
-    """キャラクター（全メッシュの bbox、target=head なら上端付近）を指定ヨー角から見るカメラを作る。"""
-    meshes = cmds.ls(type="mesh", noIntermediate=True, long=True)
-    if not meshes:
-        raise RuntimeError("メッシュがありません")
-    xmin, ymin, zmin, xmax, ymax, zmax = cmds.exactWorldBoundingBox(meshes)
-    height = ymax - ymin
-    if target == "head":
-        cy, span = ymax - height * 0.1, height * 0.2
-    else:
-        cy, span = (ymin + ymax) / 2, height
-    cx, cz = (xmin + xmax) / 2, (zmin + zmax) / 2
-    if not cmds.objExists(CAMERA_NAME):
-        cam, _ = cmds.camera(name=CAMERA_NAME)
-        cmds.rename(cam, CAMERA_NAME)
-    cam = CAMERA_NAME
-    shape = cmds.listRelatives(cam, shapes=True)[0]
-    cmds.setAttr(f"{shape}.focalLength", 50)
-    vfov = 2 * math.atan(cmds.getAttr(f"{shape}.verticalFilmAperture") * 25.4 / 2 / 50)
-    dist = span * fov_fit / 2 / math.tan(vfov / 2)
-    yaw = math.radians(yaw_deg)
-    cmds.xform(cam, worldSpace=True, translation=(cx + math.sin(yaw) * dist, cy, cz + math.cos(yaw) * dist))
-    cmds.xform(cam, worldSpace=True, rotation=(0, yaw_deg, 0))
-    panel = _model_panel()
-    if panel:
-        cmds.modelPanel(panel, edit=True, camera=cam)
-    return cam
-
-
-def _model_panel() -> str | None:
-    panel = cmds.getPanel(withFocus=True)
-    if panel and cmds.getPanel(typeOf=panel) == "modelPanel":
-        return panel
-    panels = cmds.getPanel(type="modelPanel") or []
-    visible = set(cmds.getPanel(visiblePanels=True) or [])
-    for p in panels:
-        if p in visible:
-            return p
-    return panels[0] if panels else None
-
-
-def capture(path: str, width: int = 960, height: int = 1080) -> str:
-    """現在のビューポートを 1 枚画像で保存する（A/B 比較用）。"""
+def capture(path: str, width: int = 1920, height: int = 1080) -> str:
+    """現在のビューポートを 1 枚画像で保存する（A/B・パリティ比較用）。"""
     Path(path).parent.mkdir(parents=True, exist_ok=True)
-    panel = _model_panel()
-    frame = cmds.currentTime(query=True)
-    kwargs = dict(
-        frame=[frame], format="image", compression="png", completeFilename=path,
-        viewer=False, showOrnaments=False, offScreen=True, percent=100,
-        widthHeight=(width, height), forceOverwrite=True, clearCache=True,
-    )
+    panel = environment.model_panel()
     if panel:
         cmds.setFocus(panel)
-    cmds.playblast(**kwargs)
+    frame = cmds.currentTime(query=True)
+    cmds.playblast(
+        frame=[frame], format="image", compression="png", completeFilename=path, viewer=False,
+        showOrnaments=False, offScreen=True, percent=100, widthHeight=(width, height),
+        forceOverwrite=True, clearCache=True,
+    )
     return path
 
 
-# ---------------------------------------------------------------- シーン内メタデータ
+# ---------------------------------------------------------------- シーン内メタデータ / デバッグ
 
 
 def remember_look_path(path: str) -> None:
@@ -384,13 +370,12 @@ def remembered_look_path() -> str | None:
 
 def dump_state() -> str:
     """MCP からのデバッグ用: プレビュー状態を JSON で返す。"""
-    shaders = cmds.ls(f"*{SUFFIX}", type="GLSLShader")
     return json.dumps(
         {
-            "shaders": {s: source_material(s) for s in shaders},
+            "shaders": {s: source_material(s) for s in preview_shaders()},
             "active": is_active(),
-            "env": _env,
-            "warning": rendering_engine_warning(),
+            "env": {k: list(v) if isinstance(v, tuple) else v for k, v in _env.items()},
+            "parityProblems": environment.parity_problems(),
         },
         ensure_ascii=False,
     )

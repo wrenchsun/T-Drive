@@ -1,0 +1,28 @@
+{
+  "name": "ms2026_ingame",
+  "source": "MS2026 Assets/_Project/Scenes/Main/InGame.unity + Prefabs/Characters/Player.prefab (2026-09-28 手入力。U-0 で Unity から書き出した値に置き換える)",
+  "colorSpace": "Linear",
+  "tonemapping": "Neutral",
+  "characterLight": {
+    "color": [1.0, 1.0, 1.0],
+    "intensity": 1.0,
+    "rotation": [50.0, -30.0, 0.0]
+  },
+  "sceneMainLight": {
+    "color": [1.0, 1.0, 1.0],
+    "intensity": 2.0,
+    "colorTemperature": 5000,
+    "rotation": [50.0, -30.0, 0.0]
+  },
+  "ambientSkyColor": [0.212, 0.227, 0.259],
+  "camera": {
+    "verticalFov": 40.0,
+    "near": 0.1,
+    "far": 5000.0
+  },
+  "post": {
+    "bloom": true,
+    "vignette": true
+  },
+  "captureSize": [1920, 1080]
+}

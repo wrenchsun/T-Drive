@@ -25,7 +25,7 @@ ROLE_PRESETS: dict[str, dict[str, Any]] = {
     "hair": {
         "label": "髪",
         "renderQueueOffset": 10,
-        "specific": {"_ToonOutlineWidth": 1.3, "_ToonRimStrength": 0.25},
+        "specific": {"_ToonOutlineWidth": 1.3},
     },
     "eye": {
         "label": "目",
@@ -70,7 +70,7 @@ ROLE_PRESETS: dict[str, dict[str, Any]] = {
 ROLES = tuple(ROLE_PRESETS)
 
 # マテリアル名 → ロール の推定ルール（上から順に最初に一致したもの）。
-# UnityChan 等の既存モデルを部位登録するときの初期値。確定はユーザーがエディタで行う。
+# 部位登録の初期値。確定はユーザーがエディタで行う。
 AUTO_RULES: tuple[tuple[str, str], ...] = (
     (r"brow|mayu", "brow"),
     (r"eyeline|lash|matsuge", "eyeline"),

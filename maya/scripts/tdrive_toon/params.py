@@ -51,27 +51,33 @@ BLEND_TYPES = ("Opaque", "Cutout", "Transparent")
 # D-Drive MaterialData.BaseRenderQueue と同じ値
 BASE_RENDER_QUEUE = {"Opaque": 2000, "Cutout": 2450, "Transparent": 3000}
 
-# D-Drive の Specific に入る Toon 固有パラメータ
+# D-Drive の Specific に入る Toon 固有パラメータ（docs/03_shader_spec.md §7.2 と一致させる）
 SPECIFIC_PARAMS: tuple[Param, ...] = (
-    # --- 影（2 階調） ---
+    # --- 影（2 階調）T-01 / T-04 ---
     Param("_ToonShadeColor", COLOR, [0.78, 0.72, 0.86, 1.0], "Shadow", "影色"),
     Param("_ToonShadeThreshold", FLOAT, 0.5, "Shadow", "影の境界", 0.0, 1.0),
     Param("_ToonShadeFeather", FLOAT, 0.02, "Shadow", "境界ぼかし", 0.001, 0.5),
     Param("_ToonShadowStrength", FLOAT, 1.0, "Shadow", "影の強さ", 0.0, 1.0),
-    # R=影バイアス(0.5 中立 / 0 常に影 / 1 常に明) G=輪郭線幅倍率 B=頬・耳の色マスク A=リムマスク
-    Param("_ToonMaskMap", TEXTURE, None, "Shadow", "Toon マスク (RGBA)"),
-    # --- リム ---
-    Param("_ToonRimColor", COLOR, [1.0, 1.0, 1.0, 1.0], "Rim", "リム色"),
-    Param("_ToonRimPower", FLOAT, 4.0, "Rim", "リムの鋭さ", 0.5, 16.0),
-    Param("_ToonRimStrength", FLOAT, 0.0, "Rim", "リムの強さ", 0.0, 1.0),
-    # --- 固定色（頬・耳） ---
-    Param("_ToonBlushColor", COLOR, [1.0, 0.45, 0.45, 1.0], "Blush", "頬色"),
-    Param("_ToonBlushIntensity", FLOAT, 0.0, "Blush", "頬の強さ", 0.0, 1.0),
-    # --- アウトライン（背面法線押し出し） ---
+    # --- マスク T-19。頂点カラーに乗算。null = 白（何もしない） ---
+    Param("_ToonMaskMap", TEXTURE, None, "Mask", "Toon マスク (RGBA)"),
+    # --- 固定色 T-08（頂点カラー A を黒く塗った所に乗る） ---
+    Param("_ToonTintColor", COLOR, [1.0, 0.6, 0.6, 1.0], "Tint", "固定色"),
+    Param("_ToonTintStrength", FLOAT, 0.0, "Tint", "固定色の強さ", 0.0, 1.0),
+    # --- アウトライン T-05 / T-06。線幅は「1080p 換算 px」= 画面高さに対する割合 ---
     Param("_ToonOutlineColor", COLOR, [0.28, 0.2, 0.2, 1.0], "Outline", "線色"),
     Param("_ToonOutlineBaseMix", FLOAT, 0.5, "Outline", "線色にベース色を混ぜる", 0.0, 1.0),
-    # 線幅の単位は「1080p 画面での px」。距離によらず画面上で一定（Unity 側も同じ式）
     Param("_ToonOutlineWidth", FLOAT, 1.0, "Outline", "線幅 (px@1080p)", 0.0, 10.0),
+    Param("_ToonOutlineSmoothNormal", FLOAT, 1.0, "Outline", "スムーズ法線を使う (0/1)", 0.0, 1.0),
+)
+
+# 名前だけ先に確定している P1 以降のパラメータ（docs/03 §7.3）。追加時にここから SPECIFIC_PARAMS へ移す
+RESERVED_NAMES = (
+    "_ToonDepthOffset",
+    "_ToonRimColor", "_ToonRimPower", "_ToonRimStrength",
+    "_ToonHairHighlightMap", "_ToonHairHighlightColor", "_ToonHairHighlightShift",
+    "_ToonOutlineDistanceScale",
+    "_ToonFaceShadowMap", "_ToonFaceForward", "_ToonFaceRight",
+    "_ToonShade2Color", "_ToonShade2Threshold",
 )
 
 PARAMS_BY_UNITY = {p.unity: p for p in SPECIFIC_PARAMS}

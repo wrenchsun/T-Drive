@@ -46,3 +46,6 @@ Desktop.ini
 .vscode/
 .idea/
 *.tmp
+
+# テスト素体シーン（tools/fixtures/build_unitychan_scene.py で再生成できる）
+assets/unitychan/unitychan_test.ma

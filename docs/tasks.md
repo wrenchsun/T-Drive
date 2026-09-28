@@ -16,9 +16,9 @@ Unity 移植（U）は「のちに」だが、M1 到達後に並行で着手で�
 | 0-1 | リポジトリ雛形（.gitignore / .gitattributes + Git LFS / VERSION / CHANGELOG / CLAUDE.md / README） | — | 0.5 | — | バイナリ（fbx/tga/png/mb）が LFS 管理。`captures/` `build/` が管理外 | ✅ |
 | 0-2 | 仕様書一式（docs/00〜08, tasks.md） | — | 1 | — | 目的・制約・優先順位・Look 仕様・シェーダー仕様・ツール仕様・リリース運用・移植計画が揃う | ✅ |
 | 0-3 | **Maya MCP 導入**（GG_MayaMCP 0.6.1 / `.mcp.json` / ランチャー / Maya モジュール / commandPort 自動オープン） | — | 0.5 | 0-1 | Claude Code から `health.check` → `scene.info` が成功（Maya 起動状態で確認） | 🔶 設定済み・疎通未確認 |
-| 0-4 | UnityChan テスト素体の取り込み（D-Drive から FBX・テクスチャ・ライセンス） | — | 0.5 | 0-1 | `assets/unitychan/` に配置。Maya で FBX を読み込み、マテリアル一覧が取れる | 🔶 配置済み・読込未確認 |
-| 0-5 | パラメータ契約・ロール・Look 定義（読み書き・検証・バリアント解決・差分・D-Drive 形式出力）＋ pytest | — | 1.5 | 0-2 | [02](02_look_definition_spec.md) §6 の全検証ルールと [03](03_shader_spec.md) §7.2 の契約がテストで担保される | 🔶 旧案で実装済み（頂点カラー方針・`_ToonTint*` 改名を反映要） |
-| 0-7 | Unity 環境プロファイル仕様と既定値（`looks/_env/ms2026_ingame.json` を手入力で作成: Linear / トーンマップ / ライト / 縦 FOV 40） | — | 0.5 | 0-2 | [09](09_render_parity.md) §3 の形式で読み込める。トーンマップの本番値（None/Neutral）を MS2026 に確認済み | ⬜ |
+| 0-4 | UnityChan テスト素体の取り込み（D-Drive から FBX・テクスチャ・ライセンス） | — | 0.5 | 0-1 | `assets/unitychan/` に配置。Maya で FBX を読み込み、マテリアル一覧が取れる | ✅ CgFX マテリアル消失はフィクスチャ `tools/fixtures/build_unitychan_scene.py` 側で吸収（ツールには持ち込まない） |
+| 0-5 | パラメータ契約・ロール・Look 定義（読み書き・検証・バリアント解決・差分・D-Drive 形式出力）＋ pytest | — | 1.5 | 0-2 | [02](02_look_definition_spec.md) §6 の全検証ルールと [03](03_shader_spec.md) §7.2 の契約がテストで担保される | ✅ 契約と docs/03 の一致もテスト化 |
+| 0-7 | Unity 環境プロファイル仕様と既定値（`looks/_env/ms2026_ingame.json` を手入力で作成: Linear / トーンマップ / ライト / 縦 FOV 40） | — | 0.5 | 0-2 | [09](09_render_parity.md) §3 の形式で読み込める。トーンマップの本番値（None/Neutral）を MS2026 に確認済み | ✅ InGame=Neutral |
 | 0-6 | リリーススクリプト（`check-release.ps1` / `bump-version.ps1` / 契約スナップショット） | — | 1 | 0-5 | DryRun で VERSION・CHANGELOG の更新内容が表示される。契約から削除があるのに MAJOR でない場合に失敗する | ⬜ |
 
 **M0 デモ**: Claude から MCP 経由で Maya に UnityChan を読み込み、マテリアル一覧を取得できる。

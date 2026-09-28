@@ -1,0 +1,43 @@
+import math
+
+import pytest
+
+from tdrive_toon import envmath
+
+
+def approx(v, expected):
+    return all(math.isclose(a, b, abs_tol=1e-4) for a, b in zip(v, expected))
+
+
+@pytest.mark.parametrize(
+    "euler,to_light_maya",
+    [
+        ((90, 0, 0), (0, 1, 0)),      # 真下へ照らすライト → 光源は真上
+        ((0, 0, 0), (0, 0, -1)),      # +Z へ照らす → 光源はキャラクターの背後（-Z）
+        ((0, 180, 0), (0, 0, 1)),     # -Z へ照らす → 光源はキャラクターの正面（+Z）
+        ((0, 90, 0), (1, 0, 0)),      # Unity +X へ照らす → 光源は Unity -X = Maya +X
+        ((0, 0, 45), (0, 0, -1)),     # Z 回転は方向に影響しない
+    ],
+)
+def test_light_direction(euler, to_light_maya):
+    assert approx(envmath.light_dir_to_light_maya(euler), to_light_maya)
+
+
+def test_light_direction_ms2026_ingame_example():
+    # InGame のライト (50, -30, 0): 上から、キャラクターの背後・Unity の -X 側から照らす
+    d = envmath.light_dir_to_light_maya((50, -30, 0))
+    assert approx(d, (-math.cos(math.radians(50)) * math.sin(math.radians(30)), math.sin(math.radians(50)),
+                      -math.cos(math.radians(50)) * math.cos(math.radians(30))))
+
+
+def test_focal_length_matches_vertical_fov():
+    vfa = 0.945  # Maya 既定（35mm フル）
+    fl = envmath.focal_length_for_vertical_fov(40.0, vfa)
+    fov_back = math.degrees(2 * math.atan(vfa * 25.4 / 2 / fl))
+    assert math.isclose(fov_back, 40.0, abs_tol=1e-6)
+
+
+def test_orbit_camera_looks_at_target():
+    pos, rot = envmath.orbit_camera((0, 150, 0), 100, yaw_deg=90)
+    assert approx(pos, (100, 150, 0))
+    assert approx(rot, (0, 90, 0))  # Maya カメラは -Z を見るので Y+90 で -X（= target 方向）を向く

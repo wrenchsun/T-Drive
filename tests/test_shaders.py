@@ -1,0 +1,57 @@
+"""シェーダーのオフラインコンパイル確認（Windows SDK の fxc がある環境のみ）。"""
+
+import glob
+import subprocess
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+FXC = sorted(glob.glob(r"C:\Program Files (x86)\Windows Kits\10\bin\*\x64\fxc.exe"))
+needs_fxc = pytest.mark.skipif(not FXC, reason="fxc.exe (Windows SDK) が無い")
+
+
+def _fxc(*args: str) -> subprocess.CompletedProcess:
+    return subprocess.run([FXC[-1], "/nologo", *args], capture_output=True, text=True)
+
+
+@needs_fxc
+def test_maya_fx_compiles(tmp_path):
+    r = _fxc("/T", "fx_5_0", "/D", "_MAYA_", "/Fo", str(tmp_path / "out.fxo"), str(ROOT / "maya/shaders/TDriveToon.fx"))
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+@needs_fxc
+def test_core_compiles_standalone(tmp_path):
+    """ToonCore.hlsl が Maya ラッパー無しでも（= Unity からの include と同条件で）コンパイルできる。"""
+    src = tmp_path / "harness.hlsl"
+    src.write_text(
+        f'#include "{(ROOT / "shaders/ToonCore.hlsl").as_posix()}"\n'
+        "float4 main(float4 c : COLOR0, float3 n : NORMAL) : SV_Target {\n"
+        "  float4 m = Toon_CombineMask(c, c);\n"
+        "  float lit = Toon_LitFactor(normalize(n), float3(0,1,0), m, 0.5, 0.02, 1.0);\n"
+        "  float3 col = Toon_Shade(c.rgb, lit, float3(0.8,0.7,0.9), float3(1,1,1));\n"
+        "  col = Toon_ApplyTint(col, m, float3(1,0.6,0.6), 0.5);\n"
+        "  col += Toon_SmoothNormalWS(c.xy, normalize(n), float3(1,0,0), 1.0) * 0.001;\n"
+        "  col += Toon_OutlineColor(col, float3(0.2,0.2,0.2), 0.5) * 0.001;\n"
+        "  col.xy += Toon_OutlineClipOffset(c.xy, 1.0, m, 1.0) * 0.001;\n"
+        "  return float4(Toon_Tonemap(col, TOON_TONEMAP_NEUTRAL), 1);\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    r = _fxc("/T", "ps_5_0", "/E", "main", "/Fo", str(tmp_path / "out.cso"), str(src))
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_fx_uniforms_match_contract():
+    """Maya ラッパーがパラメータ契約の全パラメータを uniform として持っている。"""
+    import re
+    import sys
+
+    sys.path.insert(0, str(ROOT / "maya" / "scripts"))
+    from tdrive_toon import params
+
+    fx = (ROOT / "maya/shaders/TDriveToon.fx").read_text(encoding="utf-8")
+    declared = set(re.findall(r"^(?:float4|float|Texture2D|bool|int|float3)\s+(\w+)", fx, re.M))
+    missing = {p.maya for p in params.SPECIFIC_PARAMS} - declared
+    assert not missing, f".fx に無いパラメータ: {missing}"

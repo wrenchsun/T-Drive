@@ -76,7 +76,22 @@ def test_ddrive_material_data_export():
 @pytest.mark.parametrize(
     "name,role",
     [("face", "face"), ("eye_L1", "eye"), ("eyebase", "eye"), ("eyeline", "eyeline"),
-     ("mat_cheek", "blush"), ("hair", "hair"), ("skin1", "skin"), ("body", "cloth"), ("Left", "other")],
+     ("mat_cheek", "blush"), ("hair", "hair"), ("skin1", "skin"), ("body", "cloth"), ("Left", "other"),
+     ("M_CharaA_Brow", "brow"), ("M_CharaA_Mouth", "mouth"), ("M_CharaA_Ribbon", "accessory")],
 )
-def test_guess_role_unitychan(name, role):
+def test_guess_role(name, role):
     assert roles.guess_role(name) == role
+
+
+def test_contract_matches_shader_spec_doc():
+    """docs/03 §7.2 の表とパラメータ契約が一致している（仕様とコードのズレ防止）。"""
+    from pathlib import Path
+    doc = (Path(__file__).resolve().parents[1] / "docs" / "03_shader_spec.md").read_text(encoding="utf-8")
+    section = doc.split("### 7.2")[1].split("### 7.3")[0]
+    import re
+    documented = set(re.findall(r"^\| `(_Toon\w+)`", section, re.M))
+    assert documented == {p.unity for p in params.SPECIFIC_PARAMS}
+
+
+def test_reserved_names_not_in_use():
+    assert not set(params.RESERVED_NAMES) & set(params.PARAMS_BY_UNITY)

@@ -4,6 +4,8 @@
 
 ## 1. 移植先の前提（2026-09-28 調査）
 
+> MS2026 は現在プロトタイプで、以下は変わりうる。値に依存するものは環境プロファイル（[09](09_render_parity.md) §3）経由にし、コード・仕様に直書きしない。
+
 | 項目 | MS2026 | D-Drive |
 |---|---|---|
 | Unity | 6000.3.13f1 | 6000.3.13f1（アップグレード禁止） |
@@ -48,6 +50,6 @@ D-Drive の拡張点（MaterialData の Specific、ShaderConversionTable、MayaI
 | Q-1 | シェーダーの置き場所・名前 | MS2026 に `MS2026/Toon`（上記）。D-Drive に入れるなら `DDrive/Toon` |
 | Q-2 | `_ToonMaskMap` のテクスチャ規約 | 命名 `T_<対象>_ToonMask`、リニア・圧縮 BC7。D-Drive `TextureImportProfile` に接尾辞ルールを追加するか、MS2026 側のインポート設定で扱うか |
 | Q-3 | Renderer Feature の追加可否 | T-23（スクリーンスペース線）/T-29（接地影）/T-24（ステンシル）で必要。MS2026 PC_Renderer への追加を MS2026 チームと合意 |
-| Q-5 | 本番シーンのトーンマップ | DefaultVolumeProfile は None、SampleSceneProfile は Neutral。InGame で有効なのはどちらか（パリティの前提） |
+| Q-5 | ~~本番シーンのトーンマップ~~ | **解決（2026-09-28）**: InGame は SampleSceneProfile = Neutral |
 | Q-6 | U-0（パリティ最小環境）の前倒し | Unity 実装は「のちに」だが、ギャップ最小化のため最小シェーダーだけ Phase 1 中に作るか |
 | Q-4 | UnityChan の扱い | テスト素体。MS2026 本番キャラクターの受け入れ前の検証にのみ使い、ゲームには入れない |

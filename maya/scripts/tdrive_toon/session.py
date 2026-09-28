@@ -190,7 +190,7 @@ class Session:
         self.show(self.ab[1] if self.shown == self.ab[0] else self.ab[0])
         return self.shown
 
-    def capture_ab(self, width: int = 960, height: int = 1080) -> tuple[str, str]:
+    def capture_ab(self, width: int = 1920, height: int = 1080) -> tuple[str, str]:
         """A と B を同じカメラ・ライトでキャプチャする。表示は元のバリアントに戻す。"""
         stamp = time.strftime("%Y%m%d-%H%M%S")
         char = self.require()["character"]
