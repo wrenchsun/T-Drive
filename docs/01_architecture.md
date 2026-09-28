@@ -9,14 +9,14 @@
 - 環境: Unity の色空間・トーンマップ・ライト・カメラを環境プロファイルとして Maya に持ち込む
 - 検証: 同条件キャプチャの画素差分で一致を確認する
 
-詳細は [09_render_parity.md](09_render_parity.md)。Unity の Renderer Feature やポストなど、マテリアル外の描画は再現しない（既知ギャップとして管理）。
+詳細は [09_render_parity.md](09_render_parity.md)。Unity 側は T-Drive の UPM パッケージ（[08](08_unity_port_plan.md)）がルックを一任で受け持ち、D-Drive とは互換ブリッジでつなぐ。Unity の Renderer Feature やポストなど、マテリアル外の描画は再現しない（既知ギャップとして管理）。
 
 ```
                     looks/<character>/look.json  （唯一の真実・Git 管理）
                                   │
                 ┌─────────────────┴─────────────────┐
                 ▼                                   ▼
-        Maya 2026 (本リポジトリ)                 Unity / MS2026（のちに実装）
+        Maya 2026 (本リポジトリ)                 Unity（T-Drive for Unity パッケージ → MS2026）
         Look Development                       Runtime Renderer
         ├ 部位登録                              ├ MS2026/Toon シェーダー
         ├ ルック調整 / A/B / プレビュー          ├ インポーター → D-Drive MaterialData

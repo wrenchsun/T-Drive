@@ -22,13 +22,13 @@ Maya 2026 上で **セルルック（アニメ調）キャラクターのルッ�
 |---|---|---|
 | C-1 | ツールは **Maya 2026**（Python 3.11 / PySide6 / Viewport 2.0）で動くこと | 指定 |
 | C-2 | 移植先は `C:\Users\yamag\wrench\unity\MS2026`（Unity 6000.3.13f1 / URP 17.3 / Forward+） | 指定・調査 |
-| C-3 | **D-Drive のマテリアルシステム（MaterialData）に適合すること**。適合しないものは NG | 指定 |
+| C-3 | ~~D-Drive の MaterialData に適合すること~~ → **2026-09-28 改定**: キャラクターのルックは **T-Drive の Unity パッケージ（`com.tdrive.toon`）に一任**し D-Drive から切り離す。ただし**互換性は保つ**（シェーダーのプロパティ構造を D-Drive の命名規約と同じにし、MaterialData へ変換できる）。シェーダー単体で無理な表現はコンポーネント・Renderer Feature で実装 | 指定 → [08](08_unity_port_plan.md) |
 | C-4 | テスト素体は **UnityChan**（D-Drive リポジトリから取得）。形状・UV・テクスチャのみ使用し、元マテリアル（URP Lit / UTS 残骸）は一切引き継がない | 指定 |
 | C-5 | セルルック優先。PBR 系技術の優先度は大きく下げる | 指定 |
 | C-7 | **Maya プレビューと Unity 描画のギャップを最小にする**（同じシェーダーコード・同じ色空間/トーンマップ・同じカメラ条件）| 指定 → [09_render_parity.md](09_render_parity.md) |
 | C-6 | **D-Drive のリリース運用（SemVer + 互換性区分 + タグ + CHANGELOG）に倣った** バージョン管理ができること | 指定 → [06_release_versioning.md](06_release_versioning.md) |
 
-### C-3 の具体的な意味（D-Drive 調査結果）
+### C-3 の具体的な意味（D-Drive 調査結果。2026-09-28 以降は「互換性として保つ条件」）
 
 D-Drive (`com.ddrive.core` 1.3.0) のマテリアルは Unity の .mat を直接持たず、`MaterialData` アセットで表現される。
 
