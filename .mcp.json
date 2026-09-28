@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "maya": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--no-project",
+        "--with",
+        "maya-mcp==0.6.1",
+        "python",
+        "tools/maya_mcp_launcher.py"
+      ],
+      "env": {
+        "MAYA_MCP_ENABLE_RAW_EXECUTION": "true",
+        "MAYA_MCP_SCRIPT_TIMEOUT": "120"
+      }
+    }
+  }
+}

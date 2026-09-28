@@ -1,0 +1,172 @@
+// T-Drive Toon — Maya Viewport 2.0 (OpenGL Core Profile) 用プレビューシェーダー
+//
+// Unity 側 "MS2026/Toon" と同じ式・同じパラメータ名（先頭の "_" を除いたもの）で実装する。
+// 式を変えたら docs/03_shader_spec.md と Unity 側シェーダーも同時に更新すること。
+//
+// Preview* / *Enabled / AlphaClip はプレビュー専用（Look データには保存されない）。
+
+// ------------------------------------------------------------------ 行列
+uniform mat4 gWVP   : WorldViewProjection < string UIWidget = "None"; >;
+uniform mat4 gWorld : World < string UIWidget = "None"; >;
+uniform mat4 gWIT   : WorldInverseTranspose < string UIWidget = "None"; >;
+uniform mat4 gVP    : ViewProjection < string UIWidget = "None"; >;
+uniform mat4 gViewI : ViewInverse < string UIWidget = "None"; >;
+
+// ------------------------------------------------------------------ Common（D-Drive MaterialCommon）
+uniform texture2D BaseMap < string ResourceName = ""; string ResourceType = "2D"; string UIName = "Base Map"; >;
+uniform sampler2D BaseMapSampler = sampler_state { Texture = <BaseMap>; };
+uniform bool BaseMapEnabled < string UIName = "Base Map Enabled"; > = false;
+uniform vec4 BaseColor : DIFFUSE < string UIName = "Base Color"; string UIWidget = "ColorPicker"; > = {1.0, 1.0, 1.0, 1.0};
+uniform bool AlphaClip < string UIName = "Alpha Clip (Cutout)"; > = false;
+uniform float Cutoff < string UIName = "Cutoff"; float UIMin = 0.0; float UIMax = 1.0; > = 0.5;
+
+// ------------------------------------------------------------------ Specific（_Toon*）
+uniform vec4  ToonShadeColor < string UIWidget = "ColorPicker"; > = {0.78, 0.72, 0.86, 1.0};
+uniform float ToonShadeThreshold < float UIMin = 0.0; float UIMax = 1.0; > = 0.5;
+uniform float ToonShadeFeather < float UIMin = 0.001; float UIMax = 0.5; > = 0.02;
+uniform float ToonShadowStrength < float UIMin = 0.0; float UIMax = 1.0; > = 1.0;
+
+// R=影バイアス(0.5 中立) G=線幅倍率 B=頬マスク A=リムマスク
+uniform texture2D ToonMaskMap < string ResourceName = ""; string ResourceType = "2D"; >;
+uniform sampler2D ToonMaskSampler = sampler_state { Texture = <ToonMaskMap>; };
+uniform bool ToonMaskMapEnabled = false;
+
+uniform vec4  ToonRimColor < string UIWidget = "ColorPicker"; > = {1.0, 1.0, 1.0, 1.0};
+uniform float ToonRimPower < float UIMin = 0.5; float UIMax = 16.0; > = 4.0;
+uniform float ToonRimStrength < float UIMin = 0.0; float UIMax = 1.0; > = 0.0;
+
+uniform vec4  ToonBlushColor < string UIWidget = "ColorPicker"; > = {1.0, 0.45, 0.45, 1.0};
+uniform float ToonBlushIntensity < float UIMin = 0.0; float UIMax = 1.0; > = 0.0;
+
+uniform vec4  ToonOutlineColor < string UIWidget = "ColorPicker"; > = {0.28, 0.2, 0.2, 1.0};
+uniform float ToonOutlineBaseMix < float UIMin = 0.0; float UIMax = 1.0; > = 0.5;
+uniform float ToonOutlineWidth < float UIMin = 0.0; float UIMax = 10.0; > = 1.0;
+
+// ------------------------------------------------------------------ プレビュー環境（Unity ではメインライト等）
+uniform vec3 PreviewLightDir < string UIName = "Preview Light Dir (to light)"; > = {0.4, 0.6, 0.7};
+uniform vec3 PreviewLightColor < string UIWidget = "ColorPicker"; > = {1.0, 1.0, 1.0};
+uniform float PreviewViewportHeight < string UIName = "Outline Reference Height"; > = 1080.0;
+
+// ------------------------------------------------------------------ 頂点入出力
+attribute appdata {
+    vec3 inPosition : POSITION;
+    vec3 inNormal   : NORMAL;
+    vec2 inUV       : TEXCOORD0;
+};
+
+attribute vertOut {
+    vec3 WorldNormal : TEXCOORD1;
+    vec3 WorldPos    : TEXCOORD2;
+    vec2 UV          : TEXCOORD0;
+};
+
+attribute pixelOut {
+    vec4 outColor : COLOR0;
+};
+
+// ------------------------------------------------------------------ 共通関数
+GLSLShader Common {
+    vec4 SampleBase(vec2 uv) {
+        vec4 c = BaseColor;
+        if (BaseMapEnabled) c *= texture(BaseMapSampler, uv);
+        return c;
+    }
+
+    vec4 SampleMask(vec2 uv) {
+        // マスク未設定時の中立値: 影バイアス 0.5 / 線幅 1 / 頬 0 / リム 1
+        if (!ToonMaskMapEnabled) return vec4(0.5, 1.0, 0.0, 1.0);
+        return texture(ToonMaskSampler, uv);
+    }
+
+    // docs/03_shader_spec.md §2 の式
+    vec3 ToonShade(vec3 base, vec4 mask, vec3 N, vec3 V) {
+        vec3 L = normalize(PreviewLightDir);
+        float halfLambert = dot(N, L) * 0.5 + 0.5;
+        float biased = clamp(halfLambert + (mask.r - 0.5) * 2.0, 0.0, 1.0);
+        float lit = smoothstep(ToonShadeThreshold - ToonShadeFeather, ToonShadeThreshold + ToonShadeFeather, biased);
+        lit = mix(1.0, lit, ToonShadowStrength);
+
+        vec3 col = mix(base * ToonShadeColor.rgb, base, lit) * PreviewLightColor;
+
+        float rim = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), ToonRimPower) * ToonRimStrength * mask.a;
+        col += ToonRimColor.rgb * rim * lit;
+
+        col = mix(col, col * ToonBlushColor.rgb, clamp(mask.b * ToonBlushIntensity * ToonBlushColor.a, 0.0, 1.0));
+        return col;
+    }
+}
+
+// ------------------------------------------------------------------ 本体パス
+GLSLShader VS_Main {
+    void main() {
+        vec4 p = vec4(inPosition, 1.0);
+        WorldPos = (gWorld * p).xyz;
+        WorldNormal = normalize((gWIT * vec4(inNormal, 0.0)).xyz);
+        UV = inUV;
+        gl_Position = gWVP * p;
+    }
+}
+
+GLSLShader PS_Main {
+    void main() {
+        vec4 base = SampleBase(UV);
+        if (AlphaClip && base.a < Cutoff) discard;
+        vec3 N = normalize(WorldNormal);
+        if (!gl_FrontFacing) N = -N;
+        vec3 V = normalize(gViewI[3].xyz - WorldPos);
+        outColor = vec4(ToonShade(base.rgb, SampleMask(UV), N, V), base.a);
+    }
+}
+
+// ------------------------------------------------------------------ アウトライン（背面法線押し出し）
+// 線幅は PreviewViewportHeight 基準の px。クリップ空間で押し出すので距離によらず画面上で一定。
+GLSLShader VS_Outline {
+    void main() {
+        vec4 p = vec4(inPosition, 1.0);
+        vec3 nWorld = normalize((gWIT * vec4(inNormal, 0.0)).xyz);
+        vec4 clip = gWVP * p;
+        vec2 nClip = (gVP * vec4(nWorld, 0.0)).xy;
+        float len = length(nClip);
+        if (len > 1e-5) nClip /= len;
+        float width = ToonOutlineWidth * SampleMask(inUV).g * (2.0 / PreviewViewportHeight);
+        clip.xy += nClip * width * clip.w;
+        WorldPos = (gWorld * p).xyz;
+        WorldNormal = nWorld;
+        UV = inUV;
+        gl_Position = clip;
+    }
+}
+
+GLSLShader PS_Outline {
+    void main() {
+        if (gl_FrontFacing || ToonOutlineWidth <= 0.0) discard;
+        vec4 base = SampleBase(UV);
+        if (AlphaClip && base.a < Cutoff) discard;
+        vec3 col = mix(ToonOutlineColor.rgb, ToonOutlineColor.rgb * base.rgb, ToonOutlineBaseMix);
+        outColor = vec4(col, 1.0);
+    }
+}
+
+// ------------------------------------------------------------------ テクニック
+technique Opaque < string Transparency = "Opaque"; >
+{
+    pass Outline
+    {
+        VertexShader (in appdata, out vertOut) = { Common, VS_Outline };
+        PixelShader (in vertOut, out pixelOut) = { Common, PS_Outline };
+    }
+    pass Main
+    {
+        VertexShader (in appdata, out vertOut) = { Common, VS_Main };
+        PixelShader (in vertOut, out pixelOut) = { Common, PS_Main };
+    }
+}
+
+technique Transparent < string Transparency = "Transparent"; >
+{
+    pass Main
+    {
+        VertexShader (in appdata, out vertOut) = { Common, VS_Main };
+        PixelShader (in vertOut, out pixelOut) = { Common, PS_Main };
+    }
+}

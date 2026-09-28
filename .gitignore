@@ -1,0 +1,48 @@
+# ===== Maya =====
+# 自動保存・一時ファイル
+*.swatches
+incrementalSave/
+autosave/
+*.ma.swp
+*.mb.swp
+*_bak.ma
+*_bak.mb
+*.mayaSwatches
+# Maya ワークスペースのキャッシュ/出力（シーンやソースは管理対象）
+maya/project/cache/
+maya/project/images/
+maya/project/movies/
+maya/project/renderData/
+maya/project/sourceimages/.mayaSwatches/
+maya/project/scenes/edits/
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# ===== ツール出力 =====
+# プレビューキャプチャ・A/B比較画像はローカルのみ（共有したいものは docs/images へ）
+captures/
+build/
+dist/
+# リリース成果物（zip）は GitHub Release に添付し、リポジトリには入れない
+release/*.zip
+
+# ===== ローカル設定 =====
+.claude/settings.local.json
+*.local.json
+.env
+
+# ===== OS / Editor =====
+Thumbs.db
+Desktop.ini
+.DS_Store
+.vscode/
+.idea/
+*.tmp
