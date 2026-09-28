@@ -11,9 +11,37 @@
 <h1>見た目のパラメータ</h1>
 <p class="lastupdate">最終更新日: 2026-09-28</p>
 
-<div class="warn">
-<strong>スライダーで調整する「ルック」タブは<span class="soon">準備中</span>です。</strong> このページではパラメータの意味を先に説明します。
+<h2>ルックタブの使い方</h2>
+<figure>
+<img src="images/editor_look.png" alt="ルックタブ">
+<figcaption>ルックタブ。左で部位かマテリアルを選び、右で値を変えます</figcaption>
+</figure>
+<ol>
+<li>左の一覧で<strong>部位</strong>（例: face）か<strong>マテリアル</strong>を選びます。部位を選ぶと、その部位の全マテリアルにまとめて設定されます</li>
+<li>右のスライダー・色・チェックを変えると、<strong>動かしている最中からビューポートに反映</strong>されます</li>
+<li>気に入ったらヘッダーの <strong>保存</strong></li>
+</ol>
+<table>
+<tr><th>操作</th><th>内容</th></tr>
+<tr><td>↺</td><td>その項目を<strong>ロールのプリセット値</strong>（無ければ既定値）に戻します</td></tr>
+<tr><td>元に戻す / やり直す（Ctrl+Z / Ctrl+Y）</td><td>エディタでの値の変更を戻します（エディタにカーソルがあるとき。Maya の Undo とは別です）</td></tr>
+<tr><td>「—」表示</td><td>部位の中でマテリアルごとに値が違うときの表示。操作すると全マテリアルがその値に揃います</td></tr>
+<tr><td>編集先</td><td>ふだんは <strong>base</strong>（基本の値）。A/B 比較用の案（バリアント）を選ぶと、その案への変更として書き込まれ、変えた項目は<strong>黄色の太字</strong>になります。横の <strong>base</strong> ボタンで基本の値に戻せます（A/B タブは<span class="soon">準備中</span>）</td></tr>
+<tr><td>色</td><td>クリックで色を選びます。<strong>Unity のインスペクターと同じ値</strong>です</td></tr>
+</table>
+<div class="tip">
+<strong>描画順オフセット</strong>と<strong>両面表示の影響の一部</strong>は Maya では再現されません（Unity でのみ効きます）。<a href="unity-parity.html">Unity との見た目の一致</a>を参照。
 </div>
+
+<h2>共通の項目</h2>
+<table>
+<tr><th>名前</th><th>意味</th></tr>
+<tr><td>ベース色（乗算）</td><td>テクスチャに掛ける色。白 = テクスチャのまま</td></tr>
+<tr><td>ブレンド</td><td>Opaque（不透明）/ Cutout（切り抜き）/ Transparent（半透明）。登録時は元のマテリアルから引き継ぎます</td></tr>
+<tr><td>カットオフ</td><td>Cutout のとき、これより透明な所を切り抜きます</td></tr>
+<tr><td>両面表示</td><td>裏側も表示します（片面ポリゴンの髪など）</td></tr>
+<tr><td>描画順オフセット</td><td>描く順番。大きいほど後に描かれ、上に出しやすくなります（Unity のみ）</td></tr>
+</table>
 
 <figure>
 <img src="images/toon_preview.png" alt="Toon プレビュー">
@@ -45,6 +73,7 @@
 <tr><td>線色</td><td>線の色</td><td>真っ黒より、<strong>暗い茶・暗い赤</strong>などにすると柔らかく見えます</td></tr>
 <tr><td>線色にベース色を混ぜる</td><td>線色に、その場所の元の色（テクスチャ）を混ぜる割合</td><td>0.5 前後にすると、肌は赤っぽい線・髪は髪色の線になります</td></tr>
 <tr><td>線幅</td><td>線の太さ。<strong>1 = フル HD（1080p）の画面で 1 ピクセル</strong></td><td>カメラの距離を変えても画面上の太さは変わりません。顔は細く、髪は太めが基本</td></tr>
+<tr><td>スムーズ法線を使う</td><td>角ばった所で線が割れないようにする（1 = 使う）</td><td>スムーズ法線の作成は<span class="soon">準備中</span>。作成前は 1 でも普通の法線で描きます</td></tr>
 </table>
 
 <h2 id="mask">Toon マスク（頂点カラーで塗る）<span class="soon">準備中</span></h2>

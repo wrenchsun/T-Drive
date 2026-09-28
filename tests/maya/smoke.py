@@ -117,6 +117,27 @@ def run() -> None:
     check("表示切替 Toon ⇔ 元の見た目", off and preview.is_active())
     check("操作後も Look が検証を通る", look.validate(s.look) == [], str(look.validate(s.look)))
 
+    # ---- ルックタブの操作（値・リセット・上書き解除・Undo）
+    s.set_edit_variant("base")
+    s.checkpoint()
+    s.set_value("face", "_ToonShadowStrength", 0.9)
+    s.reset_value("face", "_ToonShadowStrength")
+    check("リセット: ロールのプリセット値に戻る", s.value("face", "_ToonShadowStrength") == 0.35)
+    s.checkpoint()
+    s.set_value("hair", "_ToonOutlineWidth", 3.0)
+    s.undo()
+    check("Undo: 直前の値に戻る", s.value("hair", "_ToonOutlineWidth") == 1.3)
+    s.redo()
+    check("Redo: やり直せる", s.value("hair", "_ToonOutlineWidth") == 3.0)
+    s.set_edit_variant("B")
+    s.set_value("hair", "_ToonOutlineWidth", 2.0)
+    check("バリアントで上書き中を判定できる", s.is_overridden("hair", "_ToonOutlineWidth"))
+    s.clear_override("hair", "_ToonOutlineWidth")
+    check("上書き解除で base の値に戻る",
+          not s.is_overridden("hair", "_ToonOutlineWidth") and s.value("hair", "_ToonOutlineWidth") == 3.0)
+    s.set_edit_variant("base")
+    check("部位単位の値一覧（混在判定用）", len(s.values("eye", "_ToonShadowStrength")) == 3)
+
     # 後片付け
     preview.delete_all()
     check("delete_all: プレビューノードが残らない", not preview.preview_shaders())

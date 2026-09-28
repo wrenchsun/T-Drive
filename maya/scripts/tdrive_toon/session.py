@@ -28,6 +28,8 @@ class Session:
         self.ab = [look.BASE, look.BASE]  # A / B に割り当てたバリアント
         self.shown = look.BASE  # ビューポートに表示中のバリアント
         self.listeners: list = []  # 変更通知（UI 更新用）
+        self._undo: list[dict[str, Any]] = []  # Look のスナップショット（エディタ内 Undo。Maya の Undo とは別）
+        self._redo: list[dict[str, Any]] = []
 
     # ------------------------------------------------------------ 状態
     def require(self) -> dict[str, Any]:
@@ -49,6 +51,8 @@ class Session:
         self.look = look.new_look(character, model or "unknown")
         self.path = LOOKS_DIR / character / "look.json"
         self.edit_variant = self.shown = look.BASE
+        self._undo.clear()
+        self._redo.clear()
         self.ab = [look.BASE, look.BASE]
         self._changed()
 
@@ -57,6 +61,8 @@ class Session:
         self.path = Path(path)
         self.dirty = False
         self.edit_variant = self.shown = look.BASE
+        self._undo.clear()
+        self._redo.clear()
         names = look.variant_names(self.look)
         self.ab = [look.BASE, names[1] if len(names) > 1 else look.BASE]
         preview.remember_look_path(str(self.path))
@@ -183,14 +189,107 @@ class Session:
         return mat["specific"].get(key)
 
     def set_value(self, target: str, key: str, value: Any, notify: bool = True) -> None:
-        lk = self.require()
+        self.require()
         for mat in self.materials_of(target):
-            look.set_value(lk, mat, key, value, variant=self.edit_variant)
-            if self.shown == self.edit_variant:
-                preview.apply_value(mat, key, value)
-        self.dirty = True
+            self._set_one(mat, key, value)
         if notify:
             self._changed()
+
+    def values(self, target: str, key: str) -> list[Any]:
+        """target（部位 or マテリアル）に属する各マテリアルの、編集先バリアントでの値。"""
+        return [self.value(m, key) for m in self.materials_of(target)]
+
+    def is_overridden(self, material: str, key: str) -> bool:
+        """編集先バリアントで base から上書きされているか（base 編集中は常に False）。"""
+        if self.edit_variant == look.BASE:
+            return False
+        ov = self.require()["variants"][self.edit_variant]["overrides"].get(material, {})
+        if key == "renderQueueOffset":
+            return "renderQueueOffset" in ov
+        if key.startswith("common."):
+            return key.split(".", 1)[1] in ov.get("common", {})
+        return key in ov.get("specific", {})
+
+    def default_value(self, material: str, key: str) -> Any:
+        """リセット先: 部位ロールのプリセット値、無ければパラメータ契約 / MaterialCommon の既定値。"""
+        from . import params
+
+        lk = self.require()
+        part = look.part_of(lk, material)
+        preset = roles.ROLE_PRESETS[lk["parts"][part]["role"]] if part else {}
+        if key == "renderQueueOffset":
+            return preset.get("renderQueueOffset", 0)
+        if key.startswith("common."):
+            field = key.split(".", 1)[1]
+            return preset.get("common", {}).get(field, params.COMMON_FIELDS[field])
+        return preset.get("specific", {}).get(key, params.PARAMS_BY_UNITY[key].default)
+
+    def reset_value(self, target: str, key: str) -> None:
+        self.checkpoint()
+        for m in self.materials_of(target):
+            self._set_one(m, key, self.default_value(m, key))
+        self._changed()
+
+    def clear_override(self, target: str, key: str) -> None:
+        """バリアントの上書きを外して base の値に戻す。"""
+        if self.edit_variant == look.BASE:
+            return
+        self.checkpoint()
+        lk = self.require()
+        overrides = lk["variants"][self.edit_variant]["overrides"]
+        for m in self.materials_of(target):
+            ov = overrides.get(m, {})
+            if key == "renderQueueOffset":
+                ov.pop("renderQueueOffset", None)
+            elif key.startswith("common."):
+                ov.get("common", {}).pop(key.split(".", 1)[1], None)
+            else:
+                ov.get("specific", {}).pop(key, None)
+            for section in ("common", "specific"):
+                if section in ov and not ov[section]:
+                    del ov[section]
+            if m in overrides and not overrides[m]:
+                del overrides[m]
+            if self.shown == self.edit_variant:
+                preview.apply_value(m, key, self.value(m, key))
+        self._changed()
+
+    def _set_one(self, material: str, key: str, value: Any) -> None:
+        look.set_value(self.require(), material, key, value, variant=self.edit_variant)
+        if self.shown == self.edit_variant:
+            preview.apply_value(material, key, value)
+        self.dirty = True
+
+    # ------------------------------------------------------------ Undo（エディタ内）
+    def checkpoint(self) -> None:
+        """編集操作の直前に呼ぶ（スライダーは押した瞬間に 1 回）。"""
+        import copy
+
+        if self.look is None:
+            return
+        self._undo.append(copy.deepcopy(self.look))
+        del self._undo[:-100]
+        self._redo.clear()
+
+    def undo(self) -> bool:
+        return self._restore(self._undo, self._redo)
+
+    def redo(self) -> bool:
+        return self._restore(self._redo, self._undo)
+
+    def _restore(self, src: list, dst: list) -> bool:
+        import copy
+
+        if not src or self.look is None:
+            return False
+        dst.append(copy.deepcopy(self.look))
+        self.look = src.pop()
+        if self.edit_variant != look.BASE and self.edit_variant not in self.look["variants"]:
+            self.edit_variant = look.BASE
+        self.show(self.shown if self.shown in look.variant_names(self.look) else look.BASE)
+        self.dirty = True
+        self._changed()
+        return True
 
     # ------------------------------------------------------------ バリアント / A/B
     def add_variant(self, name: str, label: str = "", copy_from: str | None = None) -> None:
