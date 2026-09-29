@@ -47,6 +47,7 @@ def show() -> "EditorWindow":
     if exists:
         cmds.workspaceControl(CONTROL_NAME, edit=True, visible=True)
         cmds.workspaceControl(CONTROL_NAME, edit=True, restore=True)
+        _update_dock_label()
         _window.refresh()  # type: ignore[union-attr]
         return _window  # type: ignore[return-value]
     if _window is not None:
@@ -75,6 +76,16 @@ def restore(control: str | None = None) -> None:
         old.deleteLater()
     _window = EditorWindow()
     omui.MQtUtil.addWidgetToMayaLayout(int(getCppPointer(_window)[0]), int(ptr))
+    _update_dock_label()
+
+
+def _update_dock_label() -> None:
+    """ドッキングの見出し（workspaceControl の label）を今の版にする。
+
+    見出しは枠を最初に作ったときに付き、リロード・再起動・更新では変わらない（v0.2.0 に上げても 0.1.0 のままだった）。
+    """
+    if cmds.workspaceControl(CONTROL_NAME, exists=True):
+        cmds.workspaceControl(CONTROL_NAME, edit=True, label=f"T-Drive Toon {__version__}")
 
 
 def close() -> None:
