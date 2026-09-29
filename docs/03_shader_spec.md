@@ -79,8 +79,9 @@ lit   = min(lit, lerp(1, s, k))                                                 
 ```
 
 - `_ToonReceiveShadow`（0〜1、既定 1）: その部位が影を受ける量。**顔のロールは 0**（T-16: 髪の影を顔に落とさない。固定影は頂点マスク R で描く）
-- 影を落とすのは本体の面だけ（輪郭線の押し出しは落とさない）
-- 機能をオフにすると `_ToonReceiveShadow` は 0 で解決（効果なし）
+- 影を落とすのは本体の面だけ（輪郭線の押し出しは落とさない）。**部位ごとに `_ToonCastShadow`（0/1、既定 1）で落とすかを選ぶ**（例: まつ毛・装飾は落とさない）。
+  Maya は shadowPass で捨てる、Unity はマテリアルの ShadowCaster パスを止める（`Material.SetShaderPassEnabled`）
+- 機能をオフにすると `_ToonReceiveShadow` と `_ToonCastShadow` は 0 で解決（そのマテリアルは影を受けも落としもしない）
 - Unity: URP のメインライトのシャドウマップ（`GetMainLight(shadowCoord)` の `shadowAttenuation`）を `atten` に使う。Maya: VP2 のシャドウマップ（プレビューのキャラクターライトと同じ向きの影用ライト）。
   シャドウマップの解像度・バイアス・カスケードは環境で違うので、**Maya の表示は △（簡易）**
 
@@ -246,6 +247,7 @@ Maya の uniform 名は先頭の `_` を除いた名前。定義の実体は `ma
 | `_ToonShadeFeather` | Float | 0.02 | 0.001–0.5 | 境界のぼかし幅 | T-01 |
 | `_ToonShadowStrength` | Float | 1.0 | 0–1 | 影の強さ（0 = 影なし） | T-04 |
 | `_ToonReceiveShadow` | Float | 1.0 | 0–1 | セルフシャドウを受ける量（顔ロールは 0）（P2） | T-43 |
+| `_ToonCastShadow` | Float | 1.0 | 0/1 | セルフシャドウを落とす（P2） | T-43 |
 | `_ToonMaskMap` | Texture | white | | 頂点カラーに乗算する Toon マスク | T-19 |
 | `_ToonTintColor` | Color | (1, 0.6, 0.6, 1) | | 固定色（乗算） | T-08 |
 | `_ToonTintStrength` | Float | 0 | 0–1 | 固定色の強さ | T-08 |

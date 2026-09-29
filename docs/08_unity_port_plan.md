@@ -49,7 +49,7 @@ Maya の `TDriveToon.fx` はそこを相対パスで include する（1 本の�
 
 - 式は [03](03_shader_spec.md)（`ToonCore.hlsl` を include）
 - Properties は **D-Drive `DDrive_Lit.shader` と同じ区分・同じ共通名**で並べる: `[Header(Common)]`（`_BaseMap` `_BaseColor` `_BumpMap` …）/ `[Header(Render State)]`（`_Surface` `_Blend` `_Cull` `_ZWrite` `_QueueOffset` …）/ `[Header(Specific)]`（`_Toon*`）。これが D-Drive 互換（§6）の前提
-- セルフシャドウ（T-43）: ForwardLit でメインライトの影（`_MAIN_LIGHT_SHADOWS` 系のキーワードは生成シェーダーでは機能 `selfShadow` がオンのときだけ残す）を `Toon_SelfShadowLit` に渡す
+- セルフシャドウ（T-43）: `_ToonCastShadow` = 0 のマテリアルは ShadowCaster パスを止める（`ToonCharacter` / インポーターが `SetShaderPassEnabled`）。ForwardLit でメインライトの影（`_MAIN_LIGHT_SHADOWS` 系のキーワードは生成シェーダーでは機能 `selfShadow` がオンのときだけ残す）を `Toon_SelfShadowLit` に渡す
 - パス: ForwardLit（`UniversalForward`）/ Outline（`SRPDefaultUnlit`、Cull Front）/ ShadowCaster / DepthOnly / DepthNormals / **ToonId**（インナーライン用に部位 ID を書く。§3.4）
 - ステンシル（T-24）: `_ToonStencilRef` `_ToonStencilComp` を Specific として持つ（値は `ToonCharacter` がロールから自動設定）
 - SRP Batcher 互換を保つ。キャラクター単位の値の渡し方は Q-7
