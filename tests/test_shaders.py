@@ -77,3 +77,12 @@ def test_fx_has_common_texture_uniforms():
     fx = (ROOT / "maya/shaders/TDriveToon.fx").read_text(encoding="utf-8")
     for name in ("BaseMap", "NormalMap", "NormalMapEnabled", "NormalScale", "EmissionMap", "EmissionMapEnabled", "EmissionColor", "EmissionIntensity"):
         assert re.search(rf"^\w+\s+{name}\b", fx, re.M), name
+
+
+def test_opaque_techniques_cast_shadows():
+    """セルフシャドウ（T-43）: 不透明の技法に影を落とすパス（shadowPass）がある。無いと影用ライトに映らない。"""
+    fx = (ROOT / "maya/shaders/TDriveToon.fx").read_text(encoding="utf-8")
+    for tech in ("Opaque", "OpaqueDoubleSided"):
+        body = fx.split(f"technique11 {tech}\n", 1)[1].split("technique11", 1)[0]
+        assert 'drawContext = "shadowPass"' in body, tech
+    assert "SHADOWMAP" in fx and "SHADOWMAPMATRIX" in fx

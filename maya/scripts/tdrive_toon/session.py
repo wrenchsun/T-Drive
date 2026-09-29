@@ -246,7 +246,7 @@ class Session:
             for mat, values in resolved.items():
                 if cmds.objExists(preview.preview_shader_of(mat)):
                     preview.apply_values(mat, values)
-        if any(features.BY_ID[f].settings for f in feature_ids):
+        if any(features.BY_ID[f].settings for f in feature_ids) or "selfShadow" in feature_ids:
             self._sync_character_preview()  # キャラクター設定を持つ機能（接地影・画面上の線など）
 
     @undoable
@@ -278,7 +278,7 @@ class Session:
 
     def _sync_character_preview(self) -> None:
         """キャラクター単位の設定のうち Maya でプレビューできるもの（奥行き圧縮・顔影・接地影）をプレビューへ反映する。"""
-        from . import contact_shadow, envmath, screen_line
+        from . import contact_shadow, envmath, screen_line, self_shadow
 
         lk = self.look
         if lk is None:
@@ -296,6 +296,10 @@ class Session:
         preview.set_depth_compression(amount, pivot)
         fs = cs["faceShadow"]
         preview.set_face_axes(fs["forward"], fs["right"])
+        # セルフシャドウ（T-43）: 影用ライト・シェーダーの Light 0・ビューポートの影
+        if look.enabled(lk, "selfShadow") or self_shadow.exists():
+            self_shadow.update(environment.model_panel(), look.enabled(lk, "selfShadow") and preview.is_active(),
+                               preview.environment_state()["lightDir"])
         preview.set_line_keys(look.line_part_keys(lk))
         il = cs["innerLine"]
         so = cs["screenOutline"]

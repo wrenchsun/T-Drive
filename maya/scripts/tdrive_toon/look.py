@@ -72,31 +72,48 @@ def upgrade(look: dict[str, Any]) -> list[str]:
     added = set()
     _fill_defaults(look.setdefault(SETTINGS, {}), CHARACTER_DEFAULTS, f"{SETTINGS}.", added)
     defaults = params.default_specific()
-    for mat in look.get("materials", {}).values():
+    filled: list[tuple[str, str]] = []
+    for name, mat in look.get("materials", {}).items():
         spec = mat.setdefault("specific", {})
         for k, v in defaults.items():
             if k not in spec:
                 spec[k] = copy.deepcopy(v)
                 added.add(k)
-    # 機能のオン/オフ: 無い機能は「既定でオン」か「値が既定と違う（= 使われている）」ならオン（見た目を変えない）
+                filled.append((name, k))
+    # 機能のオン/オフ: 無い機能は「既定でオン」か「値を既定から変えている」ならオン（見た目を変えない）
     flags = look.setdefault(FEATURES, {})
-    used = used_features(look)
+    used = used_features(look, against="default")
     for f in features.FEATURES:
         if f.id not in flags:
             flags[f.id] = f.default_on or f.id in used
             added.add(f"{FEATURES}.{f.id}")
+    # 今回補ったパラメータのうち、機能がオフのもの（= 今は見た目に効かない）はロールのプリセット値にする。
+    # 例: セルフシャドウを後でオンにしたとき、古い Look でも顔は影を受けない（_ToonReceiveShadow = 0）
+    for name, k in filled:
+        fid = features.FEATURE_OF_PARAM.get(k)
+        if fid and not enabled(look, fid):
+            part = part_of(look, name)
+            role = look["parts"][part]["role"] if part else None
+            preset = roles.ROLE_PRESETS.get(role, {}).get("specific", {}) if role else {}
+            if k in preset:
+                look["materials"][name]["specific"][k] = copy.deepcopy(preset[k])
     return sorted(added)
 
 
-def used_features(look: dict[str, Any]) -> set[str]:
-    """値が効果なしの値と違う（= 使われている）機能。"""
+def used_features(look: dict[str, Any], against: str = "off") -> set[str]:
+    """使われている機能。
+
+    against="off": 値が「効果なしの値」と違う（オフにすると見た目が変わる。「使っていない機能をオフ」用）
+    against="default": 値が既定値と違う（調整した。古い Look を開いたときに機能をオンにするか決める用）
+    """
     used = set()
     pdefaults = {p.unity: p.default for p in params.SPECIFIC_PARAMS}
     sections = [m.get("specific", {}) for m in look.get("materials", {}).values()]
     sections += [ov.get("specific", {}) for v in look.get("variants", {}).values() for ov in v.get("overrides", {}).values()]
     for spec in sections:
         for k, v in spec.items():
-            if k in features.FEATURE_OF_PARAM and v != features.off_value(k, pdefaults.get(k)):
+            ref = pdefaults.get(k) if against == "default" else features.off_value(k, pdefaults.get(k))
+            if k in features.FEATURE_OF_PARAM and v != ref:
                 used.add(features.FEATURE_OF_PARAM[k])
     for key, v in look.get(SETTINGS, {}).items():
         if key in features.FEATURE_OF_SETTING and v != CHARACTER_DEFAULTS.get(key):

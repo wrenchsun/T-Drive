@@ -35,6 +35,17 @@ float4 ToonShadeColor < string UIGroup = "Shadow"; string UIWidget = "ColorPicke
 float ToonShadeThreshold < string UIGroup = "Shadow"; float UIMin = 0.0; float UIMax = 1.0; int UIOrder = 11; > = 0.5;
 float ToonShadeFeather < string UIGroup = "Shadow"; float UIMin = 0.001; float UIMax = 0.5; int UIOrder = 12; > = 0.02;
 float ToonShadowStrength < string UIGroup = "Shadow"; float UIMin = 0.0; float UIMax = 1.0; int UIOrder = 13; > = 1.0;
+float ToonReceiveShadow < string UIGroup = "Shadow"; float UIMin = 0.0; float UIMax = 1.0; int UIOrder = 14; > = 1.0;
+
+// ------------------------------------------------------------------ セルフシャドウ（T-43）: Maya が Light 0（影用ライト tdPreviewShadowLight）の影を渡す
+// 書き方は Maya 同梱の AutodeskUberShader.fx / PhongShadow.fx と同じ（SHADOWMAP / SHADOWMAPMATRIX / SHADOWFLAG）
+Texture2D gShadowMap : SHADOWMAP < string Object = "Light 0"; string UIWidget = "None"; >;
+float4x4 gShadowMatrix : SHADOWMAPMATRIX < string Object = "Light 0"; string UIWidget = "None"; >;
+bool gShadowOn : SHADOWFLAG < string Object = "Light 0"; string UIWidget = "None"; > = false;
+float gShadowBias : ShadowMapBias < string UIWidget = "None"; > = 0.001;
+float PreviewShadowTexel < string UIGroup = "Preview"; string UIName = "Shadow Map Texel"; int UIOrder = 100; > = 0.00048828125;  // 1 / 2048
+// 影を調べる位置を面の外側へずらす量（m）。面が自分の影を拾う縞（シャドウアクネ）を防ぐ。Unity の Normal Bias に相当
+float PreviewShadowNormalOffset < string UIGroup = "Preview"; string UIName = "Shadow Normal Offset (m)"; int UIOrder = 101; > = 0.004;
 
 Texture2D ToonMaskMap < string UIGroup = "Mask"; string ResourceName = ""; string UIWidget = "FilePicker"; string ResourceType = "2D"; int UIOrder = 20; >;
 bool ToonMaskMapEnabled < string UIGroup = "Mask"; int UIOrder = 21; > = false;
@@ -151,6 +162,33 @@ float4 MaskMapSampleLevel0(float2 uv)
     return ToonMaskMapEnabled ? ToonMaskMap.SampleLevel(SamLinearWrap, uv, 0) : kWhite;
 }
 
+SamplerState SamShadowDepth
+{
+    Filter = MIN_MAG_MIP_POINT;
+    AddressU = Border;
+    AddressV = Border;
+    BorderColor = float4(1.0, 1.0, 1.0, 1.0);
+};
+
+// シャドウマップの比較（1 = 光が当たる）。5 点の平均（境界は Toon_SelfShadowLit でくっきりさせる）
+float ShadowAtten(float3 positionWS)
+{
+    if (!gShadowOn)
+        return 1.0;
+    float4 p = mul(float4(positionWS, 1.0), gShadowMatrix);
+    float w = p.w;
+    p.xyz /= w;
+    if (p.x <= -1.0 || p.x >= 1.0 || p.y <= -1.0 || p.y >= 1.0 || p.z <= 0.0 || p.z >= 1.0)
+        return 1.0;
+    float2 uv = float2(0.5 * p.x + 0.5, 0.5 - 0.5 * p.y);  // Maya は Y を反転
+    float z = p.z - gShadowBias / w;
+    const float2 taps[5] = { float2(0, 0), float2(1, 0), float2(-1, 0), float2(0, 1), float2(0, -1) };
+    float lit = 0.0;
+    [unroll] for (int k = 0; k < 5; ++k)
+        lit += (z - gShadowMap.SampleLevel(SamShadowDepth, uv + taps[k] * PreviewShadowTexel, 0).x >= 0.0) ? 0.0 : 0.2;
+    return lit;
+}
+
 float4 SampleBase(float2 uv)
 {
     float4 c = BaseColor;
@@ -210,6 +248,9 @@ float4 ShadeMain(VSOut i, bool frontFace)
         float value = ToonFaceShadowMap.Sample(SamLinearWrap, Toon_FaceShadowUV(i.uv, PreviewFaceRight, L)).r;
         lit = Toon_FaceShadowLit(lit, value, Toon_FaceLightAngle01(PreviewFaceForward, L), ToonShadeFeather, ToonShadowStrength, ToonFaceShadowWeight);
     }
+    if (ToonReceiveShadow > 0.0)
+        lit = Toon_SelfShadowLit(lit, ShadowAtten(i.positionWS + N * PreviewShadowNormalOffset * PreviewUnitScale), mask,
+                                 ToonShadeFeather, ToonShadowStrength, ToonReceiveShadow);
     if (PreviewDebug != 0)
     {
         float3 d = float3(0.0, 0.0, 0.0);
@@ -315,6 +356,35 @@ PSOutWithId PS_Outline(VSOut i)
     return o;
 }
 
+// ------------------------------------------------------------------ 影を落とすパス（T-43）: Maya が影用ライトから見た ViewProjection を gVP に渡す
+struct VSShadowOut
+{
+    float4 positionCS : SV_Position;
+    float4 clip       : TEXCOORD0;
+    float2 uv         : TEXCOORD1;
+};
+
+VSShadowOut VS_Shadow(VSIn v)
+{
+    VSShadowOut o;
+    float3 posWS = mul(float4(v.position, 1.0), gWorld).xyz;  // 手前に出す（カメラ依存）は使わない
+    o.positionCS = mul(float4(posWS, 1.0), gVP);
+    o.clip = o.positionCS;
+    o.uv = v.uv;
+    return o;
+}
+
+float4 PS_Shadow(VSShadowOut i) : SV_Target
+{
+    if (AlphaClip && SampleBase(i.uv).a < Cutoff)
+        discard;
+    float z = i.clip.z / i.clip.w;
+    z += fwidth(z);
+    return z.xxxx;
+}
+
+BlendState BS_Shadow { BlendEnable[0] = false; RenderTargetWriteMask[0] = 0x0F; };
+
 // ------------------------------------------------------------------ テクニック
 technique11 Opaque
 <
@@ -339,6 +409,15 @@ technique11 Opaque
         SetRasterizerState(RS_CullBack);
         SetDepthStencilState(DS_Default, 0);
         SetBlendState(BS_OpaqueWithId, float4(0.0, 0.0, 0.0, 0.0), 0xFFFFFFFF);
+    }
+    pass Shadow < string drawContext = "shadowPass"; >
+    {
+        SetVertexShader(CompileShader(vs_5_0, VS_Shadow()));
+        SetGeometryShader(NULL);
+        SetPixelShader(CompileShader(ps_5_0, PS_Shadow()));
+        SetRasterizerState(RS_CullNone);
+        SetDepthStencilState(DS_Default, 0);
+        SetBlendState(BS_Shadow, float4(0.0, 0.0, 0.0, 0.0), 0xFFFFFFFF);
     }
 }
 
@@ -365,6 +444,15 @@ technique11 OpaqueDoubleSided
         SetRasterizerState(RS_CullNone);
         SetDepthStencilState(DS_Default, 0);
         SetBlendState(BS_OpaqueWithId, float4(0.0, 0.0, 0.0, 0.0), 0xFFFFFFFF);
+    }
+    pass Shadow < string drawContext = "shadowPass"; >
+    {
+        SetVertexShader(CompileShader(vs_5_0, VS_Shadow()));
+        SetGeometryShader(NULL);
+        SetPixelShader(CompileShader(ps_5_0, PS_Shadow()));
+        SetRasterizerState(RS_CullNone);
+        SetDepthStencilState(DS_Default, 0);
+        SetBlendState(BS_Shadow, float4(0.0, 0.0, 0.0, 0.0), 0xFFFFFFFF);
     }
 }
 

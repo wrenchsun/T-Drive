@@ -18,7 +18,8 @@ ROLE_PRESETS: dict[str, dict[str, Any]] = {
     "face": {
         "label": "顔",
         "renderQueueOffset": 0,
-        "specific": {"_ToonShadowStrength": 0.35, "_ToonOutlineWidth": 0.6, "_ToonShadeThreshold": 0.45},
+        # 顔はセルフシャドウ（前髪の影）を受けない（T-16 / T-43。固定影は頂点マスク R で描く）
+        "specific": {"_ToonShadowStrength": 0.35, "_ToonOutlineWidth": 0.6, "_ToonShadeThreshold": 0.45, "_ToonReceiveShadow": 0.0},
     },
     "skin": {
         "label": "肌（体）",

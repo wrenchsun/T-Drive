@@ -218,3 +218,27 @@ def test_normal_map_and_emission_features_resolve_common():
     del lk[look.FEATURES]
     look.upgrade(lk)
     assert lk[look.FEATURES]["emission"] and lk[look.FEATURES]["normalMap"]  # 使っていたのでオン
+
+
+def test_self_shadow_upgrade_keeps_look_and_face_does_not_receive():
+    """セルフシャドウ（T-43）: 古い Look はオフのまま（見た目不変）。後でオンにしても顔は受けない（T-16）。"""
+    lk = _sample()
+    for m in lk["materials"].values():
+        m["specific"].pop("_ToonReceiveShadow", None)  # この機能が入る前の Look
+    lk.pop(look.FEATURES)
+    look.upgrade(lk)
+    assert lk[look.FEATURES]["selfShadow"] is False
+    assert lk["materials"]["face"]["specific"]["_ToonReceiveShadow"] == 0.0  # ロールのプリセット
+    assert lk["materials"]["hair"]["specific"]["_ToonReceiveShadow"] == 1.0
+    assert look.resolve(lk)["hair"]["specific"]["_ToonReceiveShadow"] == 0.0  # オフは効果なし
+    look.set_feature(lk, "selfShadow", True)
+    assert look.resolve(lk)["hair"]["specific"]["_ToonReceiveShadow"] == 1.0
+    assert look.resolve(lk)["face"]["specific"]["_ToonReceiveShadow"] == 0.0
+
+
+def test_new_face_part_does_not_receive_self_shadow():
+    lk = _sample()
+    assert lk["materials"]["face"]["specific"]["_ToonReceiveShadow"] == 0.0
+    assert lk[look.FEATURES]["selfShadow"] is False
+    look.upgrade(lk)  # 開き直しても勝手にオンにならない（顔のプリセット 0 は「調整」ではない）
+    assert lk[look.FEATURES]["selfShadow"] is False

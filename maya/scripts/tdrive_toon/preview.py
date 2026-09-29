@@ -232,10 +232,11 @@ def disable() -> None:
 
 @outside_maya_undo
 def delete_all() -> None:
-    from . import contact_shadow, screen_line
+    from . import contact_shadow, screen_line, self_shadow
 
     disable()
     contact_shadow.delete()
+    self_shadow.delete()
     screen_line.update(None, None, None, 1, visible=False)  # 画面上の線の Override も外す
     for shader in preview_shaders():
         nodes = [shader, _shading_group(shader), *(cmds.listConnections(shader, type="file") or [])]
@@ -524,6 +525,9 @@ def apply_environment() -> None:
         _set(shader, "PreviewDepthPivot", list(_env["depthPivot"]))
         _set(shader, "PreviewFaceForward", list(_env["faceForward"]))
         _set(shader, "PreviewFaceRight", list(_env["faceRight"]))
+    from . import self_shadow
+
+    self_shadow.set_direction(_env["lightDir"])  # セルフシャドウの影用ライトもキャラクターライトに合わせる（T-43）
 
 
 @outside_maya_undo

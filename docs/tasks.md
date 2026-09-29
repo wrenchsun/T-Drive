@@ -99,6 +99,8 @@ Unity は T-Drive for Unity パッケージ（Phase U）として実装する（
 | 4-9 | テクスチャの差し替え（ルックタブの「テクスチャ」: ベースマップ / 法線マップ / 発光マップ、↺ で元マテリアルのテクスチャに戻す、見つからないファイルの警告、テクスチャを読み込み直す） | — | 1 | 4-3 | 部位を選んでベースマップを別の画像にすると即座に変わり、保存・Unity 出力に入る | ✅ ルックタブ「テクスチャ（差し替え）」、↺ = 元マテリアル、見つからないファイルは赤、テクスチャを読み込み直す（ogs -reloadTextures） |
 | 4-10 | 法線マップ・発光を Maya の表示に反映（ToonCore の式・機能 `normalMap` / `emission`、既定オフ） | — | 1 | 4-9 | 法線マップで影の形が変わり、発光は影でも暗くならない。既定で従来と同じ見た目 | ✅ Toon_NormalFromMap（Unity の UnpackNormalmapRGorAG と同じ）/ Toon_Emission。機能 normalMap / emission（既定オフ）。実機でしわの影・発光を確認 |
 
+| 4-11 | セルフシャドウ（Maya）: ToonCore の式・`_ToonReceiveShadow`（顔ロール 0、古い Look も顔は 0）・機能 `selfShadow`・影を落とすパス・影用ライトとビューポートの設定 | T-43 | 2 | 4-10 | 前髪の影が額以外（顔ロールでない部位）に、腕の影が体に落ちる。顔には落ちない。オフで従来と同じ | ✅ Toon_SelfShadowLit・_ToonReceiveShadow（顔 0、古い Look も）・機能 selfShadow・shadowPass・影用ライト（self_shadow.py）。法線方向のずらしでアクネ対策。実機で首・髪・胴の落ち影を確認 |
+
 ## Phase R: Maya ツールの配布・導入・更新
 
 仕様: [13_distribution.md](13_distribution.md)。D-Drive と同じ「git タグで固定 + 更新ウィンドウ」。
@@ -128,6 +130,7 @@ Unity は T-Drive for Unity パッケージ（Phase U）として実装する（
 | U-8 | 表情パラメータ API（`SetExpression`、Timeline/Animator から駆動） | T-25 | 2 | U-5 3-8 | 頬の赤み等を実行時に変えられる | ⬜ |
 | U-9 | カメラ角度補正 BlendShape の実行時駆動 / 奥行き圧縮 | T-20 T-22 | 2 | U-5 3-7 | カメラを回すと補正 Shape が混ざる | ⬜ |
 | U-10 | `ToonRendererFeature`: ToonId パス + スクリーンスペース インナーライン | T-23 | 4 | U-2 | 部位ごとの有無・太さ・色どおりに内側の線が出る | ⬜ |
+| U-18 | シェーダー: セルフシャドウ（メインライトの影を Toon_SelfShadowLit へ、生成シェーダーでは機能オンのときだけ） | T-43 | 1 | U-2 4-11 | Maya（4-11）と同じ部位に影が落ちる | ⬜ |
 | U-17 | `ToonRendererFeature`: スクリーンスペース外側輪郭（U-10 のエッジ検出を共有） | T-42 | 1.5 | U-10 4-8 | Maya（4-8）と同じ設定で外形に線が出る | ⬜ |
 | U-11 | `ToonRendererFeature`: 接地影 | T-29 | 2 | U-10 | 足元に影が残り、キャラクターが浮いて見えない | ⬜ |
 | U-12 | Unity 上のルックエディタ（部位 / ルック / A/B / プレビュー）+ look.json への書き戻し | — | 4 | U-3 | Unity で調整した値を Maya で開ける（往復） | ⬜ |

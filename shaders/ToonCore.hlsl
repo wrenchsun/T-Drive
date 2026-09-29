@@ -220,6 +220,14 @@ float Toon_ContactShadow(float d, float h, float radius, float strength)
     return strength * (1.0 - smoothstep(0.0, r, d)) * saturate(1.0 - max(h, 0.0) / r);
 }
 
+// ------------------------------------------------------------------ セルフシャドウ（P2 T-43、docs/03 §2.3）
+// atten: シャドウマップの比較（1 = 光が当たる、0 = 影）。mask.b 黒（常に明）の所には落ちない
+float Toon_SelfShadowLit(float lit, float atten, float4 mask, float feather, float strength, float receive)
+{
+    float s = smoothstep(0.5 - feather, 0.5 + feather, atten);
+    return min(lit, lerp(1.0, s, strength * receive * mask.b));
+}
+
 // ------------------------------------------------------------------ 法線マップ・発光（Common、docs/03 §2.2）
 // 法線マップ: Unity の UnpackNormalmapRGorAG + UnpackNormalScale と同じ（+Y = OpenGL 形式、テクスチャはリニア）
 float3 Toon_UnpackNormal(float4 packed, float scale)

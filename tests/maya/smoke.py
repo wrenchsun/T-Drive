@@ -326,6 +326,24 @@ def run() -> None:
     s.set_feature("contactShadow", False)
     check("接地影: 機能をオフにすると隠れる", not cmds.getAttr(f"{contact_shadow.NODE}.visibility"))
     s.set_feature("contactShadow", True)
+    # ---- セルフシャドウ（4-11）: 影用ライトの作成・向き・隠す・消す（画面の無い mayapy なので影の描画は確かめない）
+    from tdrive_toon import self_shadow
+
+    s.show(s.shown)
+    s.set_feature("selfShadow", True)
+    to_light = preview.environment_state()["lightDir"]
+    fwd = om.MVector(0, 0, 1).rotateBy(om.MEulerRotation(*[om.MAngle(a, om.MAngle.kDegrees).asRadians()
+                                                              for a in cmds.getAttr(f"{self_shadow.LIGHT}.rotate")[0]]))
+    check("セルフシャドウ: 影用ライトがキャラクターライトの向きで置かれる",
+          self_shadow.exists() and cmds.getAttr(f"{self_shadow.LIGHT}.visibility")
+          and (fwd - om.MVector(*to_light).normal()).length() < 1e-3, str(fwd))
+    check("セルフシャドウ: 影用ライトは部位登録・出力の対象外",
+          all(self_shadow.LIGHT not in m for m in s.export_meshes()))
+    s.set_feature("selfShadow", False)
+    check("セルフシャドウ: 機能オフで影用ライトが隠れる", not cmds.getAttr(f"{self_shadow.LIGHT}.visibility"))
+    self_shadow.delete()
+    check("セルフシャドウ: 消せる", not self_shadow.exists())
+
     # ---- シーンの保存（Ctrl+S）で Look も保存（2026-09-29 の不具合: シーンだけ保存して閉じると Look の変更が消えた）
     saved_look = s.save(tmp / "ctrl_s" / "look.json")
     cmds.file(rename=str(tmp / "ctrl_s.ma"))

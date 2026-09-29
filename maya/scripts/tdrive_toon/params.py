@@ -58,6 +58,7 @@ SPECIFIC_PARAMS: tuple[Param, ...] = (
     Param("_ToonShadeThreshold", FLOAT, 0.5, "Shadow", "影の境界", 0.0, 1.0),
     Param("_ToonShadeFeather", FLOAT, 0.02, "Shadow", "境界ぼかし", 0.001, 0.5),
     Param("_ToonShadowStrength", FLOAT, 1.0, "Shadow", "影の強さ", 0.0, 1.0),
+    Param("_ToonReceiveShadow", FLOAT, 1.0, "Shadow", "セルフシャドウを受ける量", 0.0, 1.0),  # T-43（機能 selfShadow）
     # --- マスク T-19。頂点カラーに乗算。null = 白（何もしない） ---
     Param("_ToonMaskMap", TEXTURE, None, "Mask", "Toon マスク (RGBA)"),
     # --- 固定色 T-08（頂点カラー A を黒く塗った所に乗る） ---

@@ -67,6 +67,23 @@ col    = Tonemap(col, 環境プロファイルの tonemapping)     // None / Neu
 - 影色は **乗算色**。暗くするだけでなく色相をずらす（肌 → 赤紫寄り等）ことを前提にした既定値にする
 - ライトの強度・環境光・受け影（シャドウマップ）は P0 では扱わない（T-16/T-17 で Unity 側に追加）
 
+## 2.3 セルフシャドウ（P2 T-43、2026-09-29 追加。機能 `selfShadow`、既定オフ）
+
+キャラクター自身が落とす影（前髪 → 額、腕 → 体など）を、ライトの影（シャドウマップ）から取り、**トゥーンの影として**足す。
+
+```
+atten = シャドウマップの比較（1 = 光が当たる、0 = 影）。PCF で数点の平均
+s     = smoothstep(0.5 - _ToonShadeFeather, 0.5 + _ToonShadeFeather, atten)     // 境界をくっきり（通常の影と同じぼかし幅）
+k     = _ToonShadowStrength * _ToonReceiveShadow * mask.b                       // B 黒（常に明）の所には落ちない
+lit   = min(lit, lerp(1, s, k))                                                  // 通常の影と合成（影色は _ToonShadeColor）
+```
+
+- `_ToonReceiveShadow`（0〜1、既定 1）: その部位が影を受ける量。**顔のロールは 0**（T-16: 髪の影を顔に落とさない。固定影は頂点マスク R で描く）
+- 影を落とすのは本体の面だけ（輪郭線の押し出しは落とさない）
+- 機能をオフにすると `_ToonReceiveShadow` は 0 で解決（効果なし）
+- Unity: URP のメインライトのシャドウマップ（`GetMainLight(shadowCoord)` の `shadowAttenuation`）を `atten` に使う。Maya: VP2 のシャドウマップ（プレビューのキャラクターライトと同じ向きの影用ライト）。
+  シャドウマップの解像度・バイアス・カスケードは環境で違うので、**Maya の表示は △（簡易）**
+
 ## 2.2 法線マップ・発光（Common、2026-09-28 追加。機能 `normalMap` / `emission`、既定オフ）
 
 D-Drive MaterialCommon の `Normal` / `NormalScale` / `Emission` / `EmissionColor` / `EmissionIntensity` を、Unity（URP Lit）と同じ解釈で使う。
@@ -228,6 +245,7 @@ Maya の uniform 名は先頭の `_` を除いた名前。定義の実体は `ma
 | `_ToonShadeThreshold` | Float | 0.5 | 0–1 | 影の境界 | T-01 |
 | `_ToonShadeFeather` | Float | 0.02 | 0.001–0.5 | 境界のぼかし幅 | T-01 |
 | `_ToonShadowStrength` | Float | 1.0 | 0–1 | 影の強さ（0 = 影なし） | T-04 |
+| `_ToonReceiveShadow` | Float | 1.0 | 0–1 | セルフシャドウを受ける量（顔ロールは 0）（P2） | T-43 |
 | `_ToonMaskMap` | Texture | white | | 頂点カラーに乗算する Toon マスク | T-19 |
 | `_ToonTintColor` | Color | (1, 0.6, 0.6, 1) | | 固定色（乗算） | T-08 |
 | `_ToonTintStrength` | Float | 0 | 0–1 | 固定色の強さ | T-08 |
