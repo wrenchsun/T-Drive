@@ -277,3 +277,15 @@ def test_material_overrides_survive_promote_and_are_not_in_variants():
     assert look.material_override(lk, "hair", "matCap") is True
     lk["variants"] = {"C": {"label": "", "overrides": {"hair": {look.FEATURE_OVERRIDES: {"rim": True}}}}}
     assert any("バリアントでは使えない" in e for e in look.validate(lk))
+
+
+def test_self_shadow_cast_is_per_material_and_off_resolves_zero():
+    """セルフシャドウを落とす（4-13）: _ToonCastShadow は 0/1、機能オフで 0（影を受けも落としもしない）。"""
+    lk = _sample()
+    assert lk["materials"]["hair"]["specific"]["_ToonCastShadow"] == 1.0
+    assert look.resolve(lk)["hair"]["specific"]["_ToonCastShadow"] == 0.0  # 既定で機能オフ
+    look.set_feature(lk, "selfShadow", True)
+    look.set_value(lk, "hair", "_ToonCastShadow", 0.0)  # 髪は落とさない
+    res = look.resolve(lk)
+    assert res["hair"]["specific"]["_ToonCastShadow"] == 0.0 and res["hair"]["specific"]["_ToonReceiveShadow"] == 1.0
+    assert params.PARAMS_BY_UNITY["_ToonCastShadow"].toggle

@@ -1,10 +1,13 @@
-"""機能タブ（docs/11 §4、4-3 / 4-12）: 機能ごとのオン/オフ。
+"""機能タブ（docs/11 §4、4-3 / 4-12 / 4-13）: 機能 × 全体・部位 の一覧表。
 
-オフの機能は効果なしの値でプレビュー・出力され、Unity ではプロジェクト専用シェーダーから取り除かれる。
+- 「全体」列: キャラクター全体のオン/オフ（既定）
+- 部位の列: その部位で**実際に有効か**。押すとその部位だけ切り替わる。全体と同じにすると上書きは自動で消える
+  （上書きしたマスは色付き。部位の中でマテリアルが違うときは中間の状態）。行末の ↺ で全体どおりに戻す
+- キャラクター単位の機能（接地影・画面上の線など）は部位ごとには切り替えられない（「—」）
+
+オフの機能は効果なしの値でプレビュー・出力され、Unity では機能の組み合わせごとのシェーダーから取り除かれる。
 保存されている値は消えない（オンに戻すと復活する）。
-
-左の一覧で部位・マテリアルを選ぶと、マテリアルの値で効く機能を「全体に従う / オン / オフ」で上書きできる
-（シェーダー単位。Unity では機能の組み合わせごとにシェーダーが作られる。docs/11 §2.1・§3）。
+（2026-09-29 に「部位を選んで 全体に従う / オン / オフ」から変更: どこで有効なのか分かりにくかったため）
 """
 
 from __future__ import annotations
@@ -14,92 +17,45 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from . import features, look, roles, session
 
 IMPL_LABELS = {features.SH: "シェーダー", features.ME: "メッシュ", features.CO: "コンポーネント", features.RF: "Renderer Feature"}
-PREVIEW_LABELS = {"full": "○", "partial": "△", "none": "×"}
-COLUMNS = ("全体", "選択中の部位", "機能", "Unity での実現", "Maya プレビュー", "使用中")
-COL_ALL, COL_SEL, COL_NAME, COL_IMPL, COL_PREVIEW, COL_USED = range(6)
-INHERIT, MIXED = "inherit", "mixed"
+PREVIEW_LABELS = {"full": "○ Maya でも同じ見た目", "partial": "△ Maya では簡易表示（Unity で最終確認）", "none": "× Maya では確認できない"}
+OVERRIDE_ON = "#2f5a2f"   # この部位だけオン
+OVERRIDE_OFF = "#6a4a1f"  # この部位だけオフ
 
 
 class FeaturesTab(QtWidgets.QWidget):
     def __init__(self, s: session.Session) -> None:
         super().__init__()
         self.session = s
-        self.target: str | None = None  # None = キャラクター全体
+        self._parts: list[str] = []
         v = QtWidgets.QVBoxLayout(self)
         note = QtWidgets.QLabel(
-            "使う機能だけをオンにします。オフの機能は「効果なし」で表示・出力され、"
-            "Unity ではプロジェクト専用シェーダーから取り除かれて軽くなります。"
-            "オフにしても調整値は消えません（オンに戻すと復活）。"
-            "左で部位・マテリアルを選ぶと、その部位だけオン / オフにできます（シェーダー単位）。"
+            "使う機能にチェックを入れます。<b>全体</b> = キャラクター全体の設定、<b>部位の列</b> = その部位で実際に使うか"
+            "（押すとその部位だけ切り替わり、色が付きます。行末の ↺ で全体どおりに戻す）。"
+            "オフの機能は効果なしで表示・出力され、Unity のシェーダーから取り除かれて軽くなります。調整値は消えません。"
         )
         note.setWordWrap(True)
         v.addWidget(note)
 
         top = QtWidgets.QHBoxLayout()
         unused = QtWidgets.QPushButton("使っていない機能をオフにする")
-        unused.setToolTip("値がすべて効果なし（既定値）の機能をまとめてオフにする。Ctrl+Z で戻せる")
+        unused.setToolTip("値がすべて効果なし（既定値）の機能を全体でまとめてオフにする。Ctrl+Z で戻せる")
         unused.clicked.connect(self._disable_unused)
         top.addWidget(unused)
         top.addStretch(1)
+        legend = QtWidgets.QLabel(
+            f"<span style='background:{OVERRIDE_ON}'>&nbsp;この部位だけオン&nbsp;</span> "
+            f"<span style='background:{OVERRIDE_OFF}'>&nbsp;この部位だけオフ&nbsp;</span>"
+        )
+        top.addWidget(legend)
         self.summary = QtWidgets.QLabel()
         top.addWidget(self.summary)
         v.addLayout(top)
 
-        split = QtWidgets.QSplitter()
-        self.tree = QtWidgets.QTreeWidget()
-        self.tree.setHeaderLabels(["対象"])
-        self.tree.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
-        self.tree.itemSelectionChanged.connect(self._on_target)
-        split.addWidget(self.tree)
-
-        self.table = QtWidgets.QTableWidget(len(features.FEATURES), len(COLUMNS))
-        self.table.setHorizontalHeaderLabels(COLUMNS)
+        self.table = QtWidgets.QTableWidget(len(features.FEATURES), 2)
         self.table.verticalHeader().setVisible(False)
         self.table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
         self.table.setSelectionMode(QtWidgets.QAbstractItemView.NoSelection)
-        self.checks: dict[str, QtWidgets.QCheckBox] = {}
-        self.combos: dict[str, QtWidgets.QComboBox] = {}
-        self.used_items: dict[str, QtWidgets.QTableWidgetItem] = {}
-        for row, f in enumerate(features.FEATURES):
-            cell = QtWidgets.QWidget()
-            h = QtWidgets.QHBoxLayout(cell)
-            h.setContentsMargins(6, 0, 0, 0)
-            check = QtWidgets.QCheckBox()
-            check.setEnabled(not f.required)
-            # PySide6 は「必須引数 + 既定値付き引数」の lambda を引数なしで呼ぶ → 状態はチェックから読む（CLAUDE.md）
-            check.clicked.connect(lambda *_, fid=f.id, c=check: self._toggle(fid, c.isChecked()))
-            h.addWidget(check)
-            self.table.setCellWidget(row, COL_ALL, cell)
-            self.checks[f.id] = check
-            if f.material_scope:
-                combo = QtWidgets.QComboBox()
-                combo.activated.connect(lambda *_, fid=f.id, c=combo: self._set_material(fid, c.currentData()))
-                self.table.setCellWidget(row, COL_SEL, combo)
-                self.combos[f.id] = combo
-            else:
-                item = QtWidgets.QTableWidgetItem("キャラクター単位" if not f.required else "必須")
-                item.setForeground(QtGui.QBrush(QtGui.QColor("#888")))
-                item.setToolTip("キャラクター全体で切り替える機能（部位ごとには切り替えられない）")
-                self.table.setItem(row, COL_SEL, item)
-            name = QtWidgets.QTableWidgetItem(f.label + ("（必須）" if f.required else ""))
-            name.setToolTip(_contents(f))
-            self.table.setItem(row, COL_NAME, name)
-            self.table.setItem(row, COL_IMPL, QtWidgets.QTableWidgetItem(" + ".join(IMPL_LABELS[i] for i in f.impl)))
-            pv = QtWidgets.QTableWidgetItem(PREVIEW_LABELS[f.maya_preview])
-            pv.setTextAlignment(QtCore.Qt.AlignCenter)
-            pv.setToolTip({"full": "Maya でも同じ見た目で確認できる", "partial": "Maya では簡易表示（Unity で最終確認）",
-                           "none": "Maya では確認できない（Unity で確認）"}[f.maya_preview])
-            self.table.setItem(row, COL_PREVIEW, pv)
-            used = QtWidgets.QTableWidgetItem()
-            used.setTextAlignment(QtCore.Qt.AlignCenter)
-            self.table.setItem(row, COL_USED, used)
-            self.used_items[f.id] = used
-        self.table.resizeColumnsToContents()
-        self.table.setColumnWidth(COL_SEL, 190)
-        self.table.horizontalHeader().setSectionResizeMode(COL_NAME, QtWidgets.QHeaderView.Stretch)
-        split.addWidget(self.table)
-        split.setSizes([180, 620])
-        v.addWidget(split, 1)
+        v.addWidget(self.table, 1)
 
     # -------------------------------------------------------------- 表示
     def refresh(self) -> None:
@@ -107,110 +63,139 @@ class FeaturesTab(QtWidgets.QWidget):
         self.setEnabled(lk is not None)
         if lk is None:
             self.summary.setText("")
-            self.tree.clear()
+            self.table.setColumnCount(2)
             return
-        if self.target and self.target not in lk["parts"] and self.target not in lk["materials"]:
-            self.target = None
-        self._fill_tree(lk)
+        parts = sorted(lk["parts"])
+        if parts != self._parts:
+            self._parts = parts
+        self._build(lk)
+
+    def _build(self, lk: dict) -> None:
+        parts = self._parts
+        t = self.table
+        t.clear()
+        cols = ["機能", "全体", *parts, "", "使用中"]
+        t.setColumnCount(len(cols))
+        t.setRowCount(len(features.FEATURES))
+        t.setHorizontalHeaderLabels(cols)
+        for j, part in enumerate(parts, start=2):
+            role = lk["parts"][part]["role"]
+            t.horizontalHeaderItem(j).setToolTip(f"{part}（{roles.ROLE_PRESETS.get(role, {}).get('label', role)}）: {', '.join(lk['parts'][part]['materials'])}")
+        reset_col, used_col = len(cols) - 2, len(cols) - 1
         used = look.used_features(lk)
         n_on = 0
-        for f in features.FEATURES:
-            on = look.enabled(lk, f.id)
-            n_on += on
-            c = self.checks[f.id]
-            c.blockSignals(True)
-            c.setChecked(on)
-            c.blockSignals(False)
-            item = self.used_items[f.id]
-            if f.id in used and not on:
-                item.setText("値あり（オフ中）")
-                item.setForeground(QtGui.QBrush(QtGui.QColor("#f0a040")))
-                item.setToolTip("調整値が保存されているがオフなので効果なし。オンにすると復活する")
+        for row, f in enumerate(features.FEATURES):
+            whole = look.enabled(lk, f.id)
+            n_on += whole
+            name = QtWidgets.QTableWidgetItem(f.label + ("（必須）" if f.required else ""))
+            name.setToolTip(_contents(f))
+            t.setItem(row, 0, name)
+            t.setCellWidget(row, 1, self._check(whole, enabled=not f.required,
+                                                on_click=lambda *_, fid=f.id: self._toggle_whole(fid),
+                                                tip="キャラクター全体（部位の列の既定）"))
+            any_override = False
+            for j, part in enumerate(parts, start=2):
+                if not f.material_scope:
+                    item = QtWidgets.QTableWidgetItem("—")
+                    item.setTextAlignment(QtCore.Qt.AlignCenter)
+                    item.setForeground(QtGui.QBrush(QtGui.QColor("#777")))
+                    item.setToolTip("必須の機能" if f.required else "キャラクター単位の機能（部位ごとには切り替えられない。全体の列で）")
+                    t.setItem(row, j, item)
+                    continue
+                overrides, effective = self.session.material_feature_state(part, f.id)
+                any_override |= any(o is not None for o in overrides)
+                state = (QtCore.Qt.Checked if all(effective) else
+                         QtCore.Qt.Unchecked if not any(effective) else QtCore.Qt.PartiallyChecked)
+                # 色は「全体と実際に違う」マスだけ（全体と同じ上書きは見た目に影響しないので色を付けない。↺ で消せる）
+                color = ""
+                if any(e != whole for e in effective):
+                    color = OVERRIDE_ON if any(effective) else OVERRIDE_OFF
+                t.setCellWidget(row, j, self._check(
+                    state, enabled=True, color=color, tip=self._tip(lk, part, f, overrides, effective, whole),
+                    on_click=lambda *_, fid=f.id, p=part: self._toggle_part(fid, p)))
+            if f.material_scope:
+                btn = QtWidgets.QToolButton()
+                btn.setText("↺")
+                btn.setToolTip("この機能の部位ごとの設定を消して、全体どおりに戻す")
+                btn.setEnabled(any_override)
+                btn.clicked.connect(lambda *_, fid=f.id: self._clear(fid))
+                t.setCellWidget(row, reset_col, btn)
+            u = QtWidgets.QTableWidgetItem()
+            u.setTextAlignment(QtCore.Qt.AlignCenter)
+            if f.id in used and f.id not in look.enabled_features(lk):
+                u.setText("値あり")
+                u.setForeground(QtGui.QBrush(QtGui.QColor("#f0a040")))
+                u.setToolTip("調整値が保存されているがオフなので効果なし。オンにすると復活する")
             elif f.id in used:
-                item.setText("●")
-                item.setForeground(QtGui.QBrush())
-                item.setToolTip("値が既定値と違う（= 使っている）")
-            else:
-                item.setText("")
-                item.setToolTip("値がすべて既定値（オフにしても見た目は変わらない）" if on else "")
-        self._refresh_combos()
+                u.setText("●")
+                u.setToolTip("値が既定値と違う（= 使っている）")
+            t.setItem(row, used_col, u)
+        t.resizeColumnsToContents()
+        t.horizontalHeader().setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
         n_ov = sum(1 for m in lk["materials"].values() if m.get(look.FEATURE_OVERRIDES))
-        self.summary.setText(f"オン {n_on} / {len(features.FEATURES)}" + (f"（部位ごとの上書き: マテリアル {n_ov} 件）" if n_ov else ""))
+        self.summary.setText(f"  全体でオン {n_on} / {len(features.FEATURES)}" + (f"・部位ごとの設定あり（マテリアル {n_ov}）" if n_ov else ""))
 
-    def _fill_tree(self, lk: dict) -> None:
-        self.tree.blockSignals(True)
-        self.tree.clear()
-        whole = QtWidgets.QTreeWidgetItem(["キャラクター全体"])
-        whole.setData(0, QtCore.Qt.UserRole, None)
-        self.tree.addTopLevelItem(whole)
-        if self.target is None:
-            self.tree.setCurrentItem(whole)
-        for part, info in sorted(lk["parts"].items()):
-            label = roles.ROLE_PRESETS.get(info["role"], {}).get("label", info["role"])
-            item = QtWidgets.QTreeWidgetItem([f"{part}（{label}）"])
-            item.setData(0, QtCore.Qt.UserRole, part)
-            self.tree.addTopLevelItem(item)
-            if part == self.target:
-                self.tree.setCurrentItem(item)
-            for m in info["materials"]:
-                child = QtWidgets.QTreeWidgetItem([m + ("  ✎" if lk["materials"][m].get(look.FEATURE_OVERRIDES) else "")])
-                child.setData(0, QtCore.Qt.UserRole, m)
-                child.setToolTip(0, "部位ごとの上書きあり" if lk["materials"][m].get(look.FEATURE_OVERRIDES) else "")
-                item.addChild(child)
-                if m == self.target:
-                    self.tree.setCurrentItem(child)
-            item.setExpanded(True)
-        self.tree.blockSignals(False)
+    def _check(self, state, enabled: bool, on_click, tip: str, color: str = "") -> QtWidgets.QWidget:
+        cell = QtWidgets.QWidget()
+        if color:
+            cell.setAutoFillBackground(True)
+            cell.setStyleSheet(f"background-color: {color};")
+        h = QtWidgets.QHBoxLayout(cell)
+        h.setContentsMargins(0, 0, 0, 0)
+        h.setAlignment(QtCore.Qt.AlignCenter)
+        c = QtWidgets.QCheckBox()
+        if isinstance(state, bool):
+            state = QtCore.Qt.Checked if state else QtCore.Qt.Unchecked
+        c.setTristate(state == QtCore.Qt.PartiallyChecked)
+        c.setCheckState(state)
+        c.setEnabled(enabled)
+        c.setToolTip(tip)
+        cell.setToolTip(tip)
+        # PySide6 は「必須引数 + 既定値付き引数」の lambda を引数なしで呼ぶ → on_click は *_ で受ける（CLAUDE.md）
+        c.clicked.connect(on_click)
+        h.addWidget(c)
+        return cell
 
-    def _refresh_combos(self) -> None:
-        lk = self.session.look
-        header = "選択中の部位" if self.target is None else f"{self.target}"
-        self.table.horizontalHeaderItem(COL_SEL).setText(header)
-        for fid, combo in self.combos.items():
-            combo.blockSignals(True)
-            combo.clear()
-            if self.target is None:
-                combo.addItem("—（左で部位を選ぶ）", None)
-                combo.setEnabled(False)
-            else:
-                overrides, effective = self.session.material_feature_state(self.target, fid)
-                whole_on = look.enabled(lk, fid)
-                combo.addItem(f"全体に従う（{'オン' if whole_on else 'オフ'}）", INHERIT)
-                combo.addItem("オン", True)
-                combo.addItem("オフ", False)
-                if len(set(overrides)) > 1:
-                    combo.insertItem(0, "—（部位の中で混在）", MIXED)
-                    combo.setCurrentIndex(0)
-                else:
-                    value = overrides[0] if overrides else None
-                    combo.setCurrentIndex(combo.findData(INHERIT if value is None else value))
-                combo.setEnabled(True)
-                on_any = any(effective)
-                combo.setStyleSheet("" if overrides and overrides[0] is None and len(set(overrides)) == 1
-                                    else ("color: #80d080;" if on_any else "color: #f0a040;"))
-            combo.blockSignals(False)
+    @staticmethod
+    def _tip(lk: dict, part: str, f: features.Feature, overrides, effective, whole: bool) -> str:
+        mats = lk["parts"][part]["materials"]
+        if len(set(effective)) > 1:
+            lines = [f"{part}: マテリアルで違う"] + [
+                f"  {m}: {'オン' if e else 'オフ'}{'（この部位だけ）' if o is not None else '（全体どおり）'}"
+                for m, o, e in zip(mats, overrides, effective)]
+        elif any(o is not None for o in overrides) and effective[0] != whole:
+            lines = [f"{part}: {'オン' if effective[0] else 'オフ'}（この部位だけ。全体は{'オン' if whole else 'オフ'}）"]
+        elif any(o is not None for o in overrides):
+            lines = [f"{part}: {'オン' if effective[0] else 'オフ'}（部位ごとの設定あり。今は全体と同じ。全体を変えてもこの部位はこのまま / ↺ で消す）"]
+        else:
+            lines = [f"{part}: {'オン' if effective[0] else 'オフ'}（全体どおり）"]
+        if f.id == "selfShadow" and any(effective):
+            spec = [lk["materials"][m]["specific"] for m in mats]
+            if all(sp.get("_ToonReceiveShadow", 1.0) <= 0.0 for sp in spec):
+                lines.append("※ 受ける量が 0 なので、この部位に影は出ません（ルックタブ › 影で変更）")
+            if all(sp.get("_ToonCastShadow", 1.0) < 0.5 for sp in spec):
+                lines.append("※ 「影を落とす」がオフなので、この部位は他に影を落としません")
+        lines.append("押すと切り替え（全体と同じにすると部位ごとの設定は消える）")
+        return "\n".join(lines)
 
     # -------------------------------------------------------------- 操作
-    def _on_target(self) -> None:
-        item = self.tree.currentItem() or next(iter(self.tree.selectedItems()), None)
-        self.target = item.data(0, QtCore.Qt.UserRole) if item else None
-        self._refresh_combos()
-
-    def _toggle(self, feature_id: str, on: bool) -> None:
+    def _run(self, fn, *args) -> None:
         try:
-            self.session.set_feature(feature_id, on)
+            fn(*args)
         except Exception as exc:
             QtWidgets.QMessageBox.warning(self, "T-Drive Toon", str(exc))
             self.refresh()
 
-    def _set_material(self, feature_id: str, value) -> None:
-        if self.target is None or value == MIXED:
-            return
-        try:
-            self.session.set_material_feature(self.target, feature_id, None if value == INHERIT else bool(value))
-        except Exception as exc:
-            QtWidgets.QMessageBox.warning(self, "T-Drive Toon", str(exc))
-            self.refresh()
+    def _toggle_whole(self, feature_id: str) -> None:
+        self._run(self.session.set_feature, feature_id, not look.enabled(self.session.look, feature_id))
+
+    def _toggle_part(self, feature_id: str, part: str) -> None:
+        _overrides, effective = self.session.material_feature_state(part, feature_id)
+        # 全部オンならオフへ、それ以外（オフ・混在）はオンへ
+        self._run(self.session.set_part_feature, part, feature_id, not all(effective))
+
+    def _clear(self, feature_id: str) -> None:
+        self._run(self.session.clear_feature_overrides, feature_id)
 
     def _disable_unused(self) -> None:
         off = self.session.disable_unused_features()
@@ -222,4 +207,9 @@ class FeaturesTab(QtWidgets.QWidget):
 
 def _contents(f: features.Feature) -> str:
     items = list(f.params) + [f"common.{c}" for c in f.common] + [f"characterSettings.{s}" for s in f.settings]
-    return "属するもの: " + (", ".join(items) if items else "（頂点カラーなどメッシュのデータ）")
+    return "\n".join([
+        "属するもの: " + (", ".join(items) if items else "（頂点カラーなどメッシュのデータ）"),
+        "Unity での実現: " + " + ".join(IMPL_LABELS[i] for i in f.impl),
+        "Maya: " + PREVIEW_LABELS[f.maya_preview],
+        "部位ごとに切り替え: " + ("できる" if f.material_scope else "できない（キャラクター単位）"),
+    ])

@@ -107,7 +107,8 @@ class LookTab(QtWidgets.QWidget):
     def _build_rows(self) -> None:
         groups: dict[str, list[tuple]] = {"Common": list(COMMON_ROWS), "Textures": list(TEXTURE_ROWS)}
         for p in params.SPECIFIC_PARAMS:
-            groups.setdefault(p.group, []).append((p.unity, p.label, p.kind, p.min, p.max))
+            kind = "toggle01" if p.toggle else p.kind  # 0/1 の真偽値はチェックボックス（値は 1.0 / 0.0）
+            groups.setdefault(p.group, []).append((p.unity, p.label, kind, p.min, p.max))
         for group, rows in groups.items():
             box = QtWidgets.QGroupBox(GROUP_LABELS.get(group, group))
             grid = QtWidgets.QGridLayout(box)
@@ -289,7 +290,7 @@ class ParamRow:
             self.ispin.setRange(int(self.lo), int(self.hi))
             self.ispin.editingFinished.connect(self._on_int)
             return self.ispin
-        if k == "bool":
+        if k in ("bool", "toggle01"):
             self.check = QtWidgets.QCheckBox()
             self.check.clicked.connect(self._on_bool)
             return self.check
@@ -346,7 +347,7 @@ class ParamRow:
     def _on_bool(self, on: bool) -> None:
         self.check.setTristate(False)
         self.tab.begin()
-        self.tab.set(self.key, bool(on))
+        self.tab.set(self.key, (1.0 if on else 0.0) if self.kind == "toggle01" else bool(on))
 
     def _on_blend(self, _index: int) -> None:
         if self.combo.currentText() in params.BLEND_TYPES:
@@ -400,7 +401,7 @@ class ParamRow:
             self.ispin.blockSignals(True)
             self.ispin.setValue(int(value))
             self.ispin.blockSignals(False)
-        elif k == "bool":
+        elif k in ("bool", "toggle01"):
             self.check.setTristate(mixed)
             state = QtCore.Qt.PartiallyChecked if mixed else (QtCore.Qt.Checked if value else QtCore.Qt.Unchecked)
             self.check.setCheckState(state)

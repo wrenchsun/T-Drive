@@ -273,6 +273,31 @@ class Session:
         self._changed()
 
     @undoable
+    def set_part_feature(self, target: str, feature_id: str, on: bool) -> None:
+        """機能タブの一覧表のマス: その部位 / マテリアルで機能を有効（on）にする。
+
+        全体と同じ状態なら上書きを消し（全体どおり）、違えば上書きにする（docs/11 §4、4-13）。
+        """
+        whole = look.enabled(self.require(), feature_id)
+        self.set_material_feature(target, feature_id, None if bool(on) == whole else bool(on))
+
+    @undoable
+    def clear_feature_overrides(self, feature_id: str) -> None:
+        """その機能の部位ごとの上書きをすべて消す（全体どおりに戻す）。"""
+        lk = self.require()
+        mats = [m for m in lk["materials"] if look.material_override(lk, m, feature_id) is not None]
+        for m in mats:
+            look.set_material_feature(lk, m, feature_id, None)
+        if mats and preview.is_active():
+            resolved = look.resolve(lk, self.shown)
+            for m in mats:
+                if cmds.objExists(preview.preview_shader_of(m)):
+                    preview.apply_values(m, resolved[m])
+            if feature_id == "selfShadow":
+                self._sync_character_preview()
+        self._changed(dirty=bool(mats))
+
+    @undoable
     def disable_unused_features(self) -> list[str]:
         """使っていない（値がすべて効果なしの）機能をオフにする。オフにした ID を返す。"""
         lk = self.require()

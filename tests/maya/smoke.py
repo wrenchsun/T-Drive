@@ -390,6 +390,14 @@ def run() -> None:
           and "rim" in mf[body_mat] and "rim" not in mf["face"], str(mf.get(body_mat)))
     s.undo()
     check("部位ごとの上書きは Undo で戻る", look.material_override(s.look, body_mat, "rim") is None)
+    body_part = look.part_of(s.look, body_mat)
+    s.set_part_feature(body_part, "outline", True)  # 全体もオン → 上書きは作らない
+    no_ov = look.material_override(s.look, body_mat, "outline") is None
+    s.set_part_feature(body_part, "outline", False)  # 全体と違う → この部位だけオフ
+    ov_off = look.material_override(s.look, body_mat, "outline") is False
+    s.clear_feature_overrides("outline")
+    check("一覧表のマス: 全体と同じなら上書きなし・違えば上書き・↺ で全体どおり",
+          no_ov and ov_off and look.material_override(s.look, body_mat, "outline") is None)
 
     # ---- Render Override のコールバックの戻り値（Windows の C long = 32 ビット符号付きに収まること。2026-09-28 の OverflowError）
     from tdrive_toon import screen_line

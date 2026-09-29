@@ -36,6 +36,7 @@ float ToonShadeThreshold < string UIGroup = "Shadow"; float UIMin = 0.0; float U
 float ToonShadeFeather < string UIGroup = "Shadow"; float UIMin = 0.001; float UIMax = 0.5; int UIOrder = 12; > = 0.02;
 float ToonShadowStrength < string UIGroup = "Shadow"; float UIMin = 0.0; float UIMax = 1.0; int UIOrder = 13; > = 1.0;
 float ToonReceiveShadow < string UIGroup = "Shadow"; float UIMin = 0.0; float UIMax = 1.0; int UIOrder = 14; > = 1.0;
+float ToonCastShadow < string UIGroup = "Shadow"; float UIMin = 0.0; float UIMax = 1.0; int UIOrder = 15; > = 1.0;  // 0 = 影を落とさない
 
 // ------------------------------------------------------------------ セルフシャドウ（T-43）: Maya が Light 0（影用ライト tdPreviewShadowLight）の影を渡す
 // 書き方は Maya 同梱の AutodeskUberShader.fx / PhongShadow.fx と同じ（SHADOWMAP / SHADOWMAPMATRIX / SHADOWFLAG）
@@ -376,6 +377,8 @@ VSShadowOut VS_Shadow(VSIn v)
 
 float4 PS_Shadow(VSShadowOut i) : SV_Target
 {
+    if (ToonCastShadow < 0.5)
+        discard;  // この部位は影を落とさない（Unity は ShadowCaster パスを止める。docs/03 §2.3）
     if (AlphaClip && SampleBase(i.uv).a < Cutoff)
         discard;
     float z = i.clip.z / i.clip.w;
