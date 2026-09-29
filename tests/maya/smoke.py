@@ -379,6 +379,18 @@ def run() -> None:
         s.undo()
     check("テクスチャの差し替えは Undo で戻る", s.value(body_mat, "common.albedo") == original_tex and not s.feature_enabled("normalMap"))
 
+    # ---- 機能のマテリアル（シェーダー）単位の上書き（4-12）
+    s.checkpoint()
+    s.set_material_feature(body_mat, "rim", True)  # 全体はオフのまま、体だけオン
+    res = look.resolve(s.look)
+    out_path = s.export_unity(out_dir=tmp / "mf")
+    mf = json.loads(out_path.read_text(encoding="utf-8"))["materialFeatures"]
+    check("部位ごとの上書き: 体だけリムが有効で、出力のマテリアルごとの機能に入る",
+          "rim" in res[body_mat]["features"] and "rim" not in res["face"]["features"]
+          and "rim" in mf[body_mat] and "rim" not in mf["face"], str(mf.get(body_mat)))
+    s.undo()
+    check("部位ごとの上書きは Undo で戻る", look.material_override(s.look, body_mat, "rim") is None)
+
     # ---- Render Override のコールバックの戻り値（Windows の C long = 32 ビット符号付きに収まること。2026-09-28 の OverflowError）
     from tdrive_toon import screen_line
 

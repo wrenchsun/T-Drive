@@ -242,3 +242,38 @@ def test_new_face_part_does_not_receive_self_shadow():
     assert lk[look.FEATURES]["selfShadow"] is False
     look.upgrade(lk)  # 開き直しても勝手にオンにならない（顔のプリセット 0 は「調整」ではない）
     assert lk[look.FEATURES]["selfShadow"] is False
+
+
+def test_material_feature_overrides():
+    """機能のマテリアル（シェーダー）単位の上書き（docs/11 §2.1、4-12）。"""
+    lk = _sample()
+    look.set_value(lk, "hair", "_ToonRimStrength", 0.5)
+    look.set_value(lk, "face", "_ToonRimStrength", 0.5)
+    look.set_material_feature(lk, "hair", "rim", True)  # 全体はオフのまま、髪だけオン
+    res = look.resolve(lk)
+    assert res["hair"]["specific"]["_ToonRimStrength"] == 0.5 and "rim" in res["hair"]["features"]
+    assert res["face"]["specific"]["_ToonRimStrength"] == 0.0 and "rim" not in res["face"]["features"]
+    assert "rim" in look.enabled_features(lk)  # 和集合（シェーダーの組み合わせに入る）
+    assert look.FEATURE_OVERRIDES not in res["hair"]  # 解決結果には上書きのデータを残さない
+    look.set_feature(lk, "rim", True)
+    look.set_material_feature(lk, "face", "rim", False)  # 全体オン、顔だけオフ
+    assert not look.material_enabled(lk, "face", "rim") and look.material_enabled(lk, "hair", "rim")
+    look.set_material_feature(lk, "hair", "rim", None)  # 全体に従う
+    assert look.material_override(lk, "hair", "rim") is None and look.FEATURE_OVERRIDES not in lk["materials"]["hair"]
+    assert look.validate(lk) == []
+    with pytest.raises(ValueError):
+        look.set_material_feature(lk, "hair", "contactShadow", True)  # キャラクター単位の機能
+    with pytest.raises(ValueError):
+        look.set_material_feature(lk, "hair", "shade", False)  # 必須
+    lk["materials"]["hair"][look.FEATURE_OVERRIDES] = {"innerLine": True}
+    assert any("キャラクター単位" in e for e in look.validate(lk))
+
+
+def test_material_overrides_survive_promote_and_are_not_in_variants():
+    lk = _sample()
+    look.set_material_feature(lk, "hair", "matCap", True)
+    look.add_variant(lk, "B")
+    look.promote(lk, "B")
+    assert look.material_override(lk, "hair", "matCap") is True
+    lk["variants"] = {"C": {"label": "", "overrides": {"hair": {look.FEATURE_OVERRIDES: {"rim": True}}}}}
+    assert any("バリアントでは使えない" in e for e in look.validate(lk))

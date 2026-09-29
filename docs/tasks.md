@@ -101,7 +101,7 @@ Unity は T-Drive for Unity パッケージ（Phase U）として実装する（
 
 | 4-11 | セルフシャドウ（Maya）: ToonCore の式・`_ToonReceiveShadow`（顔ロール 0、古い Look も顔は 0）・機能 `selfShadow`・影を落とすパス・影用ライトとビューポートの設定 | T-43 | 2 | 4-10 | 前髪の影が額以外（顔ロールでない部位）に、腕の影が体に落ちる。顔には落ちない。オフで従来と同じ | ✅ Toon_SelfShadowLit・_ToonReceiveShadow（顔 0、古い Look も）・機能 selfShadow・shadowPass・影用ライト（self_shadow.py）。法線方向のずらしでアクネ対策。実機で首・髪・胴の落ち影を確認 |
 
-| 4-12 | 機能のマテリアル（シェーダー）単位の上書き: `featureOverrides`・解決・出力（マテリアルごとの Features）・機能タブの部位 / マテリアル選択（全体に従う / オン / オフ）・ルックタブの表示 | — | 1.5 | 4-3 | 髪だけリムをオンにすると髪だけに効き、他の部位の欄には出ない。出力の髪の Features にだけ rim が入る | ⬜ |
+| 4-12 | 機能のマテリアル（シェーダー）単位の上書き: `featureOverrides`・解決・出力（マテリアルごとの Features）・機能タブの部位 / マテリアル選択（全体に従う / オン / オフ）・ルックタブの表示 | — | 1.5 | 4-3 | 髪だけリムをオンにすると髪だけに効き、他の部位の欄には出ない。出力の髪の Features にだけ rim が入る | ✅ featureOverrides（material_scope の機能のみ）・resolve / 出力 materialFeatures・機能タブの部位選択（全体に従う / オン / オフ・混在）・ルックタブの表示。実機で確認 |
 
 ## Phase R: Maya ツールの配布・導入・更新
 

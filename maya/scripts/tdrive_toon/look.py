@@ -53,6 +53,7 @@ CHARACTER_DEFAULTS: dict[str, Any] = {
 EXPRESSION_NAME = re.compile(r"^[A-Za-z0-9_]+$")
 SETTINGS = "characterSettings"  # トップレベルの "character" はキャラクター ID
 FEATURES = "features"  # 機能のオン/オフ（docs/11）
+FEATURE_OVERRIDES = "featureOverrides"  # マテリアル単位の上書き（docs/11 §2.1）
 
 
 def _fill_defaults(target: dict[str, Any], defaults: dict[str, Any], prefix: str, added: set[str]) -> None:
@@ -132,9 +133,47 @@ def enabled(look: dict[str, Any], feature_id: str) -> bool:
     return f.required or bool(look.get(FEATURES, {}).get(feature_id, f.default_on))
 
 
+def material_enabled(look: dict[str, Any], material: str, feature_id: str) -> bool:
+    """そのマテリアルで機能が有効か。マテリアルの上書き（featureOverrides）があればそれ、無ければキャラクター単位。"""
+    f = features.BY_ID[feature_id]
+    if f.material_scope:
+        ov = look.get("materials", {}).get(material, {}).get(FEATURE_OVERRIDES, {})
+        if feature_id in ov:
+            return bool(ov[feature_id])
+    return enabled(look, feature_id)
+
+
+def material_features(look: dict[str, Any], material: str) -> list[str]:
+    """そのマテリアルで有効な機能 ID（名前順）。生成シェーダーの組み合わせ（docs/11 §3）。"""
+    return sorted(f.id for f in features.FEATURES if material_enabled(look, material, f.id))
+
+
+def material_override(look: dict[str, Any], material: str, feature_id: str) -> bool | None:
+    """マテリアルの上書き（None = 全体に従う）。"""
+    return look.get("materials", {}).get(material, {}).get(FEATURE_OVERRIDES, {}).get(feature_id)
+
+
+def set_material_feature(look: dict[str, Any], material: str, feature_id: str, value: bool | None) -> None:
+    """マテリアル単位の上書きを設定する（None = 全体に従う）。キャラクター単位の機能・必須の機能は上書きできない。"""
+    f = features.BY_ID[feature_id]
+    if not f.material_scope:
+        raise ValueError(f"{f.label} はキャラクター単位の機能なので、部位ごとには切り替えられません")
+    mat = look["materials"][material]
+    ov = mat.setdefault(FEATURE_OVERRIDES, {})
+    if value is None:
+        ov.pop(feature_id, None)
+    else:
+        ov[feature_id] = bool(value)
+    if not ov:
+        mat.pop(FEATURE_OVERRIDES, None)
+
+
 def enabled_features(look: dict[str, Any]) -> list[str]:
-    """オンの機能 ID（定義順ではなく名前順。出力・生成シェーダーのキーに使う）。"""
-    return sorted(f.id for f in features.FEATURES if enabled(look, f.id))
+    """キャラクターのどこかで有効な機能 ID（名前順）。キャラクター単位 + マテリアルの上書きの和集合。"""
+    on = {f.id for f in features.FEATURES if enabled(look, f.id)}
+    for name in look.get("materials", {}):
+        on.update(material_features(look, name))
+    return sorted(on)
 
 
 def line_part_keys(look: dict[str, Any]) -> dict[str, float]:
@@ -329,6 +368,21 @@ def _validate_material(where: str, mat: dict[str, Any], partial: bool) -> list[s
             errors.append(f"{where}.specific.{err}")
     if not partial and not isinstance(mat.get("renderQueueOffset", 0), int):
         errors.append(f"{where}.renderQueueOffset は整数")
+    ov = mat.get(FEATURE_OVERRIDES)
+    if ov is not None:
+        if partial:
+            errors.append(f"{where}.{FEATURE_OVERRIDES} はバリアントでは使えない（base のみ）")
+        elif not isinstance(ov, dict):
+            errors.append(f"{where}.{FEATURE_OVERRIDES} は {{機能 ID: true/false}}")
+        else:
+            for fid, v in ov.items():
+                f = features.BY_ID.get(fid)
+                if f is None:
+                    errors.append(f"{where}.{FEATURE_OVERRIDES}.{fid} は未知の機能")
+                elif not f.material_scope:
+                    errors.append(f"{where}.{FEATURE_OVERRIDES}.{fid} はキャラクター単位の機能（上書きできない）")
+                elif not isinstance(v, bool):
+                    errors.append(f"{where}.{FEATURE_OVERRIDES}.{fid} は true / false")
     return errors
 
 
@@ -412,8 +466,9 @@ def resolve(look: dict[str, Any], variant: str = BASE) -> dict[str, dict[str, An
     result = merged(look, variant)
     # オフの機能のパラメータは「効果なしの値」で解決する（保存値は消さない。docs/11 §2）
     pdefaults = {p.unity: p.default for p in params.SPECIFIC_PARAMS}
-    on = enabled_features(look)
-    for mat in result.values():
+    for name, mat in result.items():
+        on = material_features(look, name)  # マテリアル単位の上書きを含む（docs/11 §2.1）
+        mat.pop(FEATURE_OVERRIDES, None)
         for k in list(mat["specific"]):
             fid = features.FEATURE_OF_PARAM.get(k)
             if fid and fid not in on:

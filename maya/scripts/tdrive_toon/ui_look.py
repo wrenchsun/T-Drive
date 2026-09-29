@@ -153,10 +153,16 @@ class LookTab(QtWidgets.QWidget):
     def _apply_features(self) -> None:
         """オフの機能のパラメータを隠す（値は残っている。機能タブでオンにすると出る）。"""
         lk = self.session.look
+        mats = self.session.materials_of(self.target) if lk is not None and self.target else []
         off = set()
         for key, row in self.rows.items():
             fid = features.FEATURE_OF_COMMON.get(key.split(".", 1)[1]) if key.startswith("common.") else features.FEATURE_OF_PARAM.get(key)
-            visible = lk is None or fid is None or look.enabled(lk, fid)
+            if lk is None or fid is None:
+                visible = True
+            elif mats:  # 選んだ部位 / マテリアルで有効か（部位ごとの上書きを含む。docs/11 §2.1）
+                visible = any(look.material_enabled(lk, m, fid) for m in mats)
+            else:
+                visible = look.enabled(lk, fid)
             row.set_visible(visible)
             if not visible:
                 off.add(features.BY_ID[fid].label)

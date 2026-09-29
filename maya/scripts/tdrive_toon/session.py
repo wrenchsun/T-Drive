@@ -249,6 +249,29 @@ class Session:
         if any(features.BY_ID[f].settings for f in feature_ids) or "selfShadow" in feature_ids:
             self._sync_character_preview()  # キャラクター設定を持つ機能（接地影・画面上の線など）
 
+    def material_feature_state(self, target: str, feature_id: str) -> tuple[list[bool | None], list[bool]]:
+        """部位 / マテリアルの、各マテリアルの上書き（None = 全体に従う）と有効かどうか（docs/11 §2.1）。"""
+        lk = self.require()
+        mats = self.materials_of(target)
+        return ([look.material_override(lk, m, feature_id) for m in mats],
+                [look.material_enabled(lk, m, feature_id) for m in mats])
+
+    @undoable
+    def set_material_feature(self, target: str, feature_id: str, value: bool | None) -> None:
+        """部位 / マテリアル単位で機能を上書きする（None = 全体に従う）。そのマテリアルのプレビューだけ描き直す。"""
+        lk = self.require()
+        mats = self.materials_of(target)
+        for m in mats:
+            look.set_material_feature(lk, m, feature_id, value)
+        if preview.is_active():
+            resolved = look.resolve(lk, self.shown)
+            for m in mats:
+                if cmds.objExists(preview.preview_shader_of(m)):
+                    preview.apply_values(m, resolved[m])
+            if feature_id == "selfShadow":
+                self._sync_character_preview()
+        self._changed()
+
     @undoable
     def disable_unused_features(self) -> list[str]:
         """使っていない（値がすべて効果なしの）機能をオフにする。オフにした ID を返す。"""
@@ -297,8 +320,9 @@ class Session:
         fs = cs["faceShadow"]
         preview.set_face_axes(fs["forward"], fs["right"])
         # セルフシャドウ（T-43）: 影用ライト・シェーダーの Light 0・ビューポートの影
-        if look.enabled(lk, "selfShadow") or self_shadow.exists():
-            self_shadow.update(environment.model_panel(), look.enabled(lk, "selfShadow") and preview.is_active(),
+        shadow_on = "selfShadow" in look.enabled_features(lk)  # どこか 1 つのマテリアルで有効なら（docs/11 §2.1）
+        if shadow_on or self_shadow.exists():
+            self_shadow.update(environment.model_panel(), shadow_on and preview.is_active(),
                                preview.environment_state()["lightDir"])
         preview.set_line_keys(look.line_part_keys(lk))
         il = cs["innerLine"]
@@ -690,6 +714,8 @@ class Session:
                 if look.enabled(lk, features.FEATURE_OF_SETTING[k])
             },
             "materials": {m: look.to_ddrive_material_data(lk, m, variant) for m in sorted(lk["materials"])},
+            # マテリアルごとの有効な機能（組み合わせごとにシェーダーを生成する。docs/11 §2.1・§3）
+            "materialFeatures": {m: look.material_features(lk, m) for m in sorted(lk["materials"])},
         }
         path = out / f"{lk['character']}_{variant}.materialdata.json"
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

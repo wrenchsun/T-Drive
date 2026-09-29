@@ -26,6 +26,11 @@ class Feature:
     off_values: dict[str, Any] = field(default_factory=dict)  # 既定値が「効果あり」のパラメータだけ
     common: tuple[str, ...] = ()  # Common（D-Drive MaterialCommon）のフィールド。オフなら既定値で解決
 
+    @property
+    def material_scope(self) -> bool:
+        """マテリアル（シェーダー）単位で上書きできるか: マテリアルの値で効く機能だけ（docs/11 §2.1）。"""
+        return not self.required and bool(self.params or self.common)
+
 
 FEATURES: tuple[Feature, ...] = (
     Feature("shade", "2 階調影", ("T-01", "T-02", "T-04"),
