@@ -326,6 +326,21 @@ def run() -> None:
     s.set_feature("contactShadow", False)
     check("接地影: 機能をオフにすると隠れる", not cmds.getAttr(f"{contact_shadow.NODE}.visibility"))
     s.set_feature("contactShadow", True)
+    # ---- シーンの保存（Ctrl+S）で Look も保存（2026-09-29 の不具合: シーンだけ保存して閉じると Look の変更が消えた）
+    saved_look = s.save(tmp / "ctrl_s" / "look.json")
+    cmds.file(rename=str(tmp / "ctrl_s.ma"))
+    cmds.file(save=True, type="mayaAscii", force=True)
+    s.checkpoint()
+    s.set_value("face", "_ToonShadowStrength", 0.123)
+    check("Look を変えるとシーンに未保存の印が付く", s.dirty and cmds.file(query=True, modified=True))
+    cmds.file(save=True, type="mayaAscii", force=True)
+    session.on_scene_saved()  # 画面ありの Maya では userSetup の SceneSaved が呼ぶ
+    on_disk = json.loads(saved_look.read_text(encoding="utf-8"))
+    check("シーンの保存で Look も保存され、どちらも未保存でなくなる",
+          on_disk["materials"]["face"]["specific"]["_ToonShadowStrength"] == 0.123 and not s.dirty
+          and not cmds.file(query=True, modified=True))
+    s.undo()
+
     # ---- テクスチャの差し替え（4-9 / 4-10）。mayapy では .fx の属性が無く file ノードは作られないので、値と解決結果で確かめる
     body_mat = next(m for m in s.look["materials"] if m.startswith("body"))
     original_tex = s.value(body_mat, "common.albedo")

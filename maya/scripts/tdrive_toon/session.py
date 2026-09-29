@@ -57,6 +57,9 @@ class Session:
 
     def _changed(self, dirty: bool = True) -> None:
         self.dirty = self.dirty or dirty
+        if dirty and self.look is not None:
+            # Look を変えたらシーンにも未保存の印を付ける: 閉じるときに保存を聞かれ、保存（Ctrl+S）で Look も保存される
+            cmds.file(modified=True)
         for fn in list(self.listeners):
             try:
                 fn()
@@ -731,6 +734,32 @@ def on_scene_opened() -> None:
         print(f"[T-Drive] Look を開きました: {preview.to_repo_path(path)}")
     except Exception as exc:  # 壊れた Look でシーンを開く操作自体は止めない
         print(f"[T-Drive] Look を開けませんでした: {exc}")
+    # シーンを開いた時点で $TDRIVE_PROJECT が無かった等でテクスチャの読み込みに失敗していても、ここで読み込み直す
+    if preview.preview_shaders():
+        preview.reload_textures()
+
+
+def on_scene_saved() -> None:
+    """SceneSaved イベント（userSetup.py で登録）: シーンの保存（Ctrl+S）で、編集中の Look も保存する。
+
+    これまでは Look を別に保存しないと、シーンだけ保存して閉じたときに Look の変更が失われた（2026-09-29）。
+    """
+    s = _current
+    if s.look is None or not s.dirty:
+        return
+    try:
+        path = s.save()
+    except Exception as exc:  # noqa: BLE001  シーンの保存自体は止めない
+        import traceback
+
+        from . import lifecycle
+
+        lifecycle.report_error(f"Look を保存できませんでした: {exc}", traceback.format_exc(), once=False)
+        return
+    cmds.file(modified=False)  # Look のパスの記録（fileInfo）でシーンが未保存に戻らないように
+    print(f"[T-Drive] シーンの保存に合わせて Look を保存しました: {preview.to_repo_path(str(path))}")
+    if not cmds.about(batch=True):
+        cmds.inViewMessage(amg="T-Drive: Look も保存しました", pos="topCenter", fade=True)
 
 
 def load_project_preference() -> None:

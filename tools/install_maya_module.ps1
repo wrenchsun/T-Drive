@@ -17,6 +17,7 @@ $content = @"
 + MAYAVERSION:$MayaVersion TDriveToon $version $moduleRoot
 scripts: scripts
 TDRIVE_ROOT=$($repoRoot.Replace('\', '/'))
+TDRIVE_PROJECT=$($repoRoot.Replace('\', '/'))
 "@
 [System.IO.File]::WriteAllText($modPath, $content, (New-Object System.Text.UTF8Encoding($false)))
 Write-Host "Installed: $modPath"
