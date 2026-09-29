@@ -101,6 +101,8 @@ Unity は T-Drive for Unity パッケージ（Phase U）として実装する（
 
 | 4-11 | セルフシャドウ（Maya）: ToonCore の式・`_ToonReceiveShadow`（顔ロール 0、古い Look も顔は 0）・機能 `selfShadow`・影を落とすパス・影用ライトとビューポートの設定 | T-43 | 2 | 4-10 | 前髪の影が額以外（顔ロールでない部位）に、腕の影が体に落ちる。顔には落ちない。オフで従来と同じ | ✅ Toon_SelfShadowLit・_ToonReceiveShadow（顔 0、古い Look も）・機能 selfShadow・shadowPass・影用ライト（self_shadow.py）。法線方向のずらしでアクネ対策。実機で首・髪・胴の落ち影を確認 |
 
+| 4-12 | 機能のマテリアル（シェーダー）単位の上書き: `featureOverrides`・解決・出力（マテリアルごとの Features）・機能タブの部位 / マテリアル選択（全体に従う / オン / オフ）・ルックタブの表示 | — | 1.5 | 4-3 | 髪だけリムをオンにすると髪だけに効き、他の部位の欄には出ない。出力の髪の Features にだけ rim が入る | ⬜ |
+
 ## Phase R: Maya ツールの配布・導入・更新
 
 仕様: [13_distribution.md](13_distribution.md)。D-Drive と同じ「git タグで固定 + 更新ウィンドウ」。
@@ -135,7 +137,7 @@ Unity は T-Drive for Unity パッケージ（Phase U）として実装する（
 | U-11 | `ToonRendererFeature`: 接地影 | T-29 | 2 | U-10 | 足元に影が残り、キャラクターが浮いて見えない | ⬜ |
 | U-12 | Unity 上のルックエディタ（部位 / ルック / A/B / プレビュー）+ look.json への書き戻し | — | 4 | U-3 | Unity で調整した値を Maya で開ける（往復） | ⬜ |
 | U-13 | D-Drive 互換ブリッジ（MaterialData 変換・ShaderConversionTable・命名規約検証。D-Drive があるときだけ有効） | — | 2 | U-3 | D-Drive 入りのプロジェクトで CharacterLook → MaterialData に変換できる。D-Drive 無しでもコンパイルが通る | ⬜ |
-| U-15 | プロジェクト専用シェーダーの生成（全キャラクターの機能の和集合 → 使わない機能のコード・プロパティ・パスを除いた `TDrive/Toon_<プロジェクト>`、キーワードなし 1 本）+ 再生成の必要性の検証 | — | 3 | U-2 4-4 | MS2026 のキャラクターに必要な機能だけのシェーダーが生成され、D-Drive 互換の共通名は残る | ⬜ |
+| U-15 | プロジェクト専用シェーダーの生成（マテリアルごとの機能の組み合わせ単位で、使わない機能のコード・プロパティ・パスを除いた `TDrive/Toon_<プロジェクト>/<組み合わせ>`、キーワードなし。docs/11 §3）+ 再生成の必要性の検証 | — | 3 | U-2 4-4 | MS2026 のキャラクターに必要な機能だけのシェーダーが生成され、D-Drive 互換の共通名は残る | ⬜ |
 | U-16 | 生成シェーダーと汎用シェーダーのパリティテスト | — | 1 | U-15 U-4 | 同じ Look で画素差が基準以内 | ⬜ |
 | U-14 | MS2026 への導入手順（git URL・PC_Renderer に Feature 追加・Prefab に ToonCharacter） | — | 0.5 | U-3 U-10 | MS2026 チームが手順どおりに導入できる（手順書 + マニュアル） | ⬜ |
 

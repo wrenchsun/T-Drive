@@ -26,6 +26,11 @@
 "face": { "role": "face", "materials": ["face", "mouth"] }
 ```
 
+マテリアルには、機能のマテリアル単位の上書き `featureOverrides`（`{機能 ID: true/false}`、無いキーは全体に従う。[11](11_features_and_shader_generation.md) §2.1）を持てる。
+
+```
+```
+
 | フィールド | 型 | 説明 |
 |---|---|---|
 | role | string | ロール ID（§5）。プリセットと描画順の既定を決める |
