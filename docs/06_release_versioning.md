@@ -73,7 +73,7 @@ D-Drive の Tools/Release と同じ手順・引数体系。この PC には Powe
 - 全 `looks/*/look.json` が検証を通る
 - 初回リリース（現在の VERSION のタグが無い）は上げ幅の検査を省略し、その時点の契約を基準にする
 
-`bump_version.py` は `--part major|minor|patch`（現在から自動計算）/ `--no-commit` にも対応。
+`bump_version.py` は `--part major|minor|patch`（現在から自動計算）/ `--no-commit` / `--allow-dirty`（リリースに関係しない作業中のファイルがあっても実行。コミットするのは VERSION・CHANGELOG・スナップショットだけ）にも対応。
 
 ## 6. ブランチ運用
 

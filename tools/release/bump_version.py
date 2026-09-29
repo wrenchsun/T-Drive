@@ -30,12 +30,15 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--tag", action="store_true")
     ap.add_argument("--no-commit", action="store_true")
+    # 作業中の他のファイル（例: デザイナーが編集中の look.json）が未コミットでもリリースする。
+    # コミットするのは VERSION / CHANGELOG / 契約スナップショットだけなので、それらは混ざらない
+    ap.add_argument("--allow-dirty", action="store_true")
     a = ap.parse_args(argv)
 
     cur = rl.current_version()
     new = a.version or rl.bump(cur, a.part)
     rl.parse(new)
-    check_args = ["--version", new] + (["--allow-dirty"] if a.dry_run else [])
+    check_args = ["--version", new] + (["--allow-dirty"] if a.dry_run or a.allow_dirty else [])
     if check_release.main(check_args) != 0:
         print("\n中止: チェックに失敗")
         return 1
