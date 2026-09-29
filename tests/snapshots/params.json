@@ -1,5 +1,6 @@
 {
   "_ToonBrightness": "float",
+  "_ToonCastShadow": "float",
   "_ToonDepthCompressWeight": "float",
   "_ToonDepthOffset": "float",
   "_ToonFaceShadowMap": "texture",
