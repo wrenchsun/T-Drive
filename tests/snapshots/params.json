@@ -19,6 +19,7 @@
   "_ToonOutlineShadowSide": "float",
   "_ToonOutlineSmoothNormal": "float",
   "_ToonOutlineWidth": "float",
+  "_ToonReceiveShadow": "float",
   "_ToonRimColor": "color",
   "_ToonRimPower": "float",
   "_ToonRimStrength": "float",
