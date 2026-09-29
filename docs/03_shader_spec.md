@@ -67,6 +67,26 @@ col    = Tonemap(col, 環境プロファイルの tonemapping)     // None / Neu
 - 影色は **乗算色**。暗くするだけでなく色相をずらす（肌 → 赤紫寄り等）ことを前提にした既定値にする
 - ライトの強度・環境光・受け影（シャドウマップ）は P0 では扱わない（T-16/T-17 で Unity 側に追加）
 
+## 2.2 法線マップ・発光（Common、2026-09-28 追加。機能 `normalMap` / `emission`、既定オフ）
+
+D-Drive MaterialCommon の `Normal` / `NormalScale` / `Emission` / `EmissionColor` / `EmissionIntensity` を、Unity（URP Lit）と同じ解釈で使う。
+
+```
+// 法線マップ（Toon_NormalFromMap）: Unity の UnpackNormalScale と同じ（+Y = OpenGL 形式、テクスチャはリニア）
+nTS.xy = (tex.ag or tex.rg) * 2 - 1   // BC5 / DXT5nm でない通常の RGB は rg
+nTS.xy *= normalScale
+nTS.z  = sqrt(saturate(1 - dot(nTS.xy, nTS.xy)))
+N = normalize(T * nTS.x + B * nTS.y + N * nTS.z)   // B = cross(N, T) * tangent.w
+// 以降の影・リム・MatCap・顔影はこの N を使う。輪郭線（§3）の押し出しは使わない
+
+// 発光（Toon_Emission）: 影・ライト色・色補正の影響を受けない。トーンマップの前に足す
+emission = emissionMap.rgb(sRGB → リニア) * linear(EmissionColor.rgb) * EmissionIntensity   // マップ無しは白
+color += emission
+```
+
+- 既定（法線マップ無し・発光の強さ 0）で従来と同じ見た目（MINOR）
+- 機能をオフにすると Common の値は既定値で解決する（出力の Common には既定値が入る。[11](11_features_and_shader_generation.md) §2）
+
 ## 3. アウトライン（背面法線押し出し）
 
 ```

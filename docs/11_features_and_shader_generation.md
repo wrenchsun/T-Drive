@@ -16,6 +16,8 @@
 | `outlineSmoothNormal` | 線のスムーズ法線 | T-06 | `_ToonOutlineSmoothNormal` + UV2 | Sh Me | ○ |
 | `outlineDistance` | 距離で線を細く | T-18 | `_ToonOutlineDistanceScale` `_ToonOutlineRefDistance` | Sh | ○ |
 | `outlineDirection` | 線の太さの方向依存 | T-26 | `_ToonOutlineShadowSide` `_ToonOutlineBottom` | Sh | ○ |
+| `normalMap` | 法線マップ | — | `common.normal` `common.normalScale` | Sh | ○ |
+| `emission` | 発光 | — | `common.emission` `common.emissionColor` `common.emissionIntensity` | Sh | ○ |
 | `vertexMask` | 頂点カラーの Toon マスク | T-03 T-07 | 頂点カラー（COLOR） | Sh Me | ○ |
 | `maskMap` | Toon マスクテクスチャ | T-19 | `_ToonMaskMap` | Sh | ○ |
 | `tint` | 固定色（頬・耳・口内） | T-08 | `_ToonTintColor` `_ToonTintStrength` | Sh | ○ |
