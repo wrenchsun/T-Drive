@@ -317,7 +317,17 @@ def apply_values(mat: str, values: dict[str, Any]) -> None:
         _set(shader, "BaseColor", envmath.srgb_color_to_linear(common["albedoTint"]))
     if "albedo" in common:
         _set_texture(shader, "BaseMap", common["albedo"], srgb=True)
-    # normal / emission は P0 の式で使わない（Unity 側でのみ使用）
+    # 法線マップ・発光（docs/03 §2.2）。法線マップはリニア、発光マップは sRGB（Unity と同じ）
+    if "normal" in common:
+        _set_texture(shader, "NormalMap", common["normal"], srgb=False)
+    if "normalScale" in common:
+        _set(shader, "NormalScale", float(common["normalScale"]))
+    if "emission" in common:
+        _set_texture(shader, "EmissionMap", common["emission"], srgb=True)
+    if "emissionColor" in common:
+        _set(shader, "EmissionColor", envmath.srgb_color_to_linear(common["emissionColor"])[:3])
+    if "emissionIntensity" in common:
+        _set(shader, "EmissionIntensity", float(common["emissionIntensity"]))
     for key, value in values.get("specific", {}).items():
         p = params.PARAMS_BY_UNITY.get(key)
         if p is None:
@@ -391,6 +401,21 @@ def _set(node: str, attr: str, value: Any) -> None:
                 cmds.setAttr(f"{node}.{attr}A", v[3])
         else:
             cmds.setAttr(plug, *v[:3], type="double3")
+
+
+@outside_maya_undo
+def reload_textures() -> int:
+    """プレビューのテクスチャを読み込み直す（外部で描き直したとき。4-9）。読み込み直した枚数を返す。"""
+    nodes = sorted({f for s in preview_shaders() for f in (cmds.listConnections(s, source=True, destination=False, type="file") or [])})
+    for node in nodes:
+        name = cmds.getAttr(f"{node}.fileTextureName")
+        cmds.setAttr(f"{node}.fileTextureName", "", type="string")
+        cmds.setAttr(f"{node}.fileTextureName", name, type="string")
+    try:
+        cmds.ogs(reloadTextures=True)  # Viewport 2.0 のテクスチャのキャッシュも読み込み直す
+    except (TypeError, RuntimeError):
+        pass  # 画面の無い mayapy
+    return len(nodes)
 
 
 def _set_texture(shader: str, attr: str, path: str | None, srgb: bool) -> None:

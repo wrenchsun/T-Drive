@@ -200,3 +200,21 @@ def test_line_part_keys_follow_sorted_part_names_and_line_flag():
             assert keys[mat] == i * 2 + (1 if part == first else 0)
     look.set_feature(lk, "innerLine", False)
     assert all(k % 2 == 0 for k in look.line_part_keys(lk).values())  # 機能オフでも線フラグなし
+
+
+def test_normal_map_and_emission_features_resolve_common():
+    """法線マップ・発光（Common）は機能オフなら既定値で解決（保存値は保持）。使っていれば古い Look でオンになる（4-10）。"""
+    lk = _sample()
+    mat = sorted(lk["materials"])[0]
+    look.set_value(lk, mat, "common.emissionIntensity", 2.0)
+    look.set_value(lk, mat, "common.normal", "textures/n.png")
+    assert look.resolve(lk)[mat]["common"]["emissionIntensity"] == 0.0  # 既定でオフ
+    assert look.resolve(lk)[mat]["common"]["normal"] is None
+    assert lk["materials"][mat]["common"]["emissionIntensity"] == 2.0  # 保存値は残る
+    look.set_feature(lk, "emission", True)
+    assert look.resolve(lk)[mat]["common"]["emissionIntensity"] == 2.0
+    md = look.to_ddrive_material_data(lk, mat)
+    assert md["Common"]["EmissionIntensity"] == 2.0 and md["Common"]["Normal"] is None
+    del lk[look.FEATURES]
+    look.upgrade(lk)
+    assert lk[look.FEATURES]["emission"] and lk[look.FEATURES]["normalMap"]  # 使っていたのでオン

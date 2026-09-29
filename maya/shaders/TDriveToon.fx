@@ -21,6 +21,14 @@ bool BaseMapEnabled < string UIGroup = "Common"; string UIName = "Base Map Enabl
 float4 BaseColor < string UIGroup = "Common"; string UIName = "Base Color"; string UIWidget = "ColorPicker"; int UIOrder = 3; > = {1.0, 1.0, 1.0, 1.0};
 bool AlphaClip < string UIGroup = "Common"; string UIName = "Alpha Clip (Cutout)"; int UIOrder = 4; > = false;
 float Cutoff < string UIGroup = "Common"; float UIMin = 0.0; float UIMax = 1.0; int UIOrder = 5; > = 0.5;
+// 法線マップ・発光（Common。docs/03 §2.2、機能 normalMap / emission）
+Texture2D NormalMap < string UIGroup = "Common"; string ResourceName = ""; string UIWidget = "FilePicker"; string UIName = "Normal Map"; string ResourceType = "2D"; int UIOrder = 6; >;
+bool NormalMapEnabled < string UIGroup = "Common"; int UIOrder = 7; > = false;
+float NormalScale < string UIGroup = "Common"; float UIMin = 0.0; float UIMax = 2.0; int UIOrder = 8; > = 1.0;
+Texture2D EmissionMap < string UIGroup = "Common"; string ResourceName = ""; string UIWidget = "FilePicker"; string UIName = "Emission Map"; string ResourceType = "2D"; int UIOrder = 9; >;
+bool EmissionMapEnabled < string UIGroup = "Common"; int UIOrder = 10; > = false;
+float3 EmissionColor < string UIGroup = "Common"; string UIWidget = "ColorPicker"; int UIOrder = 11; > = {0.0, 0.0, 0.0};
+float EmissionIntensity < string UIGroup = "Common"; float UIMin = 0.0; float UIMax = 10.0; int UIOrder = 12; > = 0.0;
 
 // ------------------------------------------------------------------ Specific（_Toon*）
 float4 ToonShadeColor < string UIGroup = "Shadow"; string UIWidget = "ColorPicker"; int UIOrder = 10; > = {0.78, 0.72, 0.86, 1.0};
@@ -120,6 +128,7 @@ struct VSOut
     float3 positionWS : TEXCOORD2;
     float4 vertexMask : TEXCOORD3;  // 頂点カラー（未使用時は白）
     float2 uv2        : TEXCOORD4;  // デバッグ表示用
+    float4 tangentWS  : TEXCOORD5;  // 法線マップ用（w = UV の裏返り）
 };
 
 static const float4 kWhite = float4(1.0, 1.0, 1.0, 1.0);
@@ -178,6 +187,7 @@ VSOut VS_Main(VSIn v)
     o.positionCS = mul(float4(posWS, 1.0), gVP);
     o.positionWS = posWS;
     o.normalWS = normalize(mul(float4(v.normal, 0.0), gWIT).xyz);
+    o.tangentWS = float4(normalize(mul(float4(v.tangent.xyz, 0.0), gWorld).xyz), v.tangent.w < 0.0 ? -1.0 : 1.0);
     o.uv = v.uv;
     o.vertexMask = VertexMask(v.color, v.color1);
     o.uv2 = v.uv2;
@@ -190,6 +200,8 @@ float4 ShadeMain(VSOut i, bool frontFace)
     if (AlphaClip && base.a < Cutoff)
         discard;
     float3 N = normalize(i.normalWS) * (frontFace ? 1.0 : -1.0);
+    if (NormalMapEnabled)
+        N = Toon_NormalFromMap(NormalMap.Sample(SamLinearWrap, i.uv), NormalScale, N, normalize(i.tangentWS.xyz), i.tangentWS.w);
     float3 L = normalize(PreviewLightDir);
     float4 mask = Toon_CombineMask(i.vertexMask, MaskMapSample(i.uv));
     float lit = Toon_LitFactor(N, L, mask, ToonShadeThreshold, ToonShadeFeather, ToonShadowStrength);
@@ -226,6 +238,8 @@ float4 ShadeMain(VSOut i, bool frontFace)
     }
     col = Toon_ApplyTint(col, mask, ToonTintColor.rgb, ToonTintStrength);
     col = Toon_ColorCorrect(col, ToonSaturation, ToonBrightness);
+    if (EmissionIntensity > 0.0)
+        col = Toon_Emission(col, EmissionMapEnabled ? EmissionMap.Sample(SamLinearWrap, i.uv).rgb : float3(1.0, 1.0, 1.0), EmissionColor, EmissionIntensity);
     col = Toon_Tonemap(col, PreviewTonemap);
     return float4(col, base.a);
 }
@@ -280,6 +294,7 @@ VSOut VS_Outline(VSIn v)
     o.uv = v.uv;
     o.vertexMask = mask;  // アウトラインでは頂点で合成済みのマスクを渡す
     o.uv2 = v.uv2;
+    o.tangentWS = float4(1.0, 0.0, 0.0, 1.0);  // 輪郭線は法線マップを使わない（docs/03 §2.2）
     return o;
 }
 

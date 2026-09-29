@@ -1,6 +1,7 @@
 """シェーダーのオフラインコンパイル確認（Windows SDK の fxc がある環境のみ）。"""
 
 import glob
+import re
 import subprocess
 from pathlib import Path
 
@@ -69,3 +70,10 @@ def test_fx_uniforms_match_contract():
     declared = set(re.findall(r"^(?:float4|float|Texture2D|bool|int|float3)\s+(\w+)", fx, re.M))
     missing = {p.maya for p in params.SPECIFIC_PARAMS} - declared
     assert not missing, f".fx に無いパラメータ: {missing}"
+
+
+def test_fx_has_common_texture_uniforms():
+    """テクスチャの差し替え（4-9 / 4-10）: preview.py が設定する Common の uniform が .fx にある。"""
+    fx = (ROOT / "maya/shaders/TDriveToon.fx").read_text(encoding="utf-8")
+    for name in ("BaseMap", "NormalMap", "NormalMapEnabled", "NormalScale", "EmissionMap", "EmissionMapEnabled", "EmissionColor", "EmissionIntensity"):
+        assert re.search(rf"^\w+\s+{name}\b", fx, re.M), name

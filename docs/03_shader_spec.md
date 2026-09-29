@@ -73,7 +73,7 @@ D-Drive MaterialCommon の `Normal` / `NormalScale` / `Emission` / `EmissionColo
 
 ```
 // 法線マップ（Toon_NormalFromMap）: Unity の UnpackNormalScale と同じ（+Y = OpenGL 形式、テクスチャはリニア）
-nTS.xy = (tex.ag or tex.rg) * 2 - 1   // BC5 / DXT5nm でない通常の RGB は rg
+nTS.xy = float2(tex.r * tex.a, tex.g) * 2 - 1   // Unity の UnpackNormalmapRGorAG と同じ（通常の画像は a = 1 で rg）
 nTS.xy *= normalScale
 nTS.z  = sqrt(saturate(1 - dot(nTS.xy, nTS.xy)))
 N = normalize(T * nTS.x + B * nTS.y + N * nTS.z)   // B = cross(N, T) * tangent.w

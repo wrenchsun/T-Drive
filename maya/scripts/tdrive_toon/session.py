@@ -481,6 +481,8 @@ class Session:
         preset = roles.ROLE_PRESETS[lk["parts"][part]["role"]] if part else {}
         if key == "renderQueueOffset":
             return preset.get("renderQueueOffset", 0)
+        if key == "common.albedo":
+            return preview.base_texture_of(material)  # ベースマップの ↺ は元マテリアルのテクスチャ（4-9）
         if key.startswith("common."):
             field = key.split(".", 1)[1]
             return preset.get("common", {}).get(field, params.COMMON_FIELDS[field])

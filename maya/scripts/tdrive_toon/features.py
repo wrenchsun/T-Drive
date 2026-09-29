@@ -24,6 +24,7 @@ class Feature:
     default_on: bool = False
     required: bool = False
     off_values: dict[str, Any] = field(default_factory=dict)  # 既定値が「効果あり」のパラメータだけ
+    common: tuple[str, ...] = ()  # Common（D-Drive MaterialCommon）のフィールド。オフなら既定値で解決
 
 
 FEATURES: tuple[Feature, ...] = (
@@ -36,6 +37,8 @@ FEATURES: tuple[Feature, ...] = (
             default_on=True, off_values={"_ToonOutlineSmoothNormal": 0.0}),
     Feature("outlineDistance", "距離で線を細く", ("T-18",), ("_ToonOutlineDistanceScale", "_ToonOutlineRefDistance")),
     Feature("outlineDirection", "線の太さの方向依存", ("T-26",), ("_ToonOutlineShadowSide", "_ToonOutlineBottom")),
+    Feature("normalMap", "法線マップ", (), common=("normal", "normalScale")),
+    Feature("emission", "発光", (), common=("emission", "emissionColor", "emissionIntensity")),
     Feature("vertexMask", "頂点カラーの Toon マスク", ("T-03", "T-07"), (), (), (SH, ME), default_on=True),
     Feature("maskMap", "Toon マスクテクスチャ", ("T-19",), ("_ToonMaskMap",)),
     Feature("tint", "固定色（頬・耳・口内）", ("T-08",), ("_ToonTintColor", "_ToonTintStrength"), default_on=True),
@@ -61,6 +64,7 @@ FEATURES: tuple[Feature, ...] = (
 BY_ID = {f.id: f for f in FEATURES}
 FEATURE_OF_PARAM = {p: f.id for f in FEATURES for p in f.params}
 FEATURE_OF_SETTING = {s: f.id for f in FEATURES for s in f.settings}
+FEATURE_OF_COMMON = {c: f.id for f in FEATURES for c in f.common}
 
 
 def default_flags() -> dict[str, bool]:

@@ -101,6 +101,12 @@ def used_features(look: dict[str, Any]) -> set[str]:
     for key, v in look.get(SETTINGS, {}).items():
         if key in features.FEATURE_OF_SETTING and v != CHARACTER_DEFAULTS.get(key):
             used.add(features.FEATURE_OF_SETTING[key])
+    commons = [m.get("common", {}) for m in look.get("materials", {}).values()]
+    commons += [ov.get("common", {}) for v in look.get("variants", {}).values() for ov in v.get("overrides", {}).values()]
+    for common in commons:
+        for k, v in common.items():
+            if k in features.FEATURE_OF_COMMON and v != params.COMMON_FIELDS.get(k):
+                used.add(features.FEATURE_OF_COMMON[k])
     return used
 
 
@@ -395,6 +401,10 @@ def resolve(look: dict[str, Any], variant: str = BASE) -> dict[str, dict[str, An
             fid = features.FEATURE_OF_PARAM.get(k)
             if fid and fid not in on:
                 mat["specific"][k] = copy.deepcopy(features.off_value(k, pdefaults.get(k)))
+        for k in list(mat["common"]):
+            fid = features.FEATURE_OF_COMMON.get(k)
+            if fid and fid not in on:
+                mat["common"][k] = copy.deepcopy(params.COMMON_FIELDS[k])  # 法線マップ・発光（docs/03 §2.2）
         mat["features"] = on  # 解決結果だけに付ける（プレビュー・出力が使う。保存データには入らない）
     return result
 

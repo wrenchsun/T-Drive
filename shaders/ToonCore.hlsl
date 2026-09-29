@@ -220,6 +220,29 @@ float Toon_ContactShadow(float d, float h, float radius, float strength)
     return strength * (1.0 - smoothstep(0.0, r, d)) * saturate(1.0 - max(h, 0.0) / r);
 }
 
+// ------------------------------------------------------------------ 法線マップ・発光（Common、docs/03 §2.2）
+// 法線マップ: Unity の UnpackNormalmapRGorAG + UnpackNormalScale と同じ（+Y = OpenGL 形式、テクスチャはリニア）
+float3 Toon_UnpackNormal(float4 packed, float scale)
+{
+    float2 xy = float2(packed.r * packed.a, packed.g) * 2.0 - 1.0;
+    xy *= scale;
+    return float3(xy, sqrt(saturate(1.0 - dot(xy, xy))));
+}
+
+// normalWS / tangentWS は正規化済み、tangentSign = tangent.w（UV の裏返り）
+float3 Toon_NormalFromMap(float4 packed, float scale, float3 normalWS, float3 tangentWS, float tangentSign)
+{
+    float3 nTS = Toon_UnpackNormal(packed, scale);
+    float3 bitangentWS = cross(normalWS, tangentWS) * tangentSign;
+    return normalize(tangentWS * nTS.x + bitangentWS * nTS.y + normalWS * nTS.z);
+}
+
+// 発光: 影・ライト色・色補正の影響を受けない。トーンマップの前に足す。emissionMap は sRGB → リニア済み、color もリニア
+float3 Toon_Emission(float3 color, float3 emissionMap, float3 emissionColor, float intensity)
+{
+    return color + emissionMap * emissionColor * intensity;
+}
+
 // ------------------------------------------------------------------ 画面上の線（T-23 / T-42、docs/03 §10）
 #define TOON_LINE_CREASE_DEG 60.0
 #define TOON_LINE_DEPTH_REL 0.03

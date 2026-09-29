@@ -326,6 +326,26 @@ def run() -> None:
     s.set_feature("contactShadow", False)
     check("接地影: 機能をオフにすると隠れる", not cmds.getAttr(f"{contact_shadow.NODE}.visibility"))
     s.set_feature("contactShadow", True)
+    # ---- テクスチャの差し替え（4-9 / 4-10）。mayapy では .fx の属性が無く file ノードは作られないので、値と解決結果で確かめる
+    body_mat = next(m for m in s.look["materials"] if m.startswith("body"))
+    original_tex = s.value(body_mat, "common.albedo")
+    s.checkpoint()
+    s.set_value(body_mat, "common.albedo", "assets/unitychan/textures/body_01_SPEC.tga")
+    check("テクスチャの差し替え: ベースマップが Look と出力に入る",
+          look.to_ddrive_material_data(s.look, body_mat)["Common"]["Albedo"] == "assets/unitychan/textures/body_01_SPEC.tga")
+    s.reset_value(body_mat, "common.albedo")
+    check("テクスチャの差し替え: ↺ で元マテリアルのテクスチャに戻る",
+          bool(original_tex) and s.value(body_mat, "common.albedo") == original_tex, f"{original_tex} / {s.value(body_mat, 'common.albedo')}")
+    check("テクスチャを読み込み直す（画面の無い mayapy でも落ちない）", preview.reload_textures() >= 0)
+    s.set_value(body_mat, "common.normal", "assets/unitychan/textures/body_01_NRM.tga")
+    off = look.resolve(s.look)[body_mat]["common"]["normal"]
+    s.set_feature("normalMap", True)
+    check("法線マップ: 機能オフでは効かず、オンで効く",
+          off is None and look.resolve(s.look)[body_mat]["common"]["normal"].endswith("body_01_NRM.tga"))
+    for _ in range(4):
+        s.undo()
+    check("テクスチャの差し替えは Undo で戻る", s.value(body_mat, "common.albedo") == original_tex and not s.feature_enabled("normalMap"))
+
     # ---- Render Override のコールバックの戻り値（Windows の C long = 32 ビット符号付きに収まること。2026-09-28 の OverflowError）
     from tdrive_toon import screen_line
 

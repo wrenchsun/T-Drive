@@ -7,7 +7,9 @@ from __future__ import annotations
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from . import features, look, params, preview, roles, session
+from pathlib import Path
+
+from . import features, look, params, preview, project, roles, session
 
 MIXED = "—"
 # Common（D-Drive MaterialCommon）のうち編集できるもの。(キー, 表示名, 種類, 最小, 最大)
@@ -18,7 +20,17 @@ COMMON_ROWS = (
     ("common.doubleSided", "両面表示", "bool", 0, 0),
     ("renderQueueOffset", "描画順オフセット（Unity のみ）", "int", -100, 100),
 )
+# テクスチャの差し替え（4-9、docs/05 §4.1）。Common（D-Drive MaterialCommon）のテクスチャと関連する値
+TEXTURE_ROWS = (
+    ("common.albedo", "ベースマップ（色）", params.TEXTURE, 0, 0),
+    ("common.normal", "法線マップ", params.TEXTURE, 0, 0),
+    ("common.normalScale", "法線マップの強さ", params.FLOAT, 0.0, 2.0),
+    ("common.emission", "発光マップ", params.TEXTURE, 0, 0),
+    ("common.emissionColor", "発光色", params.COLOR, 0, 0),
+    ("common.emissionIntensity", "発光の強さ", params.FLOAT, 0.0, 10.0),
+)
 GROUP_LABELS = {
+    "Textures": "テクスチャ（差し替え）",
     "Common": "共通", "Shadow": "影", "Mask": "マスク", "Tint": "固定色", "Outline": "線",
     "Light": "ライト", "Depth": "手前に出す（眉・目を髪の上に）", "Rim": "リム", "Hair": "髪ハイライト",
     "Color": "色補正", "MatCap": "MatCap（簡易反射）", "FaceShadow": "顔影マップ（SDF）",
@@ -27,6 +39,9 @@ GROUP_LABELS = {
 
 # テクスチャ未設定のときの意味（パラメータで違う。docs/03 §7.2 の既定値）
 TEXTURE_PLACEHOLDER = {
+    "common.albedo": "なし（ベース色だけ）。↺ で元マテリアルのテクスチャに戻す",
+    "common.normal": "なし（モデルの法線のまま）",
+    "common.emission": "なし（発光色だけ）",
     "_ToonMaskMap": "なし（白 = 何もしない）",
     "_ToonHairHighlightMap": "なし（ハイライトなし）",
     "_ToonMatCapMap": "なし（反射なし）",
@@ -58,6 +73,10 @@ class LookTab(QtWidgets.QWidget):
             b = QtWidgets.QPushButton(f"{text} ({key})")
             b.clicked.connect(fn)
             top.addWidget(b)
+        reload_tex = QtWidgets.QPushButton("テクスチャを読み込み直す")
+        reload_tex.setToolTip("ペイントツールなどで描き直したテクスチャを、プレビューで読み込み直す")
+        reload_tex.clicked.connect(self._reload_textures)
+        top.addWidget(reload_tex)
         v.addLayout(top)
 
         split = QtWidgets.QSplitter()
@@ -86,7 +105,7 @@ class LookTab(QtWidgets.QWidget):
         v.addWidget(split, 1)
 
     def _build_rows(self) -> None:
-        groups: dict[str, list[tuple]] = {"Common": list(COMMON_ROWS)}
+        groups: dict[str, list[tuple]] = {"Common": list(COMMON_ROWS), "Textures": list(TEXTURE_ROWS)}
         for p in params.SPECIFIC_PARAMS:
             groups.setdefault(p.group, []).append((p.unity, p.label, p.kind, p.min, p.max))
         for group, rows in groups.items():
@@ -136,7 +155,7 @@ class LookTab(QtWidgets.QWidget):
         lk = self.session.look
         off = set()
         for key, row in self.rows.items():
-            fid = features.FEATURE_OF_PARAM.get(key)
+            fid = features.FEATURE_OF_COMMON.get(key.split(".", 1)[1]) if key.startswith("common.") else features.FEATURE_OF_PARAM.get(key)
             visible = lk is None or fid is None or look.enabled(lk, fid)
             row.set_visible(visible)
             if not visible:
@@ -177,6 +196,12 @@ class LookTab(QtWidgets.QWidget):
         self.target = items[0].data(0, QtCore.Qt.UserRole) if items else None
         self.refresh_values()
 
+    def _reload_textures(self) -> None:
+        n = preview.reload_textures()
+        from maya import cmds
+
+        cmds.inViewMessage(amg=f"T-Drive: テクスチャを読み込み直しました（{n} 枚）", pos="topCenter", fade=True)
+
     def begin(self) -> None:
         """1 回の編集操作の開始（Undo の区切り）。"""
         self.session.checkpoint()
@@ -211,7 +236,9 @@ class ParamRow:
         self.editor = self._make_editor()
         self.reset_btn = QtWidgets.QToolButton()
         self.reset_btn.setText("↺")
-        self.reset_btn.setToolTip("ロールのプリセット値（無ければ既定値）に戻す")
+        self.reset_btn.setToolTip(
+            "元マテリアルのテクスチャに戻す" if key == "common.albedo" else "ロールのプリセット値（無ければ既定値）に戻す"
+        )
         self.reset_btn.clicked.connect(lambda: tab.reset(key))
         self.base_btn = QtWidgets.QToolButton()
         self.base_btn.setText("base")
@@ -395,3 +422,8 @@ class ParamRow:
                 self.color_btn.setStyleSheet(f"background-color: rgb({r},{g},{b}); color: {fg}; border: 1px solid #888;")
         elif k == params.TEXTURE:
             self.path.setText(MIXED if mixed else (value or ""))
+            missing = not mixed and bool(value) and not Path(project.from_project_path(value)).exists()
+            self.path.setStyleSheet("border: 1px solid #ff6060; color: #ff9090;" if missing else "")
+            self.path.setToolTip(
+                f"ファイルが見つかりません: {project.from_project_path(value)}（プロジェクトフォルダ基準）" if missing else (value or "")
+            )
