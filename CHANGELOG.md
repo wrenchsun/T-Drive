@@ -6,6 +6,11 @@
 ## [Unreleased]
 
 ### 互換性
+- （リリース前に記入）
+
+## [0.4.0] - 2026-09-30
+
+### 互換性
 - MINOR: パラメータ `_ToonSeeThroughOutline`・`_ToonOutlineScreenSpace` と `characterSettings.seeThroughOutline` を追加（既存の Look は既定値で読み込まれ、見た目は変わらない）
 
 ### 追加
