@@ -104,6 +104,7 @@ Unity は T-Drive for Unity パッケージ（Phase U）として実装する（
 | 4-12 | 機能のマテリアル（シェーダー）単位の上書き: `featureOverrides`・解決・出力（マテリアルごとの Features）・機能タブの部位 / マテリアル選択（全体に従う / オン / オフ）・ルックタブの表示 | — | 1.5 | 4-3 | 髪だけリムをオンにすると髪だけに効き、他の部位の欄には出ない。出力の髪の Features にだけ rim が入る | ✅ featureOverrides（material_scope の機能のみ）・resolve / 出力 materialFeatures・機能タブの部位選択（全体に従う / オン / オフ・混在）・ルックタブの表示。実機で確認 |
 | 4-13 | 機能タブを一覧表（機能 × 全体・部位）に: マス = 実際に有効か、押すとその部位だけ切り替え・全体と同じなら上書きを消す・上書きの色・行ごとに全体どおりに戻す。セルフシャドウを「落とす」も部位ごとに（`_ToonCastShadow`、0/1 のパラメータはチェックボックス） | T-43 | 1 | 4-12 | どの部位で何が有効か一目で分かる。髪だけ影を落とさない・顔だけ受けない を設定でき、ビューポートでその通りになる | ✅ 機能タブを一覧表に（マス = 実際に有効、押すと部位だけ、全体と同じなら上書きを消す、色は全体と違うマスだけ、↺）。_ToonCastShadow（0/1 はチェックボックス）。実機で髪の影を落とさない を確認 |
 | 4-14 | 透かし線（D-2 の別の描き方）: `_ToonSeeThroughOutline`（0/1）・`characterSettings.seeThroughOutline`・機能 `seeThroughOutline`・オンの部位は手前に出さない・Render Override に透かしバッファ・`Toon_LineSeeThroughPair` | T-44 | 2 | 4-7 | 眉・目をオンにすると、前髪に隠れた所だけ外形の線が前髪の上に出る。重なっていない所・前髪以外（顔の皮膚・手など）越しには線が出ない | ✅ |
+| 4-15 | 画面上の外側輪郭を部位ごとに: `_ToonScreenOutlineWidthScale`・`_ToonScreenOutlineUseColor`・`_ToonScreenOutlineColor`・機能 `screenOutline` を部位ごとに（一覧表のマス）・合成に部位の表（r・色）・`Toon_LineOuterPart` | T-42 | 1.5 | 4-8 | 髪だけ太く・服だけ別の色・顔だけオフにできる。何も変えなければ今までと同じ見た目 | ⬜ |
 
 ## Phase R: Maya ツールの配布・導入・更新
 
@@ -134,6 +135,7 @@ Unity は T-Drive for Unity パッケージ（Phase U）として実装する（
 | U-8 | 表情パラメータ API（`SetExpression`、Timeline/Animator から駆動） | T-25 | 2 | U-5 3-8 | 頬の赤み等を実行時に変えられる | ⬜ |
 | U-9 | カメラ角度補正 BlendShape の実行時駆動 / 奥行き圧縮 | T-20 T-22 | 2 | U-5 3-7 | カメラを回すと補正 Shape が混ざる | ⬜ |
 | U-10 | `ToonRendererFeature`: ToonId パス + スクリーンスペース インナーライン | T-23 | 4 | U-2 | 部位ごとの有無・太さ・色どおりに内側の線が出る | ⬜ |
+| U-20 | `ToonRendererFeature`: 外側輪郭の部位ごとの線幅・線色（マテリアルから部位の表を作る） | T-42 | 1 | U-17 4-15 | Maya（4-15）と同じ部位に同じ太さ・色で線が出る | ⬜ |
 | U-19 | `ToonRendererFeature`: 透かし線（透かしの部位のレンダラーだけ ToonId で別 RT に描き、`Toon_LineSeeThroughPair` で合成） | T-44 | 1.5 | U-10 4-14 | Maya（4-14）と同じ所に線が出る | ⬜ |
 | U-18 | シェーダー: セルフシャドウ（メインライトの影を Toon_SelfShadowLit へ、生成シェーダーでは機能オンのときだけ） | T-43 | 1 | U-2 4-11 | Maya（4-11）と同じ部位に影が落ちる | ⬜ |
 | U-17 | `ToonRendererFeature`: スクリーンスペース外側輪郭（U-10 のエッジ検出を共有） | T-42 | 1.5 | U-10 4-8 | Maya（4-8）と同じ設定で外形に線が出る | ⬜ |
