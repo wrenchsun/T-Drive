@@ -249,9 +249,7 @@ Maya の uniform 名は先頭の `_` を除いた名前。定義の実体は `ma
 | `_ToonReceiveShadow` | Float | 1.0 | 0–1 | セルフシャドウを受ける量（顔ロールは 0）（P2） | T-43 |
 | `_ToonCastShadow` | Float | 1.0 | 0/1 | セルフシャドウを落とす（P2） | T-43 |
 | `_ToonSeeThroughOutline` | Float | 0 | 0/1 | 髪と重なる所は輪郭線だけ（透かし線。オンなら手前に出さない）（P2） | T-44 |
-| `_ToonScreenOutlineWidthScale` | Float | 1.0 | 0–4 | 画面上の外側輪郭の線幅（キャラクターの線幅に掛ける倍率。0 = この部位には出さない）（P2） | T-42 |
-| `_ToonScreenOutlineUseColor` | Float | 0 | 0/1 | 画面上の外側輪郭にこの部位の線色を使う（0 = キャラクターの線色）（P2） | T-42 |
-| `_ToonScreenOutlineColor` | Color | (0.2, 0.15, 0.15, 1) | | 画面上の外側輪郭のこの部位の線色（sRGB）（P2） | T-42 |
+| `_ToonOutlineScreenSpace` | Float | 0 | 0/1 | 輪郭線をスクリーンスペースで描く（背面押し出しの代わり。線幅・線色は同じ `_ToonOutline*`）（P2） | T-42 |
 | `_ToonMaskMap` | Texture | white | | 頂点カラーに乗算する Toon マスク | T-19 |
 | `_ToonTintColor` | Color | (1, 0.6, 0.6, 1) | | 固定色（乗算） | T-08 |
 | `_ToonTintStrength` | Float | 0 | 0–1 | 固定色の強さ | T-08 |
@@ -358,22 +356,28 @@ Toon_LineSeeThroughPair(op, oq, mainP, maxDist, occluderMask):
 p・q の片方だけが Toon（部位キー > 0）のとき線を描く（キャラクターの外形の内外両側に r ずつ）。設定は `characterSettings.screenOutline`（有無・線幅 px@1080p・色）。
 内側の線と重なる画素は内側の線の色を優先する。背面押し出しの輪郭線（§3）と併用でき、置き換えるときは機能 `outline` をオフにする。
 
-**部位ごとの線幅・線色（4-15、2026-09-30 追加）**: 線は **Toon 側の部位（持ち主）** のものとして描く。部位番号 i（§10.1 の部位キー = i × 2 + 線フラグ）ごとに
+**輪郭線をスクリーンスペースで描く（4-15、2026-09-30 追加）**: マテリアルごとの `_ToonOutlineScreenSpace`（0/1）がオンなら、
+そのマテリアルの**背面押し出しの輪郭線（§3）を描かず**、同じ線幅 `_ToonOutlineWidth`（px@1080p）・線色 `_ToonOutlineColor`・`_ToonOutlineBaseMix` で**画面上に**描く。
+距離で太さが崩れず、細い所・尖った所でも線が途切れない。背面押し出しと同じく、キャラクターの外形だけでなく**手前と奥の段差**（腕と胴・前髪と顔など）にも線が出る。
+
+線は**手前側の画素の部位（持ち主）**のものとして描く。部位番号 i（§10.1 の部位キー = i × 2 + 線フラグ）ごとの表（64 部位まで）を合成に渡す:
 
 ```
-width_i = screenOutline.width × _ToonScreenOutlineWidthScale（その部位のマテリアルの最大値。機能 screenOutline がオフのマテリアルは 0）
-r_i     = width_i > 0 ? Toon_LineRadius(width_i, 画面の高さ) : 0      // 0 = その部位には出さない
-color_i = _ToonScreenOutlineUseColor > 0.5 ? _ToonScreenOutlineColor : screenOutline.color（リニアに変換）
+r_i     = スクリーンスペースの部位 かつ width_i > 0 ? Toon_LineRadius(width_i, 画面の高さ) : 0   // 0 = その部位は画面上には描かない
+width_i = _ToonOutlineWidth（機能 outline がオフのマテリアルは 0）
+color_i = _ToonOutlineColor（リニア）、mix_i = _ToonOutlineBaseMix
 ```
 
-を表（部位番号 → r・色。64 部位まで。それ以降の部位はキャラクターの線幅・線色）にして合成に渡す。
-
 ```
-Toon_LineOuterPart(p, q):  p・q の片方だけが Toon なら Toon 側の部位番号、そうでなければ 0
-画素 p が Toon: 4 方向の距離 r_(p の部位) の q で Toon_LineOuterPart > 0 なら p の部位の色
-画素 p が Toon でない: 4 方向に k = 1 .. r_max と進み、最初に Toon の画素 q に当たった所で k ≤ r_(q の部位) なら q の部位の色
+Toon_LineSilhouettePart(p, q, gap):   // p・q の手前側が Toon で、奥側が「Toon でない」か「奥行きが gap より離れている」なら手前側の部位番号、そうでなければ 0
+  gap = max(0.02 m, 奥行き × 0.03)     // TOON_LINE_DEPTH_GAP_M / TOON_LINE_DEPTH_GAP_REL
+画素 p が持ち主（手前側）: 4 方向の距離 r_(p の部位) の q で Toon_LineSilhouettePart = p の部位 → 線
+画素 p が奥側: 4 方向に k = 1 .. r_max と進み、最初に Toon_LineSilhouettePart(q, p) > 0 になる q で k ≤ r_(q の部位) → 線
+線の色 = Toon_OutlineColor(持ち主の画素の色, color_i, mix_i)   // ベース色の代わりに描画済みの色を混ぜる（近似）
 ```
 
-- 同じ部位の中でマテリアルごとに線幅・色が違うときは、部位の中で最初（名前順）のマテリアルの値を使う（部位が線の単位。ToonId が部位番号しか持たないため）
-- Unity: `ToonRendererFeature` が各部位のマテリアルから同じ表を作る（U-20）
+- 背面押し出しとの違い: 頂点カラーの線の太さ（Toon マスク G）・影側 / 下向きの太さ・遠いほど細く は効かない（画面上の一定幅）
+- 部位が線の単位（ToonId が部位番号しか持たない）。同じ部位の中で値が違うときは部位の中で最初（名前順）のスクリーンスペースのマテリアルの値を使う
+- 画面上の外側輪郭（`characterSettings.screenOutline`、キャラクター全体の外形だけに足す線）とは別。両方オンなら両方描く（外側輪郭が上）
+- Unity: `ToonRendererFeature` が各部位のマテリアルから同じ表を作る。スクリーンスペースのマテリアルは Outline パスを描かない（U-20）
 

@@ -13,6 +13,7 @@
 |---|---|---|---|---|---|
 | `shade` | 2 階調影（必須） | T-01 T-02 T-04 | `_ToonShadeColor` `_ToonShadeThreshold` `_ToonShadeFeather` `_ToonShadowStrength` | Sh | ○ |
 | `outline` | 輪郭線 | T-05 | `_ToonOutlineColor` `_ToonOutlineBaseMix` `_ToonOutlineWidth` + Outline パス | Sh | ○ |
+| `outlineScreenSpace` | 輪郭線をスクリーンスペースで | T-42 | `_ToonOutlineScreenSpace`（線幅・線色は `outline` の値）+ ToonId パス | Sh RF | ○（Render Override。4-15） |
 | `outlineSmoothNormal` | 線のスムーズ法線 | T-06 | `_ToonOutlineSmoothNormal` + UV2 | Sh Me | ○ |
 | `outlineDistance` | 距離で線を細く | T-18 | `_ToonOutlineDistanceScale` `_ToonOutlineRefDistance` | Sh | ○ |
 | `outlineDirection` | 線の太さの方向依存 | T-26 | `_ToonOutlineShadowSide` `_ToonOutlineBottom` | Sh | ○ |
@@ -35,7 +36,7 @@
 | `lightStabilize` | ライトの安定化 | T-17 | `characterSettings.light` | Co | ○（プレビュータブで同じ式を掛ける。4-5） |
 | `stencil` | 髪越し表示（ステンシル） | T-24 | `characterSettings.stencil` + ステンシル状態 | Sh Co | △（手前に出すで代用） |
 | `innerLine` | 画面上のインナーライン | T-23 | `characterSettings.innerLine` + ToonId パス | RF | ○（Render Override で同じ判定式。4-7） |
-| `screenOutline` | 画面上の外側輪郭 | T-42 | `_ToonScreenOutline*`（部位ごとの線幅の倍率・線色。4-15）+ `characterSettings.screenOutline` + ToonId パス | RF | ○（Render Override。4-8） |
+| `screenOutline` | 画面上の外側輪郭 | T-42 | `characterSettings.screenOutline` + ToonId パス | RF | ○（Render Override。4-8） |
 | `contactShadow` | 接地影 | T-29 | `characterSettings.contactShadow` | RF | △（足元の板に同じ式で描く。地面は無いので背景に落ちる。4-6） |
 | `viewCorrection` | カメラ角度補正 | T-20 | `characterSettings.viewCorrection` + BlendShape | Me Co | ○ |
 | `expressions` | 表情パラメータ | T-25 | `characterSettings.expressions` | Co | ○（プレビュー） |
