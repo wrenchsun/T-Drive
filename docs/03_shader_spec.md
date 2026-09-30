@@ -248,6 +248,7 @@ Maya の uniform 名は先頭の `_` を除いた名前。定義の実体は `ma
 | `_ToonShadowStrength` | Float | 1.0 | 0–1 | 影の強さ（0 = 影なし） | T-04 |
 | `_ToonReceiveShadow` | Float | 1.0 | 0–1 | セルフシャドウを受ける量（顔ロールは 0）（P2） | T-43 |
 | `_ToonCastShadow` | Float | 1.0 | 0/1 | セルフシャドウを落とす（P2） | T-43 |
+| `_ToonSeeThroughOutline` | Float | 0 | 0/1 | 髪と重なる所は輪郭線だけ（透かし線。オンなら手前に出さない）（P2） | T-44 |
 | `_ToonMaskMap` | Texture | white | | 頂点カラーに乗算する Toon マスク | T-19 |
 | `_ToonTintColor` | Color | (1, 0.6, 0.6, 1) | | 固定色（乗算） | T-08 |
 | `_ToonTintStrength` | Float | 0 | 0–1 | 固定色の強さ | T-08 |
@@ -323,6 +324,26 @@ Maya（Render Override、4-7 / 4-8）と Unity（`ToonRendererFeature`、U-10 / 
 
 線の画素の色 = `innerLine.color`（sRGB → リニア）。本体と同じトーンマップを掛けて上書きする（アンチエイリアスなし。Unity も同じ）。
 Maya ではトーンマップをシェーダー内で掛けているので線にも同じ `Toon_Tonemap` を掛ける。Unity は線を描いた後にポストでトーンマップが掛かる（結果は同じ）。
+
+### 10.5 透かし線（T-44、`Toon_LineSeeThroughPair`、2026-09-30 追加）
+
+部位ごとの `_ToonSeeThroughOutline`（0/1）がオンの部位（眉・目など）は、
+
+1. 本体は**手前に出さない**（`_ToonDepthOffset` は使わない）。髪に隠れる所は隠れる
+2. その部位だけを別の描画先（**透かしバッファ**。ToonId と同じ形式）に描く。他の物に遮られないので、隠れている所も含めた部位の形と奥行きが分かる
+3. 合成で、透かしバッファの**部位の外形**（p が部位の内側、q が外側または別の部位）のうち、
+   p で通常の ToonId が**別の面で、しかも手前にある**（奥行きの差が `characterSettings.seeThroughOutline.maxDistance` 以内。手など遠い物越しには出さない）画素に線を描く
+
+```
+Toon_LineSeeThroughPair(op, oq, mainP, maxDist):
+  op.b > 1.5（p が透かしの部位）かつ |op.b - oq.b| > 0.5（外形）
+  かつ mainP.b と op.b が違う（p で見えているのは別の面）
+  かつ 0 < op.a - |mainP.a| <= maxDist（その面が手前、距離以内）
+```
+
+- 線幅（px@1080p）・色は `characterSettings.seeThroughOutline`（width / color / maxDistance）。部位の輪郭線（§3）とは別（輪郭線の太さ 0 の部位にも使える）
+- 重なっていない所は通常の描画のまま（線は足さない）
+- Maya: Render Override に「透かしの部位だけを描く」操作を足す（`objectSetOverride`）。Unity: `ToonRendererFeature` で透かしの部位のレンダラーだけを ToonId パスで別の RT に描く
 
 ### 10.4 外側輪郭（T-42、`Toon_LineOuterPair`）
 

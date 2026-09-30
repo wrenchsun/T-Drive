@@ -18,6 +18,7 @@
 | `outlineDirection` | 線の太さの方向依存 | T-26 | `_ToonOutlineShadowSide` `_ToonOutlineBottom` | Sh | ○ |
 | `normalMap` | 法線マップ | — | `common.normal` `common.normalScale` | Sh | ○ |
 | `emission` | 発光 | — | `common.emission` `common.emissionColor` `common.emissionIntensity` | Sh | ○ |
+| `seeThroughOutline` | 透かし線（髪と重なる所は輪郭線だけ） | T-44 | `_ToonSeeThroughOutline` + `characterSettings.seeThroughOutline` + 透かしバッファ | Sh RF | ○（Render Override。4-14） |
 | `selfShadow` | セルフシャドウ | T-43 | `_ToonReceiveShadow` + ShadowCaster パス・メインライトの影 | Sh | △（VP2 のシャドウマップ。4-11） |
 | `vertexMask` | 頂点カラーの Toon マスク | T-03 T-07 | 頂点カラー（COLOR） | Sh Me | ○ |
 | `maskMap` | Toon マスクテクスチャ | T-19 | `_ToonMaskMap` | Sh | ○ |
