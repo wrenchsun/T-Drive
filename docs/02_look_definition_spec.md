@@ -96,7 +96,7 @@ Maya でプレビューできない項目もここで編集して持つ（エデ
                       "color": [0.2, 0.15, 0.15, 1.0], "parts": ["cloth"] },
   "screenOutline":  { "enabled": false, "width": 2.0,                    // T-42 画面上の外側輪郭（px@1080p）2026-09-28 追加（MINOR）
                       "color": [0.2, 0.15, 0.15, 1.0] },
-  "seeThroughOutline": { "width": 1.5, "color": [0.25, 0.15, 0.15, 1.0], "maxDistance": 0.05 },  // T-44 透かし線（px@1080p / sRGB / m）2026-09-30 追加（MINOR）
+  "seeThroughOutline": { "width": 1.5, "color": [0.25, 0.15, 0.15, 1.0], "maxDistance": 0.1, "occluders": [] },  // T-44 透かし線（px@1080p / sRGB / m / 透かす手前の部位。空 = 髪ロールの部位）2026-09-30 追加（MINOR）
   "contactShadow":  { "enabled": false, "radius": 0.25, "strength": 0.5 },// T-29 接地影（m / 0–1）       Maya: 足元の板で簡易表示
   "viewCorrection": { "mesh": "", "front": "", "threeQuarter": "", "side": "" },  // T-20 補正 BlendShape を持つメッシュ名とターゲット名
   "depthCompression": 0.0,                                                // T-22 奥行き圧縮（0–1）
@@ -113,7 +113,7 @@ Maya でプレビューできない項目もここで編集して持つ（エデ
 | innerLine.parts | 登録済みの部位名のみ |
 | innerLine.color | [r, g, b, a]（sRGB 値） |
 | screenOutline | width ≥ 0、color = [r, g, b, a]（sRGB 値） |
-| seeThroughOutline | width ≥ 0、maxDistance ≥ 0、color = [r, g, b, a]（sRGB 値） |
+| seeThroughOutline | width ≥ 0、maxDistance ≥ 0、color = [r, g, b, a]（sRGB 値）、occluders は登録済みの部位名 |
 | contactShadow | radius > 0、strength 0–1 |
 | viewCorrection | すべて文字列。mesh = 補正 BlendShape（`tdViewCorrection_<mesh>`）を持つメッシュ名、front / threeQuarter / side = ターゲット名（空 = その角度は使わない） |
 | depthCompression | 0–1 |

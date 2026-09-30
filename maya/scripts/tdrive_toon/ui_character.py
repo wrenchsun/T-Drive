@@ -63,6 +63,20 @@ class CharacterTab(QtWidgets.QWidget):
         self.so_color.clicked.connect(lambda: self._pick_color("screenOutline.color"))
         f.addRow("線色", self.so_color)
 
+        # ---- 透かし線 T-44（部位ごとのオン/オフはルックタブ › 手前に出す）
+        box, f = self._group("透かし線（髪と重なる所は輪郭線だけ。部位はルックタブ › 手前に出す で選ぶ）", feature="seeThroughOutline")
+        self.st_width = self._spin(f, "線幅（px@1080p）", "seeThroughOutline.width", 0.0, 10.0, 0.1)
+        self.st_dist = self._spin(f, "手前の物との距離の上限（m）", "seeThroughOutline.maxDistance", 0.0, 1.0, 0.01)
+        self.st_color = QtWidgets.QPushButton()
+        self.st_color.clicked.connect(lambda *_: self._pick_color("seeThroughOutline.color"))
+        f.addRow("線色", self.st_color)
+        self.st_occluders = QtWidgets.QListWidget()
+        self.st_occluders.setMinimumHeight(130)
+        self.st_occluders.setMaximumHeight(150)
+        self.st_occluders.setToolTip("この部位が手前にある所だけ線を出す。何も選ばなければ髪ロールの部位")
+        self.st_occluders.itemChanged.connect(self._on_occluders_changed)
+        f.addRow("透かす手前の部位", self.st_occluders)
+
         # ---- 接地影 T-29
         box, f = self._group("接地影（Maya では足元の板に簡易表示）", feature="contactShadow")
         self.cs_enabled = self._check(f, "使う", "contactShadow.enabled")
@@ -234,7 +248,8 @@ class CharacterTab(QtWidgets.QWidget):
             for w in self.findChildren(QtWidgets.QCheckBox):
                 if w.property("path"):
                     w.setChecked(bool(self.session.setting(w.property("path"))))
-            for button, path in ((self.il_color, "innerLine.color"), (self.so_color, "screenOutline.color")):
+            for button, path in ((self.il_color, "innerLine.color"), (self.so_color, "screenOutline.color"),
+                                 (self.st_color, "seeThroughOutline.color")):
                 r, g, b, _a = self.session.setting(path)
                 button.setStyleSheet(f"background-color: rgb({int(r * 255)},{int(g * 255)},{int(b * 255)}); border: 1px solid #888;")
             chosen = set(self.session.setting("innerLine.parts"))
@@ -244,6 +259,15 @@ class CharacterTab(QtWidgets.QWidget):
                 it.setFlags(it.flags() | QtCore.Qt.ItemIsUserCheckable)
                 it.setCheckState(QtCore.Qt.Checked if part in chosen else QtCore.Qt.Unchecked)
                 self.il_parts.addItem(it)
+            occ = set(self.session.setting("seeThroughOutline.occluders") or [])
+            auto = set(look.see_through_occluders(lk)) if not occ else occ
+            self.st_occluders.clear()
+            for part in sorted(lk["parts"]):
+                it = QtWidgets.QListWidgetItem(part + ("（自動: 髪）" if not occ and part in auto else ""))
+                it.setData(QtCore.Qt.UserRole, part)
+                it.setFlags(it.flags() | QtCore.Qt.ItemIsUserCheckable)
+                it.setCheckState(QtCore.Qt.Checked if part in auto else QtCore.Qt.Unchecked)
+                self.st_occluders.addItem(it)
             for key, e in self.vc.items():
                 e.setText(self.session.setting(f"viewCorrection.{key}"))
             self.vc_mesh.setText(self.session.setting("viewCorrection.mesh") or "（未設定: 顔メッシュを選んで「作る」）")
@@ -291,6 +315,13 @@ class CharacterTab(QtWidgets.QWidget):
     def _on_parts_changed(self, _item) -> None:
         parts = [self.il_parts.item(i).text() for i in range(self.il_parts.count()) if self.il_parts.item(i).checkState() == QtCore.Qt.Checked]
         self._set("innerLine.parts", parts)
+
+    def _on_occluders_changed(self, _item) -> None:
+        if self._updating:
+            return
+        w = self.st_occluders
+        parts = [w.item(i).data(QtCore.Qt.UserRole) for i in range(w.count()) if w.item(i).checkState() == QtCore.Qt.Checked]
+        self._set("seeThroughOutline.occluders", parts)
 
     def _expressions(self) -> dict:
         import copy

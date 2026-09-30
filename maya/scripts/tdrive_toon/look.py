@@ -44,6 +44,8 @@ CHARACTER_DEFAULTS: dict[str, Any] = {
     "stencil": {"enabled": False},
     "innerLine": {"enabled": False, "width": 1.0, "color": [0.2, 0.15, 0.15, 1.0], "parts": []},
     "screenOutline": {"enabled": False, "width": 2.0, "color": [0.2, 0.15, 0.15, 1.0]},
+    # T-44 透かし線。occluders = 透かす手前の部位（空なら髪ロールの部位）
+    "seeThroughOutline": {"width": 1.5, "color": [0.25, 0.15, 0.15, 1.0], "maxDistance": 0.1, "occluders": []},
     "contactShadow": {"enabled": False, "radius": 0.25, "strength": 0.5},
     "viewCorrection": {"mesh": "", "front": "", "threeQuarter": "", "side": ""},
     "depthCompression": 0.0,
@@ -190,6 +192,23 @@ def line_part_keys(look: dict[str, Any]) -> dict[str, float]:
     return keys
 
 
+def see_through_occluders(look: dict[str, Any]) -> list[str]:
+    """透かし線（T-44）で「手前にあれば線を出す」部位。occluders が空なら髪ロールの部位（docs/03 §10.5）。"""
+    chosen = get_setting(look, "seeThroughOutline.occluders") or []
+    parts = look.get("parts", {})
+    return sorted(p for p in parts if (p in chosen if chosen else parts[p]["role"] == "hair"))
+
+
+def see_through_occluder_mask(look: dict[str, Any]) -> int:
+    """see_through_occluders のビットマスク: ビット (部位番号 - 1)。部位番号は line_part_keys と同じ。32 番目以降の部位は入らない。"""
+    names = set(see_through_occluders(look))
+    mask = 0
+    for i, part in enumerate(sorted(look.get("parts", {})), start=1):
+        if part in names and i <= 31:  # シェーダーへは 32 ビット符号付き int で渡す
+            mask |= 1 << (i - 1)
+    return mask
+
+
 def set_feature(look: dict[str, Any], feature_id: str, on: bool) -> None:
     f = features.BY_ID[feature_id]
     if f.required and not on:
@@ -296,6 +315,14 @@ def _validate_settings(look: dict[str, Any]) -> list[str]:
     for part in il.get("parts", []):
         if part not in look.get("parts", {}):
             errors.append(f"{w}.innerLine.parts に未登録の部位 {part}")
+    st = cs.get("seeThroughOutline", {})
+    num("seeThroughOutline.width", st.get("width", 1.5), 0, None)
+    num("seeThroughOutline.maxDistance", st.get("maxDistance", 0.1), 0, None)
+    for part in st.get("occluders", []):
+        if part not in look.get("parts", {}):
+            errors.append(f"{w}.seeThroughOutline.occluders に未登録の部位 {part}")
+    if not (isinstance(st.get("color", [0, 0, 0, 1]), list) and len(st.get("color", [0, 0, 0, 1])) == 4):
+        errors.append(f"{w}.seeThroughOutline.color は [r, g, b, a]")
     so = cs.get("screenOutline", {})
     num("screenOutline.width", so.get("width", 2), 0, None)
     if not (isinstance(so.get("color", [0, 0, 0, 1]), list) and len(so.get("color", [0, 0, 0, 1])) == 4):

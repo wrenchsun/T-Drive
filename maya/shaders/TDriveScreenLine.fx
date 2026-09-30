@@ -7,6 +7,7 @@
 
 Texture2D gColorTex;
 Texture2D gIdTex;
+Texture2D gOverlayIdTex;  // 透かしバッファ（透かし線の部位だけを描いた ToonId。T-44）
 SamplerState gPointSampler;  // 未使用（Maya の効果ファイルの読み込み要件で 1 つ置く）
 
 float2 gScreenSize = {1920.0, 1080.0};
@@ -14,6 +15,11 @@ int gTonemap = 1;
 bool gInnerEnabled = false;
 float gInnerRadius = 1.0;                // 画素（Toon_LineRadius 済み）
 float3 gInnerColor = {0.0, 0.0, 0.0};    // リニア
+bool gSeeThroughEnabled = false;
+float gSeeThroughRadius = 1.0;
+float3 gSeeThroughColor = {0.0, 0.0, 0.0};
+float gSeeThroughMaxDist = 0.1;  // m
+int gSeeThroughOccluders = 0;     // 透かす手前の部位のビットマスク
 bool gOuterEnabled = false;
 float gOuterRadius = 1.0;
 float3 gOuterColor = {0.0, 0.0, 0.0};
@@ -44,6 +50,23 @@ float EdgeInner(int2 p, float4 idP, int r)
     return e;
 }
 
+float4 OverlayAt(int2 p)
+{
+    p = clamp(p, int2(0, 0), int2(gScreenSize) - 1);
+    return gOverlayIdTex.Load(int3(p, 0));
+}
+
+float EdgeSeeThrough(int2 p, float4 idP, int r)
+{
+    float4 op = OverlayAt(p);
+    float e = 0.0;
+    e = max(e, Toon_LineSeeThroughPair(op, OverlayAt(p + int2(r, 0)), idP, gSeeThroughMaxDist, (uint)gSeeThroughOccluders));
+    e = max(e, Toon_LineSeeThroughPair(op, OverlayAt(p - int2(r, 0)), idP, gSeeThroughMaxDist, (uint)gSeeThroughOccluders));
+    e = max(e, Toon_LineSeeThroughPair(op, OverlayAt(p + int2(0, r)), idP, gSeeThroughMaxDist, (uint)gSeeThroughOccluders));
+    e = max(e, Toon_LineSeeThroughPair(op, OverlayAt(p - int2(0, r)), idP, gSeeThroughMaxDist, (uint)gSeeThroughOccluders));
+    return e;
+}
+
 float EdgeOuter(int2 p, float4 idP, int r)
 {
     float e = 0.0;
@@ -63,6 +86,8 @@ float4 PS_Composite(VSOut i) : SV_Target
         c.rgb = Toon_Tonemap(gOuterColor, gTonemap);
     if (gInnerEnabled && EdgeInner(p, idP, (int)gInnerRadius) > 0.5)
         c.rgb = Toon_Tonemap(gInnerColor, gTonemap);
+    if (gSeeThroughEnabled && EdgeSeeThrough(p, idP, (int)gSeeThroughRadius) > 0.5)
+        c.rgb = Toon_Tonemap(gSeeThroughColor, gTonemap);  // 髪の上に出すので最後
     return c;
 }
 

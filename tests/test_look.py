@@ -289,3 +289,27 @@ def test_self_shadow_cast_is_per_material_and_off_resolves_zero():
     res = look.resolve(lk)
     assert res["hair"]["specific"]["_ToonCastShadow"] == 0.0 and res["hair"]["specific"]["_ToonReceiveShadow"] == 1.0
     assert params.PARAMS_BY_UNITY["_ToonCastShadow"].toggle
+
+
+def test_see_through_outline_setting_param_and_feature():
+    """透かし線（T-44）: 部位ごとの 0/1・キャラクター設定・機能。機能オフなら 0（手前に出す量をそのまま使う）。"""
+    lk = _sample()
+    assert lk[look.SETTINGS]["seeThroughOutline"] == {"width": 1.5, "color": [0.25, 0.15, 0.15, 1.0], "maxDistance": 0.1, "occluders": []}
+    assert params.PARAMS_BY_UNITY["_ToonSeeThroughOutline"].toggle
+    look.set_value(lk, "face", "_ToonSeeThroughOutline", 1.0)
+    assert look.resolve(lk)["face"]["specific"]["_ToonSeeThroughOutline"] == 0.0  # 既定で機能オフ
+    look.set_feature(lk, "seeThroughOutline", True)
+    assert look.resolve(lk)["face"]["specific"]["_ToonSeeThroughOutline"] == 1.0
+    assert look.validate(lk) == []
+    # 手前の部位: 未指定なら髪ロール（部位番号 = 名前順 1 始まり: face=1, hair=2 → ビット 1）
+    assert look.see_through_occluders(lk) == ["hair"] and look.see_through_occluder_mask(lk) == 0b10
+    look.set_setting(lk, "seeThroughOutline.occluders", ["face"])
+    assert look.see_through_occluder_mask(lk) == 0b01
+    look.set_setting(lk, "seeThroughOutline.occluders", ["nope"])
+    assert any("occluders に未登録の部位" in e for e in look.validate(lk))
+    look.set_setting(lk, "seeThroughOutline.occluders", [])
+    look.set_setting(lk, "seeThroughOutline.maxDistance", -1.0)
+    look.set_setting(lk, "seeThroughOutline.color", [1, 0, 0])
+    errors = look.validate(lk)
+    assert any("seeThroughOutline.maxDistance" in e for e in errors)
+    assert any("seeThroughOutline.color" in e for e in errors)

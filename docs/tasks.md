@@ -103,7 +103,7 @@ Unity は T-Drive for Unity パッケージ（Phase U）として実装する（
 
 | 4-12 | 機能のマテリアル（シェーダー）単位の上書き: `featureOverrides`・解決・出力（マテリアルごとの Features）・機能タブの部位 / マテリアル選択（全体に従う / オン / オフ）・ルックタブの表示 | — | 1.5 | 4-3 | 髪だけリムをオンにすると髪だけに効き、他の部位の欄には出ない。出力の髪の Features にだけ rim が入る | ✅ featureOverrides（material_scope の機能のみ）・resolve / 出力 materialFeatures・機能タブの部位選択（全体に従う / オン / オフ・混在）・ルックタブの表示。実機で確認 |
 | 4-13 | 機能タブを一覧表（機能 × 全体・部位）に: マス = 実際に有効か、押すとその部位だけ切り替え・全体と同じなら上書きを消す・上書きの色・行ごとに全体どおりに戻す。セルフシャドウを「落とす」も部位ごとに（`_ToonCastShadow`、0/1 のパラメータはチェックボックス） | T-43 | 1 | 4-12 | どの部位で何が有効か一目で分かる。髪だけ影を落とさない・顔だけ受けない を設定でき、ビューポートでその通りになる | ✅ 機能タブを一覧表に（マス = 実際に有効、押すと部位だけ、全体と同じなら上書きを消す、色は全体と違うマスだけ、↺）。_ToonCastShadow（0/1 はチェックボックス）。実機で髪の影を落とさない を確認 |
-| 4-14 | 透かし線（D-2 の別の描き方）: `_ToonSeeThroughOutline`（0/1）・`characterSettings.seeThroughOutline`・機能 `seeThroughOutline`・オンの部位は手前に出さない・Render Override に透かしバッファ・`Toon_LineSeeThroughPair` | T-44 | 2 | 4-7 | 眉・目をオンにすると、前髪に隠れた所だけ外形の線が前髪の上に出る。重なっていない所・前髪以外（手など遠い物）越しには線が出ない | ⬜ |
+| 4-14 | 透かし線（D-2 の別の描き方）: `_ToonSeeThroughOutline`（0/1）・`characterSettings.seeThroughOutline`・機能 `seeThroughOutline`・オンの部位は手前に出さない・Render Override に透かしバッファ・`Toon_LineSeeThroughPair` | T-44 | 2 | 4-7 | 眉・目をオンにすると、前髪に隠れた所だけ外形の線が前髪の上に出る。重なっていない所・前髪以外（顔の皮膚・手など）越しには線が出ない | ✅ |
 
 ## Phase R: Maya ツールの配布・導入・更新
 

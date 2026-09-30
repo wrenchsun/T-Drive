@@ -79,6 +79,7 @@ SPECIFIC_PARAMS: tuple[Param, ...] = (
     Param("_ToonLightColorInfluence", FLOAT, 1.0, "Light", "ライト色の影響", 0.0, 1.0),
     # --- 眉・目を髪の上に T-09（視線方向にカメラへ寄せる。m 単位） ---
     Param("_ToonDepthOffset", FLOAT, 0.0, "Depth", "手前に出す量 (m)", 0.0, 0.2),
+    Param("_ToonSeeThroughOutline", FLOAT, 0.0, "Depth", "髪と重なる所は輪郭線だけ（透かし線）", 0.0, 1.0, toggle=True),  # T-44
     # --- リム T-13（明側のみ） ---
     Param("_ToonRimColor", COLOR, [1.0, 1.0, 1.0, 1.0], "Rim", "リム色"),
     Param("_ToonRimPower", FLOAT, 4.0, "Rim", "リムの鋭さ", 0.5, 16.0),

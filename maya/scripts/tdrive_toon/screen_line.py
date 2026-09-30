@@ -33,6 +33,9 @@ _params: dict[str, Any] = {
     "tonemap": 1,
     "inner": None,  # {"width": px@1080p, "color": リニア RGB} or None
     "outer": None,
+    # 透かし線（T-44）: {"width", "color"(リニア RGB), "maxDistance"(m), "occluders"(部位のビットマスク),
+    #                     "meshes": [透かしの部位のメッシュ]} or None
+    "seeThrough": None,
 }
 
 
@@ -56,6 +59,8 @@ class _ClearOp(omr.MSceneRender):
     @lifecycle.guarded(None)
     def targetOverrideList(self):  # noqa: N802
         t = self.ov.targets
+        if self.which == "overlay":
+            return [t["ov_color"], t["ov_id"], t["ov_depth"]]
         return [t["color"], t["depth"]] if self.which == "color" else [t["id"]]
 
     @lifecycle.guarded(_EXCLUDE_ALL)
@@ -104,6 +109,37 @@ class _SceneOp(omr.MSceneRender):
         return c
 
 
+class _OverlayOp(omr.MSceneRender):
+    """透かしバッファ: 透かし線の部位（T-44）だけを描く（他の物に遮られない形と奥行き。docs/03 §10.5）。"""
+
+    def __init__(self, name: str, ov: "_Override") -> None:
+        super().__init__(name)
+        self.ov = ov
+
+    @lifecycle.guarded(None)
+    def targetOverrideList(self):  # noqa: N802
+        t = self.ov.targets
+        return [t["ov_color"], t["ov_id"], t["ov_depth"]]
+
+    @lifecycle.guarded(_EXCLUDE_ALL)
+    def objectTypeExclusions(self):  # noqa: N802
+        return 0 if self.ov.overlay_active else _EXCLUDE_ALL  # 使わないときは何も描かない
+
+    @lifecycle.guarded(fallback=lambda self: self.ov.empty_selection)
+    def objectSetOverride(self):  # noqa: N802
+        return self.ov.overlay_selection if self.ov.overlay_active else self.ov.empty_selection
+
+    @lifecycle.guarded(fallback=lambda self: omr.MSceneRender.kRenderShadedItems)
+    def renderFilterOverride(self):  # noqa: N802
+        return omr.MSceneRender.kRenderShadedItems
+
+    @lifecycle.guarded(fallback=lambda self: self.mClearOperation)
+    def clearOperation(self):  # noqa: N802
+        c = self.mClearOperation
+        c.setMask(omr.MClearOperation.kClearNone)
+        return c
+
+
 class _QuadOp(omr.MQuadRender):
     def __init__(self, name: str, ov: "_Override") -> None:
         super().__init__(name)
@@ -126,6 +162,14 @@ class _QuadOp(omr.MQuadRender):
         w, h = self.ov.size
         set_param(sh, "gColorTex", t["color"])
         set_param(sh, "gIdTex", t["id"])
+        set_param(sh, "gOverlayIdTex", t["ov_id"])
+        st = _params["seeThrough"]
+        set_param(sh, "gSeeThroughEnabled", bool(st and self.ov.overlay_active))
+        if st:
+            set_param(sh, "gSeeThroughRadius", line_radius(st["width"], h))
+            set_param(sh, "gSeeThroughColor", st["color"][:3])
+            set_param(sh, "gSeeThroughMaxDist", st["maxDistance"])
+            set_param(sh, "gSeeThroughOccluders", st["occluders"])
         set_param(sh, "gPointSampler", self._sampler)
         set_param(sh, "gScreenSize", [w, h])
         set_param(sh, "gTonemap", _params["tonemap"])
@@ -176,6 +220,8 @@ class _Override(omr.MRenderOverride):
         self.ops = [
             _ClearOp(f"{NAME}_clearColor", self, "color"),
             _ClearOp(f"{NAME}_clearId", self, "id"),
+            _ClearOp(f"{NAME}_clearOverlay", self, "overlay"),
+            _OverlayOp(f"{NAME}_overlay", self),
             _SceneOp(f"{NAME}_scene", self, shaded=True),
             _QuadOp(f"{NAME}_lines", self),
             _SceneOp(f"{NAME}_ui", self, shaded=False),
@@ -184,6 +230,9 @@ class _Override(omr.MRenderOverride):
         ]
         self.index = 0
         self.empty_selection = om.MSelectionList()
+        self.overlay_selection = om.MSelectionList()
+        self.overlay_active = False
+        self._overlay_key: tuple = ()
         self.targets: dict[str, Any] = {}
         self.size = (0, 0)
         self.background = ((0.36, 0.36, 0.36), (0.36, 0.36, 0.36), False)
@@ -217,11 +266,15 @@ class _Override(omr.MRenderOverride):
                 "id": omr.MRenderer.kR16G16B16A16_FLOAT,
                 "depth": omr.MRenderer.kD24S8,
                 "out": omr.MRenderer.kR8G8B8A8_UNORM,
+                "ov_color": omr.MRenderer.kR16G16B16A16_FLOAT,  # 透かしバッファ（T-44）
+                "ov_id": omr.MRenderer.kR16G16B16A16_FLOAT,
+                "ov_depth": omr.MRenderer.kD24S8,
             }
             for key, fmt in formats.items():
                 desc = omr.MRenderTargetDescription(f"{NAME}_{key}_{self.uid}", w, h, 1, fmt, 1, False)
                 self.targets[key] = mgr.acquireRenderTarget(desc)
             self.size = size
+        self._update_overlay()
 
     def release(self) -> None:
         mgr = omr.MRenderer.getRenderTargetManager()
@@ -229,6 +282,21 @@ class _Override(omr.MRenderOverride):
             if t is not None:
                 mgr.releaseRenderTarget(t)
         self.targets = {}
+
+    def _update_overlay(self) -> None:
+        """透かし線の部位のメッシュを選択リストに（変わったときだけ作り直す）。"""
+        st = _params["seeThrough"]
+        meshes = tuple(st["meshes"]) if st else ()
+        self.overlay_active = bool(meshes)
+        if meshes != self._overlay_key:
+            sel = om.MSelectionList()
+            for m in meshes:
+                try:
+                    sel.add(m)
+                except RuntimeError:
+                    pass  # 消えたメッシュ
+            self.overlay_selection = sel
+            self._overlay_key = meshes
 
     @lifecycle.guarded(None)
     def cleanup(self) -> None:
@@ -317,13 +385,17 @@ def is_applied(panel: str) -> bool:
     return bool(panel) and cmds.modelEditor(panel, query=True, rendererOverrideName=True) == NAME
 
 
-def update(panel: str | None, inner: dict | None, outer: dict | None, tonemap: int, visible: bool) -> None:
+def update(panel: str | None, inner: dict | None, outer: dict | None, tonemap: int, visible: bool,
+           see_through: dict | None = None) -> None:
     """線の設定を渡し、必要ならパネルに Override を割り当てる / 外す。
 
     inner / outer: {"width": px@1080p, "color": リニア RGB} または None（その線を使わない）。
+    see_through: 透かし線（T-44）{"width", "color", "maxDistance", "occluders", "meshes"} または None。
     """
-    _params.update(inner=inner, outer=outer, tonemap=int(tonemap))
-    want = visible and (inner is not None or outer is not None)
+    if see_through is not None and not see_through.get("meshes"):
+        see_through = None
+    _params.update(inner=inner, outer=outer, tonemap=int(tonemap), seeThrough=see_through)
+    want = visible and (inner is not None or outer is not None or see_through is not None)
     if want and panel:
         if omr.MRenderer.findRenderOverride(NAME) is None or _override is None:
             register()

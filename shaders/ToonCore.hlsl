@@ -296,6 +296,23 @@ float Toon_LineInnerPair(float4 p, float4 q)
     return abs(p.a - q.a) > min(p.a, q.a) * TOON_LINE_DEPTH_REL ? 1.0 : 0.0;
 }
 
+// 透かし線（T-44、docs/03 §10.5）: op / oq = 透かしバッファ（透かしの部位だけを描いた ToonId）、mainP = 通常の ToonId（p の位置）。
+// p が透かしの部位の外形で、p で見えているのが別の面、しかもその面が手前（距離 maxDist 以内）のとき 1
+// occluderMask: 線を出す手前の部位（ビット = 部位番号 - 1。部位番号 = floor(B / 2)）。顔の皮膚が目の縁を覆う所などには出さない
+float Toon_LineSeeThroughPair(float4 op, float4 oq, float4 mainP, float maxDist, uint occluderMask)
+{
+    if (op.b < 1.5 || abs(op.b - oq.b) < 0.5)
+        return 0.0;  // p が透かしの部位でない / 外形でない
+    if (mainP.b < 1.5 || abs(mainP.b - op.b) < 0.5)
+        return 0.0;  // p でその部位自身が見えている（重なっていない）→ 通常の描画
+    uint occ = (uint)floor(mainP.b * 0.5) - 1u;
+    if (occ > 31u || ((occluderMask >> occ) & 1u) == 0u)
+        return 0.0;  // 手前にあるのが透かす部位（髪など）でない
+    float front = abs(mainP.a);  // 輪郭線の画素は A = −奥行き（§10.1）
+    float gap = op.a - front;
+    return (gap > 0.0 && gap <= maxDist) ? 1.0 : 0.0;
+}
+
 // p と q の片方だけが Toon のとき外側輪郭（T-42）
 float Toon_LineOuterPair(float4 p, float4 q)
 {

@@ -67,6 +67,7 @@ float ToonOutlineRefDistance < string UIGroup = "Outline"; float UIMin = 0.1; fl
 // ---- P1（既定値では P0 と同じ見た目）
 float ToonLightColorInfluence < string UIGroup = "Light"; float UIMin = 0.0; float UIMax = 1.0; int UIOrder = 50; > = 1.0;
 float ToonDepthOffset < string UIGroup = "Depth"; string UIName = "Depth Offset (m)"; float UIMin = 0.0; float UIMax = 0.2; int UIOrder = 51; > = 0.0;
+float ToonSeeThroughOutline < string UIGroup = "Depth"; float UIMin = 0.0; float UIMax = 1.0; int UIOrder = 53; > = 0.0;  // 1 = 髪と重なる所は輪郭線だけ（T-44）
 float4 ToonRimColor < string UIGroup = "Rim"; string UIWidget = "ColorPicker"; int UIOrder = 52; > = {1.0, 1.0, 1.0, 1.0};
 float ToonRimPower < string UIGroup = "Rim"; float UIMin = 0.5; float UIMax = 16.0; int UIOrder = 53; > = 4.0;
 float ToonRimStrength < string UIGroup = "Rim"; float UIMin = 0.0; float UIMax = 1.0; int UIOrder = 54; > = 0.0;
@@ -215,7 +216,8 @@ float3 OffsetPositionWS(float3 positionWS)
         float3 pivotVS = mul(float4(PreviewDepthPivot, 1.0), gView).xyz;
         positionWS = mul(float4(Toon_DepthCompressVS(posVS, pivotVS, k), 1.0), gViewI).xyz;
     }
-    return Toon_DepthOffsetWS(positionWS, CameraPosWS(), ToonDepthOffset * PreviewUnitScale);
+    // 透かし線（T-44）の部位は手前に出さない（髪に隠れたまま、隠れた所に線だけを描く。docs/03 §10.5）
+    return Toon_DepthOffsetWS(positionWS, CameraPosWS(), ToonDepthOffset * PreviewUnitScale * (1.0 - ToonSeeThroughOutline));
 }
 
 VSOut VS_Main(VSIn v)

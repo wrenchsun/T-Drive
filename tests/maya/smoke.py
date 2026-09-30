@@ -421,6 +421,17 @@ def run() -> None:
     check("画面上の線: 線を出す部位だけ線フラグが立つ",
           all((k % 2 == 1) == (m in s.look["parts"]["face"]["materials"]) for m, k in keys.items()) and keys, str(keys))
     s.set_feature("innerLine", False)
+    # 透かし線（4-14）: オンの部位のメッシュだけが透かしバッファの対象になり、手前の部位は既定で髪
+    s.set_feature("seeThroughOutline", True)
+    s.set_value("eye", "_ToonSeeThroughOutline", 1.0)
+    st = screen_line._params["seeThrough"]
+    eye_meshes = {x for m in s.look["parts"]["eye"]["materials"] for x in preview.scene_materials().get(m, [])}
+    check("透かし線: オンの部位のメッシュと手前の部位（髪）が渡る",
+          st is not None and set(st["meshes"]) == eye_meshes and st["occluders"] == look.see_through_occluder_mask(s.look) > 0,
+          str(st and {k: v for k, v in st.items() if k != "meshes"}))
+    s.set_value("eye", "_ToonSeeThroughOutline", 0.0)
+    check("透かし線: オフに戻すと対象なし", screen_line._params["seeThrough"] is None)
+    s.set_feature("seeThroughOutline", False)
     preview.delete_all()
     check("接地影: delete_all で消える", not contact_shadow.exists())
     s.show(s.shown)

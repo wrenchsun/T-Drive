@@ -42,6 +42,8 @@ FEATURES: tuple[Feature, ...] = (
             default_on=True, off_values={"_ToonOutlineSmoothNormal": 0.0}),
     Feature("outlineDistance", "距離で線を細く", ("T-18",), ("_ToonOutlineDistanceScale", "_ToonOutlineRefDistance")),
     Feature("outlineDirection", "線の太さの方向依存", ("T-26",), ("_ToonOutlineShadowSide", "_ToonOutlineBottom")),
+    Feature("seeThroughOutline", "透かし線（髪と重なる所は輪郭線だけ）", ("T-44",), ("_ToonSeeThroughOutline",),
+            ("seeThroughOutline",), (SH, RF)),
     Feature("selfShadow", "セルフシャドウ", ("T-43",), ("_ToonReceiveShadow", "_ToonCastShadow"), maya_preview="partial",
             off_values={"_ToonReceiveShadow": 0.0, "_ToonCastShadow": 0.0}),
     Feature("normalMap", "法線マップ", (), common=("normal", "normalScale")),

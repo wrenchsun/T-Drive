@@ -332,16 +332,21 @@ Maya ではトーンマップをシェーダー内で掛けているので線に
 1. 本体は**手前に出さない**（`_ToonDepthOffset` は使わない）。髪に隠れる所は隠れる
 2. その部位だけを別の描画先（**透かしバッファ**。ToonId と同じ形式）に描く。他の物に遮られないので、隠れている所も含めた部位の形と奥行きが分かる
 3. 合成で、透かしバッファの**部位の外形**（p が部位の内側、q が外側または別の部位）のうち、
-   p で通常の ToonId が**別の面で、しかも手前にある**（奥行きの差が `characterSettings.seeThroughOutline.maxDistance` 以内。手など遠い物越しには出さない）画素に線を描く
+   p で通常の ToonId が**透かす手前の部位（`occluders`。空なら髪ロールの部位）で、しかも手前にある**
+   （奥行きの差が `characterSettings.seeThroughOutline.maxDistance` 以内）画素に線を描く。
+   顔の皮膚が目・アイラインの縁を覆う所（モデルの作り上よくある）や、手など髪以外の物越しには出さない
 
 ```
-Toon_LineSeeThroughPair(op, oq, mainP, maxDist):
+Toon_LineSeeThroughPair(op, oq, mainP, maxDist, occluderMask):
   op.b > 1.5（p が透かしの部位）かつ |op.b - oq.b| > 0.5（外形）
   かつ mainP.b と op.b が違う（p で見えているのは別の面）
+  かつ occluderMask のビット (floor(mainP.b / 2) - 1) が立っている（その面が透かす手前の部位）
   かつ 0 < op.a - |mainP.a| <= maxDist（その面が手前、距離以内）
 ```
 
-- 線幅（px@1080p）・色は `characterSettings.seeThroughOutline`（width / color / maxDistance）。部位の輪郭線（§3）とは別（輪郭線の太さ 0 の部位にも使える）
+- 線幅（px@1080p）・色は `characterSettings.seeThroughOutline`（width / color / maxDistance / occluders）。部位の輪郭線（§3）とは別（輪郭線の太さ 0 の部位にも使える）
+- occluderMask: ビット (部位番号 - 1)。部位番号は §10.1 の部位キーと同じ（部位名の昇順で 1 始まり）。32 番目以降の部位は透かす手前の部位にできない
+- 透かしバッファにはメッシュ単位で描く。1 つのメッシュに透かしの部位と他の部位のマテリアルが混ざっていると、他の部位も透かしバッファに入る（線が余計に出る）→ 透かしの部位は別メッシュにする
 - 重なっていない所は通常の描画のまま（線は足さない）
 - Maya: Render Override に「透かしの部位だけを描く」操作を足す（`objectSetOverride`）。Unity: `ToonRendererFeature` で透かしの部位のレンダラーだけを ToonId パスで別の RT に描く
 

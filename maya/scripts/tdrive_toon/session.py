@@ -197,6 +197,8 @@ class Session:
         lk["parts"] = {(new if k == old else k): v for k, v in lk["parts"].items()}
         il = lk.get(look.SETTINGS, {}).get("innerLine", {})
         il["parts"] = [new if p == old else p for p in il.get("parts", [])]  # インナーライン対象の部位名も追従
+        st = lk.get(look.SETTINGS, {}).get("seeThroughOutline", {})
+        st["occluders"] = [new if p == old else p for p in st.get("occluders", [])]  # 透かし線の手前の部位も
         self._sync_character_preview()
         self._changed()
 
@@ -268,7 +270,7 @@ class Session:
             for m in mats:
                 if cmds.objExists(preview.preview_shader_of(m)):
                     preview.apply_values(m, resolved[m])
-            if feature_id == "selfShadow":
+            if feature_id in ("selfShadow", "seeThroughOutline"):
                 self._sync_character_preview()
         self._changed()
 
@@ -293,7 +295,7 @@ class Session:
             for m in mats:
                 if cmds.objExists(preview.preview_shader_of(m)):
                     preview.apply_values(m, resolved[m])
-            if feature_id == "selfShadow":
+            if feature_id in ("selfShadow", "seeThroughOutline"):
                 self._sync_character_preview()
         self._changed(dirty=bool(mats))
 
@@ -319,7 +321,7 @@ class Session:
     def set_setting(self, path: str, value: Any, notify: bool = True) -> None:
         look.set_setting(self.require(), path, value)
         self.dirty = True
-        if path == "depthCompression" or path.startswith(("faceShadow", "contactShadow", "innerLine", "screenOutline")):
+        if path == "depthCompression" or path.startswith(("faceShadow", "contactShadow", "innerLine", "screenOutline", "seeThroughOutline")):
             self._sync_character_preview()
         if notify:
             self._changed()
@@ -354,7 +356,15 @@ class Session:
         so = cs["screenOutline"]
         inner = {"width": il["width"], "color": envmath.srgb_color_to_linear(il["color"])[:3]} if il["enabled"] else None
         outer = {"width": so["width"], "color": envmath.srgb_color_to_linear(so["color"])[:3]} if so["enabled"] else None
-        screen_line.update(environment.model_panel(), inner, outer, preview.environment_state()["tonemap"], visible=preview.is_active())
+        # 透かし線（T-44）: _ToonSeeThroughOutline がオンのマテリアルのメッシュだけを透かしバッファに描く
+        st = cs["seeThroughOutline"]
+        st_meshes = sorted({x for m, v in resolved.items() if v["specific"].get("_ToonSeeThroughOutline", 0) > 0.5
+                            for x in scene.get(m, [])})
+        see_through = {"width": st["width"], "color": envmath.srgb_color_to_linear(st["color"])[:3],
+                       "maxDistance": st["maxDistance"], "occluders": look.see_through_occluder_mask(lk),
+                       "meshes": st_meshes} if st_meshes else None
+        screen_line.update(environment.model_panel(), inner, outer, preview.environment_state()["tonemap"],
+                           visible=preview.is_active(), see_through=see_through)
         if cs["contactShadow"].get("enabled") or contact_shadow.exists():
             contact_shadow.update(self.export_meshes(), cs["contactShadow"], visible=preview.is_active())
 
@@ -508,8 +518,8 @@ class Session:
         self.require()
         for mat in self.materials_of(target):
             self._set_one(mat, key, value)
-        if key == "_ToonDepthCompressWeight":
-            self._sync_character_preview()  # 効かせる部位が変わると中心も変わる
+        if key in ("_ToonDepthCompressWeight", "_ToonSeeThroughOutline"):
+            self._sync_character_preview()  # 効かせる部位が変わると中心も変わる / 透かしバッファに描くメッシュが変わる
         if notify:
             self._changed()
 
