@@ -432,6 +432,16 @@ def run() -> None:
     s.set_value("eye", "_ToonSeeThroughOutline", 0.0)
     check("透かし線: オフに戻すと対象なし", screen_line._params["seeThrough"] is None)
     s.set_feature("seeThroughOutline", False)
+    # 輪郭線のスクリーンスペース（4-15）: 部位の表が渡り、オフに戻すと消える
+    s.set_feature("outlineScreenSpace", True)
+    s.set_value("eye", "_ToonOutlineScreenSpace", 1.0)
+    s.set_value("eye", "_ToonOutlineWidth", 2.0)
+    sil = screen_line._params["silhouette"]
+    eye_no = sorted(s.look["parts"]).index("eye") + 1
+    check("輪郭線のスクリーンスペース: 部位の表に目の線幅が入る", bool(sil) and sil.get(eye_no, {}).get("width") == 2.0, str(sil))
+    s.set_value("eye", "_ToonOutlineScreenSpace", 0.0)
+    check("輪郭線のスクリーンスペース: オフに戻すと表が空", screen_line._params["silhouette"] is None)
+    s.set_feature("outlineScreenSpace", False)
     preview.delete_all()
     check("接地影: delete_all で消える", not contact_shadow.exists())
     s.show(s.shown)

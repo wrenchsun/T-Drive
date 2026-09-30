@@ -313,3 +313,18 @@ def test_see_through_outline_setting_param_and_feature():
     errors = look.validate(lk)
     assert any("seeThroughOutline.maxDistance" in e for e in errors)
     assert any("seeThroughOutline.color" in e for e in errors)
+
+
+def test_screen_space_outline_parts_table():
+    """輪郭線のスクリーンスペース（4-15）: 部位番号 → 線幅・線色・混ぜ具合。オフの部位・機能オフは入らない / 線幅 0。"""
+    lk = _sample()  # 部位番号: face=1, hair=2
+    assert look.screen_space_outline_parts(lk) == {}
+    look.set_value(lk, "hair", "_ToonOutlineScreenSpace", 1.0)
+    assert look.screen_space_outline_parts(lk) == {}  # 機能 outlineScreenSpace が既定でオフ
+    look.set_feature(lk, "outlineScreenSpace", True)
+    look.set_value(lk, "hair", "_ToonOutlineWidth", 2.5)
+    table = look.screen_space_outline_parts(lk)
+    assert list(table) == [2] and table[2]["width"] == 2.5 and len(table[2]["color"]) == 4
+    look.set_feature(lk, "outline", False)  # 輪郭線そのものがオフなら線幅 0
+    assert look.screen_space_outline_parts(lk)[2]["width"] == 0.0
+    assert params.PARAMS_BY_UNITY["_ToonOutlineScreenSpace"].toggle

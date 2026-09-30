@@ -70,6 +70,7 @@ SPECIFIC_PARAMS: tuple[Param, ...] = (
     Param("_ToonOutlineColor", COLOR, [0.28, 0.2, 0.2, 1.0], "Outline", "線色"),
     Param("_ToonOutlineBaseMix", FLOAT, 0.5, "Outline", "線色にベース色を混ぜる", 0.0, 1.0),
     Param("_ToonOutlineWidth", FLOAT, 1.0, "Outline", "線幅 (px@1080p)", 0.0, 10.0),
+    Param("_ToonOutlineScreenSpace", FLOAT, 0.0, "Outline", "スクリーンスペースで描く（背面押し出しの代わり）", 0.0, 1.0, toggle=True),  # T-42 / 4-15
     Param("_ToonOutlineSmoothNormal", FLOAT, 1.0, "Outline", "スムーズ法線を使う", 0.0, 1.0, toggle=True),
     # ---------------- P1（v0.2 で追加。既定値では P0 と同じ見た目 = MINOR） ----------------
     # --- 線幅の距離補正 T-18 ---

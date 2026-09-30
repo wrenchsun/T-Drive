@@ -248,8 +248,11 @@ class Session:
             for mat, values in resolved.items():
                 if cmds.objExists(preview.preview_shader_of(mat)):
                     preview.apply_values(mat, values)
-        if any(features.BY_ID[f].settings for f in feature_ids) or "selfShadow" in feature_ids:
+        if any(features.BY_ID[f].settings or f in self._PREVIEW_FEATURES for f in feature_ids):
             self._sync_character_preview()  # キャラクター設定を持つ機能（接地影・画面上の線など）
+
+    # キャラクター単位のプレビュー（影用ライト・透かしバッファ・画面上の線の部位の表）に効く機能
+    _PREVIEW_FEATURES = ("selfShadow", "seeThroughOutline", "outlineScreenSpace", "outline")
 
     def material_feature_state(self, target: str, feature_id: str) -> tuple[list[bool | None], list[bool]]:
         """部位 / マテリアルの、各マテリアルの上書き（None = 全体に従う）と有効かどうか（docs/11 §2.1）。"""
@@ -270,7 +273,7 @@ class Session:
             for m in mats:
                 if cmds.objExists(preview.preview_shader_of(m)):
                     preview.apply_values(m, resolved[m])
-            if feature_id in ("selfShadow", "seeThroughOutline"):
+            if feature_id in self._PREVIEW_FEATURES:
                 self._sync_character_preview()
         self._changed()
 
@@ -295,7 +298,7 @@ class Session:
             for m in mats:
                 if cmds.objExists(preview.preview_shader_of(m)):
                     preview.apply_values(m, resolved[m])
-            if feature_id in ("selfShadow", "seeThroughOutline"):
+            if feature_id in self._PREVIEW_FEATURES:
                 self._sync_character_preview()
         self._changed(dirty=bool(mats))
 
@@ -363,8 +366,10 @@ class Session:
         see_through = {"width": st["width"], "color": envmath.srgb_color_to_linear(st["color"])[:3],
                        "maxDistance": st["maxDistance"], "occluders": look.see_through_occluder_mask(lk),
                        "meshes": st_meshes} if st_meshes else None
+        silhouette = {i: dict(v, color=envmath.srgb_color_to_linear(v["color"])[:3])
+                      for i, v in look.screen_space_outline_parts(lk, self.shown).items()}
         screen_line.update(environment.model_panel(), inner, outer, preview.environment_state()["tonemap"],
-                           visible=preview.is_active(), see_through=see_through)
+                           visible=preview.is_active(), see_through=see_through, silhouette=silhouette)
         if cs["contactShadow"].get("enabled") or contact_shadow.exists():
             contact_shadow.update(self.export_meshes(), cs["contactShadow"], visible=preview.is_active())
 
@@ -518,10 +523,21 @@ class Session:
         self.require()
         for mat in self.materials_of(target):
             self._set_one(mat, key, value)
-        if key in ("_ToonDepthCompressWeight", "_ToonSeeThroughOutline"):
-            self._sync_character_preview()  # 効かせる部位が変わると中心も変わる / 透かしバッファに描くメッシュが変わる
+        self._sync_if_preview_key(key)
         if notify:
             self._changed()
+
+    # キャラクター単位のプレビュー（奥行き圧縮の中心・透かしバッファ・画面上の線の部位の表）に効くパラメータ
+    _PREVIEW_KEYS = ("_ToonDepthCompressWeight", "_ToonSeeThroughOutline", "_ToonOutlineScreenSpace",
+                     "_ToonOutlineWidth", "_ToonOutlineColor", "_ToonOutlineBaseMix")
+
+    def _sync_if_preview_key(self, key: str) -> None:
+        if key not in self._PREVIEW_KEYS:
+            return
+        if key.startswith("_ToonOutline") and key != "_ToonOutlineScreenSpace" \
+                and not look.screen_space_outline_parts(self.require(), self.shown):
+            return  # スクリーンスペースの部位が無ければ線幅・線色は背面押し出しだけ（スライダーのたびに作り直さない）
+        self._sync_character_preview()
 
     def values(self, target: str, key: str) -> list[Any]:
         """target（部位 or マテリアル）に属する各マテリアルの、編集先バリアントでの値。"""
@@ -558,6 +574,7 @@ class Session:
         self.checkpoint()
         for m in self.materials_of(target):
             self._set_one(m, key, self.default_value(m, key))
+        self._sync_if_preview_key(key)
         self._changed()
 
     def clear_override(self, target: str, key: str) -> None:
@@ -582,6 +599,7 @@ class Session:
                 del overrides[m]
             if self.shown == self.edit_variant:
                 preview.apply_value(m, key, self.value(m, key))
+        self._sync_if_preview_key(key)
         self._changed()
 
     def _set_one(self, material: str, key: str, value: Any) -> None:

@@ -60,6 +60,7 @@ float ToonTintStrength < string UIGroup = "Tint"; float UIMin = 0.0; float UIMax
 float4 ToonOutlineColor < string UIGroup = "Outline"; string UIWidget = "ColorPicker"; int UIOrder = 40; > = {0.28, 0.2, 0.2, 1.0};
 float ToonOutlineBaseMix < string UIGroup = "Outline"; float UIMin = 0.0; float UIMax = 1.0; int UIOrder = 41; > = 0.5;
 float ToonOutlineWidth < string UIGroup = "Outline"; float UIMin = 0.0; float UIMax = 10.0; int UIOrder = 42; > = 1.0;
+float ToonOutlineScreenSpace < string UIGroup = "Outline"; float UIMin = 0.0; float UIMax = 1.0; int UIOrder = 43; > = 0.0;  // 1 = 輪郭線を画面上で描く（背面押し出しは描かない。4-15）
 float ToonOutlineSmoothNormal < string UIGroup = "Outline"; float UIMin = 0.0; float UIMax = 1.0; int UIOrder = 43; > = 1.0;
 float ToonOutlineDistanceScale < string UIGroup = "Outline"; float UIMin = 0.0; float UIMax = 1.0; int UIOrder = 44; > = 0.0;
 float ToonOutlineRefDistance < string UIGroup = "Outline"; float UIMin = 0.1; float UIMax = 20.0; int UIOrder = 45; > = 2.0;
@@ -344,7 +345,7 @@ VSOut VS_Outline(VSIn v)
 
 PSOutWithId PS_Outline(VSOut i)
 {
-    if (ToonOutlineWidth <= 0.0 || i.vertexMask.g <= 0.0)
+    if (ToonOutlineWidth <= 0.0 || i.vertexMask.g <= 0.0 || ToonOutlineScreenSpace > 0.5)
         discard;
     float4 base = SampleBase(i.uv);
     if (AlphaClip && base.a < Cutoff)

@@ -192,6 +192,23 @@ def line_part_keys(look: dict[str, Any]) -> dict[str, float]:
     return keys
 
 
+def screen_space_outline_parts(look: dict[str, Any], variant: str = BASE) -> dict[int, dict[str, Any]]:
+    """輪郭線をスクリーンスペースで描く部位の表（4-15、docs/03 §10.4）: 部位番号 → {"width", "color"(sRGB), "mix"}。
+
+    部位の中で最初（名前順）の _ToonOutlineScreenSpace がオンのマテリアルの値。機能オフは解決済みの値（線幅 0 など）で反映される。
+    """
+    resolved = resolve(look, variant)
+    table = {}
+    for i, part in enumerate(sorted(look.get("parts", {})), start=1):
+        for mat in sorted(look["parts"][part]["materials"]):
+            sp = resolved.get(mat, {}).get("specific", {})
+            if sp.get("_ToonOutlineScreenSpace", 0) > 0.5:
+                table[i] = {"width": float(sp.get("_ToonOutlineWidth", 0.0)), "color": list(sp.get("_ToonOutlineColor", [0, 0, 0, 1])),
+                            "mix": float(sp.get("_ToonOutlineBaseMix", 0.0))}
+                break
+    return table
+
+
 def see_through_occluders(look: dict[str, Any]) -> list[str]:
     """透かし線（T-44）で「手前にあれば線を出す」部位。occluders が空なら髪ロールの部位（docs/03 §10.5）。"""
     chosen = get_setting(look, "seeThroughOutline.occluders") or []

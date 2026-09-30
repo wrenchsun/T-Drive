@@ -38,6 +38,7 @@ FEATURES: tuple[Feature, ...] = (
             default_on=True, required=True),
     Feature("outline", "輪郭線", ("T-05",), ("_ToonOutlineColor", "_ToonOutlineBaseMix", "_ToonOutlineWidth"),
             default_on=True, off_values={"_ToonOutlineWidth": 0.0}),
+    Feature("outlineScreenSpace", "輪郭線をスクリーンスペースで", ("T-42",), ("_ToonOutlineScreenSpace",), impl=(SH, RF)),
     Feature("outlineSmoothNormal", "線のスムーズ法線", ("T-06",), ("_ToonOutlineSmoothNormal",), impl=(SH, ME),
             default_on=True, off_values={"_ToonOutlineSmoothNormal": 0.0}),
     Feature("outlineDistance", "距離で線を細く", ("T-18",), ("_ToonOutlineDistanceScale", "_ToonOutlineRefDistance")),

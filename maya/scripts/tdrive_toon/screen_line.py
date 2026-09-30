@@ -36,7 +36,11 @@ _params: dict[str, Any] = {
     # 透かし線（T-44）: {"width", "color"(リニア RGB), "maxDistance"(m), "occluders"(部位のビットマスク),
     #                     "meshes": [透かしの部位のメッシュ]} or None
     "seeThrough": None,
+    # 輪郭線のスクリーンスペース（4-15）: {部位番号: {"width": px@1080p, "color": リニア RGB, "mix": ベース色の混ぜ具合}} or None
+    "silhouette": None,
 }
+
+SIL_PARTS = 64  # TDriveScreenLine.fx の SIL_PARTS と同じ
 
 
 def maya_useNewAPI() -> None:  # noqa: N802 (Maya の規約)
@@ -163,6 +167,21 @@ class _QuadOp(omr.MQuadRender):
         set_param(sh, "gColorTex", t["color"])
         set_param(sh, "gIdTex", t["id"])
         set_param(sh, "gOverlayIdTex", t["ov_id"])
+        sil = _params["silhouette"]
+        set_param(sh, "gSilEnabled", bool(sil))
+        if sil:
+            radius, col, mix = [0.0] * SIL_PARTS, [[0.0] * SIL_PARTS for _ in range(3)], [0.0] * SIL_PARTS
+            for part, v in sil.items():
+                if 0 < part < SIL_PARTS and v["width"] > 0:
+                    radius[part] = line_radius(v["width"], h)
+                    for c in range(3):
+                        col[c][part] = float(v["color"][c])
+                    mix[part] = float(v["mix"])
+            set_param(sh, "gSilMaxRadius", int(max(radius)))
+            set_array(sh, "gSilRadius", radius)
+            for c, name in enumerate(("gSilR", "gSilG", "gSilB")):
+                set_array(sh, name, col[c])
+            set_array(sh, "gSilMix", mix)
         st = _params["seeThrough"]
         set_param(sh, "gSeeThroughEnabled", bool(st and self.ov.overlay_active))
         if st:
@@ -341,6 +360,15 @@ def set_param(shader, name: str, value: Any) -> None:
         raise ValueError(f"シェーダーに {name} が無い、または未対応の型（{kind}）")
 
 
+def set_array(shader, name: str, values: list[float]) -> None:
+    """float の配列パラメータを設定する（長さを確かめる）。"""
+    if not shader.isArrayParameter(name):
+        raise ValueError(f"シェーダーに配列 {name} が無い")
+    if shader.getArraySize(name) != len(values):
+        raise ValueError(f"{name}: {shader.getArraySize(name)} 要素のところに {len(values)} 要素")
+    shader.setArrayParameter(name, [float(v) for v in values], len(values))
+
+
 def line_radius(width_px: float, screen_height: float) -> float:
     """docs/03 §10.2（Toon_LineRadius と同じ）: 境界の両側に r 画素ずつ。
 
@@ -386,16 +414,18 @@ def is_applied(panel: str) -> bool:
 
 
 def update(panel: str | None, inner: dict | None, outer: dict | None, tonemap: int, visible: bool,
-           see_through: dict | None = None) -> None:
+           see_through: dict | None = None, silhouette: dict | None = None) -> None:
     """線の設定を渡し、必要ならパネルに Override を割り当てる / 外す。
 
     inner / outer: {"width": px@1080p, "color": リニア RGB} または None（その線を使わない）。
     see_through: 透かし線（T-44）{"width", "color", "maxDistance", "occluders", "meshes"} または None。
+    silhouette: 輪郭線のスクリーンスペース（4-15）{部位番号: {"width", "color", "mix"}} または None。
     """
     if see_through is not None and not see_through.get("meshes"):
         see_through = None
-    _params.update(inner=inner, outer=outer, tonemap=int(tonemap), seeThrough=see_through)
-    want = visible and (inner is not None or outer is not None or see_through is not None)
+    silhouette = {k: v for k, v in (silhouette or {}).items() if v["width"] > 0} or None
+    _params.update(inner=inner, outer=outer, tonemap=int(tonemap), seeThrough=see_through, silhouette=silhouette)
+    want = visible and (inner is not None or outer is not None or see_through is not None or silhouette is not None)
     if want and panel:
         if omr.MRenderer.findRenderOverride(NAME) is None or _override is None:
             register()

@@ -6,10 +6,11 @@
 ## [Unreleased]
 
 ### 互換性
-- MINOR: パラメータ `_ToonSeeThroughOutline` と `characterSettings.seeThroughOutline` を追加（既存の Look は既定値で読み込まれ、見た目は変わらない）
+- MINOR: パラメータ `_ToonSeeThroughOutline`・`_ToonOutlineScreenSpace` と `characterSettings.seeThroughOutline` を追加（既存の Look は既定値で読み込まれ、見た目は変わらない）
 
 ### 追加
 - 透かし線（T-44 / 4-14）: 前髪に隠れた所だけ、眉・目などの部位の外形の線を前髪の上に描く（重なっていない所は通常の描画）。部位ごとにオン/オフ（機能「透かし線」）、線幅・色・距離の上限・透かす手前の部位（既定は髪ロール）はキャラクタータブ。Maya は Render Override で透かしバッファを描いてプレビュー（Unity は U-19 で対応予定）
+- 輪郭線をスクリーンスペースで描く（4-15）: 部位ごとに、背面押し出しの輪郭線を画面上の線に切り替え（ルックタブ › 線 ›「スクリーンスペースで描く」、機能「輪郭線をスクリーンスペースで」）。線幅・線色はそのまま、外形と手前・奥の段差に一定の太さの線（Unity は U-20 で対応予定）
 
 ## [0.3.0] - 2026-09-29
 

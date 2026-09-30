@@ -319,4 +319,20 @@ float Toon_LineOuterPair(float4 p, float4 q)
     return ((p.b > 1.5) != (q.b > 1.5)) ? 1.0 : 0.0;
 }
 
+// 輪郭線のスクリーンスペース（4-15、docs/03 §10.4）: 奥行きの段差とみなす差（m）= max(GAP_M, 奥行き × GAP_REL)
+#define TOON_LINE_DEPTH_GAP_M 0.02
+#define TOON_LINE_DEPTH_GAP_REL 0.03
+
+// p が手前側の Toon で、q が Toon でないか奥行きが離れている（段差）とき p の部位番号、そうでなければ 0
+float Toon_LineSilhouettePart(float4 p, float4 q)
+{
+    if (p.b < 1.5)
+        return 0.0;
+    float partP = floor(p.b * 0.5 + 0.25);
+    if (q.b < 1.5)
+        return partP;
+    float dP = abs(p.a), dQ = abs(q.a);  // 輪郭線の画素は A = −奥行き（§10.1）
+    return (dQ - dP > max(TOON_LINE_DEPTH_GAP_M, dP * TOON_LINE_DEPTH_GAP_REL)) ? partP : 0.0;
+}
+
 #endif // TDRIVE_TOON_CORE_INCLUDED
