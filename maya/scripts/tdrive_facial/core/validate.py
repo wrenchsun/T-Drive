@@ -889,6 +889,8 @@ def _check_targets(doc: Document, scene: SceneInfo, add) -> None:
                 )
             )
 
+    _check_name_ambiguous(doc, scene, live, live_ex, n_persp, add)
+
     # 彫り用の補助シェイプ（fcs_*）でどのポーズからも使われていないもの
     prefix = doc.sculpt_shapes.prefix if doc.sculpt_shapes is not None else naming.DEFAULT_SCULPT_PREFIX
     if prefix and not prefix.startswith(naming.FC_PREFIX):
@@ -910,6 +912,57 @@ def _check_targets(doc: Document, scene: SceneInfo, add) -> None:
     for t, info in scene.target_info.items():
         if naming.is_fc_name(t) and info.empty:
             add(Issue("target_empty", SEVERITY_INFO, f"差分が 1 つも無いターゲット {t}", name=t))
+
+
+
+def _check_name_ambiguous(doc: Document, scene: SceneInfo, live, live_ex, n_persp: int, add) -> None:
+    """レイヤー名に `_` を含むとき、別のキャラクターの補正シェイプと名前が同じになる衝突を警告する（C-1 の残り。`fc_name_ambiguous`）。
+
+    名前の形式（`FC_<asset>_<layer>_R{r}_C{c}`）は変えないので、asset `a` のレイヤー `b_Joy` と
+    asset `a_b` のレイヤー `Joy` は同じ名前になり、名前だけでは区別できない。次をすべて満たすとき 1 件ずつ警告する
+    （決まった規則。レイヤー × `_` の位置ごとに 1 件）:
+      1. このデータのレイヤー名 ℓ に `_` があり、`_` の位置で ℓ = <接頭> + "_" + <残り> に分けられる（両方とも空でない）
+      2. 別のキャラクター ID N = このデータの asset + "_" + <接頭> として読めるシェイプが、モデルにある
+         （`FC_<N>_<残り>_R{r}_C{c}`（`_Ex` 付きも可）で、このデータ自身がベイクで作る名前ではないもの）
+    制限: 別のキャラクターの補正シェイプが、このデータ自身が作る名前と完全に同じだけのとき（同じ点だけ）は、
+    自分のものとの区別が付かないので警告しない。逆向き（asset `a_b` のレイヤー `Joy` から見た asset `a`）も、
+    孤立した自分のシェイプと区別が付かないので扱わない。逆に、このデータ自身の古い（孤立した）シェイプは別のキャラクターのものと見分けが付かず、警告が出ることがある（レイヤーに `_` を含む側の検証で拾う）。
+    """
+    asset = doc.asset or ""
+    layer_names = [layer.name for layer in doc.layers]
+    if not any("_" in n for n in layer_names):
+        return
+    own = {naming.morph_name(asset, ln, r, c) for ln, r, c in live}
+    own |= {naming.morph_name(asset, ln, r, c, extreme=True) for ln, r, c in live_ex}
+    own |= {naming.perspective_name(asset, k) for k in range(n_persp)}
+    others = [t for t in sorted(scene.targets or ()) if naming.is_fc_name(t) and t not in own]
+    if not others:
+        return
+    seen: set[tuple[str, str]] = set()
+    for li, name in enumerate(layer_names):
+        for i, ch in enumerate(name):
+            if ch != "_" or i == 0 or i == len(name) - 1:
+                continue
+            other_asset = f"{asset}_{name[:i]}"
+            rest = name[i + 1:]
+            if (name, other_asset) in seen:
+                continue
+            for t in others:
+                p = naming.parse_name(t, other_asset)
+                if p is not None and p.kind in (naming.KIND_POINT, naming.KIND_POINT_EX) and p.layer == rest:
+                    seen.add((name, other_asset))
+                    add(
+                        Issue(
+                            "fc_name_ambiguous",
+                            SEVERITY_WARNING,
+                            f"このキャラクター ID（{asset}）とレイヤー名（{name}）の組み合わせは、"
+                            f"別のキャラクター（{other_asset}）の補正シェイプと同じ名前になります。"
+                            "レイヤー名かキャラクター ID を変えてください",
+                            layer=li,
+                            name=name,
+                        )
+                    )
+                    break
 
 
 # ---------------------------------------------------------------------------

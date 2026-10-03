@@ -323,6 +323,11 @@ D-Drive を変更しない前提でできることだけを入れる（変更が
 | 検証 | `IValidator` 実装: CutsceneData の `.playable` にある FacialCorrectionTrack のバインド先に Runner があるか、Data の FC_* がモデルにそろっているか |
 | fctrack の取り込み | `AssetPostprocessor`（D-Drive の Cutscene 取り込みより後の順番）で、`SourceAssets/Cutscene/<Category>/<Shot>__<Model>.fctrack` から、対応する `.playable` に `FacialCorrectionTrack` を足す / 更新する。自動で作ったトラックは名前 `<Model>_Facial(auto)` で見分け、デザイナーのトラックは触らない |
 
+### 5.w 頭の角度の規則（2026-10-03 決定。レビュー C-6）
+
+- 頭から見たカメラの Yaw / Pitch の求め方は、**T-Drive の規則（Unity 準拠。Python と C# で共通）を正とする**。UE 版とは、前方向が ±Y で、頭にロールとピッチが両方あるとき、最大 7° ほど違う（UE 版には合わせない。ポーズは T-Drive で作るので実害はない）
+- 規則は共通のテストデータ `tests/facial/conformance/view_angles.json`（ロール + ピッチのケース 36 件を含む 78 件）で固定する。変えるのは MAJOR
+
 ### 5.x Timeline などからの上書き（持ち主ごと・2026-10-03。レビュー E-2 / E-3）
 
 - `Runner.SetOverride(owner, in FacialFrameOverride, priority = 0, ownerObject = null)` / `ClearOverride(owner)` / `ClearAllOverrides()`。値はコピーして Runner が持ち、**外されるまで残る**（D-Drive のカットシーンは一時停止中に評価されないため）。定常状態で割り当てなし

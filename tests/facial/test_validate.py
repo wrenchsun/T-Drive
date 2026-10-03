@@ -872,3 +872,35 @@ def test_exclude_legacy_record_is_not_stale():
     doc.exclude.curves = ["smile_R"]
     for rec in (None, {}, {"FC_other": "x"}):  # 記録なし・この点の記録なし = 不明 → 今と同じ
         assert "point_changed_since_bake" not in codes(V.validate(doc, make_scene(doc), None, make_bake(doc), rec))
+
+
+# ---------------------------------------------------------------- C-1 の残り: fc_name_ambiguous
+def _doc_with_layer(name: str):
+    doc = make_doc()
+    doc.layers.append(m.Layer(name=name, points={(0, 0): m.GridPoint(0, 0, True, m.SourcePose(curves={"bs.jaw_open": 1.0}))}))
+    return doc
+
+
+def test_name_ambiguous_warns_when_neighbour_asset_has_same_names():
+    """asset a のレイヤー b_Joy と、asset a_b のレイヤー Joy は同じ名前（FC_a_b_Joy_…）になる。"""
+    doc = _doc_with_layer("b_Joy")
+    scene = make_scene(doc)
+    scene.targets = {MORPH, "FC_a_b_Joy_R0_C0", "FC_a_b_Joy_R3_C3"}  # R3_C3 はこのデータが作らない名前 = 別のキャラクターの証拠
+    got = [i for i in run(doc, scene, bake=None) if i.code == "fc_name_ambiguous"]
+    assert len(got) == 1 and got[0].severity == "warning" and got[0].name == "b_Joy"
+    assert "（a）" in got[0].message and "（b_Joy）" in got[0].message and "（a_b）" in got[0].message
+
+
+def test_name_ambiguous_silent_for_normal_underscore_layer_and_unrelated_assets():
+    doc = _doc_with_layer("Joy_Big")
+    scene = make_scene(doc)
+    scene.targets = {MORPH, "FC_a_Joy_Big_R0_C0"}
+    assert "fc_name_ambiguous" not in codes(run(doc, scene, bake=None))
+    scene.targets = {MORPH, "FC_a_Joy_Big_R0_C0", "FC_zzz_Joy_R0_C0", "FC_a_Joy_Other_R1_C1"}
+    assert "fc_name_ambiguous" not in codes(run(doc, scene, bake=None))
+    plain = make_doc()
+    scene = make_scene(plain)
+    scene.targets = {MORPH, "FC_a_b_Neutral_R1_C2", "FC_a_b_Joy_R0_C0"}
+    assert "fc_name_ambiguous" not in codes(run(plain, scene, bake=None))
+    scene.targets = None
+    assert "fc_name_ambiguous" not in codes(run(doc, scene, bake=None))

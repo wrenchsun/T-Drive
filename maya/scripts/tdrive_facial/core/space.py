@@ -334,6 +334,7 @@ def compute_view_angles_in_space(
     )
     fwd_vec = rotate_vector(q, _AXIS_VECTORS[forward_axis])
     fwd = cv.direction(fwd_vec)
+    # 頭の Yaw / Pitch の規則は T-Drive（Unity 準拠）を正とする。UE 版とは、前方向が ±Y で頭にロールとピッチが両方あるとき最大 7° ほど違う
     forward_yaw = math.degrees(math.atan2(fwd[1], fwd[0]))
     return evaluate.compute_view_angles(cv.position(center), forward_yaw, cv.position(viewer_pos))
 

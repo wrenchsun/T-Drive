@@ -785,6 +785,618 @@
       },
       "toleranceDeg": 0.01,
       "note": "中心が 10 上: 水平に近い視点 → Pitch 0"
+    },
+    {
+      "name": "ue_axis+X_roll_pitch1_camera_a",
+      "source": "python-port",
+      "mode": "bone",
+      "space": {"unit": "cm", "upAxis": "Z", "handedness": "left"},
+      "headPos": [10, 20, 30],
+      "headRotation": [0.162010335521, 0.285148851609, 0.108587714552, 0.938430334047],
+      "forwardAxis": "+X",
+      "centerOffset": [0, 0, 0],
+      "viewerPos": [10, -80, 10],
+      "expect": {
+        "yawDeg": 110.0,
+        "pitchDeg": -11.309932474
+      },
+      "toleranceDeg": 0.01,
+      "note": "C-6: 頭にロールとピッチが同時にある。頭の Yaw / Pitch の規則は T-Drive（Unity 準拠）を正とする（UE 版とは前方向が ±Y のとき最大 7° ほど違う）。期待値は Python 実装"
+    },
+    {
+      "name": "ue_axis+X_roll_pitch1_camera_b",
+      "source": "python-port",
+      "mode": "bone",
+      "space": {"unit": "cm", "upAxis": "Z", "handedness": "left"},
+      "headPos": [10, 20, 30],
+      "headRotation": [0.162010335521, 0.285148851609, 0.108587714552, 0.938430334047],
+      "forwardAxis": "+X",
+      "centerOffset": [0, 0, 0],
+      "viewerPos": [160, 100, 90],
+      "expect": {
+        "yawDeg": -8.072486936,
+        "pitchDeg": 19.440034828
+      },
+      "toleranceDeg": 0.01,
+      "note": "C-6: 頭にロールとピッチが同時にある。頭の Yaw / Pitch の規則は T-Drive（Unity 準拠）を正とする（UE 版とは前方向が ±Y のとき最大 7° ほど違う）。期待値は Python 実装"
+    },
+    {
+      "name": "ue_axis+X_roll_pitch1_camera_c",
+      "source": "python-port",
+      "mode": "bone",
+      "space": {"unit": "cm", "upAxis": "Z", "handedness": "left"},
+      "headPos": [10, 20, 30],
+      "headRotation": [0.162010335521, 0.285148851609, 0.108587714552, 0.938430334047],
+      "forwardAxis": "+X",
+      "centerOffset": [0, 0, 0],
+      "viewerPos": [-80, -100, 70],
+      "expect": {
+        "yawDeg": 146.869897646,
+        "pitchDeg": 14.931417178
+      },
+      "toleranceDeg": 0.01,
+      "note": "C-6: 頭にロールとピッチが同時にある。頭の Yaw / Pitch の規則は T-Drive（Unity 準拠）を正とする（UE 版とは前方向が ±Y のとき最大 7° ほど違う）。期待値は Python 実装"
+    },
+    {
+      "name": "ue_axis+X_roll_pitch2_camera_b",
+      "source": "python-port",
+      "mode": "bone",
+      "space": {"unit": "cm", "upAxis": "Z", "handedness": "left"},
+      "headPos": [10, 20, 30],
+      "headRotation": [-0.326190408187, -0.282571020822, -0.102847440645, 0.896200780937],
+      "forwardAxis": "+X",
+      "centerOffset": [0, 0, 0],
+      "viewerPos": [160, 100, 90],
+      "expect": {
+        "yawDeg": -28.072486936,
+        "pitchDeg": 19.440034828
+      },
+      "toleranceDeg": 0.01,
+      "note": "C-6: 頭にロールとピッチが同時にある。頭の Yaw / Pitch の規則は T-Drive（Unity 準拠）を正とする（UE 版とは前方向が ±Y のとき最大 7° ほど違う）。期待値は Python 実装"
+    },
+    {
+      "name": "ue_axis-X_roll_pitch1_camera_a",
+      "source": "python-port",
+      "mode": "bone",
+      "space": {"unit": "cm", "upAxis": "Z", "handedness": "left"},
+      "headPos": [10, 20, 30],
+      "headRotation": [0.162010335521, 0.285148851609, 0.108587714552, 0.938430334047],
+      "forwardAxis": "-X",
+      "centerOffset": [0, 0, 0],
+      "viewerPos": [10, -80, 10],
+      "expect": {
+        "yawDeg": -70.0,
+        "pitchDeg": -11.309932474
+      },
+      "toleranceDeg": 0.01,
+      "note": "C-6: 頭にロールとピッチが同時にある。頭の Yaw / Pitch の規則は T-Drive（Unity 準拠）を正とする（UE 版とは前方向が ±Y のとき最大 7° ほど違う）。期待値は Python 実装"
+    },
+    {
+      "name": "ue_axis-X_roll_pitch1_camera_b",
+      "source": "python-port",
+      "mode": "bone",
+      "space": {"unit": "cm", "upAxis": "Z", "handedness": "left"},
+      "headPos": [10, 20, 30],
+      "headRotation": [0.162010335521, 0.285148851609, 0.108587714552, 0.938430334047],
+      "forwardAxis": "-X",
+      "centerOffset": [0, 0, 0],
+      "viewerPos": [160, 100, 90],
+      "expect": {
+        "yawDeg": 171.927513064,
+        "pitchDeg": 19.440034828
+      },
+      "toleranceDeg": 0.01,
+      "note": "C-6: 頭にロールとピッチが同時にある。頭の Yaw / Pitch の規則は T-Drive（Unity 準拠）を正とする（UE 版とは前方向が ±Y のとき最大 7° ほど違う）。期待値は Python 実装"
+    },
+    {
+      "name": "ue_axis-X_roll_pitch1_camera_c",
+      "source": "python-port",
+      "mode": "bone",
+      "space": {"unit": "cm", "upAxis": "Z", "handedness": "left"},
+      "headPos": [10, 20, 30],
+      "headRotation": [0.162010335521, 0.285148851609, 0.108587714552, 0.938430334047],
+      "forwardAxis": "-X",
+      "centerOffset": [0, 0, 0],
+      "viewerPos": [-80, -100, 70],
+      "expect": {
+        "yawDeg": -33.130102354,
+        "pitchDeg": 14.931417178
+      },
+      "toleranceDeg": 0.01,
+      "note": "C-6: 頭にロールとピッチが同時にある。頭の Yaw / Pitch の規則は T-Drive（Unity 準拠）を正とする（UE 版とは前方向が ±Y のとき最大 7° ほど違う）。期待値は Python 実装"
+    },
+    {
+      "name": "ue_axis-X_roll_pitch2_camera_b",
+      "source": "python-port",
+      "mode": "bone",
+      "space": {"unit": "cm", "upAxis": "Z", "handedness": "left"},
+      "headPos": [10, 20, 30],
+      "headRotation": [-0.326190408187, -0.282571020822, -0.102847440645, 0.896200780937],
+      "forwardAxis": "-X",
+      "centerOffset": [0, 0, 0],
+      "viewerPos": [160, 100, 90],
+      "expect": {
+        "yawDeg": 151.927513064,
+        "pitchDeg": 19.440034828
+      },
+      "toleranceDeg": 0.01,
+      "note": "C-6: 頭にロールとピッチが同時にある。頭の Yaw / Pitch の規則は T-Drive（Unity 準拠）を正とする（UE 版とは前方向が ±Y のとき最大 7° ほど違う）。期待値は Python 実装"
+    },
+    {
+      "name": "ue_axis+Y_roll_pitch1_camera_a",
+      "source": "python-port",
+      "mode": "bone",
+      "space": {"unit": "cm", "upAxis": "Z", "handedness": "left"},
+      "headPos": [10, 20, 30],
+      "headRotation": [0.162010335521, 0.285148851609, 0.108587714552, 0.938430334047],
+      "forwardAxis": "+Y",
+      "centerOffset": [0, 0, 0],
+      "viewerPos": [10, -80, 10],
+      "expect": {
+        "yawDeg": -173.124268123,
+        "pitchDeg": -11.309932474
+      },
+      "toleranceDeg": 0.01,
+      "note": "C-6: 頭にロールとピッチが同時にある。頭の Yaw / Pitch の規則は T-Drive（Unity 準拠）を正とする（UE 版とは前方向が ±Y のとき最大 7° ほど違う）。期待値は Python 実装"
+    },
+    {
+      "name": "ue_axis+Y_roll_pitch1_camera_b",
+      "source": "python-port",
+      "mode": "bone",
+      "space": {"unit": "cm", "upAxis": "Z", "handedness": "left"},
+      "headPos": [10, 20, 30],
+      "headRotation": [0.162010335521, 0.285148851609, 0.108587714552, 0.938430334047],
+      "forwardAxis": "+Y",
+      "centerOffset": [0, 0, 0],
+      "viewerPos": [160, 100, 90],
+      "expect": {
+        "yawDeg": 68.803244941,
+        "pitchDeg": 19.440034828
+      },
+      "toleranceDeg": 0.01,
+      "note": "C-6: 頭にロールとピッチが同時にある。頭の Yaw / Pitch の規則は T-Drive（Unity 準拠）を正とする（UE 版とは前方向が ±Y のとき最大 7° ほど違う）。期待値は Python 実装"
+    },
+    {
+      "name": "ue_axis+Y_roll_pitch1_camera_c",
+      "source": "python-port",
+      "mode": "bone",
+      "space": {"unit": "cm", "upAxis": "Z", "handedness": "left"},
+      "headPos": [10, 20, 30],
+      "headRotation": [0.162010335521, 0.285148851609, 0.108587714552, 0.938430334047],
+      "forwardAxis": "+Y",
+      "centerOffset": [0, 0, 0],
+      "viewerPos": [-80, -100, 70],
+      "expect": {
+        "yawDeg": -136.254370477,
+        "pitchDeg": 14.931417178
+      },
+      "toleranceDeg": 0.01,
+      "note": "C-6: 頭にロールとピッチが同時にある。頭の Yaw / Pitch の規則は T-Drive（Unity 準拠）を正とする（UE 版とは前方向が ±Y のとき最大 7° ほど違う）。期待値は Python 実装"
+    },
+    {
+      "name": "ue_axis+Y_roll_pitch2_camera_b",
+      "source": "python-port",
+      "mode": "bone",
+      "space": {"unit": "cm", "upAxis": "Z", "handedness": "left"},
+      "headPos": [10, 20, 30],
+      "headRotation": [-0.326190408187, -0.282571020822, -0.102847440645, 0.896200780937],
+      "forwardAxis": "+Y",
+      "centerOffset": [0, 0, 0],
+      "viewerPos": [160, 100, 90],
+      "expect": {
+        "yawDeg": 36.226569769,
+        "pitchDeg": 19.440034828
+      },
+      "toleranceDeg": 0.01,
+      "note": "C-6: 頭にロールとピッチが同時にある。頭の Yaw / Pitch の規則は T-Drive（Unity 準拠）を正とする（UE 版とは前方向が ±Y のとき最大 7° ほど違う）。期待値は Python 実装"
+    },
+    {
+      "name": "ue_axis-Y_roll_pitch1_camera_a",
+      "source": "python-port",
+      "mode": "bone",
+      "space": {"unit": "cm", "upAxis": "Z", "handedness": "left"},
+      "headPos": [10, 20, 30],
+      "headRotation": [0.162010335521, 0.285148851609, 0.108587714552, 0.938430334047],
+      "forwardAxis": "-Y",
+      "centerOffset": [0, 0, 0],
+      "viewerPos": [10, -80, 10],
+      "expect": {
+        "yawDeg": 6.875731877,
+        "pitchDeg": -11.309932474
+      },
+      "toleranceDeg": 0.01,
+      "note": "C-6: 頭にロールとピッチが同時にある。頭の Yaw / Pitch の規則は T-Drive（Unity 準拠）を正とする（UE 版とは前方向が ±Y のとき最大 7° ほど違う）。期待値は Python 実装"
+    },
+    {
+      "name": "ue_axis-Y_roll_pitch1_camera_b",
+      "source": "python-port",
+      "mode": "bone",
+      "space": {"unit": "cm", "upAxis": "Z", "handedness": "left"},
+      "headPos": [10, 20, 30],
+      "headRotation": [0.162010335521, 0.285148851609, 0.108587714552, 0.938430334047],
+      "forwardAxis": "-Y",
+      "centerOffset": [0, 0, 0],
+      "viewerPos": [160, 100, 90],
+      "expect": {
+        "yawDeg": -111.196755059,
+        "pitchDeg": 19.440034828
+      },
+      "toleranceDeg": 0.01,
+      "note": "C-6: 頭にロールとピッチが同時にある。頭の Yaw / Pitch の規則は T-Drive（Unity 準拠）を正とする（UE 版とは前方向が ±Y のとき最大 7° ほど違う）。期待値は Python 実装"
+    },
+    {
+      "name": "ue_axis-Y_roll_pitch1_camera_c",
+      "source": "python-port",
+      "mode": "bone",
+      "space": {"unit": "cm", "upAxis": "Z", "handedness": "left"},
+      "headPos": [10, 20, 30],
+      "headRotation": [0.162010335521, 0.285148851609, 0.108587714552, 0.938430334047],
+      "forwardAxis": "-Y",
+      "centerOffset": [0, 0, 0],
+      "viewerPos": [-80, -100, 70],
+      "expect": {
+        "yawDeg": 43.745629523,
+        "pitchDeg": 14.931417178
+      },
+      "toleranceDeg": 0.01,
+      "note": "C-6: 頭にロールとピッチが同時にある。頭の Yaw / Pitch の規則は T-Drive（Unity 準拠）を正とする（UE 版とは前方向が ±Y のとき最大 7° ほど違う）。期待値は Python 実装"
+    },
+    {
+      "name": "ue_axis-Y_roll_pitch2_camera_b",
+      "source": "python-port",
+      "mode": "bone",
+      "space": {"unit": "cm", "upAxis": "Z", "handedness": "left"},
+      "headPos": [10, 20, 30],
+      "headRotation": [-0.326190408187, -0.282571020822, -0.102847440645, 0.896200780937],
+      "forwardAxis": "-Y",
+      "centerOffset": [0, 0, 0],
+      "viewerPos": [160, 100, 90],
+      "expect": {
+        "yawDeg": -143.773430231,
+        "pitchDeg": 19.440034828
+      },
+      "toleranceDeg": 0.01,
+      "note": "C-6: 頭にロールとピッチが同時にある。頭の Yaw / Pitch の規則は T-Drive（Unity 準拠）を正とする（UE 版とは前方向が ±Y のとき最大 7° ほど違う）。期待値は Python 実装"
+    },
+    {
+      "name": "maya_axis+Z_roll_pitch1_camera_a",
+      "source": "python-port",
+      "mode": "bone",
+      "space": {"unit": "cm", "upAxis": "Y", "handedness": "right"},
+      "headPos": [0, 0, 0],
+      "headRotation": [0.285148851609, 0.108587714552, 0.162010335521, 0.938430334047],
+      "forwardAxis": "+Z",
+      "centerOffset": [0, 0, 0],
+      "viewerPos": [100, -20, 0],
+      "expect": {
+        "yawDeg": 70.0,
+        "pitchDeg": -11.309932474
+      },
+      "toleranceDeg": 0.01,
+      "note": "C-6: 頭にロールとピッチが同時にある。頭の Yaw / Pitch の規則は T-Drive（Unity 準拠）を正とする（UE 版とは前方向が ±Y のとき最大 7° ほど違う）。期待値は Python 実装"
+    },
+    {
+      "name": "maya_axis+Z_roll_pitch1_camera_b",
+      "source": "python-port",
+      "mode": "bone",
+      "space": {"unit": "cm", "upAxis": "Y", "handedness": "right"},
+      "headPos": [0, 0, 0],
+      "headRotation": [0.285148851609, 0.108587714552, 0.162010335521, 0.938430334047],
+      "forwardAxis": "+Z",
+      "centerOffset": [0, 0, 0],
+      "viewerPos": [80, 60, 150],
+      "expect": {
+        "yawDeg": 8.072486936,
+        "pitchDeg": 19.440034828
+      },
+      "toleranceDeg": 0.01,
+      "note": "C-6: 頭にロールとピッチが同時にある。頭の Yaw / Pitch の規則は T-Drive（Unity 準拠）を正とする（UE 版とは前方向が ±Y のとき最大 7° ほど違う）。期待値は Python 実装"
+    },
+    {
+      "name": "maya_axis+Z_roll_pitch1_camera_c",
+      "source": "python-port",
+      "mode": "bone",
+      "space": {"unit": "cm", "upAxis": "Y", "handedness": "right"},
+      "headPos": [0, 0, 0],
+      "headRotation": [0.285148851609, 0.108587714552, 0.162010335521, 0.938430334047],
+      "forwardAxis": "+Z",
+      "centerOffset": [0, 0, 0],
+      "viewerPos": [-120, 40, -90],
+      "expect": {
+        "yawDeg": -146.869897646,
+        "pitchDeg": 14.931417178
+      },
+      "toleranceDeg": 0.01,
+      "note": "C-6: 頭にロールとピッチが同時にある。頭の Yaw / Pitch の規則は T-Drive（Unity 準拠）を正とする（UE 版とは前方向が ±Y のとき最大 7° ほど違う）。期待値は Python 実装"
+    },
+    {
+      "name": "maya_axis+Z_roll_pitch2_camera_b",
+      "source": "python-port",
+      "mode": "bone",
+      "space": {"unit": "cm", "upAxis": "Y", "handedness": "right"},
+      "headPos": [0, 0, 0],
+      "headRotation": [-0.282571020822, -0.102847440645, -0.326190408187, 0.896200780937],
+      "forwardAxis": "+Z",
+      "centerOffset": [0, 0, 0],
+      "viewerPos": [80, 60, 150],
+      "expect": {
+        "yawDeg": 28.072486936,
+        "pitchDeg": 19.440034828
+      },
+      "toleranceDeg": 0.01,
+      "note": "C-6: 頭にロールとピッチが同時にある。頭の Yaw / Pitch の規則は T-Drive（Unity 準拠）を正とする（UE 版とは前方向が ±Y のとき最大 7° ほど違う）。期待値は Python 実装"
+    },
+    {
+      "name": "maya_axis-Z_roll_pitch1_camera_a",
+      "source": "python-port",
+      "mode": "bone",
+      "space": {"unit": "cm", "upAxis": "Y", "handedness": "right"},
+      "headPos": [0, 0, 0],
+      "headRotation": [0.285148851609, 0.108587714552, 0.162010335521, 0.938430334047],
+      "forwardAxis": "-Z",
+      "centerOffset": [0, 0, 0],
+      "viewerPos": [100, -20, 0],
+      "expect": {
+        "yawDeg": -110.0,
+        "pitchDeg": -11.309932474
+      },
+      "toleranceDeg": 0.01,
+      "note": "C-6: 頭にロールとピッチが同時にある。頭の Yaw / Pitch の規則は T-Drive（Unity 準拠）を正とする（UE 版とは前方向が ±Y のとき最大 7° ほど違う）。期待値は Python 実装"
+    },
+    {
+      "name": "maya_axis-Z_roll_pitch1_camera_b",
+      "source": "python-port",
+      "mode": "bone",
+      "space": {"unit": "cm", "upAxis": "Y", "handedness": "right"},
+      "headPos": [0, 0, 0],
+      "headRotation": [0.285148851609, 0.108587714552, 0.162010335521, 0.938430334047],
+      "forwardAxis": "-Z",
+      "centerOffset": [0, 0, 0],
+      "viewerPos": [80, 60, 150],
+      "expect": {
+        "yawDeg": -171.927513064,
+        "pitchDeg": 19.440034828
+      },
+      "toleranceDeg": 0.01,
+      "note": "C-6: 頭にロールとピッチが同時にある。頭の Yaw / Pitch の規則は T-Drive（Unity 準拠）を正とする（UE 版とは前方向が ±Y のとき最大 7° ほど違う）。期待値は Python 実装"
+    },
+    {
+      "name": "maya_axis-Z_roll_pitch1_camera_c",
+      "source": "python-port",
+      "mode": "bone",
+      "space": {"unit": "cm", "upAxis": "Y", "handedness": "right"},
+      "headPos": [0, 0, 0],
+      "headRotation": [0.285148851609, 0.108587714552, 0.162010335521, 0.938430334047],
+      "forwardAxis": "-Z",
+      "centerOffset": [0, 0, 0],
+      "viewerPos": [-120, 40, -90],
+      "expect": {
+        "yawDeg": 33.130102354,
+        "pitchDeg": 14.931417178
+      },
+      "toleranceDeg": 0.01,
+      "note": "C-6: 頭にロールとピッチが同時にある。頭の Yaw / Pitch の規則は T-Drive（Unity 準拠）を正とする（UE 版とは前方向が ±Y のとき最大 7° ほど違う）。期待値は Python 実装"
+    },
+    {
+      "name": "maya_axis-Z_roll_pitch2_camera_b",
+      "source": "python-port",
+      "mode": "bone",
+      "space": {"unit": "cm", "upAxis": "Y", "handedness": "right"},
+      "headPos": [0, 0, 0],
+      "headRotation": [-0.282571020822, -0.102847440645, -0.326190408187, 0.896200780937],
+      "forwardAxis": "-Z",
+      "centerOffset": [0, 0, 0],
+      "viewerPos": [80, 60, 150],
+      "expect": {
+        "yawDeg": -151.927513064,
+        "pitchDeg": 19.440034828
+      },
+      "toleranceDeg": 0.01,
+      "note": "C-6: 頭にロールとピッチが同時にある。頭の Yaw / Pitch の規則は T-Drive（Unity 準拠）を正とする（UE 版とは前方向が ±Y のとき最大 7° ほど違う）。期待値は Python 実装"
+    },
+    {
+      "name": "maya_axis+X_roll_pitch1_camera_a",
+      "source": "python-port",
+      "mode": "bone",
+      "space": {"unit": "cm", "upAxis": "Y", "handedness": "right"},
+      "headPos": [0, 0, 0],
+      "headRotation": [0.285148851609, 0.108587714552, 0.162010335521, 0.938430334047],
+      "forwardAxis": "+X",
+      "centerOffset": [0, 0, 0],
+      "viewerPos": [100, -20, 0],
+      "expect": {
+        "yawDeg": -6.875731877,
+        "pitchDeg": -11.309932474
+      },
+      "toleranceDeg": 0.01,
+      "note": "C-6: 頭にロールとピッチが同時にある。頭の Yaw / Pitch の規則は T-Drive（Unity 準拠）を正とする（UE 版とは前方向が ±Y のとき最大 7° ほど違う）。期待値は Python 実装"
+    },
+    {
+      "name": "maya_axis+X_roll_pitch1_camera_b",
+      "source": "python-port",
+      "mode": "bone",
+      "space": {"unit": "cm", "upAxis": "Y", "handedness": "right"},
+      "headPos": [0, 0, 0],
+      "headRotation": [0.285148851609, 0.108587714552, 0.162010335521, 0.938430334047],
+      "forwardAxis": "+X",
+      "centerOffset": [0, 0, 0],
+      "viewerPos": [80, 60, 150],
+      "expect": {
+        "yawDeg": -68.803244941,
+        "pitchDeg": 19.440034828
+      },
+      "toleranceDeg": 0.01,
+      "note": "C-6: 頭にロールとピッチが同時にある。頭の Yaw / Pitch の規則は T-Drive（Unity 準拠）を正とする（UE 版とは前方向が ±Y のとき最大 7° ほど違う）。期待値は Python 実装"
+    },
+    {
+      "name": "maya_axis+X_roll_pitch1_camera_c",
+      "source": "python-port",
+      "mode": "bone",
+      "space": {"unit": "cm", "upAxis": "Y", "handedness": "right"},
+      "headPos": [0, 0, 0],
+      "headRotation": [0.285148851609, 0.108587714552, 0.162010335521, 0.938430334047],
+      "forwardAxis": "+X",
+      "centerOffset": [0, 0, 0],
+      "viewerPos": [-120, 40, -90],
+      "expect": {
+        "yawDeg": 136.254370477,
+        "pitchDeg": 14.931417178
+      },
+      "toleranceDeg": 0.01,
+      "note": "C-6: 頭にロールとピッチが同時にある。頭の Yaw / Pitch の規則は T-Drive（Unity 準拠）を正とする（UE 版とは前方向が ±Y のとき最大 7° ほど違う）。期待値は Python 実装"
+    },
+    {
+      "name": "maya_axis+X_roll_pitch2_camera_b",
+      "source": "python-port",
+      "mode": "bone",
+      "space": {"unit": "cm", "upAxis": "Y", "handedness": "right"},
+      "headPos": [0, 0, 0],
+      "headRotation": [-0.282571020822, -0.102847440645, -0.326190408187, 0.896200780937],
+      "forwardAxis": "+X",
+      "centerOffset": [0, 0, 0],
+      "viewerPos": [80, 60, 150],
+      "expect": {
+        "yawDeg": -36.226569769,
+        "pitchDeg": 19.440034828
+      },
+      "toleranceDeg": 0.01,
+      "note": "C-6: 頭にロールとピッチが同時にある。頭の Yaw / Pitch の規則は T-Drive（Unity 準拠）を正とする（UE 版とは前方向が ±Y のとき最大 7° ほど違う）。期待値は Python 実装"
+    },
+    {
+      "name": "unity_axis+Z_roll_pitch1_camera_a",
+      "source": "python-port",
+      "mode": "bone",
+      "space": {"unit": "m", "upAxis": "Y", "handedness": "left"},
+      "headPos": [0, 0, 0],
+      "headRotation": [0.285148851609, 0.108587714552, 0.162010335521, 0.938430334047],
+      "forwardAxis": "+Z",
+      "centerOffset": [0, 0, 0],
+      "viewerPos": [1, -0.2, 0],
+      "expect": {
+        "yawDeg": -70.0,
+        "pitchDeg": -11.309932474
+      },
+      "toleranceDeg": 0.01,
+      "note": "C-6: 頭にロールとピッチが同時にある。頭の Yaw / Pitch の規則は T-Drive（Unity 準拠）を正とする（UE 版とは前方向が ±Y のとき最大 7° ほど違う）。期待値は Python 実装"
+    },
+    {
+      "name": "unity_axis+Z_roll_pitch1_camera_b",
+      "source": "python-port",
+      "mode": "bone",
+      "space": {"unit": "m", "upAxis": "Y", "handedness": "left"},
+      "headPos": [0, 0, 0],
+      "headRotation": [0.285148851609, 0.108587714552, 0.162010335521, 0.938430334047],
+      "forwardAxis": "+Z",
+      "centerOffset": [0, 0, 0],
+      "viewerPos": [0.8, 0.6, 1.5],
+      "expect": {
+        "yawDeg": -8.072486936,
+        "pitchDeg": 19.440034828
+      },
+      "toleranceDeg": 0.01,
+      "note": "C-6: 頭にロールとピッチが同時にある。頭の Yaw / Pitch の規則は T-Drive（Unity 準拠）を正とする（UE 版とは前方向が ±Y のとき最大 7° ほど違う）。期待値は Python 実装"
+    },
+    {
+      "name": "unity_axis+Z_roll_pitch1_camera_c",
+      "source": "python-port",
+      "mode": "bone",
+      "space": {"unit": "m", "upAxis": "Y", "handedness": "left"},
+      "headPos": [0, 0, 0],
+      "headRotation": [0.285148851609, 0.108587714552, 0.162010335521, 0.938430334047],
+      "forwardAxis": "+Z",
+      "centerOffset": [0, 0, 0],
+      "viewerPos": [-1.2, 0.4, -0.9],
+      "expect": {
+        "yawDeg": 146.869897646,
+        "pitchDeg": 14.931417178
+      },
+      "toleranceDeg": 0.01,
+      "note": "C-6: 頭にロールとピッチが同時にある。頭の Yaw / Pitch の規則は T-Drive（Unity 準拠）を正とする（UE 版とは前方向が ±Y のとき最大 7° ほど違う）。期待値は Python 実装"
+    },
+    {
+      "name": "unity_axis+Z_roll_pitch2_camera_b",
+      "source": "python-port",
+      "mode": "bone",
+      "space": {"unit": "m", "upAxis": "Y", "handedness": "left"},
+      "headPos": [0, 0, 0],
+      "headRotation": [-0.282571020822, -0.102847440645, -0.326190408187, 0.896200780937],
+      "forwardAxis": "+Z",
+      "centerOffset": [0, 0, 0],
+      "viewerPos": [0.8, 0.6, 1.5],
+      "expect": {
+        "yawDeg": -28.072486936,
+        "pitchDeg": 19.440034828
+      },
+      "toleranceDeg": 0.01,
+      "note": "C-6: 頭にロールとピッチが同時にある。頭の Yaw / Pitch の規則は T-Drive（Unity 準拠）を正とする（UE 版とは前方向が ±Y のとき最大 7° ほど違う）。期待値は Python 実装"
+    },
+    {
+      "name": "unity_axis-Z_roll_pitch1_camera_a",
+      "source": "python-port",
+      "mode": "bone",
+      "space": {"unit": "m", "upAxis": "Y", "handedness": "left"},
+      "headPos": [0, 0, 0],
+      "headRotation": [0.285148851609, 0.108587714552, 0.162010335521, 0.938430334047],
+      "forwardAxis": "-Z",
+      "centerOffset": [0, 0, 0],
+      "viewerPos": [1, -0.2, 0],
+      "expect": {
+        "yawDeg": 110.0,
+        "pitchDeg": -11.309932474
+      },
+      "toleranceDeg": 0.01,
+      "note": "C-6: 頭にロールとピッチが同時にある。頭の Yaw / Pitch の規則は T-Drive（Unity 準拠）を正とする（UE 版とは前方向が ±Y のとき最大 7° ほど違う）。期待値は Python 実装"
+    },
+    {
+      "name": "unity_axis-Z_roll_pitch1_camera_b",
+      "source": "python-port",
+      "mode": "bone",
+      "space": {"unit": "m", "upAxis": "Y", "handedness": "left"},
+      "headPos": [0, 0, 0],
+      "headRotation": [0.285148851609, 0.108587714552, 0.162010335521, 0.938430334047],
+      "forwardAxis": "-Z",
+      "centerOffset": [0, 0, 0],
+      "viewerPos": [0.8, 0.6, 1.5],
+      "expect": {
+        "yawDeg": 171.927513064,
+        "pitchDeg": 19.440034828
+      },
+      "toleranceDeg": 0.01,
+      "note": "C-6: 頭にロールとピッチが同時にある。頭の Yaw / Pitch の規則は T-Drive（Unity 準拠）を正とする（UE 版とは前方向が ±Y のとき最大 7° ほど違う）。期待値は Python 実装"
+    },
+    {
+      "name": "unity_axis-Z_roll_pitch1_camera_c",
+      "source": "python-port",
+      "mode": "bone",
+      "space": {"unit": "m", "upAxis": "Y", "handedness": "left"},
+      "headPos": [0, 0, 0],
+      "headRotation": [0.285148851609, 0.108587714552, 0.162010335521, 0.938430334047],
+      "forwardAxis": "-Z",
+      "centerOffset": [0, 0, 0],
+      "viewerPos": [-1.2, 0.4, -0.9],
+      "expect": {
+        "yawDeg": -33.130102354,
+        "pitchDeg": 14.931417178
+      },
+      "toleranceDeg": 0.01,
+      "note": "C-6: 頭にロールとピッチが同時にある。頭の Yaw / Pitch の規則は T-Drive（Unity 準拠）を正とする（UE 版とは前方向が ±Y のとき最大 7° ほど違う）。期待値は Python 実装"
+    },
+    {
+      "name": "unity_axis-Z_roll_pitch2_camera_b",
+      "source": "python-port",
+      "mode": "bone",
+      "space": {"unit": "m", "upAxis": "Y", "handedness": "left"},
+      "headPos": [0, 0, 0],
+      "headRotation": [-0.282571020822, -0.102847440645, -0.326190408187, 0.896200780937],
+      "forwardAxis": "-Z",
+      "centerOffset": [0, 0, 0],
+      "viewerPos": [0.8, 0.6, 1.5],
+      "expect": {
+        "yawDeg": 151.927513064,
+        "pitchDeg": 19.440034828
+      },
+      "toleranceDeg": 0.01,
+      "note": "C-6: 頭にロールとピッチが同時にある。頭の Yaw / Pitch の規則は T-Drive（Unity 準拠）を正とする（UE 版とは前方向が ±Y のとき最大 7° ほど違う）。期待値は Python 実装"
     }
   ]
 }

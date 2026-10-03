@@ -259,6 +259,7 @@ namespace TDrive.Facial.Core
             Vec3 axisVec;
             if (!TryAxisVector(forwardAxis, out axisVec)) throw new ArgumentException("未知の forwardAxis: '" + forwardAxis + "'");
             Vec3 fwd = toCanonical.Direction(RotateVector(headRotation, axisVec));
+            // 頭の Yaw / Pitch の規則は T-Drive（Unity 準拠）を正とする。UE 版とは、前方向が ±Y で頭にロールとピッチが両方あるとき最大 7° ほど違う
             double forwardYaw = Math.Atan2(fwd.Y, fwd.X) * (180.0 / Math.PI);
             FacialCore.ComputeViewAngles(toCanonical.Position(center), forwardYaw, toCanonical.Position(viewerPos),
                 out yawDeg, out pitchDeg);
