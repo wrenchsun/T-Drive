@@ -97,7 +97,7 @@ namespace TDrive.Facial.Timeline
                 float w = playable.GetInputWeight(i);
                 if (b == null || w <= 0f) continue;
                 w *= norm;
-                if (b.useExaggeration) { anyEx = true; exSum += w * Mathf.Clamp01(b.exaggeration); }
+                if (b.effUseExaggeration) { anyEx = true; exSum += w * Mathf.Clamp01(b.effExaggeration); }
                 else exSum += w;
             }
             if (anyEx)
@@ -243,10 +243,17 @@ namespace TDrive.Facial.Timeline
             return track != null && track.name != null && track.name.EndsWith("(auto)", System.StringComparison.Ordinal) ? -1 : 0;
         }
 
-        // 編集時プレビューの視点（Runner の editViewer。Auto = メインカメラがあればそれ、無ければ Scene ビュー）
+        // 編集時プレビューの視点（Runner の editViewer）。
+        //   Auto = D-Drive などの Fallback が視点を返すなら null（Runner が Fallback を使う）→ メインカメラ → Scene ビュー
+        //   SceneView / MainCamera = その指定が Fallback より先（Transform を渡す）
         static Transform EditViewer(FacialCorrectionRunner runner)
         {
             FacialEditViewer mode = runner != null ? runner.editViewer : FacialEditViewer.Auto;
+            if (mode == FacialEditViewer.Auto && runner != null)
+            {
+                Vector3 p; Quaternion r; float f;
+                if (FacialViewResolver.TryResolve(runner.transform, out p, out r, out f)) return null;
+            }
             Camera main = mode == FacialEditViewer.SceneView ? null : Camera.main;
             if (main != null) return main.transform;
 #if UNITY_EDITOR

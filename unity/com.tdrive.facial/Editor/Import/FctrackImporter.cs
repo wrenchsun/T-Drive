@@ -28,6 +28,7 @@ namespace TDrive.Facial.Editor
                 {
                     case "alpha": a.alpha = keys; break;
                     case "useManual": a.useManual = keys; break;
+                    case FctrackReader.ExaggerationCurve: a.exaggeration = keys; break;
                     case "manualYaw": a.manualYaw = keys; break;
                     case "manualPitch": a.manualPitch = keys; break;
                     default:

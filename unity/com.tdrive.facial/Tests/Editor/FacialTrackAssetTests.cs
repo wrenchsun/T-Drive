@@ -77,6 +77,22 @@ namespace TDrive.Facial.Tests
         }
 
         [Test]
+        public void ConverterFillsTheExaggerationCurveOnlyWhenPresent()
+        {
+            const string ex = "{\"format\":\"FacialTrack\",\"version\":1,\"shot\":\"a\",\"model\":\"b\",\"range\":[0,30],\"curves\":{\"exaggeration\":[[0.0,1.0],[0.5,0.0]]}}";
+            FacialTrackAsset a = FctrackConverter.Build(FctrackReader.Read(ex), "x");
+            FacialTrackAsset old = FctrackConverter.Build(FctrackReader.Read(Json), "y");
+            try
+            {
+                Assert.IsTrue(a.HasExaggeration);
+                Assert.AreEqual(2, a.exaggeration.Length);
+                Assert.AreEqual(0f, a.exaggeration[1].value);
+                Assert.IsFalse(old.HasExaggeration, "古い .fctrack = 誇張は変えない");
+            }
+            finally { Object.DestroyImmediate(a); Object.DestroyImmediate(old); }
+        }
+
+        [Test]
         public void EmptyCurvesGiveAnAssetWithoutAnyCurve()
         {
             FacialTrackAsset a = FctrackConverter.Build(FctrackReader.Read("{\"format\":\"FacialTrack\",\"version\":1,\"shot\":\"a\",\"model\":\"b\",\"range\":[0,30]}"), "x");

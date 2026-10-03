@@ -92,10 +92,35 @@ namespace TDrive.Facial.Tests
             Assert.Throws<FctrackException>(() => FctrackReader.Read(""));
         }
 
+        // F5-12: 誇張の固定カーブ（任意。名前は exaggeration）。テスト内の JSON（共通のテストデータは変えない）
+        const string WithExaggeration =
+            "{\"format\":\"FacialTrack\",\"version\":1,\"shot\":\"S010\",\"model\":\"shizuku\",\"frameRate\":30,\"range\":[0,60]," +
+            "\"curves\":{\"exaggeration\":[[0.0,1.0],[1.0,0.25]]}}";
+
+        [Test]
+        public void ExaggerationIsAnOptionalFixedCurve()
+        {
+            FcTrack t = FctrackReader.Read(WithExaggeration);
+            Assert.AreEqual(2, t.Curves[FctrackReader.ExaggerationCurve].Count);
+            Assert.AreEqual(0.25, t.Curves["exaggeration"][1].Value);
+            Assert.AreEqual("exaggeration", FctrackReader.ExaggerationCurve);
+            Assert.Contains("exaggeration", FctrackReader.FixedCurves);
+            // 古い .fctrack（カーブなし）も読める
+            FcTrack old = FctrackReader.Read(Good);
+            Assert.IsFalse(old.Curves.ContainsKey("exaggeration"));
+        }
+
+        [Test]
+        public void ExaggerationNeedsTheKeyArrayForm()
+        {
+            var e = Assert.Throws<FctrackException>(() => FctrackReader.Read(WithExaggeration.Replace("[[0.0,1.0],[1.0,0.25]]", "0.5")));
+            StringAssert.Contains("exaggeration", e.Message);
+        }
+
         [Test]
         public void CurveNamesFollowThePythonRule()
         {
-            foreach (string ok in new[] { "alpha", "useManual", "manualYaw", "manualPitch", "emotion.Joy", "emotion.a.b" })
+            foreach (string ok in new[] { "alpha", "useManual", "manualYaw", "manualPitch", "exaggeration", "emotion.Joy", "emotion.a.b" })
                 Assert.IsTrue(FctrackReader.IsValidCurveName(ok), ok);
             foreach (string ng in new[] { "", "emotion.", "Alpha", "bogus", "emotionJoy" })
                 Assert.IsFalse(FctrackReader.IsValidCurveName(ng), ng);

@@ -60,7 +60,7 @@ namespace TDrive.Facial.Timeline
         public float stepFps;
 
         [Header("誇張")]
-        [Tooltip("オンのとき、このクリップの間だけ誇張（_Ex シェイプ）の強さを下の値にする")]
+        [Tooltip("オンのとき、このクリップの間だけ誇張（_Ex シェイプ）の強さを下の値にする（.fctrack に誇張のカーブがあっても、こちらが優先）。オフなら .fctrack のカーブに従う（カーブが無ければ変えない）")]
         public bool useExaggeration;
 
         [Tooltip("誇張の強さ（0〜1）。1 = 作った通り、0 = 誇張なし（重みを 1 までに収める）")]
@@ -76,6 +76,8 @@ namespace TDrive.Facial.Timeline
         [NonSerialized] public bool effUseAlpha;
         [NonSerialized] public float effAlpha;
         [NonSerialized] public FacialEmotionEntry[] effEmotions;
+        [NonSerialized] public bool effUseExaggeration;
+        [NonSerialized] public float effExaggeration;
         [NonSerialized] public bool effFixAngles;
         [NonSerialized] public float effYaw;
         [NonSerialized] public float effPitch;
@@ -89,6 +91,7 @@ namespace TDrive.Facial.Timeline
         public void UpdateEffective(double time)
         {
             effUseAlpha = useAlpha; effAlpha = alpha;
+            effUseExaggeration = useExaggeration; effExaggeration = exaggeration;
             effFixAngles = fixAngles; effYaw = yaw; effPitch = pitch;
             effEmotions = emotions;
             FacialTrackAsset a = track;
@@ -99,6 +102,13 @@ namespace TDrive.Facial.Timeline
             {
                 effUseAlpha = true;
                 effAlpha = Mathf.Clamp01(FacialTrackAsset.Sample(a.alpha, t, 1f));
+            }
+
+            // 誇張: 「誇張を使う」がオフのとき .fctrack の exaggeration（0〜1）を使う（カーブが無ければ従来どおり変えない）
+            if (!useExaggeration && a.HasExaggeration)
+            {
+                effUseExaggeration = true;
+                effExaggeration = Mathf.Clamp01(FacialTrackAsset.Sample(a.exaggeration, t, 1f));
             }
 
             // 角度: useManual > 0.5 のあいだ固定（角度のカーブが無ければ 0）

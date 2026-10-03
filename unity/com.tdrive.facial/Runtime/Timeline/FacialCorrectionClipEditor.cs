@@ -55,7 +55,7 @@ namespace TDrive.Facial.Timeline
                 Field(t, "stepFps", "fps", "補正の更新 fps（0 = 毎フレーム）。更新の間は前の重みのまま止まり、追従は使わず更新のたびに目標へ切り替わる");
 
             Section("誇張");
-            Toggle(t, "useExaggeration", "誇張を使う", "オンのとき、このクリップの間だけ誇張（_Ex シェイプ）の強さを下の値にする");
+            Toggle(t, "useExaggeration", "誇張を使う", "オンのとき、このクリップの間だけ誇張（_Ex シェイプ）の強さを下の値にする。オフのときは .fctrack の誇張のカーブに従う（無ければ変えない）");
             using (new EditorGUI.DisabledScope(!t.FindPropertyRelative("useExaggeration").boolValue))
                 Field(t, "exaggeration", "誇張（0〜1）", "1 = 作った通り、0 = 誇張なし。_Ex の無いキャラクターでは変化なし。重なったクリップは重みで混ざる");
 

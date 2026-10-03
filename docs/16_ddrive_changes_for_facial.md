@@ -24,7 +24,10 @@
 > | FC-3（= C-3） | 今の視点 `ViewCamera.TryGetCurrent` / `IViewProvider` | **実装済み**（同上） | Runner の視点の解決の**最後**の手段にブリッジが設定する（視点の指定 → 手動の角度 → これ）。Runtime は D-Drive を参照しない。**そのフレームのカット姿勢が要るので、LateUpdate で実行順 1000（`DDriveCutsceneCameraApplier`）より後に呼ぶ** = Runner は 10000 なので満たしている（変えない）→ FT-6 |
 > | FC-4 | 外部マーカーの受け口 `ICutsceneMarker` | **実装済み**（同上） | 今は使わない（クリップだけ）。一点で感情を切り替えるマーカーが要るときに使う |
 > | FC-6 / FC-14 | 取り込みルールの外部拡張（`IImportRuleFolderOptOut` ほか）・変換表 / テクスチャ規則の提供口 | **実装済み**（同上） | `.fctrack` は `SourceAssets/Cutscene/` に置くので今は不要。`SourceAssets/Facial/` を使うことにしたら `"Facial"` を返す型を足す |
-> | FC-7〜FC-9、FC-13、FC-16〜FC-19 | 依存グラフ・BlendShape カーブ ほか | 未着手 / 保留 | — |
+> | FC-7 / FC-19 | 依存関係の追跡が Timeline の中の参照まで届く / 検証の警告の調整 | **実装済み**（origin/main `59111a7`） | 対応不要 |
+> | FC-8、FC-9、FC-13、FC-16〜FC-18 | BlendShape カーブ ほか | 保留 / 後回し | — |
+>
+> **T-Drive 側の対応（2026-10-03、FT-6）**: FC-5 と FC-3 に対応済み。ローカルブランチ `tdrive-facial` は origin/main `59111a7` を取り込み済み。
 >
 > 注: D-Drive の版はまだ 1.3.1（1.4.0 のタグは未発行）。新しい型を使うコードは、版の条件付きのアセンブリ（レビュー指摘 E-1）に置く。
 >

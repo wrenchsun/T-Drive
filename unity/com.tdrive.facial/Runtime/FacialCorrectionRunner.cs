@@ -54,7 +54,7 @@ namespace TDrive.Facial
     }
 
     /// <summary>直近の評価で使った視点の出どころ（診断・デバッグ表示用）。</summary>
-    public enum FacialViewerSource { None, Override, Component, Parameter, MainCamera }
+    public enum FacialViewerSource { None, Override, Component, Parameter, MainCamera, Fallback }
 
     /// <summary>直近の評価で使った角度の出どころ（診断・デバッグ表示用）。</summary>
     public enum FacialAngleSource { None, Viewer, ComponentManual, OverrideManual, Blended, Explicit }
@@ -118,7 +118,7 @@ namespace TDrive.Facial
         public Renderer[] materialTargets;
 
         [Header("プレビュー")]
-        [Tooltip("Timeline を再生せずに（編集時に）プレビューするとき、補正の視点にするカメラ。自動 = メインカメラ（タグ MainCamera）があればそれ（ゲームビューのカットと同じ見え方）、無ければ Scene ビューのカメラ。再生中は使わない")]
+        [Tooltip("Timeline を再生せずに（編集時に）プレビューするとき、補正の視点にするカメラ。自動 = D-Drive などが今の視点を返せばそれ、無ければメインカメラ（タグ MainCamera）、それも無ければ Scene ビューのカメラ。Scene ビュー / メインカメラを選ぶと、D-Drive の視点より先にそれを使う。再生中は使わない。視点の順（再生中）: クリップの視点 → このコンポーネントの視点 → D-Drive の今の視点 → メインカメラ")]
         public FacialEditViewer editViewer = FacialEditViewer.Auto;
 
         // --- 診断（読み取り専用） ---
@@ -143,6 +143,11 @@ namespace TDrive.Facial
 
         /// <summary>直近の評価で使った視点（無ければ null）。</summary>
         public Transform LastViewer { get { return _lastViewer; } }
+        /// <summary>直近の評価で使った視点の位置（ワールド）。HasLastViewerPosition が false なら無効。Fallback の視点は Transform が無いのでこちらで読む。</summary>
+        public Vector3 LastViewerPosition { get { return _lastViewerPos; } }
+        public bool HasLastViewerPosition { get { return _hasViewerPos; } }
+        /// <summary>直近の評価で使った視点の縦画角（度。分からなければ 0）。</summary>
+        public float LastViewerFov { get { return _lastViewerFov; } }
         /// <summary>直近の評価で使った視点の出どころ。</summary>
         public FacialViewerSource LastViewerSource { get { return _lastViewerSource; } }
         /// <summary>直近の評価で使った角度の出どころ。</summary>
@@ -161,6 +166,9 @@ namespace TDrive.Facial
             ScanTransforms.Clear();
         }
         Transform _lastViewer;
+        Vector3 _lastViewerPos;
+        bool _hasViewerPos;
+        float _lastViewerFov;
         FacialViewerSource _lastViewerSource;
         FacialAngleSource _lastAngleSource;
 
@@ -587,6 +595,15 @@ namespace TDrive.Facial
             return true;
         }
 
+        /// <summary>
+        /// 左右反転（スケール -1）のボーンで、世界での前方向と中心のずれを求める（Runner の角度計算とデバッグ表示で同じ式を使う。docs/19 §5）。
+        /// </summary>
+        public static void MirrorSafeDirections(Transform bone, Vec3 forwardAxis, Vector3 centerOffset, out Vector3 worldForward, out Vector3 worldOffset)
+        {
+            worldForward = bone.TransformDirection(new Vector3((float)forwardAxis.X, (float)forwardAxis.Y, (float)forwardAxis.Z));
+            worldOffset = bone.TransformDirection(centerOffset);
+        }
+
         void StepCore(float deltaTime, Transform viewerParam, bool explicitAngles, double explicitYaw, double explicitPitch)
         {
             FacialCorrectionData d = data;
@@ -602,18 +619,38 @@ namespace TDrive.Facial
 
             FacialEffectiveParams p = FacialCorrectionOverrides.Resolve(d, overrides);
 
-            // 1 視点: 手動の角度 > 指定した Transform > メインカメラ
+            // 1 視点（位置）: 上書きの視点 > viewerOverride > EvaluateNow の引数（編集時の editViewer）> FacialViewResolver.Fallback（D-Drive の今の視点）> メインカメラ
+            //   手動の角度のときも距離（レイヤー・フェード）には視点の位置を使うので、同じ順で解決する
             Transform viewer = null;
+            Vector3 viewerPos = default(Vector3);
+            bool haveViewer = false;
             FacialViewerSource viewerSource = FacialViewerSource.None;
             if (hadOverride && ov.viewer != null) { viewer = ov.viewer; viewerSource = FacialViewerSource.Override; }
             else if (viewerOverride != null) { viewer = viewerOverride; viewerSource = FacialViewerSource.Component; }
             else if (viewerParam != null) { viewer = viewerParam; viewerSource = FacialViewerSource.Parameter; }
+            if (viewer != null) { viewerPos = viewer.position; haveViewer = true; }
             else
             {
-                Camera cam = Camera.main;
-                if (cam != null) { viewer = cam.transform; viewerSource = FacialViewerSource.MainCamera; }
+                Quaternion fbRot;
+                float fbFov;
+                if (FacialViewResolver.TryResolve(transform, out viewerPos, out fbRot, out fbFov))
+                {
+                    haveViewer = true; viewerSource = FacialViewerSource.Fallback; _lastViewerFov = fbFov;
+                }
+                else
+                {
+                    Camera cam = Camera.main;
+                    if (cam != null) { viewer = cam.transform; viewerPos = viewer.position; haveViewer = true; viewerSource = FacialViewerSource.MainCamera; _lastViewerFov = cam.fieldOfView; }
+                }
+            }
+            if (viewer != null && viewerSource != FacialViewerSource.MainCamera && viewerSource != FacialViewerSource.Fallback)
+            {
+                Camera vc;
+                _lastViewerFov = viewer.TryGetComponent(out vc) ? vc.fieldOfView : 0f;
             }
             _lastViewer = viewer;
+            _lastViewerPos = viewerPos;
+            _hasViewerPos = haveViewer;
             _lastViewerSource = viewerSource;
 
             // 2 角度: 直接指定 > 上書きの手動（manualAngleBlend < 1 ならライブとの補間）> コンポーネントの手動 > 視点
@@ -629,21 +666,21 @@ namespace TDrive.Facial
                 if (!manualOv || blend < 1f)
                 {
                     if (useManualAngles) { liveYaw = manualYaw; livePitch = manualPitch; haveLive = true; liveSource = FacialAngleSource.ComponentManual; }
-                    else if (viewer != null)
+                    else if (haveViewer)
                     {
                         Transform bone = _baseResolved;
                         if (bone != null)
                         {
                             Vector3 hp = bone.position;
                             Quaternion hr = bone.rotation;
-                            Vector3 vp = viewer.position;
+                            Vector3 vp = viewerPos;
                             Vector3 co = d.grid.centerOffset;
                             Vec3 axisV;
                             if (bone.localToWorldMatrix.determinant < 0f && FacialSpace.TryAxisVector(_forwardAxis, out axisV))
                             {
                                 // 左右反転（スケール -1）のボーン: 回転だけでは軸の向きが裏返るので、世界での向きを TransformDirection で求める（docs/19 §5）
-                                Vector3 wf = bone.TransformDirection(new Vector3((float)axisV.X, (float)axisV.Y, (float)axisV.Z));
-                                Vector3 wo = bone.TransformDirection(co);
+                                Vector3 wf, wo;
+                                MirrorSafeDirections(bone, axisV, co, out wf, out wo);
                                 FacialSpace.ComputeViewAnglesFromWorldVectors(UnityToCanonical, new Vec3(hp.x, hp.y, hp.z),
                                     new Vec3(wo.x, wo.y, wo.z), new Vec3(wf.x, wf.y, wf.z), new Vec3(vp.x, vp.y, vp.z), out liveYaw, out livePitch);
                             }
@@ -689,15 +726,15 @@ namespace TDrive.Facial
             // 優先: 上書き（Timeline・PushOverride）の値 > 距離で決めるレイヤーの距離の重み > Runner の emotionWeights
             float[] ovEmo = hadOverride ? ov.emotionWeights : null;
             int layerCount = d.layers.Length;
-            double viewDistance = viewer != null
-                ? (double)Vector3.Distance(viewer.position, (_baseResolved != null ? _baseResolved : transform).position) : 0.0;
+            double viewDistance = haveViewer
+                ? (double)Vector3.Distance(viewerPos, (_baseResolved != null ? _baseResolved : transform).position) : 0.0;
             if (_emo.Length != layerCount) { _emo = new double[layerCount]; _rawEmo = new double[layerCount]; _hasRaw = false; }
             bool emoSame = true;
             for (int i = 0; i < layerCount; i++)
             {
                 double w = 0.0;
                 FacialLayerWeightData lwd = d.layers[i].weight;
-                if (i > 0 && lwd.source == FacialLayerWeightSource.Distance && viewer != null)
+                if (i > 0 && lwd.source == FacialLayerWeightSource.Distance && haveViewer)
                 {
                     w = FacialCore.LayerWeightFromDistance(viewDistance, lwd.start, lwd.end, lwd.from, lwd.to);
                     if (ovEmo != null && i < ovEmo.Length && !float.IsNaN(ovEmo[i])) w = ovEmo[i]; // Timeline などの明示の値が優先
@@ -761,10 +798,10 @@ namespace TDrive.Facial
             }
             double exprScale = FacialCore.ExpressionScale((double)p.expressionDampen, s);
             double distFade = 1.0;
-            if (viewer != null)
+            if (haveViewer)
             {
                 Transform origin = _baseResolved != null ? _baseResolved : transform;
-                distFade = FacialCore.DistanceFade((double)Vector3.Distance(viewer.position, origin.position),
+                distFade = FacialCore.DistanceFade((double)Vector3.Distance(viewerPos, origin.position),
                     (double)p.fadeStart, (double)p.fadeEnd);
             }
             double scale = exprScale * distFade * System.Math.Max(0.0, (double)p.globalAlpha) * Mathf.Clamp01(alpha);

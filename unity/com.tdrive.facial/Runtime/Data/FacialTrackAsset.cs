@@ -33,12 +33,14 @@ namespace TDrive.Facial
         [Tooltip("角度の固定のオン / オフ（0 か 1。0.5 より大きいとオン）のカーブ")] public FacialKey[] useManual = new FacialKey[0];
         [Tooltip("固定する Yaw（度）のカーブ")] public FacialKey[] manualYaw = new FacialKey[0];
         [Tooltip("固定する Pitch（度）のカーブ")] public FacialKey[] manualPitch = new FacialKey[0];
+        [Tooltip("誇張の強さ（0〜1）のカーブ。空 = 打っていない（誇張は変えない）")] public FacialKey[] exaggeration = new FacialKey[0];
         [Tooltip("感情レイヤーごとの重みのカーブ")] public FacialEmotionCurve[] emotions = new FacialEmotionCurve[0];
 
         /// <summary>範囲の長さ（秒）。</summary>
         public float DurationSeconds { get { return frameRate > 0f ? Mathf.Max(0f, (rangeEnd - rangeStart) / frameRate) : 0f; } }
 
         public bool HasAlpha { get { return alpha != null && alpha.Length > 0; } }
+        public bool HasExaggeration { get { return exaggeration != null && exaggeration.Length > 0; } }
         public bool HasUseManual { get { return useManual != null && useManual.Length > 0; } }
         public bool HasEmotions { get { return emotions != null && emotions.Length > 0; } }
 

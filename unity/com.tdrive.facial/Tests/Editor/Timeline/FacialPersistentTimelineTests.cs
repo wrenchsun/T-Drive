@@ -115,8 +115,14 @@ namespace TDrive.Facial.Tests.Timeline
             Assert.AreSame(main.transform, R.LastViewer, "メインカメラ指定");
 
             R.editViewer = FacialEditViewer.Auto;
-            _h.At(1.0);
-            Assert.AreSame(main.transform, R.LastViewer, "自動: メインカメラがあればそれ");
+            FacialViewResolver.Provider savedFallback = FacialViewResolver.Fallback;
+            FacialViewResolver.Fallback = null; // 自動は D-Drive の視点（Fallback）があればそちらが先。ここは Fallback なしの順を確かめる（Fallback ありは FacialViewFallbackEditTests）
+            try
+            {
+                _h.At(1.0);
+                Assert.AreSame(main.transform, R.LastViewer, "自動: メインカメラがあればそれ");
+            }
+            finally { FacialViewResolver.Fallback = savedFallback; }
 
             UnityEditor.SceneView sv = UnityEditor.SceneView.lastActiveSceneView;
             if (sv != null && sv.camera != null && sv.camera.transform != main.transform)

@@ -231,7 +231,7 @@ FacialController（カメラ角度に応じた顔の補正。UE 版からの移�
 | FT-3 | Maya → Timeline: `.fctrack` の出力（プレビュー用ノードのキー）+ Unity 側で `.playable` にトラックを足す / 更新する | — | 3 | FT-2 F1-5 | Maya で打ったキーが Timeline のクリップ / カーブになる。再出力でデザイナーが足したトラックは残る | ✅ Maya: 出力タブの `.fctrack`。Unity: `FctrackImporter` → `FacialTrackAsset`、クリップがカーブで動く、`FacialTrackTimelineSync`（`<役名>_Facial(auto)` を 1 本だけ管理）、D-Drive では `Assets/SourceAssets/Cutscene/<分類>/<ショット>__<モデル>.fctrack` を置くと自動で反映して SameAsTrack で結ぶ（順番が前後したら再試行 + メニューでやり直し）。**実際のカットシーンでの取り込みは未確認** |
 | FT-4 | D-Drive 側への提案の起票（チケット 7-8 の書き換え案・C-1〜C-9）※ D-Drive のリポジトリは読み取りのみなので、文面を用意して渡す | — | 0.5 | — | [16](16_ddrive_changes_for_facial.md) の内容が D-Drive のチケットの形になっている | ✅ D-Drive 側で起票済み（D-Drive `docs/51_tdrive_integration.md`・`docs/11_tasks.md` FC-0〜FC-10、PR #86）。対応表は [16](16_ddrive_changes_for_facial.md) 冒頭 |
 | FT-5 | D-Drive の新しい拡張点に合わせる（D-Drive main `8af02ea` の FC-1 / FC-2 / FC-12）: ブリッジで Runner を `IModelInstanceListener` に対応（スポーン後にキャッシュを作り直す・返却前に戻す）、FC-2 の重みの復元と Runner の戻しが二重になっても壊れないテスト、`.fctrack` の取り込み（FT-3）では `SameAsTrack` の Binding を足す | — | 1.5 | FT-2 | D-Drive のプールから出し直したキャラクターで補正が正しく掛かる。SameAsTrack で結んだ Facial トラックが動く | ✅ `FacialModelInstanceBridge`（モデルの Prefab に付ける。スポーン後に作り直し・返却前に戻す）、D-Drive の重みの復元と二重になっても壊れないテスト、検証が SameAsTrack をたどる。**D-Drive 1.4.0 のタグが出たら版の条件を付ける**（今はブリッジが FC-1 / FC-12 入りの D-Drive を前提にする） |
-| FT-6 | D-Drive の新しい拡張点に合わせる 2（origin/main `51e1827` の FC-3 / FC-5）: `.fctrack` の反映を `ICutsceneImportListener` へ（後追いの再試行は古い D-Drive 用に残す）、視点の最後の手段に `ViewCamera.TryGetCurrent`（ブリッジが設定。Runner の実行順 10000 は変えない）。版の条件付きアセンブリに置く | — | 1.5 | FT-5 | FBX と `.fctrack` をどちらの順で置いても 1 回の取り込みで Timeline に入る。分割画面などで視点を差し替えた D-Drive でも補正がその視点に従う | ⬜ |
+| FT-6 | D-Drive の新しい拡張点に合わせる 2（origin/main `51e1827` の FC-3 / FC-5）: `.fctrack` の反映を `ICutsceneImportListener` へ（後追いの再試行は古い D-Drive 用に残す）、視点の最後の手段に `ViewCamera.TryGetCurrent`（ブリッジが設定。Runner の実行順 10000 は変えない）。版の条件付きアセンブリに置く | — | 1.5 | FT-5 | FBX と `.fctrack` をどちらの順で置いても 1 回の取り込みで Timeline に入る。分割画面などで視点を差し替えた D-Drive でも補正がその視点に従う | ✅ `FctrackImportListener`（条件付きの `TDrive.Facial.DDrive.FC.Editor`）で、FBX の取り込みと同じ回に `.fctrack` を反映（保存・Undo なし、何度呼ばれても重複しない）。通知がある D-Drive では後追いの再試行をしない。視点は `FacialViewResolver.Fallback` に `ViewCamera.TryGetCurrent` を設定（視点の指定 → これ → メインカメラ）。**条件付きアセンブリは D-Drive 1.4.0 のタグ、または `TDRIVE_DDRIVE_FC_FORCE` が要る。実際の取り込みは未確認** |
 
 ## Phase F5: UE 版の未実装項目
 
@@ -250,7 +250,7 @@ UE 版で未実装（文書だけ）の機能。計算に関わるものは Pyth
 | F5-9 | Toon シェーダー側の受け口（角度に応じた線幅・顔影の補正）。`_Toon` 接頭辞・機能として追加 | R-14 | 2 | FU-4 | 横顔のときだけ線幅を変えられる。機能オフで従来と同じ | ⬜ |
 | F5-10 | 輪郭を大きく崩すアニメとの整合: ガイドライン（崩し用レイヤー・弱め設定）をマニュアルに。破綻例を集めて個別ルールを検討 | R-23 | 1 | F1-6 | マニュアルに手順がある | ⬜ |
 | F5-11 | 補間の種類（Catmull-Rom）※ 既定は双線形のまま | — | 1.5 | F0-2 FU-1 | 切り替えで中間角度が滑らかになる。既定では結果が変わらない | ⬜ |
-| F5-12 | 誇張の強さを `.fctrack` に入れる（Maya の出力・検証、Unity の取り込み・クリップのカーブ）。無いファイルは従来どおり | R-37 | 1 | F5-5 FT-3 | Maya で打った誇張のキーどおりに Unity の Timeline で誇張が動く。古い `.fctrack` も読める | ⬜ |
+| F5-12 | 誇張の強さを `.fctrack` に入れる（Maya の出力・検証、Unity の取り込み・クリップのカーブ）。無いファイルは従来どおり | R-37 | 1 | F5-5 FT-3 | Maya で打った誇張のキーどおりに Unity の Timeline で誇張が動く。古い `.fctrack` も読める | ✅ Maya: キーのある「誇張」を固定カーブ `exaggeration` として書き出す。Unity: 読み取り → クリップが従う（クリップの「誇張を使う」が優先）。**誇張のキー入りの `.fctrack` は、古い Unity パッケージでは取り込みに失敗する**（知らないカーブ名はエラー） |
 | F5-13 | 除外パターンを変えたら自動で「変更あり」（ベイク時の除外パターンを記録して比べる） | R-17 | 0.5 | F5-6 | パターンを変えると全点が焼き直しの対象になり、焼くと消える。変えていなければ既存データは変わらない | ✅ シェイプごとに「焼いたときの除外パターンの印」をシーンに記録（`tdFacialBakeExclude`）。記録の無い古いベイクは変更なし扱い。一部だけ焼いても、焼いていない点の印は残る |
 
 保留（作らない）: テクスチャ / VAT へのベイク、MetaHuman、推奨構成の自動割り当て、リギングツール（R-20 含む）、Unity でのポーズ編集・ベイク。

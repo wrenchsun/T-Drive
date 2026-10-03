@@ -122,6 +122,7 @@ namespace TDrive.Facial
                 sb.Append("  Sharp ").Append(r.LastSharpness.ToString("F2")).Append("  Exag ").Append(r.LastExaggeration.ToString("F2")).Append('\n');
             sb.Append("  Viewer ").Append(r.LastViewerSource.ToString());
             if (r.LastViewer != null) sb.Append(" (").Append(r.LastViewer.name).Append(')');
+            else if (r.LastViewerSource == FacialViewerSource.Fallback) sb.Append(" (provider)");
             sb.Append("  Angles ").Append(r.LastAngleSource.ToString()).Append('\n');
 
             r.GetActiveWeights(_weights);
@@ -161,17 +162,25 @@ namespace TDrive.Facial
             Vector3 center = bone.position + bone.rotation * co;
             Vec3 axis;
             Vector3 fwd = bone.forward;
-            if (FacialSpace.TryAxisVector(d.grid.forwardAxis, out axis)) fwd = bone.rotation * new Vector3((float)axis.X, (float)axis.Y, (float)axis.Z);
+            bool haveAxis = FacialSpace.TryAxisVector(d.grid.forwardAxis, out axis);
+            if (bone.localToWorldMatrix.determinant < 0f && haveAxis)
+            {
+                // 左右反転の親: Runner の角度計算と同じ式（FacialCorrectionRunner.MirrorSafeDirections）
+                Vector3 wo;
+                FacialCorrectionRunner.MirrorSafeDirections(bone, axis, co, out fwd, out wo);
+                center = bone.position + wo;
+            }
+            else if (haveAxis) fwd = bone.rotation * new Vector3((float)axis.X, (float)axis.Y, (float)axis.Z);
 
             Color old = Gizmos.color;
             Gizmos.color = new Color(0.3f, 0.6f, 1f);            // 頭の前方向（青）
             Gizmos.DrawLine(center, center + fwd.normalized * 0.4f);
             Gizmos.color = Color.cyan;                            // 格子の中心（水色）
             Gizmos.DrawWireSphere(center, 0.02f);
-            if (r.LastViewer != null)
+            if (r.HasLastViewerPosition)
             {
                 Gizmos.color = Color.yellow;                      // 視点への向き（黄）
-                Vector3 to = r.LastViewer.position - center;
+                Vector3 to = r.LastViewerPosition - center;
                 Gizmos.DrawLine(center, center + to.normalized * Mathf.Min(to.magnitude, 1.5f));
             }
             Gizmos.color = old;

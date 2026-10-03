@@ -1,6 +1,7 @@
 // FT-3: .fctrack の曲線でクリップを動かす。director を編集時に Evaluate して、Runner（合成メッシュ）のブレンドシェイプの重みで確かめる。
 // 重みの目安（FacialTimelineTests と同じ）: 強さ 1 で中央の Neutral(1,1) = 100、感情 Joy の重み w で Joy(1,1) = 100 * w。
 using NUnit.Framework;
+using TDrive.Facial.Core;
 using TDrive.Facial.Timeline;
 using UnityEngine;
 
@@ -51,6 +52,60 @@ namespace TDrive.Facial.Tests.Timeline
             _h.At(1.0); Assert.AreEqual(50f, N11, 0.5f);
             _h.At(2.0); Assert.AreEqual(0f, N11, 0.5f);
             _h.At(3.0); Assert.AreEqual(0f, N11, 0.5f, "最後のキーより後は最後の値");
+        }
+
+        string AddExShape()
+        {
+            string ex = FacialNaming.MorphName(FacialTestRig.Asset, "Neutral", 1, 1, true);
+            _h.rig.AddShape(ex);
+            var exNames = new string[9];
+            for (int i = 0; i < 9; i++) exNames[i] = "";
+            exNames[4] = ex;
+            _h.rig.data.layers[0].exMorphNames = exNames;
+            return ex;
+        }
+
+        [Test]
+        public void ExaggerationCurveDrivesTheExShape()
+        {
+            string ex = AddExShape();
+            _asset.exaggeration = new[] { K(0f, 1f), K(2f, 0f) };
+            ClipFor(0, 4);
+            _h.At(0.0); Assert.AreEqual(100f, _h.rig.W(ex), 0.5f);
+            _h.At(1.0); Assert.AreEqual(50f, _h.rig.W(ex), 0.5f);
+            _h.At(2.0); Assert.AreEqual(0f, _h.rig.W(ex), 0.5f);
+            Assert.AreEqual(100f, N11, 0.5f, "誇張は _Ex だけ。通常のシェイプは変わらない");
+        }
+
+        [Test]
+        public void ExaggerationCurveIsClampedToZeroOne()
+        {
+            string ex = AddExShape();
+            _asset.exaggeration = new[] { K(0f, 3f) };
+            ClipFor(0, 4);
+            _h.At(1.0); Assert.AreEqual(100f, _h.rig.W(ex), 0.5f, "1 を超えても作った通り（1 まで）");
+            _asset.exaggeration = new[] { K(0f, -2f) };
+            _h.At(1.1); Assert.AreEqual(0f, _h.rig.W(ex), 0.5f, "負は 0");
+        }
+
+        [Test]
+        public void ClipExaggerationOverridesTheImportedCurve()
+        {
+            string ex = AddExShape();
+            _asset.exaggeration = new[] { K(0f, 0f) }; // 曲線は 0
+            FacialCorrectionClip c = ClipFor(0, 4);
+            c.template.useExaggeration = true; c.template.exaggeration = 0.5f; // 先に設定（グラフは最初の評価で作られる）
+            _h.At(1.0); Assert.AreEqual(50f, _h.rig.W(ex), 0.5f, "「誇張を使う」の手の値が曲線（0）に優先する");
+        }
+
+        [Test]
+        public void WithoutAnExaggerationCurveTheShapeIsUnchanged()
+        {
+            string ex = AddExShape();
+            ClipFor(0, 4);
+            _h.At(1.0); Assert.AreEqual(100f, _h.rig.W(ex), 0.5f, "カーブが無い = 誇張を変えない");
+            _asset.alpha = new[] { K(0f, 1f) };
+            _h.At(1.5); Assert.AreEqual(100f, _h.rig.W(ex), 0.5f, "ほかのカーブだけでも変えない");
         }
 
         [Test]

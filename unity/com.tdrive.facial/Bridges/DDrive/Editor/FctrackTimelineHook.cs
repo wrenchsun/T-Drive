@@ -1,7 +1,8 @@
 // D-Drive ブリッジ（Editor）: .fctrack を取り込んだら、同じショットのカットシーンの Timeline に Facial のトラックを反映する（FT-3 / FT-5）。
 //  - 対象: <ソースルート>/Cutscene/<カテゴリ>/<ショット>__<モデル>.fctrack の取り込み・移動
-//  - D-Drive の FBX 取り込みは delayCall で後回しに動く（FC-5 の「取り込み完了」の通知はまだ無い）ので、順序は保証できない。
-//    CutsceneData / 役名のアニメーショントラックがまだ無ければ、少し待って数回やり直し、それでも無ければ日本語の警告を 1 回出してやめる
+//  - D-Drive の FBX 取り込みは delayCall で後回しに動くので、順序は保証できない。FC-5 のリスナー（TDrive.Facial.DDrive.FC.Editor。D-Drive 1.4.0 以降）が
+//    使えるときは、FBX と一緒の取り込みはリスナーが反映する。ここは「.fctrack だけ後から置いた・直した」ときの 1 回だけ（再試行しない。FctrackListenerGate）
+//  - リスナーが使えない（D-Drive 1.3.x）ときだけ従来どおり: CutsceneData / 役名のアニメーショントラックがまだ無ければ、少し待って数回やり直し、それでも無ければ日本語の警告を 1 回出してやめる
 //  - 手動: メニュー「Tools/T-Drive/Facial/.fctrack を Timeline に反映し直す」（選んだ .fctrack に対して）
 using System.Collections.Generic;
 using DDrive.Editor.Import;
@@ -75,8 +76,10 @@ namespace TDrive.Facial.DDrive.Editor
                 FctrackSyncResult r = FctrackCutsceneSync.SyncFromPath(path, touched);
                 if (r.Status == FctrackSyncStatus.NotReady)
                 {
-                    int attempts = Pending[path] + 1;
-                    if (attempts < MaxAttempts) { Pending[path] = attempts; continue; }
+                    // FC-5 のリスナーがあるときは再試行しない（FBX の取り込みのときにリスナーが反映する。二重に反映しない）
+                    FctrackRetryDecision decision = FctrackImportApply.DecideRetry(r, Pending[path], MaxAttempts, FctrackListenerGate.Available);
+                    if (decision == FctrackRetryDecision.Retry) { Pending[path] = Pending[path] + 1; continue; }
+                    if (decision == FctrackRetryDecision.GiveUpSilent) { done.Add(path); continue; }
                     Debug.LogWarning("[T-Drive Facial] " + System.IO.Path.GetFileName(path) + " をカットシーンの Timeline に反映できませんでした: " + r.Message
                         + "。カットシーンの FBX（<ショット>.fbx と <ショット>__<モデル>.fbx）を取り込んだあとで、この .fctrack を選んでメニュー「" + MenuPath + "」を実行するか、右クリック → Reimport してください");
                     done.Add(path);
@@ -108,7 +111,7 @@ namespace TDrive.Facial.DDrive.Editor
             RunPending();
         }
 
-        static void Report(string path, FctrackSyncResult r)
+        public static void Report(string path, FctrackSyncResult r)
         {
             string name = System.IO.Path.GetFileName(path);
             if (r.Status == FctrackSyncStatus.Failed) Debug.LogWarning("[T-Drive Facial] " + name + ": " + r.Message);

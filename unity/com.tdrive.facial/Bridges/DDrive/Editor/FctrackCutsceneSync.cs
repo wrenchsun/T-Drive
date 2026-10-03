@@ -15,6 +15,7 @@ using DDrive.Runtime.Cutscene;
 using TDrive.Facial.Core;
 using TDrive.Facial.Timeline.Editor;
 using UnityEditor;
+using UnityEngine.Timeline;
 
 namespace TDrive.Facial.DDrive.Editor
 {
@@ -93,6 +94,8 @@ namespace TDrive.Facial.DDrive.Editor
         public string Message = "";
         public FacialTrackSyncReport Timeline;
         public FctrackBindingResult? Binding;
+        /// <summary>NotReady の理由が「このショットの CutsceneData がまだ無い」こと（FBX の取り込みで作られる。FC-5 のリスナーが取り込み時に反映する）。</summary>
+        public bool NoCutsceneData;
         public bool Changed;
         public override string ToString() { return Status + ": " + Message; }
     }
@@ -105,15 +108,25 @@ namespace TDrive.Facial.DDrive.Editor
         /// </summary>
         public static FctrackSyncResult ApplyToCutscene(CutsceneData data, FacialTrackAsset asset, string roleTrackName)
         {
+            return Apply(data, data != null ? data.Timeline : null, asset, roleTrackName);
+        }
+
+        /// <summary>
+        /// 反映の共通の入口（探さない・保存しない）。後追いの取り込み（SyncFromPath）と D-Drive の取り込み完了の通知（FC-5 のリスナー）が同じ処理を通る。
+        /// 何度呼んでも重複しない（"(auto)" のトラックと Binding を先に確かめる）。timeline = null なら data.Timeline。
+        /// </summary>
+        public static FctrackSyncResult Apply(CutsceneData data, TimelineAsset timeline, FacialTrackAsset asset, string roleTrackName)
+        {
             var r = new FctrackSyncResult();
+            if (data != null && timeline == null) timeline = data.Timeline;
             if (asset == null) { r.Status = FctrackSyncStatus.Failed; r.Message = ".fctrack（FacialTrackAsset）がありません"; return r; }
             if (string.IsNullOrEmpty(roleTrackName)) { r.Status = FctrackSyncStatus.Failed; r.Message = "役名（モデル識別子）が分かりません"; return r; }
-            if (data == null) { r.Status = FctrackSyncStatus.NotReady; r.Message = "このショットの CutsceneData がまだありません"; return r; }
-            if (data.Timeline == null) { r.Status = FctrackSyncStatus.NotReady; r.Message = "CutsceneData '" + data.name + "' に TimelineAsset がありません"; return r; }
+            if (data == null) { r.Status = FctrackSyncStatus.NotReady; r.NoCutsceneData = true; r.Message = "このショットの CutsceneData がまだありません"; return r; }
+            if (timeline == null) { r.Status = FctrackSyncStatus.NotReady; r.Message = "CutsceneData '" + data.name + "' に TimelineAsset がありません"; return r; }
 
             // D-Drive のフレーム範囲の切り出し（SourceFrameRange）に、クリップの開始位置と長さを合わせる（docs/19 E-5）
             var options = new FacialTrackSyncOptions { SourceStartFrame = data.SourceFrameRange.Start, SourceEndFrame = data.SourceFrameRange.End };
-            FacialTrackSyncReport tl = FacialTrackTimelineSync.Apply(data.Timeline, asset, roleTrackName, options);
+            FacialTrackSyncReport tl = FacialTrackTimelineSync.Apply(timeline, asset, roleTrackName, options);
             r.Timeline = tl;
             if (!tl.Success) { r.Status = FctrackSyncStatus.NotReady; r.Message = string.Join(" / ", tl.Messages); return r; }
 
