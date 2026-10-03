@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://t-drive.local/schema/fcprofile.schema.json",
+  "title": "T-Drive FacialController .fcprofile.json",
+  "description": "命名規則プロファイル（format: FacialNamingProfile, version 1）。UE 版 UFacialNamingProfile（標準カーブ名・ミラー規則・カーブ可動域）に対応する。docs/14 §4.4。知らないキーはどの階層でも許す（読む側は無視して保持する）。必須は format / version / name だけ（欠けた欄は読む側が既定値で補う）。",
+  "type": "object",
+  "required": ["format", "version", "name"],
+  "properties": {
+    "format": { "const": "FacialNamingProfile" },
+    "version": { "type": "integer", "minimum": 1, "description": "この実装は 1。新しい版は警告して読める所だけ読む" },
+    "name": { "type": "string", "minLength": 1, "description": "識別子。.fcpose.json の profile に入る。ファイル名の語幹と同じにする" },
+    "description": { "type": "string", "description": "用途・対象モデルのメモ" },
+    "standardCurves": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "あるべきシェイプ名の一覧（不足チェック用）。名前の照合は大文字小文字を区別する完全一致"
+    },
+    "mirror": {
+      "type": "object",
+      "properties": {
+        "suffixL": { "type": "string", "description": "左の接尾辞（既定 _L）" },
+        "suffixR": { "type": "string", "description": "右の接尾辞（既定 _R）" },
+        "exclude": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "鏡映の対象外にする名前の部分一致パターン"
+        }
+      },
+      "additionalProperties": true
+    },
+    "limits": {
+      "type": "object",
+      "description": "シェイプ名 → 可動域 [最小, 最大]。無いシェイプは 0〜1。誇張は最大 2 まで（R-37）",
+      "additionalProperties": {
+        "type": "array",
+        "items": { "type": "number" },
+        "minItems": 2,
+        "maxItems": 2
+      }
+    }
+  },
+  "additionalProperties": true
+}

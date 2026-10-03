@@ -1,0 +1,45 @@
+{
+  "format": "FacialNamingProfile",
+  "version": 1,
+  "name": "vrchat_viseme",
+  "description": "VRChat 標準ビセム（vrc.v_*）。表情シェイプ（bs.* など）はモデルに合わせて追記すること。接尾辞は _L / _R。UE 版のプリセットと同じ",
+  "standardCurves": [
+    "vrc.v_sil",
+    "vrc.v_aa",
+    "vrc.v_ch",
+    "vrc.v_dd",
+    "vrc.v_e",
+    "vrc.v_ff",
+    "vrc.v_ih",
+    "vrc.v_kk",
+    "vrc.v_nn",
+    "vrc.v_oh",
+    "vrc.v_ou",
+    "vrc.v_pp",
+    "vrc.v_rr",
+    "vrc.v_ss",
+    "vrc.v_th"
+  ],
+  "mirror": {
+    "suffixL": "_L",
+    "suffixR": "_R",
+    "exclude": []
+  },
+  "limits": {
+    "vrc.v_sil": [0, 1],
+    "vrc.v_aa": [0, 1],
+    "vrc.v_ch": [0, 1],
+    "vrc.v_dd": [0, 1],
+    "vrc.v_e": [0, 1],
+    "vrc.v_ff": [0, 1],
+    "vrc.v_ih": [0, 1],
+    "vrc.v_kk": [0, 1],
+    "vrc.v_nn": [0, 1],
+    "vrc.v_oh": [0, 1],
+    "vrc.v_ou": [0, 1],
+    "vrc.v_pp": [0, 1],
+    "vrc.v_rr": [0, 1],
+    "vrc.v_ss": [0, 1],
+    "vrc.v_th": [0, 1]
+  }
+}

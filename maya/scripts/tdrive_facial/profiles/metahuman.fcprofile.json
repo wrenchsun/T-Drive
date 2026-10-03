@@ -1,0 +1,13 @@
+{
+  "format": "FacialNamingProfile",
+  "version": 1,
+  "name": "metahuman",
+  "description": "MetaHuman（RigLogic の制御カーブ CTRL_expressions_*）。カーブは約 250 本あるため一覧は同梱しない（対象メッシュから列挙して standardCurves へ追記すること）。接尾辞は L / R（末尾一致のため誤検出に注意）。UE 版のプリセットと同じ",
+  "standardCurves": [],
+  "mirror": {
+    "suffixL": "L",
+    "suffixR": "R",
+    "exclude": []
+  },
+  "limits": {}
+}
