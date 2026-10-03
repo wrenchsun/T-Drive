@@ -37,6 +37,16 @@
 `save_point` はキーのポーズへ保存する（未保存の編集があるときの「保存 / 破棄 / 取りやめ」は点・レイヤーと同じ）。
 シーンへ当たっているものは `applied_point`（点）/ `applied_key`（キー）。
 
+## 編集の対象はリップシンクのマスにもできる
+`select_lip_cell(音素, 感情)`（感情の基本は ""）でマスを編集の対象にする（点・キーの選択は外れ、`ctx.lip_target`）。ポーズタブはそのマスの
+シェイプだけを編集・保存する（ボーンは当ても保存もしない）。シーンへ当たっているものは `applied_lip`。
+
+## リップシンクの「試す」（シーンだけ。編集状態の間だけ）
+`lip_try_start` → `lip_try_set(音素の強さ, 声量, 感情の重み)` で、対応表の計算結果（`lipsync.evaluate`）を元のシェイプの値の上へ当てる。
+「元の値」は編集状態が持っている値（土台の表情だけ。ふつうは 0）で、自分の出力を重ねない。文書は変えず、Maya の Undo にも積まない。
+ほかの対象の選択・ポーズの当て直し・`lip_try_stop`・編集状態を抜けることで終わる（シーンは編集状態が見せるものへ戻る）。保存・出力のあいだは一時的に抜けて、戻ると続きから。
+編集の対象と「試す」は同時に使えない（試しはじめると対象は外れる。未保存のポーズ編集があれば保存 / 破棄 / 取りやめを聞く）。
+
 ## 土台の表情（シーンだけの下敷き。2026-10-03 の決定: 加算）
 `set_base_expression(名前, {シェイプ名: 重み})` / `clear_base_expression()`。ゲームでは表情アニメがシェイプを動かし、その上にベイクした
 FC_*（補正）が足される。シーンでもそれに合わせ、`_apply_buffer` が**土台の値 + ポーズの値**をシーンへ当てる
@@ -93,6 +103,7 @@ from .core.presenters import (
     CONFIRM_CANCEL,
     CONFIRM_DISCARD,
     CONFIRM_SAVE,
+    SELECT_CANCELLED,
     SELECT_NEEDS_CONFIRM,
     SELECT_SAME,
     SELECT_SELECTED,
@@ -217,8 +228,11 @@ class FacialSession:
         self._ref: Optional[scene_mod.Reference] = None
         self._ref_uuids: dict[str, list[str]] = {}
         self._applied: Optional[tuple[int, int, int]] = None
+        self._applied_lip: Optional[tuple[str, str]] = None
         self._sculpt: Optional[SculptState] = None  # 「この角度で彫る」の最中（shapes.py。docs/14 §5.6）
         self._base: Optional[BaseExpression] = None  # 土台の表情（シーンだけの下敷き。モジュールの docstring「土台の表情」）
+        self._lip_try: Optional["LipTry"] = None  # リップシンクの「試す」の最中の入力（モジュールの docstring「リップシンクの『試す』」）
+        self.last_lip_try: dict[str, float] = {}  # 直近の「試す」でシーンへ当てた、対応表のシェイプの値
         self._suspended: Optional["_SuspendedEdit"] = None  # 保存・出力のあいだ編集状態を一時的に抜けているときの、戻す情報（M-1）
         self.last_capture_base_ignored: list[str] = []  # 直近の `capture_from_scene` で、土台のとおりだったので取り込まなかったシェイプ
         self.last_capture_below_base: list[str] = []  # 直近の `capture_from_scene` で、シーンの値が土台より低く、取り込めなかったシェイプ（C-2）
@@ -584,9 +598,16 @@ class FacialSession:
             ctx.selection = None
         if ctx.key_target is not None and ctx.selected_key() is None:  # 元に戻す・やり直しでキーが無くなった
             ctx.key_target = None
+        self._prune_lip_target()
         if old_target != self._target_key(doc):
             self.end_edit(quiet=True)  # 対象メッシュが変わった: 基準姿勢は古い対象のもの
         ctx.notify_document_changed()
+
+    def _prune_lip_target(self) -> None:
+        """編集の対象のマスの音素・感情が無くなっていたら（元に戻す・レイヤーの削除など）対象を外す。"""
+        ctx = self._pres().ctx
+        if ctx.lip_target is not None and ctx.selected_lip() is None:
+            ctx.set_lip_target(None)
 
     @staticmethod
     def _target_key(doc: Document) -> tuple:
@@ -617,6 +638,7 @@ class FacialSession:
         changed = fcpose_io.to_dict(doc) != snap_dict
         if not changed:
             return res
+        self._prune_lip_target()
         self._undo.append(snap)
         del self._undo[:-MAX_UNDO]
         self._redo.clear()
@@ -631,6 +653,8 @@ class FacialSession:
             self.refresh_scene(notify=True, call_listeners=False)
         if reapply and self._saved_hash() != before_hash:
             self._reapply_safely()
+        elif self._lip_try is not None:  # 対応表が変わったので、「試す」の結果を計算し直す
+            self._reapply_safely()
         self._sync_preview()
         self._changed()
         return res
@@ -640,7 +664,10 @@ class FacialSession:
         if not self.editing:
             return
         try:
-            self._apply_buffer()
+            if self._lip_try is not None:  # 「試す」の最中は、試した結果を当て直す
+                self._apply_lip_try()
+            else:
+                self._apply_buffer()
         except Exception:  # noqa: BLE001
             self.end_edit(quiet=True)
             lifecycle.report_error("ポーズをシーンへ当て直せませんでした（編集状態を抜けました）", traceback.format_exc(), once=False)
@@ -715,7 +742,22 @@ class FacialSession:
     def applied_key(self) -> Optional[int]:
         """シーンに今当たっているポーズがパース補正のキーのとき、その番号。無ければ None。"""
         a = self._applied if self.editing else None
-        return a[1] if a is not None and a[0] < 0 else None
+        return a[1] if a is not None and a[0] == -1 else None
+
+    @property
+    def applied_lip(self) -> Optional[tuple[str, str]]:
+        """シーンに今当たっているポーズがリップシンクのマスのとき、(音素, 感情)。無ければ None。"""
+        a = self._applied if self.editing else None
+        return self._applied_lip if a is not None and a[0] == -2 else None
+
+    @property
+    def lip_try_active(self) -> bool:
+        """リップシンクの「試す」の最中か（編集状態を抜けたら False）。"""
+        return self._lip_try is not None and self.editing
+
+    def lip_try_values(self) -> "LipTry":
+        """今の「試す」の入力の複製（試していなければ初期値）。"""
+        return copy.deepcopy(self._lip_try) if self._lip_try is not None else LipTry()
 
     def _ref_alive(self) -> bool:
         ref = self._ref
@@ -738,6 +780,7 @@ class FacialSession:
         self._ref = None
         self._ref_uuids = {}
         self._applied = None
+        self._lip_try = None
         self._base = None
         self._sculpt = None  # シーンが入れ替わった: 彫りの状態も捨てる（新しいシーンの blendShape には触らない）
 
@@ -807,6 +850,7 @@ class FacialSession:
             self._ref = None
             self._ref_uuids = {}
             self._applied = None
+            self._lip_try = None
             self._base = None  # 土台の表情は編集状態の間だけ（シーンの重みは上で元へ戻った）
         if not quiet and sync_preview and self._preview_pending:
             self._sync_preview()
@@ -832,6 +876,7 @@ class FacialSession:
             "active_layer": ctx.active_layer,
             "selection": list(ctx.selection) if ctx.selection is not None else None,
             "key_target": ctx.selected_key(),
+            "lip_target": list(ctx.selected_lip()) if ctx.selected_lip() is not None else None,
             "buffer": {"curves": curves, "bones": bones},
         }
 
@@ -850,10 +895,14 @@ class FacialSession:
             ctx.set_active_layer(min(max(int(state.get("active_layer", 0)), 0), n - 1))
         sel = state.get("selection")
         kt = state.get("key_target")
+        lt = state.get("lip_target")
         if sel is not None and ctx.in_grid(int(sel[0]), int(sel[1])):
             ctx.set_selection((int(sel[0]), int(sel[1])))
         elif kt is not None and doc.perspective is not None and 0 <= int(kt) < len(doc.perspective.keys):
             ctx.set_key_target(int(kt))
+        elif lt is not None and doc.lip_sync is not None:
+            ctx.set_lip_target((str(lt[0]), str(lt[1])))
+            self._prune_lip_target()
         if ctx.has_target:
             buf = state.get("buffer") or {}
             pose = fcpose_io._read_pose(buf.get("curves"), buf.get("bones"))
@@ -871,7 +920,7 @@ class FacialSession:
             return True
         if not self.editing:
             return False
-        st = _SuspendedEdit(base=self._base, sculpt=self._sculpt)
+        st = _SuspendedEdit(base=self._base, sculpt=self._sculpt, lip_try=self._lip_try)
         ref = self._ref
         assert ref is not None
         try:
@@ -882,6 +931,7 @@ class FacialSession:
             self._ref = None
             self._ref_uuids = {}
             self._applied = None
+            self._lip_try = None
             self._base = None
             self._sculpt = None
         self._suspended = st
@@ -898,6 +948,9 @@ class FacialSession:
             self._base = st.base
             self._sculpt = st.sculpt
             self._apply_buffer()
+            if st.lip_try is not None:  # 「試す」の最中だった: 同じ入力で続ける
+                self._lip_try = st.lip_try
+                self._apply_lip_try()
         except Exception:  # noqa: BLE001  入り直せなくても保存は成功させる（シーンは元の姿勢のまま）
             self.end_edit(quiet=True)
             lifecycle.report_error("保存のあと編集状態へ戻れませんでした（編集状態を抜けました）", traceback.format_exc(), once=False)
@@ -987,6 +1040,7 @@ class FacialSession:
             raise FacialSessionError("編集状態に入っていません（begin_edit）")
         pres = self._pres()
         ctx = pres.ctx
+        self._lip_try = None  # ポーズを当て直すと、「試す」は終わる（シーンは編集状態が見せるものへ戻る）
         if not ctx.has_target:
             if self._base is None:
                 with _no_undo():
@@ -1004,6 +1058,9 @@ class FacialSession:
         self._track_weights(ref, pose.curves)
         if ctx.selected_key() is not None:
             self._applied = (-1, ctx.selected_key(), -1)  # キーが当たっている印（applied_key）
+        elif ctx.selected_lip() is not None:
+            self._applied = (-2, 0, 0)  # リップシンクのマスが当たっている印（applied_lip）
+            self._applied_lip = ctx.selected_lip()
         elif ctx.selection is None:
             self._applied = None
         else:
@@ -1198,6 +1255,42 @@ class FacialSession:
             self._apply_buffer()
         if move_camera and r.camera_jump:
             self.camera_to_key(index, camera)
+        return r
+
+    @scene_op
+    def select_lip_cell(self, phoneme: str, emotion: str = "", choice: Optional[str] = None) -> SelectResult:
+        """リップシンクのマス（音素 × 感情。基本は ""）を編集の対象にし、その行のシェイプをシーンへ当てる（編集状態に入っていなければ入る。点・キーの選択は外れる）。
+
+        未保存のポーズ編集があると `needs_confirm`（`select_point` と同じ。`choice="save" | "discard" | "cancel"` つきで繰り返す）。
+        「試す」の最中ならそれは終わる。"""
+        try:
+            return self._select_lip_cell(phoneme, emotion, choice)
+        finally:
+            self._notify_state()
+
+    def _select_lip_cell(self, phoneme: str, emotion: str, choice: Optional[str]) -> SelectResult:
+        if self._sculpt is not None and choice != CONFIRM_CANCEL:
+            self.sculpt_end()
+        pres = self._pres()
+        was_editing = self.editing
+        self.begin_edit()
+        r = pres.lipsync.select_lip_cell(phoneme, emotion)
+        if r.status == SELECT_NEEDS_CONFIRM:
+            if choice is None:
+                return r
+            if choice == CONFIRM_SAVE:
+                self.save_point()
+                r = pres.lipsync.select_lip_cell(phoneme, emotion)
+                if r.status == SELECT_NEEDS_CONFIRM:  # 保存しても差が残る: 捨てて進む
+                    r = pres.lipsync.confirm_select_lip_cell(CONFIRM_DISCARD)
+                r.saved = True
+            else:
+                return_early = choice == CONFIRM_CANCEL
+                r = pres.lipsync.confirm_select_lip_cell(choice)
+                if return_early or r.status != SELECT_SELECTED:
+                    return r
+        if r.status == SELECT_SELECTED or (r.status == SELECT_SAME and (not was_editing or self._applied is None)):
+            self._apply_buffer()
         return r
 
     @scene_op
@@ -1859,9 +1952,17 @@ class FacialSession:
         k = ctx.selected_key()
         if k is not None:
             return self.key_label(k)
+        lc = ctx.selected_lip()
+        if lc is not None:
+            return self.lip_label(*lc)
         if ctx.selection is not None:
             return f"レイヤー「{ctx.layer.name}」 点 R{ctx.selection[0]}, C{ctx.selection[1]}"
         return ""
+
+    @staticmethod
+    def lip_label(phoneme: str, emotion: str = "") -> str:
+        """リップシンクのマスの呼び名（「リップシンクの A（基本）」「リップシンクの A（Joy）」）。"""
+        return f"リップシンクの {phoneme}（{emotion or '基本'}）"
 
     def perspective_view(self):
         """画面用の表示（`PerspectiveView`）。"""
@@ -1928,6 +2029,155 @@ class FacialSession:
             return preview_rig.view_distance(doc, camera)
         except (preview_rig.PreviewRigError, FacialSessionError, RuntimeError):
             return None
+
+    # ============================================================ リップシンクの対応表（R-18。docs/14 §5.8c）
+    # 設定・音素・行の編集は Presenter（`session.lipsync`）の変更系を包んだコマンド（Undo つき。ベイクは無い）。
+    @property
+    def lipsync(self):
+        return self._pres().lipsync
+
+    def lipsync_view(self):
+        """画面用の表示（`LipSyncView`）。"""
+        return self.lipsync.view()
+
+    @undoable(notify=True)
+    def set_lipsync_enabled(self, enabled: bool):
+        return self.lipsync.set_enabled(enabled)
+
+    @undoable(notify=True)
+    def set_lipsync_strength(self, strength: float):
+        return self.lipsync.set_strength(strength)
+
+    @undoable(notify=True)
+    def set_lipsync_volume(self, min=None, max=None, from_=None, to=None):  # noqa: A002
+        return self.lipsync.set_volume(min, max, from_, to)
+
+    @undoable(notify=True)
+    def set_lipsync_follow(self, follow: float):
+        return self.lipsync.set_follow(follow)
+
+    @undoable(notify=True)
+    def add_lip_phoneme(self, name: str):
+        return self.lipsync.add_phoneme(name)
+
+    @undoable(notify=True)
+    def rename_lip_phoneme(self, old: str, new: str):
+        return self.lipsync.rename_phoneme(old, new)
+
+    @undoable(notify=True)
+    def remove_lip_phoneme(self, name: str):
+        """音素を消す（その音素の行も消える。編集の対象がその音素なら外れ、シーンは基準姿勢へ）。"""
+        return self.lipsync.remove_phoneme(name)
+
+    @undoable(notify=True)
+    def move_lip_phoneme(self, name: str, to_index: int):
+        return self.lipsync.move_phoneme(name, to_index)
+
+    @undoable(notify=True)
+    def set_lip_cell_pose(self, phoneme: str, emotion: str, pose: SourcePose, keep_empty: bool = False):
+        return self.lipsync.set_cell_pose(phoneme, emotion, pose, keep_empty)
+
+    @undoable(notify=True)
+    def clear_lip_cell(self, phoneme: str, emotion: str = ""):
+        """マスの行を消す（編集の対象のマスなら、編集中の値は保存済み（空）に読み直される）。"""
+        return self.lipsync.clear_cell(phoneme, emotion)
+
+    @undoable(notify=True)
+    def create_lipsync_from_profile(self, overwrite: bool = False):
+        """文書のプロファイルの `lipSync`（音素 → シェイプ名）から基本の行を作る（シーンのシェイプに合わせる）。"""
+        return self.lipsync.create_from_profile(overwrite=overwrite)
+
+    # --- 「試す」（モジュールの docstring「リップシンクの『試す』」）---
+    def lip_try_start(self, choice: Optional[str] = None) -> SelectResult:
+        """「試す」を始める（編集状態に入っていなければ入る）。編集の対象（点・キー・マス）は外れる。
+        未保存のポーズ編集があると `needs_confirm`（`choice="save" | "discard" | "cancel"` つきで繰り返す）。
+        すでに試していれば `same_point`。"""
+        try:
+            return self._lip_try_start(choice)
+        except BaseException:
+            self.end_edit(quiet=True)
+            raise
+        finally:
+            self._notify_state()
+
+    def _lip_try_start(self, choice: Optional[str]) -> SelectResult:
+        pres = self._pres()
+        ctx = pres.ctx
+        if self._lip_try is not None and self.editing:
+            return SelectResult(SELECT_SAME, "try")
+        if self._sculpt is not None and choice != CONFIRM_CANCEL:
+            self.sculpt_end()
+        self.begin_edit()
+        saved = False
+        if ctx.has_target and pres.pose.dirty:
+            if choice is None:
+                return SelectResult(
+                    SELECT_NEEDS_CONFIRM, "try", message="未保存のポーズ編集があります。保存 / 破棄 / 取りやめのどれかを選んでください"
+                )
+            if choice == CONFIRM_CANCEL:
+                return SelectResult(SELECT_CANCELLED, "try", message="取りやめました")
+            if choice == CONFIRM_SAVE:
+                self.save_point()
+                saved = True
+        if ctx.has_target:
+            ctx.set_selection(None)  # 編集の対象と「試す」は同時に使えない
+        self._lip_try = LipTry()
+        self._apply_lip_try()
+        return SelectResult(SELECT_SELECTED, "try", saved=saved)
+
+    def lip_try_set(
+        self,
+        phonemes: Optional[dict[str, float]] = None,
+        volume: Optional[float] = None,
+        emotions: Optional[dict[str, float]] = None,
+    ) -> dict[str, float]:
+        """「試す」の入力（音素の強さ・声量。None = 渡さない・感情の重み）を置き換えて、結果をシーンへ当てる。
+        戻り = 当てた対応表のシェイプの値（`lipsync.evaluate` の結果）。試していなければ FacialSessionError。"""
+        if self._lip_try is None or not self.editing:
+            raise FacialSessionError("「試す」を始めていません（lip_try_start）")
+        self._lip_try = LipTry(
+            phonemes={str(k): float(v) for k, v in (phonemes or {}).items()},
+            volume=None if volume is None else float(volume),
+            emotions={str(k): float(v) for k, v in (emotions or {}).items()},
+        )
+        try:
+            self._apply_lip_try()
+        except BaseException:
+            self.end_edit(quiet=True)
+            raise
+        self._notify_state()
+        return dict(self.last_lip_try)
+
+    def lip_try_stop(self) -> bool:
+        """「試す」をやめて、シーンを編集状態が見せるもの（土台の表情だけ・ふつうは基準姿勢）へ戻す。試していたら True。"""
+        if self._lip_try is None:
+            return False
+        self._lip_try = None
+        self.last_lip_try = {}
+        if self.editing and self.presenters is not None:
+            self._reapply_safely()
+        self._notify_state()
+        return True
+
+    def _apply_lip_try(self) -> None:
+        """「試す」の結果をシーンへ当てる: 元の値（土台の表情だけ）の上に `lipsync.evaluate` の結果を載せる（自分の出力は重ねない）。"""
+        ref = self._ref
+        if ref is None or self._lip_try is None:
+            raise FacialSessionError("編集状態に入っていません（begin_edit）")
+        pres = self._pres()
+        t = self._lip_try
+        current = dict(self._layered_pose(SourcePose()).curves)
+        out = pres.lipsync.evaluate(current, t.phonemes, t.volume, t.emotions)
+        curves = dict(current)
+        curves.update(out)
+        for name in curves:
+            ref._curve_cache.pop(name, None)
+        with _no_undo():
+            rep = pose_apply.apply_pose(pres.ctx.doc, SourcePose(curves=curves), ref)
+        self._track_weights(ref, curves)
+        self._applied = None
+        self.last_apply = rep
+        self.last_lip_try = dict(out)
 
     # ============================================================ ベイク
     def bake_all(self, progress=None) -> bake_mod.BakeReport:
@@ -3011,6 +3261,16 @@ class _SuspendedEdit:
 
     base: Optional["BaseExpression"] = None
     sculpt: Optional["SculptState"] = None
+    lip_try: Optional["LipTry"] = None
+
+
+@dataclass
+class LipTry:
+    """リップシンクの「試す」の入力: 音素ごとの強さ（0〜1）・声量（None = 渡さない）・感情レイヤーの重み。"""
+
+    phonemes: dict[str, float] = field(default_factory=dict)
+    volume: Optional[float] = None
+    emotions: dict[str, float] = field(default_factory=dict)
 
 
 @dataclass

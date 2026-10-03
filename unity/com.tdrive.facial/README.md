@@ -43,3 +43,16 @@ Package Manager の `Add package from git URL` に `https://github.com/wrenchsun
 
 - `.meta` は置いてある（git URL で配るので GUID をコミットしておく必要がある）。新しいファイルを足したら、Unity で開いたあとに `.meta` もコミットする
 - Unity 6000.3 でコンパイル・EditMode テストが通ることを確認する
+
+## リップシンク（uLipSync とのつなぎ）
+
+T-Drive は音声を解析しません。解析結果（音素の強さと声量）を `FacialCorrectionRunner.SetLipSync(...)` に渡すと、`.fcpose` の対応表（`lipSync`）に従って口のシェイプを動かします。
+
+[uLipSync](https://github.com/hecomi/uLipSync)（MIT）を使う場合:
+
+1. プロジェクトに uLipSync（`com.hecomi.ulipsync` 3.0.0 以降）を入れる。入っていると、つなぎのアセンブリ `TDrive.Facial.ULipSync` が自動でコンパイルされる（入っていなければ外れる）
+2. `uLipSync` コンポーネントと同じオブジェクト（または Runner の子）に「T-Drive › Facial uLipSync Bridge」を付ける。`source` に uLipSync を指定するか、uLipSync の「On Lip Sync Update」に `FacialULipSyncBridge.OnLipSyncUpdate` を登録する
+3. uLipSync のプロファイルの音素名と、T-Drive の対応表の音素名が違うときは、`phonemeMap` に対応を書く（空なら同じ名前として扱う）
+
+確認状況（2026-10-04）: uLipSync v3.1.5 と一緒に Unity 6000.3.13f1 でコンパイルできることを確認した。実際の音声を流しての動作は未確認。
+

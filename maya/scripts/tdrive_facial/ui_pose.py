@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import dataclasses
 import math
+import re
 import traceback
 import weakref
 from pathlib import Path
@@ -825,19 +826,21 @@ class PoseTab(QtWidgets.QWidget):
     def key_label(self, index: int) -> str:
         return self.session.key_label(index)
 
-    def _header_html(self, selection, layer: str, dirty: bool, key: Optional[int] = None) -> str:
+    def _header_html(self, selection, layer: str, dirty: bool, key: Optional[int] = None, lip: Optional[tuple[str, str]] = None) -> str:
         mark = f" <span style='color:{DIRTY_COLOR}; font-weight:bold;'>[未保存]</span>" if dirty else ""
         if key is not None:
             return f"<b>編集の対象:</b> {self.key_label(key)}{mark}"
+        if lip is not None:
+            return f"<b>編集の対象:</b> {self.session.lip_label(*lip)}（シェイプだけ。ボーンは保存されません）{mark}"
         if selection is None:
-            return "グリッドで点を選んでください（グリッドタブで点をクリックすると、その点のポーズをここで編集できます。パース補正のキーを選んでも編集できます）"
+            return "グリッドで点を選んでください（グリッドタブで点をクリックすると、その点のポーズをここで編集できます。パース補正のキー・リップシンクのマスを選んでも編集できます）"
         r, c = selection
         yaw, pitch = self.session.grid.angles_of(r, c)
         return f"<b>編集中:</b> レイヤー「{layer}」 点 R{r}, C{c}（Yaw {yaw:.1f}° / Pitch {pitch:.1f}°）{mark}"
 
     def _sync_header(self, view: PoseView) -> None:
-        self.header.setText(self._header_html(view.selection, view.layer, view.dirty, view.key_index))
-        self._sync_note(view.selection is not None or view.key_index is not None)
+        self.header.setText(self._header_html(view.selection, view.layer, view.dirty, view.key_index, view.lip))
+        self._sync_note(view.selection is not None or view.key_index is not None or view.lip is not None)
 
     def _sync_controls(self, view: PoseView) -> None:
         ed = view.can_edit
@@ -846,6 +849,9 @@ class PoseTab(QtWidgets.QWidget):
         if view.key_index is not None:  # 編集の対象がパース補正のキー
             self.btn_save.setText("保存（このキーのポーズにする）")
             self.btn_save.setToolTip("編集中のポーズを、選んでいるパース補正のキーへ保存します。全部 0 のポーズを保存すると「補正なし」のキーになります（キーは消えません）")
+        elif view.lip is not None:  # 編集の対象がリップシンクのマス
+            self.btn_save.setText("保存（この口の形にする）")
+            self.btn_save.setToolTip("編集中のシェイプの値を、選んでいるリップシンクのマスへ保存します（ボーンは保存されません）。全部 0 のポーズを保存するとそのマスの行は消えます")
         else:
             self.btn_save.setText(self._save_text)
             self.btn_save.setToolTip(self._save_tip)
@@ -936,7 +942,7 @@ class PoseTab(QtWidgets.QWidget):
         """自分の操作のあと: 見出しの [未保存] だけを更新する（行は作り直さない）。"""
         if self.has_doc():
             ctx = self.session.ctx
-            self.header.setText(self._header_html(ctx.selection, ctx.layer.name, self.session.pose.dirty, ctx.selected_key()))
+            self.header.setText(self._header_html(ctx.selection, ctx.layer.name, self.session.pose.dirty, ctx.selected_key(), ctx.selected_lip()))
 
     # ------------------------------------------------------------------ 共通
     def _run(self, label: str, fn: Callable[[], object]):
@@ -1202,7 +1208,15 @@ class PoseTab(QtWidgets.QWidget):
         d = self.session.doc
         ctx = self.session.ctx
         sel = ctx.selection
-        stem = f"{ctx.layer.name}_R{sel[0]}_C{sel[1]}" if sel else f"Persp_K{ctx.selected_key()}" if ctx.selected_key() is not None else "pose"
+        lip = ctx.selected_lip()
+        if sel:
+            stem = f"{ctx.layer.name}_R{sel[0]}_C{sel[1]}"
+        elif ctx.selected_key() is not None:
+            stem = f"Persp_K{ctx.selected_key()}"
+        elif lip is not None:
+            stem = re.sub(r'[^0-9A-Za-z_.-]', '_', f"Lip_{lip[0]}_{lip[1] or 'base'}")
+        else:
+            stem = "pose"
         return str(Path(project.root()) / "facial" / (d.asset or "untitled") / "poses" / f"{stem}.fcpose.json")
 
     def choose_export_path(self, default: str) -> str:

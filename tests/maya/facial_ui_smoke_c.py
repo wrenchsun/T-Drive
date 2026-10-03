@@ -124,7 +124,7 @@ def run() -> None:
     check("準備: 3x3 + Joy を焼いた（FC_* 18 本）", len(rep.created) == 18, rep.summary())
 
     labels = [panel.tabs.tabText(i) for i in range(panel.tabs.count())]
-    check("パネル: 7 つのタブ（出力タブが本物）", labels == ["セットアップ", "グリッド", "ポーズ", "シェイプ", "レイヤー", "検証", "出力"] and not panel.tab_is_placeholder("export"))
+    check("パネル: 8 つのタブ（出力タブが本物）", labels == ["セットアップ", "グリッド", "ポーズ", "シェイプ", "レイヤー", "リップシンク", "検証", "出力"] and not panel.tab_is_placeholder("export"))
     check("パネル: state_listeners にパネルが登録される（ctx の購読は使わない）", panel._on_state_changed in s.state_listeners and not hasattr(panel, "_unsubscribe_ctx"))
     s.begin_edit()
     check("ヘッダー: セッションの軽い通知だけで「編集」ボタンが追従する", panel.header.edit_btn.isChecked() and "編集中" in panel.header.edit_state.text())

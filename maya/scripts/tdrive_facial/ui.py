@@ -13,6 +13,7 @@ UI はセッション層（`tdrive_facial.session.current()`）の薄いラッ�
 | ポーズ | ui_pose | PoseTab |
 | シェイプ | ui_shapes | ShapesTab |
 | レイヤー | ui_layers | LayersTab |
+| リップシンク | ui_lipsync | LipsyncTab |
 | 検証 | ui_validate | ValidateTab |
 | 出力 | ui_export | ExportTab |
 
@@ -57,6 +58,7 @@ TAB_SPECS = (
     ("pose", "ポーズ", "PoseTab"),
     ("shapes", "シェイプ", "ShapesTab"),
     ("layers", "レイヤー", "LayersTab"),
+    ("lipsync", "リップシンク", "LipsyncTab"),
     ("validate", "検証", "ValidateTab"),
     ("export", "出力", "ExportTab"),
 )
@@ -350,8 +352,16 @@ class HeaderBar(QtWidgets.QWidget):
         self.edit_btn.setChecked(editing)
         self.edit_btn.blockSignals(False)
         if editing:
-            key = s.presenters.ctx.selected_key()
-            target = f"（編集の対象: {s.key_label(key)}）" if key is not None else ""
+            ctx = s.presenters.ctx
+            key = ctx.selected_key()
+            if key is not None:
+                target = f"（編集の対象: {s.key_label(key)}）"
+            elif ctx.selected_lip() is not None:
+                target = f"（編集の対象: {s.edit_target_label()}）"
+            elif s.lip_try_active:
+                target = "（リップシンクを試しています）"
+            else:
+                target = ""
             self.edit_state.setText(f"<b>編集中</b>{target} = シーンが基準姿勢になっています（オフで元の姿勢に戻ります）")
             self.edit_state.setStyleSheet(WARN_STYLE)
         else:
@@ -466,7 +476,7 @@ class HeaderBar(QtWidgets.QWidget):
 
 
 class FacialPanel(QtWidgets.QWidget):
-    """FacialController タブの中身: ヘッダー + 警告 + セットアップ / グリッド / ポーズ / シェイプ / レイヤー / 検証 / 出力。"""
+    """FacialController タブの中身: ヘッダー + 警告 + セットアップ / グリッド / ポーズ / シェイプ / レイヤー / リップシンク / 検証 / 出力。"""
 
     def __init__(self) -> None:
         super().__init__()
@@ -493,7 +503,7 @@ class FacialPanel(QtWidgets.QWidget):
             self.slots[key] = slot
             self.tabs.addTab(slot, label)
         layout.addWidget(self.tabs, 1)
-        self.tabs.currentChanged.connect(lambda *_: self._refresh_current_if_stale())
+        self.tabs.currentChanged.connect(lambda *_: self._on_tab_changed())
 
         self.session.listeners.append(self._on_session_changed)
         self.session.state_listeners.append(self._on_state_changed)  # 軽い通知（編集状態・選択・ポーズの値）はヘッダーだけ更新する
@@ -517,6 +527,16 @@ class FacialPanel(QtWidgets.QWidget):
     def _current_slot(self) -> Optional[_TabSlot]:
         w = self.tabs.currentWidget()
         return w if isinstance(w, _TabSlot) else None
+
+    def _on_tab_changed(self) -> None:
+        """タブを移ったら、リップシンクの「試す」は終わる（シーンを元の編集状態へ戻す）。"""
+        slot = self._current_slot()
+        if slot is not None and slot.key != "lipsync" and self.session.presenters is not None:
+            try:
+                self.session.lip_try_stop()
+            except Exception:  # noqa: BLE001
+                lifecycle.report_error("リップシンクの「試す」を終えられませんでした", traceback.format_exc(), once=False)
+        self._refresh_current_if_stale()
 
     def _refresh_current_if_stale(self) -> None:
         slot = self._current_slot()

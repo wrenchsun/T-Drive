@@ -147,12 +147,16 @@ class ValidateTab(QtWidgets.QWidget):
                         where += f" R{r.row} C{r.col}"
                 if r.key is not None and r.layer is None:
                     where = f"パース補正 キー {r.key + 1}"
+                if r.lip is not None and r.layer is None:
+                    where = f"リップシンク {r.lip[0]}（{r.lip[1] or '基本'}）"
                 it = QtWidgets.QTreeWidgetItem([where, r.message, ""])
                 it.setToolTip(COL_MESSAGE, r.message)
                 if r.can_select_point:
                     it.setToolTip(COL_WHERE, "ダブルクリックでこの点へ移ります")
                 elif r.can_select_key:
                     it.setToolTip(COL_WHERE, "ダブルクリックでこのパース補正のキーへ移ります")
+                elif r.can_select_lip:
+                    it.setToolTip(COL_WHERE, "ダブルクリックでこのリップシンクのマスへ移ります")
                 top.addChild(it)
                 self._issue_of_item[id(it)] = r
                 if r.fix == "rename" and (r.kind, r.name) in self.choices:
@@ -276,6 +280,41 @@ class ValidateTab(QtWidgets.QWidget):
             self.go_to_issue(issue)
         elif getattr(issue, "can_select_key", False):
             self.go_to_key(issue)
+        elif getattr(issue, "can_select_lip", False):
+            self.go_to_lip(issue)
+
+    def go_to_lip(self, issue) -> bool:
+        """問題のリップシンクのマスを編集の対象にし、リップシンクタブへ移る（未保存の編集があれば確認する）。移れたら True。"""
+        s = self.session
+        phoneme, emotion = issue.lip
+        try:
+            r = s.select_lip_cell(phoneme, emotion)
+            if r.status == SELECT_NEEDS_CONFIRM:
+                choice = self.ask_move_choice("編集中のポーズに未保存の変更があります。別のマスへ移る前に保存しますか？")
+                r = s.select_lip_cell(phoneme, emotion, choice=choice)
+        except Exception as exc:  # noqa: BLE001
+            self.show_status(str(exc), error=True)
+            lifecycle.report_error("検証タブからのリップシンクのマスの移動でエラー", traceback.format_exc())
+            return False
+        ok = r.status in (SELECT_SELECTED, "same_point")
+        self.show_status(
+            f"{s.lip_label(phoneme, emotion)}へ移りました（編集状態になっています）" if ok else (r.message or "移動できませんでした"), error=not ok
+        )
+        if ok:
+            self.show_tab("lipsync")
+        return ok
+
+    def show_tab(self, key: str) -> None:
+        """パネルのタブを切り替える（パネルの外で使うときは何もしない）。"""
+        w = self.window()
+        sel = getattr(w, "select_tab", None)
+        if sel is None:
+            p = self.parent()
+            while p is not None and not hasattr(p, "select_tab"):
+                p = p.parent()
+            sel = getattr(p, "select_tab", None)
+        if sel is not None:
+            sel(key)
 
     def go_to_key(self, issue) -> bool:
         """問題のパース補正のキーを編集の対象にする（未保存の編集があれば確認する）。移れたら True。"""

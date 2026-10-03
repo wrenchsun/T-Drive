@@ -119,8 +119,8 @@ def run() -> None:
     panel = ui.FacialPanel()
     panel.resize(560, 900)
     labels = [panel.tabs.tabText(i) for i in range(panel.tabs.count())]
-    check("パネル: タブの順番", labels == ["セットアップ", "グリッド", "ポーズ", "シェイプ", "レイヤー", "検証", "出力"], f"{labels}")
-    check("データ無し: タブはすべて無効", not any(panel.tabs.isTabEnabled(i) for i in range(7)))
+    check("パネル: タブの順番", labels == ["セットアップ", "グリッド", "ポーズ", "シェイプ", "レイヤー", "リップシンク", "検証", "出力"], f"{labels}")
+    check("データ無し: タブはすべて無効", not any(panel.tabs.isTabEnabled(i) for i in range(8)))
     check("データ無し: ヒントが出ている", not panel.hint.isHidden() and "新規 または 開く" in panel.hint.text())
     check("データ無し: ヘッダーに「まだありません」・保存と編集は押せない",
           "まだありません" in panel.header.label.text() and not panel.header.buttons["save"].isEnabled() and not panel.header.edit_btn.isEnabled())
@@ -134,7 +134,7 @@ def run() -> None:
     except Exception:
         survived = False
         RESULTS.append(("例外（データ無しでタブを作る）", False, traceback.format_exc()))
-    check("データ無し: 7 つのタブがどれも（準備中でも）作れる", survived)
+    check("データ無し: 8 つのタブがどれも（準備中でも）作れる", survived)
     for key in ("grid", "pose", "shapes", "export"):
         exists = importlib.util.find_spec(f"tdrive_facial.ui_{key}") is not None
         check(f"タブ {key}: モジュールが無ければ準備中の表示（あれば本物）", placeholders[key] == (not exists), f"exists={exists} placeholder={placeholders[key]}")
@@ -149,7 +149,7 @@ def run() -> None:
     hdr.ask_new = lambda: {"character": "mini", "mesh": cmds.ls(face, long=True)[0], "profile": None}
     hdr.buttons["new"].click()
     pump()
-    check("新規: データができ、タブが有効になる", s.presenters is not None and all(panel.tabs.isTabEnabled(i) for i in range(7)) and panel.hint.isHidden())
+    check("新規: データができ、タブが有効になる", s.presenters is not None and all(panel.tabs.isTabEnabled(i) for i in range(8)) and panel.hint.isHidden())
     check("新規: ヘッダーにパスと ●未保存", "facial/mini/mini.fcpose.json" in hdr.label.text() and "●未保存" in hdr.label.text(), hdr.label.text())
     hdr.buttons["save"].click()
     pump()
