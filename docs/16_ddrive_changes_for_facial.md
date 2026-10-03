@@ -20,7 +20,13 @@
 > | FC-15（= doc17 M-5） | 知らないシェーダーを黙って `DDrive/Lit` に変換しない | **実装済み** | 罠 1（[17](17_ddrive_toon_materials.md) §4）は確認ダイアログで防げる。U-23 の検証は念のため残す |
 > | FC-20 | `FC_` / `fcs_` 接頭辞の予約（D-Drive の一覧から隠す・AnimData が指すと警告） | **実装済み** | 名前の規則を変えない（[15](15_facial_controller_design.md) §7: 改名は MAJOR） |
 > | FC-10 | 外部拡張の契約テスト（「変更なしで動く」前提を D-Drive のテストで固定） | **実装済み** | — |
-> | FC-3〜FC-9、FC-13、FC-14、FC-16〜FC-19 | 視点の API・マーカー・取り込み通知 ほか | 未着手 / 保留 | FC-3（視点）と FC-5（取り込み通知）が入ったら Runner の視点の解決と FT-3 を合わせる |
+> | FC-5（= C-5） | カットシーン取り込み完了の公開イベント `ICutsceneImportListener` | **実装済み**（origin/main `51e1827`） | `.fctrack` の反映を、取り込みの後追い（`delayCall` の再試行）からリスナーへ切り替える。保存は D-Drive が 1 回行うので呼ばない。再取り込みでも毎回呼ばれるので、足す前に既にあるか確かめる → FT-6 |
+> | FC-3（= C-3） | 今の視点 `ViewCamera.TryGetCurrent` / `IViewProvider` | **実装済み**（同上） | Runner の視点の解決の**最後**の手段にブリッジが設定する（視点の指定 → 手動の角度 → これ）。Runtime は D-Drive を参照しない。**そのフレームのカット姿勢が要るので、LateUpdate で実行順 1000（`DDriveCutsceneCameraApplier`）より後に呼ぶ** = Runner は 10000 なので満たしている（変えない）→ FT-6 |
+> | FC-4 | 外部マーカーの受け口 `ICutsceneMarker` | **実装済み**（同上） | 今は使わない（クリップだけ）。一点で感情を切り替えるマーカーが要るときに使う |
+> | FC-6 / FC-14 | 取り込みルールの外部拡張（`IImportRuleFolderOptOut` ほか）・変換表 / テクスチャ規則の提供口 | **実装済み**（同上） | `.fctrack` は `SourceAssets/Cutscene/` に置くので今は不要。`SourceAssets/Facial/` を使うことにしたら `"Facial"` を返す型を足す |
+> | FC-7〜FC-9、FC-13、FC-16〜FC-19 | 依存グラフ・BlendShape カーブ ほか | 未着手 / 保留 | — |
+>
+> 注: D-Drive の版はまだ 1.3.1（1.4.0 のタグは未発行）。新しい型を使うコードは、版の条件付きのアセンブリ（レビュー指摘 E-1）に置く。
 >
 > D-Drive 側の人による確認項目は D-Drive の `docs/52_manual_verification_fc.md`（T-Drive と合わせて見る項目は同 §22）。T-Drive 側の確認項目は [18](18_manual_verification_facial.md) G 節。
 
