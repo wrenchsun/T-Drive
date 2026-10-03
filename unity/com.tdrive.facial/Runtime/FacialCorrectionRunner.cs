@@ -196,6 +196,8 @@ namespace TDrive.Facial
             public bool written;
             public bool hasLimit;
             public float limMin, limMax;
+            public int[] lods;   // 各 Renderer の LOD の番号（LODGroup に属さないものは 0）。結ぶときに 1 度だけ決める
+            public bool[] skip;  // quality.maxLod を超える LOD のため書かない（ApplyLodLimit が切り替える）
         }
 
         static readonly SpaceConverter UnityToCanonical = FacialSpace.Converter(FacialSpace.Unity, FacialSpace.Canonical);
@@ -209,6 +211,11 @@ namespace TDrive.Facial
         readonly List<string> _ambiguous = new List<string>();
         readonly List<SkinnedMeshRenderer> _targets = new List<SkinnedMeshRenderer>(4);
         readonly List<Mesh> _targetMeshes = new List<Mesh>(4);
+        // LOD: 対象 Renderer → LODGroup の何番目の LOD か（結ぶときに 1 度だけ調べる。毎フレームの割り当てなし）
+        readonly Dictionary<SkinnedMeshRenderer, int> _lodOf = new Dictionary<SkinnedMeshRenderer, int>(4);
+        readonly Dictionary<LODGroup, LOD[]> _lodGroups = new Dictionary<LODGroup, LOD[]>(2);
+        int _lodLimit;            // 今効いている quality.maxLod（0 = 制限なし）
+        bool _lodLimitApplied;    // _lodLimit を各結びに反映済みか
         readonly List<LayerEvalInput> _layerInputs = new List<LayerEvalInput>(8);
         SkinnedMeshRenderer[] _intRenderers = new SkinnedMeshRenderer[0];
         int[] _intIndices = new int[0];
@@ -279,6 +286,7 @@ namespace TDrive.Facial
             public SkinnedMeshRenderer[] shapeRenderers = new SkinnedMeshRenderer[0];
             public int[] shapeIndices = new int[0];
             public float[] shapeValues = new float[0];
+            public int[] shapeLods = new int[0];
             public Transform[] boneTransforms = new Transform[0];
             public FacialPoseBone[] bones = new FacialPoseBone[0];
         }
@@ -410,12 +418,12 @@ namespace TDrive.Facial
             RestorePose(); // カット補正で加算した分も元へ
             if (zeroAllBound)
             {
-                foreach (ShapeBinding b in _bindings.Values) WriteRaw(b, 0f, true);
+                foreach (ShapeBinding b in _bindings.Values) WriteRaw(b, 0f, true, true);
             }
             for (int i = 0; i < _written.Count; i++)
             {
                 ShapeBinding b = _written[i];
-                if (!zeroAllBound) WriteRaw(b, 0f, true);
+                if (!zeroAllBound) WriteRaw(b, 0f, true, true);
                 b.written = false;
             }
             _written.Clear();
@@ -643,6 +651,7 @@ namespace TDrive.Facial
             bool hadOverride = MergeOverrides(d.layers.Length, out ov);
 
             FacialEffectiveParams p = FacialCorrectionOverrides.Resolve(d, overrides);
+            ApplyLodLimit(p.maxLod); // quality.maxLod を超える LOD の Renderer には書かない
 
             // 1 視点（位置）: 上書きの視点 > viewerOverride > EvaluateNow の引数（編集時の editViewer）> FacialViewResolver.Fallback（D-Drive の今の視点）> メインカメラ
             //   手動の角度のときも距離（レイヤー・フェード）には視点の位置を使うので、同じ順で解決する
@@ -925,12 +934,14 @@ namespace TDrive.Facial
         }
 
         // checkMesh: 戻すとき（古い番号が別のメッシュの関係ないシェイプを指さないよう、作ったときのメッシュと同じときだけ書く）
-        static void WriteRaw(ShapeBinding b, float percent, bool checkMesh = false)
+        // force: LOD の上限で書かないことになっている Renderer にも書く（全部を 0 へ戻すとき）
+        static void WriteRaw(ShapeBinding b, float percent, bool checkMesh = false, bool force = false)
         {
             for (int k = 0; k < b.count; k++)
             {
                 SkinnedMeshRenderer r = b.renderers[k];
                 if (r == null) continue;
+                if (!force && b.skip[k]) continue;
                 if (checkMesh && r.sharedMesh != b.meshes[k]) continue;
                 r.SetBlendShapeWeight(b.indices[k], percent);
             }
@@ -968,6 +979,7 @@ namespace TDrive.Facial
             var rs = new List<SkinnedMeshRenderer>();
             var ix = new List<int>();
             var vs = new List<float>();
+            var ls = new List<int>();
             if (pose.curves != null && _targets.Count > 0)
             {
                 var index = new FacialShapeIndex[_targets.Count];
@@ -979,13 +991,14 @@ namespace TDrive.Facial
                     for (int t = 0; t < _targets.Count; t++)
                     {
                         int idx = index[t].Find(nm); // 完全一致 → 末尾一致（FC_ と同じ名前の規則）
-                        if (idx >= 0) { rs.Add(_targets[t]); ix.Add(idx); vs.Add(pose.curves[c].value); }
+                        if (idx >= 0) { rs.Add(_targets[t]); ix.Add(idx); vs.Add(pose.curves[c].value); ls.Add(LodOf(_targets[t])); }
                     }
                 }
             }
             pc.shapeRenderers = rs.ToArray();
             pc.shapeIndices = ix.ToArray();
             pc.shapeValues = vs.ToArray();
+            pc.shapeLods = ls.ToArray();
 
             if (pose.bones != null && pose.bones.Length > 0)
             {
@@ -1014,6 +1027,7 @@ namespace TDrive.Facial
             {
                 SkinnedMeshRenderer r = pc.shapeRenderers[i];
                 if (r == null) continue;
+                if (_lodLimit > 0 && pc.shapeLods[i] > _lodLimit) continue; // LOD の上限を超える Renderer には加算しない
                 float cur = r.GetBlendShapeWeight(pc.shapeIndices[i]);
                 float applied = cur + weight * pc.shapeValues[i] * 100f; // 加算（Unity は 0〜100）
                 r.SetBlendShapeWeight(pc.shapeIndices[i], applied);
@@ -1129,6 +1143,10 @@ namespace TDrive.Facial
             _ambiguous.Clear();
             _targets.Clear();
             _targetMeshes.Clear();
+            _lodOf.Clear();
+            _lodGroups.Clear();
+            _lodLimit = 0;
+            _lodLimitApplied = false;
             _layerInputs.Clear();
             _baseResolved = null;
             _intRenderers = new SkinnedMeshRenderer[0];
@@ -1165,6 +1183,7 @@ namespace TDrive.Facial
                 ScanRenderers.Clear();
             }
             for (int i = 0; i < _targets.Count; i++) _targetMeshes.Add(_targets[i].sharedMesh);
+            BuildLodMap();
 
             // 基準ボーン: 指定があればそれ、無ければデータの名前で子から探す
             if (baseBone != null) _baseResolved = baseBone;
@@ -1289,11 +1308,81 @@ namespace TDrive.Facial
             }
         }
 
-        static ShapeBinding NewBinding(List<SkinnedMeshRenderer> rs, List<int> ix)
+        ShapeBinding NewBinding(List<SkinnedMeshRenderer> rs, List<int> ix)
         {
             var meshes = new Mesh[rs.Count];
-            for (int i = 0; i < meshes.Length; i++) meshes[i] = rs[i].sharedMesh;
-            return new ShapeBinding { renderers = rs.ToArray(), indices = ix.ToArray(), count = rs.Count, meshes = meshes };
+            var lods = new int[rs.Count];
+            for (int i = 0; i < meshes.Length; i++) { meshes[i] = rs[i].sharedMesh; lods[i] = LodOf(rs[i]); }
+            return new ShapeBinding { renderers = rs.ToArray(), indices = ix.ToArray(), count = rs.Count, meshes = meshes, lods = lods, skip = new bool[rs.Count] };
+        }
+
+        /// <summary>対象 Renderer の LOD の番号（LODGroup に属さない・対象でないものは 0）。</summary>
+        int LodOf(SkinnedMeshRenderer r)
+        {
+            int lod;
+            return r != null && _lodOf.TryGetValue(r, out lod) ? lod : 0;
+        }
+
+        /// <summary>対象 Renderer が LODGroup のどの LOD に入っているか（結ぶとき 1 度だけ。複数の LOD に入っていれば最も詳細な方）。</summary>
+        void BuildLodMap()
+        {
+            for (int i = 0; i < _targets.Count; i++)
+            {
+                SkinnedMeshRenderer r = _targets[i];
+                int lvl = 0;
+                LODGroup lg = r.GetComponentInParent<LODGroup>(true);
+                if (lg != null)
+                {
+                    LOD[] lods;
+                    if (!_lodGroups.TryGetValue(lg, out lods)) { lods = lg.GetLODs(); _lodGroups[lg] = lods; }
+                    bool found = false;
+                    for (int k = 0; k < lods.Length && !found; k++)
+                    {
+                        Renderer[] rr = lods[k].renderers;
+                        if (rr == null) continue;
+                        for (int j = 0; j < rr.Length; j++)
+                            if (ReferenceEquals(rr[j], r)) { lvl = k; found = true; break; }
+                    }
+                }
+                _lodOf[r] = lvl;
+            }
+            _lodGroups.Clear();
+        }
+
+        /// <summary>
+        /// quality.maxLod（0 = 制限なし。N = LOD N まで書く）を結びに反映する。限度を超える LOD の Renderer は書かない。
+        /// 書かなくなる瞬間に 1 度だけ 0 へ戻す。値が変わらなければ何もしない（毎フレーム呼んでよい）。
+        /// </summary>
+        void ApplyLodLimit(int limit)
+        {
+            if (limit < 0) limit = 0;
+            if (_lodLimitApplied && limit == _lodLimit) return;
+            _lodLimitApplied = true;
+            _lodLimit = limit;
+            foreach (ShapeBinding b in _bindings.Values)
+            {
+                for (int k = 0; k < b.count; k++)
+                {
+                    bool skip = limit > 0 && b.lods[k] > limit;
+                    if (skip && !b.skip[k])
+                    {
+                        SkinnedMeshRenderer r = b.renderers[k];
+                        if (r != null && r.sharedMesh == b.meshes[k]) r.SetBlendShapeWeight(b.indices[k], 0f); // 書かなくなる最後に 0 へ
+                    }
+                    b.skip[k] = skip;
+                }
+            }
+        }
+
+        /// <summary>今効いている LOD の上限（quality.maxLod。0 = 制限なし）。</summary>
+        public int EffectiveMaxLod { get { EnsureCache(); return _lodLimit; } }
+
+        /// <summary>対象 Renderer の LOD の番号（LODGroup の何番目か。LODGroup の外・対象でないものは 0）。</summary>
+        public int GetRendererLod(Renderer r)
+        {
+            EnsureCache();
+            var smr = r as SkinnedMeshRenderer;
+            return smr != null ? LodOf(smr) : 0;
         }
 
         static bool HasShapeWithPrefix(SkinnedMeshRenderer r, string prefix)

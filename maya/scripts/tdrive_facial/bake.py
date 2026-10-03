@@ -36,6 +36,7 @@ from maya import cmds
 
 from . import pose_apply, scene
 from .core import naming, validate
+from .core import strength as part_strength
 from .core.model import Document, SourcePose
 
 DEFAULT_THRESHOLD = 0.001  # cm（doc.bake が無いとき）
@@ -66,6 +67,7 @@ class BakeReport:
     warnings: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)  # 自動でしたことのお知らせ（Neutral の焼き直しに伴う感情レイヤーの焼き直し・プレビューの作り直し）
     meshes: list[str] = field(default_factory=list)
+    per_mesh: dict[str, dict[str, int]] = field(default_factory=dict)  # メッシュ（短い名前）→ {"targets": 書いたターゲットの数, "vertices": 差分を持つ頂点の合計}
 
     @property
     def targets(self) -> list[str]:
@@ -80,6 +82,12 @@ class BakeReport:
     def perspective_count(self) -> int:
         """パース補正のキーとして焼いたシェイプの数。"""
         return len(self.perspective)
+
+    def mesh_lines(self) -> list[str]:
+        """メッシュが 2 つ以上のときの、メッシュごとの数（顔・追加のメッシュ・LOD のメッシュ）。1 つなら空。"""
+        if len(self.per_mesh) < 2:
+            return []
+        return [f"{name}: シェイプ {c['targets']} 本、頂点 {c['vertices']}" for name, c in self.per_mesh.items()]
 
     def summary(self) -> str:
         ex = f"（うち誇張用 {len(self.extreme)}）" if self.extreme else ""
@@ -97,13 +105,13 @@ class BakeReport:
 
 
 def _resolve_meshes(doc: Document) -> list[str]:
-    """顔メッシュ + extraMeshes（長い名前）。足りなければ BakeError。"""
+    """顔メッシュ + extraMeshes + LOD のメッシュ（長い名前）。足りなければ BakeError。"""
     if not doc.asset:
         raise BakeError("アセット名（asset）が設定されていないためベイクできません")
     if doc.target is None or not doc.target.mesh:
         raise BakeError("焼く先のメッシュ（target.mesh）が設定されていないためベイクできません")
     out: list[str] = []
-    for name in [doc.target.mesh, *doc.target.extra_meshes]:
+    for name in doc.target.all_meshes():
         try:
             m = scene.resolve_mesh(name)
         except ValueError as e:
@@ -250,11 +258,13 @@ def bake(
                 return {m: scene.read_points(m) - base[m] for m in meshes}
 
             def deltas(pose: SourcePose) -> tuple[dict[str, np.ndarray], Optional[dict[str, np.ndarray]]]:
-                """(通常の差分, 誇張の差分)。重み 1 超が無ければ誇張は None。通常 = 重みを 1 までに丸めたポーズ、誇張 = 元のポーズ − 丸めたポーズ。"""
-                full = deform(pose)
-                if not validate.has_extreme(doc, pose):
+                """(通常の差分, 誇張の差分)。重み 1 超が無ければ誇張は None。通常 = 重みを 1 までに丸めたポーズ、誇張 = 元のポーズ − 丸めたポーズ。
+                部位別の強さは、ここで（差分を取る前に）ポーズへ掛ける。感情レイヤーの差分は、掛けたあとのポーズ同士になる。"""
+                scaled = part_strength.scale_pose(doc, pose)
+                full = deform(scaled)
+                if not validate.has_extreme(doc, pose):  # 掛けたあとの重みで見る（validate が強さを見ている）
                     return full, None
-                clamped = deform(validate.clamp_extreme(pose))
+                clamped = deform(validate.clamp_extreme(scaled))
                 return clamped, {m: full[m] - clamped[m] for m in meshes}
 
             def neutral_delta(r: int, c: int):
@@ -292,7 +302,7 @@ def bake(
             for j, (_k, name, pose) in enumerate(pjobs):  # パース補正: 基準姿勢との差分（重み 1 超は丸める。Neutral は引かない）
                 if progress:
                     progress(len(jobs) + j, n_jobs, name)
-                results.append((name, pose, to_sparse(deform(validate.clamp_extreme(pose)))))
+                results.append((name, pose, to_sparse(deform(validate.clamp_extreme(part_strength.scale_pose(doc, pose))))))
             if progress:
                 progress(n_jobs, n_jobs, "")
         finally:
@@ -314,6 +324,9 @@ def bake(
                 state[m][name] = validate.pose_hash(pose)  # パース補正のキーも pose_hash（= perspective_key_hash）
                 excl[m][name] = sig
                 total += len(idx)
+                pm = rep.per_mesh.setdefault(scene.short_name(m), {"targets": 0, "vertices": 0})
+                pm["targets"] += 1
+                pm["vertices"] += len(idx)
                 if m == meshes[0]:
                     (rep.created if created else rep.replaced).append(name)
                     if name.endswith(naming.EXTREME_SUFFIX):

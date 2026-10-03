@@ -73,6 +73,7 @@ from . import preview_rig
 from . import scene as scene_mod
 from . import shapes
 from .core import autofill, base_expr, evaluate, fcpose_io, naming, space
+from .core import strength as strength_mod
 from .core import profile as profile_mod
 from .core import validate as V
 from .core.model import (
@@ -82,6 +83,7 @@ from .core.model import (
     Bake,
     Document,
     GridPoint,
+    LodMesh,
     Meta,
     Quality,
     SourcePose,
@@ -487,17 +489,20 @@ class FacialSession:
         if doc.target is None or not doc.target.mesh:
             raise FacialSessionError("対象のメッシュ（target.mesh）が設定されていません")
         out: list[str] = []
-        for name in [doc.target.mesh, *doc.target.extra_meshes]:
+        lod_only = {m.mesh for m in doc.target.lod_meshes} - {doc.target.mesh, *doc.target.extra_meshes}
+        for name in doc.target.all_meshes():
             try:
                 m = scene_mod.resolve_mesh(name)
             except ValueError as e:
+                if name in lod_only:
+                    continue  # LOD のメッシュが無いのは飛ばす（編集は続けられる。検証が知らせ、ベイクは止まる）
                 raise FacialSessionError(str(e)) from e
             if m not in out:
                 out.append(m)
         return out
 
     def target_meshes(self) -> list[str]:
-        """対象メッシュ（顔 + extraMeshes。長い名前）。設定が無い・見つからなければ FacialSessionError。"""
+        """対象メッシュ（顔 + extraMeshes + LOD のメッシュ。長い名前）。設定が無い・見つからなければ FacialSessionError（LOD のメッシュが無いのだけは飛ばす）。"""
         return self._resolve_meshes(self.require())
 
     # ------------------------------------------------------------ シーンの情報
@@ -586,7 +591,7 @@ class FacialSession:
     @staticmethod
     def _target_key(doc: Document) -> tuple:
         t = doc.target
-        return (t.mesh, tuple(t.extra_meshes)) if t is not None else ("", ())
+        return (t.mesh, tuple(t.extra_meshes), tuple(m.mesh for m in t.lod_meshes)) if t is not None else ("", (), ())
 
     def _sync_after_restore(self) -> None:
         self._reapply_safely()
@@ -1511,6 +1516,42 @@ class FacialSession:
         doc = self.doc
         return doc is not None and pose_apply.is_excluded(doc, kind, name)
 
+    # --- 部位別の強さ（ベイクのとき掛ける。F5-6）---
+    def part_strengths(self) -> list[tuple[str, float]]:
+        """部位別の強さの一覧（上が優先）。(パターン, 強さ)。"""
+        doc = self.doc
+        return [(e.pattern, e.strength) for e in strength_mod.entries_of(doc)] if doc is not None else []
+
+    def part_strength_of(self, kind: str, name: str) -> float:
+        """名前に掛かる強さ（当たるものが無い・除外されているときは 1）。kind = "curve" / "bone"。ポーズタブの表示用。"""
+        doc = self.doc
+        if doc is None:
+            return 1.0
+        excluded = pose_apply.is_excluded(doc, kind, name)
+        return 1.0 if excluded else strength_mod.strength_for(strength_mod.effective_entries(doc), name)
+
+    def _part_edit(self, edit: Callable[[Document], Optional[tuple[str, str]]]) -> CommandResult:
+        bad = edit(self.require())
+        return CommandResult(ok=False, code=bad[0], message=bad[1]) if bad else CommandResult()
+
+    @undoable(notify=True)
+    def add_part_strength(self, pattern: str, strength: float = 0.5) -> CommandResult:
+        """部位別の強さを一覧の末尾に足す（名前にこの文字を含むシェイプ・ボーンに、ベイクのとき強さを掛ける）。"""
+        return self._part_edit(lambda d: strength_mod.add_entry(d, pattern, strength))
+
+    @undoable(notify=True)
+    def remove_part_strength(self, index: int) -> CommandResult:
+        return self._part_edit(lambda d: strength_mod.remove_entry(d, index))
+
+    @undoable(notify=True)
+    def set_part_strength(self, index: int, strength: float) -> CommandResult:
+        return self._part_edit(lambda d: strength_mod.set_entry_strength(d, index, strength))
+
+    @undoable(notify=True)
+    def move_part_strength(self, index: int, delta: int) -> CommandResult:
+        """上へ（delta = -1。優先度が上がる）/ 下へ（+1）。"""
+        return self._part_edit(lambda d: strength_mod.move_entry(d, index, delta))
+
     # --- セットアップ ---
     @undoable(refresh=True, notify=True)
     def set_target(self, mesh: Optional[str] = None, extra_meshes: Optional[Sequence[str]] = None) -> CommandResult:
@@ -1530,7 +1571,70 @@ class FacialSession:
             doc.target = Target()
         doc.target.mesh = new_mesh
         doc.target.extra_meshes = [m for m in new_extra if m != new_mesh]
+        doc.target.lod_meshes = [m for m in doc.target.lod_meshes if m.mesh != new_mesh and m.mesh not in doc.target.extra_meshes]  # 顔・追加に入れたメッシュは LOD から外す
         return CommandResult()
+
+    # --- LOD のメッシュ（F5-7）---
+    def lod_meshes(self) -> list[tuple[str, int]]:
+        """LOD のメッシュの一覧（文書に書いた名前, LOD 番号）。"""
+        doc = self.doc
+        return [(m.mesh, m.lod) for m in doc.target.lod_meshes] if doc is not None and doc.target is not None else []
+
+    def next_lod_number(self) -> int:
+        """次に割り当てる LOD 番号（今の最大 + 1。無ければ 1）。"""
+        return max([lod for _m, lod in self.lod_meshes()], default=0) + 1
+
+    @undoable(refresh=True, notify=True)
+    def add_lod_mesh(self, mesh: str, lod: Optional[int] = None) -> CommandResult:
+        """LOD のメッシュを足す（顔のメッシュと同じ FC_* をそのメッシュの blendShape に焼く）。lod を省くと次の番号。
+        メッシュがシーンに無い・顔 / 追加のメッシュ・登録済みのとき、LOD 番号が 1 未満のときは失敗して文書は変わらない。編集状態は抜ける。"""
+        doc = self.require()
+        if doc.target is None or not doc.target.mesh:
+            return CommandResult(ok=False, code="no_target", message="先に顔のメッシュを設定してください")
+        try:
+            stored = self._stored_mesh_name(scene_mod.resolve_mesh(mesh))
+            long_name = scene_mod.resolve_mesh(stored)
+        except ValueError as e:
+            return CommandResult(ok=False, code="mesh_not_found", message=str(e))
+        if lod is None:
+            lod = self.next_lod_number()
+        if isinstance(lod, bool) or not isinstance(lod, int) or lod < 1:
+            return CommandResult(ok=False, code="lod_range", message="LOD 番号は 1 以上の整数にしてください（LOD0 は顔のメッシュです）")
+        for name in doc.target.all_meshes():
+            try:
+                same = scene_mod.resolve_mesh(name) == long_name
+            except ValueError:
+                same = name == stored
+            if same:
+                kind = "LOD のメッシュに入っています" if name in {m.mesh for m in doc.target.lod_meshes} else "顔のメッシュ・追加のメッシュに入っています"
+                return CommandResult(ok=False, code="exists", message=f"{scene_mod.short_name(long_name)} は既に{kind}")
+        self.end_edit(quiet=True)
+        doc.target.lod_meshes.append(LodMesh(mesh=stored, lod=lod))
+        return CommandResult(message=f"LOD{lod} に {scene_mod.short_name(long_name)} を足しました。焼くと、顔のメッシュと同じ名前のシェイプがこのメッシュにも作られます")
+
+    @undoable(refresh=True, notify=True)
+    def remove_lod_mesh(self, mesh: str) -> CommandResult:
+        """LOD のメッシュを外す（文書に書いた名前で指す。シーンに無くても外せる）。そのメッシュに焼いた FC_* はシーンに残る（メッシュを選んで消す）。"""
+        doc = self.require()
+        have = doc.target.lod_meshes if doc.target is not None else []
+        left = [m for m in have if m.mesh != mesh]
+        if len(left) == len(have):
+            return CommandResult(ok=False, code="missing", message=f"「{mesh}」は LOD のメッシュにありません")
+        self.end_edit(quiet=True)
+        doc.target.lod_meshes = left  # type: ignore[union-attr]
+        return CommandResult()
+
+    @undoable(notify=True)
+    def set_lod_number(self, mesh: str, lod: int) -> CommandResult:
+        """LOD のメッシュの LOD 番号を変える（1 以上の整数）。"""
+        doc = self.require()
+        if isinstance(lod, bool) or not isinstance(lod, int) or lod < 1:
+            return CommandResult(ok=False, code="lod_range", message="LOD 番号は 1 以上の整数にしてください（LOD0 は顔のメッシュです）")
+        for m in doc.target.lod_meshes if doc.target is not None else []:
+            if m.mesh == mesh:
+                m.lod = lod
+                return CommandResult()
+        return CommandResult(ok=False, code="missing", message=f"「{mesh}」は LOD のメッシュにありません")
 
     @undoable(notify=True)
     def set_base_bone(self, name: str) -> CommandResult:

@@ -33,7 +33,7 @@ namespace TDrive.Facial
     public struct FacialQualityData
     {
         [Tooltip("角度の変化がこの値（度）未満で感情も同じなら、前回の格子の計算を使い回す")] public float angleEpsilon;
-        [Tooltip("評価する LOD の上限（0 = 最も詳細な LOD のみ）。※今は未使用")] public int maxLod;
+        [Tooltip("補正を書く LOD の上限（0 = 制限なし。N = LOD N まで書き、それより粗い LOD の Renderer には書かない。LODGroup に入っていない Renderer は常に書く）")] public int maxLod;
         [Tooltip("キー角度のシャープさ（既定 1）。1 より大きいとキーの角度の近くでキーのポーズに寄る。0 以下は 1 として扱う")] public float sharpness;
         [Tooltip("コマ打ちの fps（0 = 毎フレーム）。補正の更新をこの回数 / 秒に間引く（追従はなく、更新のたびに目標へ跳ぶ）")] public float stepFps;
         [Tooltip("誇張（_Ex シェイプ）の既定の強さ（0〜1）。「指定あり」がオンのときだけ使い、オフなら 1")] public float exaggeration;

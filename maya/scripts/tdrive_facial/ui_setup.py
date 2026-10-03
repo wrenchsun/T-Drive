@@ -96,6 +96,7 @@ class SetupTab(QtWidgets.QWidget):
         self._build_quality()
         self._build_profile()
         self._build_exclude()
+        self._build_part_strength()
         self._build_t20()
         self._build_working_set()
         self.form.addStretch(1)
@@ -138,6 +139,37 @@ class SetupTab(QtWidgets.QWidget):
         row2.addWidget(self.extra_remove)
         row2.addStretch(1)
         f.addRow("", row2)
+
+        self.lod_table = QtWidgets.QTableWidget(0, 2)
+        self.lod_table.setHorizontalHeaderLabels(["メッシュ", "LOD"])
+        self.lod_table.verticalHeader().setVisible(False)
+        self.lod_table.horizontalHeader().setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
+        self.lod_table.horizontalHeader().setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeToContents)
+        self.lod_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        self.lod_table.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
+        self.lod_table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        self.lod_table.setMinimumHeight(80)
+        self.lod_table.setMaximumHeight(120)
+        self.lod_table.setToolTip("LOD1 以降のメッシュ。顔のメッシュと同じ名前のシェイプが、このメッシュの blendShape にも焼かれます")
+        f.addRow("LOD のメッシュ", self.lod_table)
+        row3 = QtWidgets.QHBoxLayout()
+        self.lod_add = QtWidgets.QPushButton("選択から追加")
+        self.lod_add.setToolTip("Maya で選んでいるメッシュを LOD のメッシュに足す。LOD 番号は次の番号（あとから変えられます）")
+        self.lod_add.clicked.connect(lambda *_: self.on_lod_add())
+        self.lod_remove = QtWidgets.QPushButton("外す")
+        self.lod_remove.clicked.connect(lambda *_: self.on_lod_remove())
+        row3.addWidget(self.lod_add)
+        row3.addWidget(self.lod_remove)
+        row3.addStretch(1)
+        f.addRow("", row3)
+        lod_hint = QtWidgets.QLabel(
+            "LOD1 以降の（頂点数の違う）メッシュです。顔のメッシュと同じポーズを当てて、そのメッシュの形の差分を、同じ名前のシェイプとして焼きます。"
+            "ポーズのシェイプは、LOD のメッシュにある同じ名前のターゲットを動かします（無いターゲットは、そのメッシュでは動きません。検証タブでお知らせします）。"
+            "ゲームでは、同じ重みがすべての LOD のメッシュに書かれます。"
+        )
+        lod_hint.setWordWrap(True)
+        lod_hint.setStyleSheet(DIM_STYLE)
+        f.addRow(lod_hint)
 
     def _build_bone(self) -> None:
         f = self._group("基準ボーンと向き")
@@ -327,6 +359,56 @@ class SetupTab(QtWidgets.QWidget):
         v.addWidget(self.exclude_note)
         self.form.addWidget(box)
 
+    def _build_part_strength(self) -> None:
+        box = QtWidgets.QGroupBox("部位別の強さ")
+        v = QtWidgets.QVBoxLayout(box)
+        hint = QtWidgets.QLabel(
+            "名前にここの文字を含むシェイプ・ボーンの動きに、ベイクのときだけ強さ（0〜1）を掛けます（部分一致。例: 「eye」を 0.5 にすると、目の動きが半分になって焼かれます）。"
+            "複数に当たるときは、上の行が優先されます。「補正から除外するもの」に入れた名前は、強さに関わらず焼かれません。"
+            "編集中のビューには、ポーズに入れた元の値がそのまま出ます。掛けた結果は、焼いたあとのプレビューで確かめてください。"
+            "ゲームの実行中に変えることはできません（焼き込みです）。変えると、焼いた点に「変更あり」の印が付くので、焼き直してください。"
+        )
+        hint.setWordWrap(True)
+        hint.setStyleSheet(DIM_STYLE)
+        v.addWidget(hint)
+        self.part_table = QtWidgets.QTableWidget(0, 2)
+        self.part_table.setHorizontalHeaderLabels(["パターン（名前に含む文字）", "強さ"])
+        self.part_table.verticalHeader().setVisible(False)
+        self.part_table.horizontalHeader().setStretchLastSection(False)
+        self.part_table.horizontalHeader().setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
+        self.part_table.horizontalHeader().setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeToContents)
+        self.part_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        self.part_table.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
+        self.part_table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        self.part_table.setMinimumHeight(110)
+        self.part_table.setMaximumHeight(150)
+        self.part_table.setToolTip("上の行ほど優先されます。強さを変えると、焼いた点に「変更あり」の印が付きます")
+        v.addWidget(self.part_table)
+        row = QtWidgets.QHBoxLayout()
+        self.part_input = QtWidgets.QLineEdit()
+        self.part_input.setPlaceholderText("パターンを入力（例: eye）")
+        self.part_input.returnPressed.connect(lambda *_: self.on_part_add())
+        self.part_add = QtWidgets.QPushButton("追加")
+        self.part_add.setToolTip("一覧のいちばん下（優先度がいちばん低い）に足します。強さは 0.5 から始まります")
+        self.part_add.clicked.connect(lambda *_: self.on_part_add())
+        row.addWidget(self.part_input, 1)
+        row.addWidget(self.part_add)
+        v.addLayout(row)
+        row = QtWidgets.QHBoxLayout()
+        self.part_remove = QtWidgets.QPushButton("外す")
+        self.part_up = QtWidgets.QPushButton("上へ")
+        self.part_down = QtWidgets.QPushButton("下へ")
+        self.part_up.setToolTip("優先度を上げる")
+        self.part_down.setToolTip("優先度を下げる")
+        self.part_remove.clicked.connect(lambda *_: self.on_part_remove())
+        self.part_up.clicked.connect(lambda *_: self.on_part_move(-1))
+        self.part_down.clicked.connect(lambda *_: self.on_part_move(1))
+        for b in (self.part_remove, self.part_up, self.part_down):
+            row.addWidget(b)
+        row.addStretch(1)
+        v.addLayout(row)
+        self.form.addWidget(box)
+
     def _build_profile(self) -> None:
         f = self._group("命名規則プロファイル")
         row = QtWidgets.QHBoxLayout()
@@ -443,6 +525,7 @@ class SetupTab(QtWidgets.QWidget):
             self.quality_exaggeration.setValue(q.exaggeration if q is not None else 1.0)
             self.quality_epsilon.setValue(q.angle_epsilon if q is not None else 0.1)
             self._refresh_exclude(doc)
+            self._refresh_part_strength()
             self._refresh_profile(doc)
             self._refresh_working_set(doc)
         finally:
@@ -482,6 +565,7 @@ class SetupTab(QtWidgets.QWidget):
         else:
             self.mesh.insertItem(0, "（未設定）", None)
             self.mesh.setCurrentIndex(0)
+        self._refresh_lod()
         self.extra_list.clear()
         for name in extras:
             it = QtWidgets.QListWidgetItem(name)
@@ -493,6 +577,41 @@ class SetupTab(QtWidgets.QWidget):
             it.setData(QtCore.Qt.UserRole, name)
             self.extra_list.addItem(it)
 
+    def _refresh_lod(self) -> None:
+        """LOD のメッシュの表。行（メッシュの並び）が変わったときだけ作り直す（LOD 番号のスピンボックスの通知の途中で、自分を消さないため）。"""
+        was, self._updating = self._updating, True
+        try:
+            self._fill_lod()
+        finally:
+            self._updating = was
+
+    def _fill_lod(self) -> None:
+        entries = self.session.lod_meshes()
+        sig = tuple(m for m, _l in entries)
+        tbl = self.lod_table
+        if self._list_sig.get("lod") != sig:
+            self._list_sig["lod"] = sig
+            tbl.setRowCount(0)
+            tbl.setRowCount(len(entries))
+            for i, (name, _lod) in enumerate(entries):
+                it = QtWidgets.QTableWidgetItem(name)
+                try:
+                    it.setToolTip(scene_mod.resolve_mesh(name))
+                except ValueError:
+                    it.setText(f"{name} {MESH_MISSING}")
+                    it.setForeground(QtCore.Qt.gray)
+                it.setData(QtCore.Qt.UserRole, name)
+                tbl.setItem(i, 0, it)
+                sp = _int_spin(1, 99)
+                sp.setToolTip("LOD の番号（1 以上。LOD0 は顔のメッシュです）")
+                sp.valueChanged.connect(lambda *a, nm=name: self.on_lod_number_changed(nm, a[0]))
+                tbl.setCellWidget(i, 1, sp)
+        for i, (_name, lod) in enumerate(entries):
+            sp = tbl.cellWidget(i, 1)
+            if sp is not None and sp.value() != lod:
+                sp.setValue(max(1, min(99, lod)))
+        self.lod_remove.setEnabled(bool(entries))
+
     def _refresh_exclude(self, doc) -> None:
         for kind, patterns in (("curve", doc.exclude.curves), ("bone", doc.exclude.bones)):
             lst = self.exclude_lists[kind]
@@ -501,6 +620,40 @@ class SetupTab(QtWidgets.QWidget):
                 lst.addItem(pat)
         used = self._excluded_in_poses(doc)
         self.exclude_note.setText(f"除外に当たる名前がポーズに入っています: {used} 個（ベイクでは無視されます）" if used else "")
+
+    def _refresh_part_strength(self, select: Optional[int] = None) -> None:
+        """部位別の強さの表。行（パターンの並び）が変わったときだけ作り直す（強さのスピンボックスの通知の途中で、自分を消さないため）。"""
+        was, self._updating = self._updating, True  # 値を入れ直すあいだ、操作の通知を止める
+        try:
+            self._fill_part_strength(select)
+        finally:
+            self._updating = was
+
+    def _fill_part_strength(self, select: Optional[int]) -> None:
+        entries = self.session.part_strengths()
+        sig = tuple(p for p, _s in entries)
+        tbl = self.part_table
+        if self._list_sig.get("part") != sig:
+            self._list_sig["part"] = sig
+            tbl.setRowCount(0)
+            tbl.setRowCount(len(entries))
+            for i, (pat, st) in enumerate(entries):
+                it = QtWidgets.QTableWidgetItem(pat)
+                it.setToolTip(pat)
+                tbl.setItem(i, 0, it)
+                sp = _spin(0.0, 1.0, 0.05, 2)
+                sp.setToolTip("ベイクのときに掛ける強さ（0 = 効かない、1 = そのまま）")
+                sp.valueChanged.connect(lambda *a, r=i: self.on_part_strength_changed(r, a[0]))
+                tbl.setCellWidget(i, 1, sp)
+        for i, (_pat, st) in enumerate(entries):
+            sp = tbl.cellWidget(i, 1)
+            if sp is not None and abs(sp.value() - st) > 1e-9:
+                sp.setValue(min(1.0, max(0.0, st)))
+        if select is not None and 0 <= select < len(entries):
+            tbl.selectRow(select)
+        has = bool(entries)
+        for b in (self.part_remove, self.part_up, self.part_down):
+            b.setEnabled(has)
 
     @staticmethod
     def _excluded_in_poses(doc) -> int:
@@ -652,6 +805,40 @@ class SetupTab(QtWidgets.QWidget):
             return
         self._run(self.session.set_target, extra_meshes=[n for n in doc.target.extra_meshes if n not in gone])
 
+    def on_lod_add(self) -> None:
+        doc = self.session.doc
+        if doc is None or doc.target is None:
+            return
+        sel = _selected_mesh_transforms()
+        if not sel:
+            self.show_status("メッシュを選んでから押してください", error=True)
+            return
+        added = 0
+        for m in sel:
+            res = self._run(self.session.add_lod_mesh, m)
+            if res:
+                added += 1
+            elif res is None and len(sel) == 1:
+                return  # 失敗の理由は _run が状態欄に出した
+        if added:
+            self.show_status(f"LOD のメッシュを {added} 個足しました（LOD 番号は表で変えられます）。焼くとこのメッシュにも補正のシェイプができます")
+        else:
+            self.show_status("足せるメッシュが選ばれていません（顔・追加・登録済みのメッシュは除きます）", error=True)
+
+    def on_lod_remove(self) -> None:
+        rows = self.lod_table.selectionModel().selectedRows()
+        if not rows:
+            self.show_status("外すメッシュを一覧から選んでください", error=True)
+            return
+        name = self.lod_table.item(rows[0].row(), 0).data(QtCore.Qt.UserRole)
+        if self._run(self.session.remove_lod_mesh, name):
+            self.show_status("LOD のメッシュから外しました（そのメッシュに焼いた補正のシェイプはシーンに残ります）")
+
+    def on_lod_number_changed(self, name: str, value: int) -> None:
+        if self._updating:
+            return
+        self._run(self.session.set_lod_number, name, int(value))
+
     # ---- 基準ボーン・向き
     def on_base_bone_edited(self) -> None:
         if self._updating:
@@ -787,6 +974,42 @@ class SetupTab(QtWidgets.QWidget):
             if not self._run(self.session.remove_exclude, kind, it.text()):
                 return
         self.show_status("除外から外しました。焼いた点に「変更あり」の印が付きます（焼き直すと反映されます）")
+
+    # ---- 部位別の強さ
+    def _part_row(self) -> int:
+        rows = self.part_table.selectionModel().selectedRows()
+        return rows[0].row() if rows else -1
+
+    def on_part_add(self) -> None:
+        text = self.part_input.text().strip()
+        if not text:
+            self.show_status("パターンを入力してから追加してください", error=True)
+            return
+        if self._run(self.session.add_part_strength, text, 0.5):
+            self.part_input.clear()
+            self.show_status(f"「{text}」を部位別の強さに足しました（強さ 0.5）。焼いた点に「変更あり」の印が付きます（焼き直すと反映されます）")
+            self._refresh_part_strength(select=len(self.session.part_strengths()) - 1)
+
+    def on_part_remove(self) -> None:
+        i = self._part_row()
+        if i < 0:
+            self.show_status("外す行を一覧から選んでください", error=True)
+            return
+        if self._run(self.session.remove_part_strength, i):
+            self.show_status("部位別の強さから外しました。焼いた点に「変更あり」の印が付きます（焼き直すと反映されます）")
+
+    def on_part_move(self, delta: int) -> None:
+        i = self._part_row()
+        if i < 0:
+            self.show_status("動かす行を一覧から選んでください", error=True)
+            return
+        if self._run(self.session.move_part_strength, i, delta):
+            self._refresh_part_strength(select=max(0, min(len(self.session.part_strengths()) - 1, i + delta)))
+
+    def on_part_strength_changed(self, row: int, value: float) -> None:
+        if self._updating:
+            return
+        self._run(self.session.set_part_strength, row, float(value))
 
     # ---- プロファイル
     def on_profile_apply(self) -> None:

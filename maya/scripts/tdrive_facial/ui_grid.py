@@ -1070,6 +1070,8 @@ class GridTab(QtWidgets.QWidget):
             lines.append(f"パース補正のシェイプ（FC_…_Persp_K）: {len(report.perspective)} 個")
         if report.empty:
             lines.append(f"差分が残らなかった点（空のシェイプ）: {len(report.empty)} 個")
+        for ml in getattr(report, "mesh_lines", lambda: [])():  # メッシュが 2 つ以上のとき、メッシュごとの数
+            lines.append("メッシュ別  " + ml)
         if report.missing_curves:
             lines.append("シーンに無くて飛ばしたシェイプ: " + "、".join(report.missing_curves))
         if report.missing_bones:

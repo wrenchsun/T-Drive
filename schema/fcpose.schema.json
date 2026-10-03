@@ -173,7 +173,20 @@
           "description": "T-Drive 追加。焼く先のメッシュ",
           "properties": {
             "mesh": { "type": "string" },
-            "extraMeshes": { "$ref": "#/$defs/stringList" }
+            "extraMeshes": { "$ref": "#/$defs/stringList" },
+            "lodMeshes": {
+              "type": "array",
+              "description": "T-Drive 追加。LOD1 以降のメッシュ（顔メッシュと同じ FC_* をそのメッシュの blendShape に焼く）",
+              "items": {
+                "type": "object",
+                "required": ["mesh"],
+                "properties": {
+                  "mesh": { "type": "string" },
+                  "lod": { "type": "integer", "minimum": 1 }
+                },
+                "additionalProperties": true
+              }
+            }
           },
           "additionalProperties": true
         },
@@ -182,7 +195,20 @@
           "description": "T-Drive 追加",
           "properties": {
             "deltaThreshold": { "type": "number", "minimum": 0 },
-            "differential": { "type": "boolean" }
+            "differential": { "type": "boolean" },
+            "partStrength": {
+              "type": "array",
+              "description": "T-Drive 追加。部位別の強さ（ベイクのとき、名前に pattern を含むシェイプ・ボーンのポーズに掛ける 0〜1。上にあるものが優先）",
+              "items": {
+                "type": "object",
+                "required": ["pattern", "strength"],
+                "properties": {
+                  "pattern": { "type": "string" },
+                  "strength": { "type": "number", "minimum": 0, "maximum": 1 }
+                },
+                "additionalProperties": true
+              }
+            }
           },
           "additionalProperties": true
         },

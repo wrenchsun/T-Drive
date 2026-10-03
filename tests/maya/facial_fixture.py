@@ -132,3 +132,38 @@ def make_doc():
         joy.points[(pt.row, pt.col)] = pt
     doc.layers.append(joy)
     return doc
+
+
+def add_lod1(name: str = "mini_face_LOD1", node: str = "bs_lod1", divisions: tuple = (10, 8), aliases: tuple = ()) -> dict:
+    """`build_mini_head()` のあとに、LOD1 のメッシュを足す: 頂点数の違う球（72）を同じジョイントへスキンし、
+    自分の blendShape ノード（`node`。スキンより前）に **同じ名前のターゲット**（mouth_open / smile_L / smile_R / brow_up。LOD1 の頂点で作る）を持たせる。
+    ターゲット用のメッシュは消す（差分は blendShape が持つ）。divisions = 球の分割（頂点数が変わる）、aliases を渡すとその名前のターゲットだけ持たせる。"""
+    lod = cmds.polySphere(name=name, radius=8, subdivisionsX=divisions[0], subdivisionsY=divisions[1], axis=(0, 1, 0))[0]
+    cmds.move(0, 12, 0, lod, absolute=True)
+    cmds.makeIdentity(lod, apply=True, translate=True)
+    skin = cmds.skinCluster("root", "head", "eye_L", "eye_R", lod, toSelectedBones=True, maximumInfluences=3, name=f"{name}_skin")[0]
+    cmds.skinPercent(skin, lod, transformValue=[("head", 1.0)])
+    for i, p in enumerate(_vertex_positions(lod)):
+        for eye, pos in (("eye_L", EYE_L), ("eye_R", EYE_R)):
+            d = math.dist(p, pos)
+            if d < EYE_RADIUS * 1.6:  # 頂点が粗いので、目の範囲を少し広げる
+                w = 1.0 - d / (EYE_RADIUS * 1.6)
+                cmds.skinPercent(skin, f"{lod}.vtx[{i}]", transformValue=[("head", 1.0 - w), (eye, w)])
+
+    def front(p):
+        return p[2] > 3.0
+
+    specs = (
+        ("mouth_open", lambda p: front(p) and 8.0 < p[1] < 11.5 and abs(p[0]) < 4.5, (0, -1.5, 0.3)),
+        ("smile_L", lambda p: front(p) and 8.0 < p[1] < 12.5 and p[0] > 1.0, (0.5, 0.8, 0)),
+        ("smile_R", lambda p: front(p) and 8.0 < p[1] < 12.5 and p[0] < -1.0, (-0.5, 0.8, 0)),
+        ("brow_up", lambda p: front(p) and p[1] > 14.0, (0, 1.0, 0)),
+    )
+    specs = tuple(sp for sp in specs if not aliases or sp[0] in aliases)
+    targets = [_make_target(lod, f"{node}_target_{a}", sel, off) for a, sel, off in specs]
+    bs = cmds.blendShape(*targets, lod, name=node, frontOfChain=True)[0]
+    for i, (alias, _s, _o) in enumerate(specs):
+        cmds.aliasAttr(alias, f"{bs}.weight[{i}]")
+    cmds.delete(*targets)
+    cmds.select(clear=True)
+    return {"lod": lod, "bs": bs, "skin": skin}

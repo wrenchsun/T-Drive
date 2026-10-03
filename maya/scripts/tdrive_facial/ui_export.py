@@ -357,6 +357,11 @@ class ExportTab(QtWidgets.QWidget):
             f"FBX: {res.fbx.as_posix()}",
             f".fcpose: {res.fcpose.as_posix()}",
             "メッシュ（{} 個）: {}".format(len(res.meshes), "、".join(res.meshes)),
+            *(
+                ["LOD のメッシュ: " + "、".join(f"LOD{lod} {name}（FC_* {res.fc_by_mesh.get(name, 0)} 本）" for name, lod in sorted(res.lod_meshes.items(), key=lambda kv: (kv[1], kv[0])))]
+                if res.lod_meshes
+                else []
+            ),
             f"FBX に入った FC_*（顔メッシュ）: {res.fc_count} 本" + (f"（うち誇張用 _Ex {res.fc_ex_count} 本）" if res.fc_ex_count else ""),
             f"除いた fcs_*（彫刻用シェイプ）: {res.excluded_fcs} 本",
         ]

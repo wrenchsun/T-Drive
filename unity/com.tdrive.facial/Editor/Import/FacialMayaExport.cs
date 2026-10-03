@@ -58,7 +58,7 @@ namespace TDrive.Facial.Editor
                 sharpness = p.sharpness,
                 stepFps = p.stepFps,
                 angleEpsilon = data != null ? data.quality.angleEpsilon : 0.1,
-                maxLod = data != null ? data.quality.maxLod : 0,
+                maxLod = p.maxLod,
                 edgeFade = p.edgeFade,
                 exaggeration = p.exaggeration,
                 perspectiveStrength = p.perspectiveStrength,

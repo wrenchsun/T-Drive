@@ -16,6 +16,7 @@
   - `exaggeration` カーブを含む `.fctrack` は、古い版のパッケージでは読めない
 
 ### 追加
+- F5-7: 調整値「書き込む LOD の上限」（`maxLod`。0 = すべての LOD に書く = これまでどおり、N ≥ 1 = LOD N まで）。LOD は LODGroup から調べる。`Runner.EffectiveMaxLod` / `GetRendererLod`
 - F5-4: パース補正（距離 / 画角の軸のキー。`FC_<asset>_Persp_K{n}` を角度の補正に足す）。調整値「パース補正の強さ」、Timeline のクリップ「パース補正を使う」、`.fctrack` の固定カーブ `perspective`。`.fcpose` / `.fctrack` の取り込みの版を上げた（再取り込みされる）
 - FU-0: パッケージ雛形（asmdef・README）
 - FU-1: `TDrive.Facial.Core`（FacialCore / FacialSpace）と共通テストデータの EditMode テスト

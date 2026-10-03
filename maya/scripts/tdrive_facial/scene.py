@@ -1020,4 +1020,23 @@ def build_scene_info(doc: Document) -> validate.SceneInfo:
             n = len(cmds.getAttr(_item_plug(t.node, t.index, geometry_index(t.node, mesh)) + ".inputPointsTarget") or [])
             infos[t.alias] = validate.TargetInfo(vertex_count=n, empty=(n == 0))
     info.target_info = infos
+    info.mesh_infos = _mesh_infos(doc, prefix) if doc.target.lod_meshes else None  # LOD のメッシュが無ければ集めない（検査も飛ばす）
     return info
+
+
+def _mesh_infos(doc: Document, prefix: str) -> dict[str, validate.MeshInfo]:
+    """文書に書いたメッシュ（顔・extraMeshes・LOD）→ シーンでの事情。"""
+    out: dict[str, validate.MeshInfo] = {}
+    for name in doc.target.all_meshes() if doc.target is not None else []:
+        try:
+            m = resolve_mesh(name)
+        except ValueError:
+            out[name] = validate.MeshInfo(exists=False)
+            continue
+        out[name] = validate.MeshInfo(
+            exists=True,
+            resolved=m,
+            targets=[t.alias for t in list_curves(m)],
+            fc_targets=[t.alias for t in fc_targets(m, prefix) if naming.is_fc_name(t.alias)],
+        )
+    return out

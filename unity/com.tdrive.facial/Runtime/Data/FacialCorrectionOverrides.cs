@@ -19,6 +19,7 @@ namespace TDrive.Facial
         public float stepFps;
         public float exaggeration;
         public float perspectiveStrength;
+        public int maxLod; // 補正を書く LOD の上限（0 = 制限なし。N = LOD N まで）
     }
 
     [CreateAssetMenu(menuName = "T-Drive/Facial Correction Overrides", fileName = "FacialCorrectionOverrides", order = 901)]
@@ -54,6 +55,9 @@ namespace TDrive.Facial
         [Tooltip("誇張を上書きする")] public bool overrideExaggeration;
         [Tooltip("誇張（_Ex シェイプ）の強さ（0〜1）。1 = 作った通り、0 = 誇張なし")] [Range(0f, 1f)] public float exaggeration = 1f;
 
+        [Tooltip("書き込む LOD の上限を上書きする")] public bool overrideMaxLod;
+        [Tooltip("補正を書く LOD の上限（0 = 制限なし。N = LOD N まで書く。LODGroup に入っていない Renderer は常に書く）")] [Min(0)] public int maxLod;
+
         [Tooltip("パース補正の強さを上書きする")] public bool overridePerspectiveStrength;
         [Tooltip("パース補正の強さ（0〜1）。0 = 補正なし")] [Range(0f, 1f)] public float perspectiveStrength = 1f;
 
@@ -74,6 +78,7 @@ namespace TDrive.Facial
                 p.stepFps = data.quality.stepFps;
                 p.exaggeration = data.quality.hasExaggeration ? Mathf.Clamp01(data.quality.exaggeration) : 1f;
                 p.perspectiveStrength = Mathf.Clamp01(data.perspective.strength);
+                p.maxLod = Mathf.Max(0, data.quality.maxLod);
             }
             else
             {
@@ -92,6 +97,7 @@ namespace TDrive.Facial
             if (ov.overrideStepFps) p.stepFps = ov.stepFps;
             if (ov.overrideExaggeration) p.exaggeration = Mathf.Clamp01(ov.exaggeration);
             if (ov.overridePerspectiveStrength) p.perspectiveStrength = Mathf.Clamp01(ov.perspectiveStrength);
+            if (ov.overrideMaxLod) p.maxLod = Mathf.Max(0, ov.maxLod);
             return p;
         }
     }

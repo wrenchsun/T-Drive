@@ -37,9 +37,11 @@ from .model import (
     Grid,
     GridPoint,
     Layer,
+    LodMesh,
     Material,
     Meta,
     Mirror,
+    PartStrength,
     Perspective,
     PerspectiveKey,
     Policy,
@@ -273,10 +275,31 @@ def _read_exclude(d: Optional[dict]) -> Exclude:
     return Exclude(curves=_strs(d.get("curves")), bones=_strs(d.get("bones")), extra=_extra(d, ("curves", "bones")))
 
 
+def _read_lod_meshes(v: Any) -> list[LodMesh]:
+    out: list[LodMesh] = []
+    if isinstance(v, list):
+        for e in v:
+            if isinstance(e, dict) and isinstance(e.get("mesh"), str):
+                out.append(LodMesh(mesh=e["mesh"], lod=_i(e.get("lod"), 1), extra=_extra(e, ("mesh", "lod"))))
+    return out
+
+
 def _read_target(d: dict) -> Target:
     return Target(
-        mesh=_s(d.get("mesh"), ""), extra_meshes=_strs(d.get("extraMeshes")), extra=_extra(d, ("mesh", "extraMeshes"))
+        mesh=_s(d.get("mesh"), ""),
+        extra_meshes=_strs(d.get("extraMeshes")),
+        lod_meshes=_read_lod_meshes(d.get("lodMeshes")),
+        extra=_extra(d, ("mesh", "extraMeshes", "lodMeshes")),
     )
+
+
+def _read_part_strength(v: Any) -> list[PartStrength]:
+    out: list[PartStrength] = []
+    if isinstance(v, list):
+        for e in v:
+            if isinstance(e, dict) and isinstance(e.get("pattern"), str):
+                out.append(PartStrength(pattern=e["pattern"], strength=_f(e.get("strength"), 1.0), extra=_extra(e, ("pattern", "strength"))))
+    return out
 
 
 def _read_bake(d: dict) -> Bake:
@@ -284,7 +307,8 @@ def _read_bake(d: dict) -> Bake:
     return Bake(
         delta_threshold=_f(d.get("deltaThreshold"), b.delta_threshold),
         differential=_b(d.get("differential"), b.differential),
-        extra=_extra(d, ("deltaThreshold", "differential")),
+        part_strength=_read_part_strength(d.get("partStrength")),
+        extra=_extra(d, ("deltaThreshold", "differential", "partStrength")),
     )
 
 
@@ -616,13 +640,15 @@ def to_dict(doc: AnyDocument) -> dict[str, Any]:
     if doc.asset is not None:
         out["asset"] = doc.asset
     if doc.target is not None:
-        out["target"] = _with_extra(
-            {"mesh": doc.target.mesh, "extraMeshes": list(doc.target.extra_meshes)}, doc.target.extra
-        )
+        td: dict[str, Any] = {"mesh": doc.target.mesh, "extraMeshes": list(doc.target.extra_meshes)}
+        if doc.target.lod_meshes:  # 無いときは出さない（既存のファイルを変えない）
+            td["lodMeshes"] = [_with_extra({"mesh": m.mesh, "lod": m.lod}, m.extra) for m in doc.target.lod_meshes]
+        out["target"] = _with_extra(td, doc.target.extra)
     if doc.bake is not None:
-        out["bake"] = _with_extra(
-            {"deltaThreshold": doc.bake.delta_threshold, "differential": doc.bake.differential}, doc.bake.extra
-        )
+        bd: dict[str, Any] = {"deltaThreshold": doc.bake.delta_threshold, "differential": doc.bake.differential}
+        if doc.bake.part_strength:
+            bd["partStrength"] = [_with_extra({"pattern": e.pattern, "strength": e.strength}, e.extra) for e in doc.bake.part_strength]
+        out["bake"] = _with_extra(bd, doc.bake.extra)
     if doc.limits is not None:
         out["limits"] = {k: list(v) for k, v in doc.limits.items()}
     if doc.material is not None:

@@ -364,8 +364,8 @@ def _bake_status(ctx: EditContext, layer: Layer, rc: tuple[int, int]) -> str:
     if h != V.pose_hash(p.pose):
         return BAKE_CHANGED
     be = ctx.bake_exclude
-    if be and be.get(morph, V.exclude_signature(ctx.doc)) != V.exclude_signature(ctx.doc):
-        return BAKE_CHANGED  # 除外パターンを変えたあと焼き直していない
+    if be and V.bake_setting_changed(be.get(morph), V.exclude_signature(ctx.doc)):
+        return BAKE_CHANGED  # 除外パターン・部位別の強さを変えたあと焼き直していない
     li = next((i for i, l in enumerate(ctx.doc.layers) if l is layer), None)
     if li is not None and V.needs_extreme(ctx.doc, li, rc):  # 誇張用 `_Ex`（重み 1 超）が要るのに焼けていない
         ex = naming.morph_name(ctx.doc.asset, layer.name, rc[0], rc[1], extreme=True)
@@ -2166,7 +2166,7 @@ class PerspectivePresenter(Observable):
         if h != V.perspective_key_hash(p.keys[index]):
             return BAKE_CHANGED
         be = ctx.bake_exclude
-        if be and be.get(morph, V.exclude_signature(self.doc)) != V.exclude_signature(self.doc):
+        if be and V.bake_setting_changed(be.get(morph), V.exclude_signature(self.doc)):
             return BAKE_CHANGED
         return BAKE_BAKED
 

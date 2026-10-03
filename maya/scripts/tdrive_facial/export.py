@@ -94,7 +94,7 @@ def _sculpt_prefix(doc: Document) -> str:
 
 
 def collect_meshes(doc: Document) -> list[str]:
-    """FBX に入れるメッシュ（transform の長い名前）。顔メッシュ・extraMeshes・顔メッシュと同じ骨格にスキンされた表示中のメッシュ。"""
+    """FBX に入れるメッシュ（transform の長い名前）。顔メッシュ・extraMeshes・LOD のメッシュ（非表示でも入れる）・顔メッシュと同じ骨格にスキンされた表示中のメッシュ。"""
     if doc.target is None or not doc.target.mesh:
         raise ExportError("対象メッシュ（target.mesh）が設定されていません")
     try:
@@ -102,7 +102,7 @@ def collect_meshes(doc: Document) -> list[str]:
     except ValueError as e:
         raise ExportError(f"対象メッシュが見つかりません: {e}") from e
     out = [face]
-    for name in doc.target.extra_meshes:
+    for name in doc.target.all_meshes()[1:]:  # 先頭は顔メッシュ
         try:
             m = scene_mod.resolve_mesh(name)
         except ValueError:
@@ -255,6 +255,8 @@ class UnityExportResult:
     fcpose: Path
     meshes: list[str] = field(default_factory=list)
     blendshapes: dict[str, int] = field(default_factory=dict)  # メッシュ → FBX に入ったブレンドシェイプの数
+    fc_by_mesh: dict[str, int] = field(default_factory=dict)  # メッシュ → FBX に入った FC_* の数
+    lod_meshes: dict[str, int] = field(default_factory=dict)  # LOD のメッシュ（短い名前）→ LOD 番号（FBX に入ったものだけ）
     fc_count: int = 0  # FBX に入った FC_*（顔メッシュ。誇張用の _Ex を含む）
     fc_ex_count: int = 0  # うち誇張用（_Ex）
     excluded_fcs: int = 0  # 除いた fcs_*
@@ -357,6 +359,8 @@ class UnityExportJob:
             fcpose=self.fcpose,
             meshes=list(res["meshes"]),
             blendshapes=dict(res["blendshapes"]),
+            fc_by_mesh={k: int(v) for k, v in res.get("fc", {}).items()},
+            lod_meshes=self._lod_in(res["meshes"]),
             fc_count=int(res["fc"].get(face, 0)),
             fc_ex_count=int(res.get("fc_ex", {}).get(face, 0)),
             excluded_fcs=int(res["excluded_fcs"]),
@@ -365,6 +369,21 @@ class UnityExportJob:
         )
         if out.fc_count == 0:
             out.warnings.append("FBX に FC_* が 1 本も入っていません（ベイクしてから出力してください）")
+        for name, lod in out.lod_meshes.items():
+            if out.fc_by_mesh.get(name, 0) == 0:
+                out.warnings.append(f"LOD{lod} のメッシュ「{name}」に FC_* が入っていません（ベイクしてから出力してください）")
+        return out
+
+    def _lod_in(self, exported: list[str]) -> dict[str, int]:
+        """FBX に入った LOD のメッシュ（短い名前）→ LOD 番号。"""
+        out: dict[str, int] = {}
+        for m in self._doc.target.lod_meshes if self._doc.target is not None else []:
+            try:
+                short = scene_mod.short_name(scene_mod.resolve_mesh(m.mesh))
+            except ValueError:
+                continue
+            if short in exported:
+                out[short] = m.lod
         return out
 
 

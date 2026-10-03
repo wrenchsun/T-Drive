@@ -6,7 +6,7 @@
 camera.worldMatrix[0] → decomposeMatrix（<rig>_camDM） ─┐
 基準ボーン.worldMatrix[0] → decomposeMatrix（<rig>_headDM）─┼→ expression（<rig>_expr）
 tdFacialPreview_<asset>.（enable / alpha / useManual / manualYaw / manualPitch / emotion_<Layer>）─┘
-        → blendShape.weight[FC_*]（顔メッシュと target.extraMeshes の同名ターゲット）と outYaw / outPitch
+        → blendShape.weight[FC_*]（顔メッシュと target.extraMeshes・target.lodMeshes の同名ターゲット）と outYaw / outPitch
 ```
 
 - expression の文字列は `core/evaluate.py` と `core/space.py` の式を**データから生成**する（格子・レイヤー・存在する FC_* が変わったら
@@ -176,13 +176,13 @@ def _meshes(doc: Document) -> list[str]:
     if doc.target is None or not doc.target.mesh:
         raise PreviewRigError("対象メッシュ（target.mesh）が設定されていません")
     out: list[str] = []
-    for name in [doc.target.mesh, *doc.target.extra_meshes]:
+    for name in doc.target.all_meshes():  # 顔 → extraMeshes → LOD のメッシュ（同じ名前の FC_* に同じ重みを配線する）
         try:
             m = scene_mod.resolve_mesh(name)
         except ValueError as e:
             if name == doc.target.mesh:
                 raise PreviewRigError(f"対象メッシュが見つかりません: {e}") from e
-            continue  # extraMeshes が無いのは飛ばす
+            continue  # extraMeshes・LOD のメッシュが無いのは飛ばす
         if m not in out:
             out.append(m)
     return out

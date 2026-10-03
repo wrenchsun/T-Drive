@@ -146,9 +146,36 @@ class Exclude:
 
 
 @dataclass
+class LodMesh:
+    """LOD1 以降のメッシュ 1 件（F5-7）。lod は 1 以上。"""
+
+    mesh: str = ""
+    lod: int = 1
+    extra: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class Target:
     mesh: str = ""
     extra_meshes: list[str] = field(default_factory=list)
+    lod_meshes: list[LodMesh] = field(default_factory=list)
+    extra: dict[str, Any] = field(default_factory=dict)
+
+    def all_meshes(self) -> list[str]:
+        """焼く先のメッシュ名（文書に書いた名前）: 顔 → extraMeshes → LOD のメッシュ。空・重複は除く。"""
+        out: list[str] = []
+        for n in [self.mesh, *self.extra_meshes, *[m.mesh for m in self.lod_meshes]]:
+            if n and n not in out:
+                out.append(n)
+        return out
+
+
+@dataclass
+class PartStrength:
+    """部位別の強さ 1 件。名前に pattern を含むシェイプ・ボーンのポーズに、ベイクのとき strength（0〜1）を掛ける。"""
+
+    pattern: str = ""
+    strength: float = 1.0
     extra: dict[str, Any] = field(default_factory=dict)
 
 
@@ -156,6 +183,7 @@ class Target:
 class Bake:
     delta_threshold: float = 0.001  # cm 未満の頂点は捨てる
     differential: bool = True
+    part_strength: list[PartStrength] = field(default_factory=list)  # 上にあるものが優先（F5-6）
     extra: dict[str, Any] = field(default_factory=dict)
 
 

@@ -24,6 +24,7 @@ from typing import Collection, Iterable, Mapping, Optional, Sequence
 
 from . import naming
 from . import space
+from . import strength as part_strength_mod
 from .model import (
     FILL_MODES,
     FORWARD_AXES,
@@ -90,6 +91,16 @@ class TargetInfo:
 
 
 @dataclass
+class MeshInfo:
+    """対象メッシュ 1 つの、シーンでの事情（`SceneInfo.mesh_infos`）。"""
+
+    exists: bool = True  # シーンで見つかった
+    resolved: str = ""  # 見つかったメッシュの長い名前（同じメッシュを別の書き方で 2 回挙げていないかの確認用）
+    targets: Collection[str] = ()  # そのメッシュの blendShape のターゲット名（FC_* / fcs_* を除く。`bs.eye` の `eye` の部分）
+    fc_targets: Collection[str] = ()  # そのメッシュにある FC_*（ベイクした補正シェイプ）
+
+
+@dataclass
 class SceneInfo:
     """検証に要る「シーン（モデル）の事情」。呼ぶ側が集めて渡す。None = 渡されていない（その検査は飛ばす）。"""
 
@@ -99,6 +110,7 @@ class SceneInfo:
     targets: Optional[Collection[str]] = None  # 顔メッシュにある FC_* / fcs_* のターゲット名
     recorded_bone_parents: Optional[Mapping[str, str]] = None  # 前に記録した親（UE 版の RecordedBoneParents に当たる）
     target_info: Mapping[str, TargetInfo] = field(default_factory=dict)  # ターゲット名 → 情報
+    mesh_infos: Optional[Mapping[str, MeshInfo]] = None  # 文書に書いたメッシュ名（顔・extraMeshes・LOD）→ 情報
 
 
 # ---------------------------------------------------------------------------
@@ -119,11 +131,43 @@ def normalize_exclude(patterns) -> list[str]:
 
 
 def exclude_signature(doc: Document) -> str:
-    """補正から除外するもの（シェイプ・ボーン）の指紋（正規化した値の sha1 の先頭 12 文字）。ベイク時に記録して今と比べる。"""
+    """ベイク時の設定（補正から除外するもの + 部位別の強さ）の指紋。ベイク時に記録して今と比べる。
+
+    形は `<除外の指紋 12 桁>`（部位別の強さが無いとき。従来の記録と同じ文字列 = 古いシーンが一斉に変更ありにならない）
+    または `<除外の指紋>+<部位別の強さの指紋>`。"""
     norm = json.dumps(
         {"curves": normalize_exclude(doc.exclude.curves), "bones": normalize_exclude(doc.exclude.bones)}, sort_keys=True, ensure_ascii=False
     )
-    return hashlib.sha1(norm.encode("utf-8")).hexdigest()[:12]
+    base = hashlib.sha1(norm.encode("utf-8")).hexdigest()[:12]
+    part = part_strength_mod.signature_part(doc)
+    return f"{base}+{part}" if part else base
+
+
+def split_signature(sig: str) -> tuple[str, str]:
+    """指紋 → (除外の指紋, 部位別の強さの指紋)。部位別の強さが無い（従来の）記録は 2 つめが ""。"""
+    base, _, part = sig.partition("+")
+    return base, part
+
+
+SETTING_EXCLUDE = "exclude"
+SETTING_PART = "part"
+SETTING_BOTH = "both"
+SETTING_CHANGED_TEXT = {
+    SETTING_EXCLUDE: "補正から除外するものを変えたあと、焼き直していません",
+    SETTING_PART: "部位別の強さを変えたあと、焼き直していません",
+    SETTING_BOTH: "補正から除外するもの・部位別の強さを変えたあと、焼き直していません",
+}
+
+
+def bake_setting_changed(recorded: Optional[str], current: str) -> str:
+    """ベイク時に記録した指紋と今の指紋の違い。同じ・記録なし（不明）は ""。違えば SETTING_EXCLUDE / SETTING_PART / SETTING_BOTH。"""
+    if recorded is None or recorded == current:
+        return ""
+    (re_, rp), (ce, cp) = split_signature(recorded), split_signature(current)
+    ex, pt = re_ != ce, rp != cp
+    if ex and pt:
+        return SETTING_BOTH
+    return SETTING_EXCLUDE if ex else SETTING_PART
 
 
 def pose_hash(pose: SourcePose) -> str:
@@ -226,8 +270,12 @@ EXTREME_EPS = 1e-6  # 重みが 1 を超えているとみなす余裕（pose_ha
 
 
 def extreme_curves(doc: Document, pose: SourcePose) -> list[str]:
-    """ポーズのうち、重みが 1 を超えるシェイプの名前（誇張。R-37）。補正除外に当たるものは焼かれないので数えない。"""
-    return [n for n, w in pose.curves.items() if w > 1.0 + EXTREME_EPS and not is_mirror_excluded(n, doc.exclude.curves)]
+    """ポーズのうち、重みが 1 を超えるシェイプの名前（誇張。R-37）。補正除外に当たるものは焼かれないので数えない。部位別の強さを掛けたあとの重みで見る。"""
+    return [
+        n
+        for n, w in pose.curves.items()
+        if w * part_strength_mod.curve_factor(doc, n) > 1.0 + EXTREME_EPS and not is_mirror_excluded(n, doc.exclude.curves)
+    ]  # 部位別の強さを掛けたあとで 1 を超えるか（掛けて 1 以下になるなら誇張にならない）
 
 
 def has_extreme(doc: Document, pose: SourcePose) -> bool:
@@ -308,8 +356,10 @@ def validate(
     # --- 可動域 ---
     _check_limits(doc, profile, add)
 
-    # --- 補正除外（R-17）---
+    # --- 補正除外（R-17）・部位別の強さ・LOD のメッシュ ---
     _check_excluded(doc, add)
+    _check_part_strength(doc, add)
+    _check_lod_meshes(doc, scene, curve_refs, add)
 
     # --- プロファイル ---
     if profile is not None and scene.curves is not None:
@@ -914,6 +964,95 @@ def _check_excluded(doc: Document, add) -> None:
         )
 
 
+def _check_part_strength(doc: Document, add) -> None:
+    """部位別の強さ（`bake.partStrength`）の形: 空・重複のパターン、0〜1 の外・数でない強さ。"""
+    if doc.bake is None:
+        return
+    seen: set[str] = set()
+    for i, e in enumerate(doc.bake.part_strength):
+        label = f"部位別の強さ {i + 1} 行目"
+        if not e.pattern.strip():
+            add(Issue("part_strength_pattern_empty", SEVERITY_WARNING, f"{label}のパターンが空です（無視されます）", name=e.pattern))
+        elif e.pattern in seen:
+            add(
+                Issue(
+                    "part_strength_pattern_duplicate",
+                    SEVERITY_WARNING,
+                    f"{label}「{e.pattern}」は上の行と同じパターンです（上にあるものが優先され、この行は使われません）",
+                    name=e.pattern,
+                )
+            )
+        seen.add(e.pattern)
+        if not (isinstance(e.strength, (int, float)) and math.isfinite(e.strength)):
+            add(Issue("part_strength_not_finite", SEVERITY_WARNING, f"{label}「{e.pattern}」の強さが数ではありません（無視されます）", name=e.pattern))
+        elif not 0.0 <= e.strength <= 1.0:
+            add(
+                Issue(
+                    "part_strength_out_of_range",
+                    SEVERITY_WARNING,
+                    f"{label}「{e.pattern}」の強さ {_fmt(e.strength)} が 0〜1 の外です（ベイクでは 0〜1 に収めます）",
+                    name=e.pattern,
+                )
+            )
+
+
+def _check_lod_meshes(doc: Document, scene: SceneInfo, curve_refs, add) -> None:
+    """LOD のメッシュ（`target.lodMeshes`）: 番号・重複・顔 / extraMeshes との重なり・シーンにあるか・同じ名前のターゲットがあるか。"""
+    t = doc.target
+    if t is None or not t.lod_meshes:
+        return
+    infos = scene.mesh_infos
+
+    def ident(name: str) -> str:
+        i = infos.get(name) if infos is not None else None
+        return i.resolved if i is not None and i.resolved else name
+
+    owners = {ident(n): n for n in [t.mesh, *t.extra_meshes] if n}
+    seen: set[str] = set()
+    known = set(scene.curves) if scene.curves is not None else None
+    pose_targets = sorted({n.partition(".")[2] if "." in n else n for n in curve_refs if known is None or n in known})
+    for m in t.lod_meshes:
+        if m.lod < 1:
+            add(Issue("lod_number_invalid", SEVERITY_ERROR, f"LOD のメッシュ「{m.mesh}」の LOD 番号 {m.lod} が使えません（1 以上。LOD0 は顔のメッシュ）", name=m.mesh))
+        key = ident(m.mesh)
+        if key in owners:
+            add(Issue("lod_mesh_also_listed", SEVERITY_WARNING, f"LOD のメッシュ「{m.mesh}」は顔のメッシュ・追加のメッシュにも入っています（LOD から外してください）", name=m.mesh))
+        elif key in seen:
+            add(Issue("lod_mesh_duplicate", SEVERITY_WARNING, f"LOD のメッシュ「{m.mesh}」が重複しています", name=m.mesh))
+        seen.add(key)
+        info = infos.get(m.mesh) if infos is not None else None
+        if info is None:
+            continue
+        if not info.exists:
+            add(Issue("lod_mesh_missing", SEVERITY_ERROR, f"LOD のメッシュ「{m.mesh}」がシーンにありません（ベイクできません）", name=m.mesh))
+            continue
+        face_fc = {n for n in (scene.targets or ()) if naming.is_fc_name(n)}
+        missing_fc = sorted(face_fc - set(info.fc_targets))
+        if missing_fc:
+            add(
+                Issue(
+                    "lod_mesh_unbaked",
+                    SEVERITY_WARNING,
+                    f"LOD{m.lod} のメッシュ「{m.mesh}」には、顔のメッシュにある補正シェイプが {len(missing_fc)} 本足りません（ベイクすると作られます）",
+                    name=m.mesh,
+                    candidates=tuple(missing_fc[:20]),
+                )
+            )
+        have = set(info.targets)
+        lacking = [n for n in pose_targets if n not in have]
+        if lacking:
+            add(
+                Issue(
+                    "lod_mesh_no_targets",
+                    SEVERITY_WARNING,
+                    f"LOD{m.lod} のメッシュ「{m.mesh}」には、ポーズのシェイプ {len(pose_targets)} 個のうち {len(lacking)} 個と同じ名前のターゲットがありません"
+                    "（そのシェイプはこのメッシュでは動きません）",
+                    name=m.mesh,
+                    candidates=tuple(lacking[:20]),
+                )
+            )
+
+
 # --- ベイク・ターゲット ---
 
 
@@ -955,12 +1094,13 @@ def _check_bake(doc: Document, scene: SceneInfo, bake_state: Optional[Mapping[st
                 )
             )
             continue
-        if bake_exclude and bake_exclude.get(morph, cur_sig) != cur_sig:
+        changed = bake_setting_changed(bake_exclude.get(morph), cur_sig) if bake_exclude else ""
+        if changed:
             add(
                 Issue(
                     "point_changed_since_bake",
                     SEVERITY_WARNING,
-                    f"補正から除外するものを変えたあと、焼き直していません: {_where(li, doc, rc)}（再ベイクしてください）",
+                    f"{SETTING_CHANGED_TEXT[changed]}: {_where(li, doc, rc)}（再ベイクしてください）",
                     **base,
                 )
             )
@@ -1020,12 +1160,13 @@ def _check_perspective_bake(doc: Document, scene: SceneInfo, bake_state: Mapping
                 )
             )
             continue
-        if bake_exclude and bake_exclude.get(morph, cur_sig) != cur_sig:
+        changed = bake_setting_changed(bake_exclude.get(morph), cur_sig) if bake_exclude else ""
+        if changed:
             add(
                 Issue(
                     "perspective_key_changed",
                     SEVERITY_WARNING,
-                    f"補正から除外するものを変えたあと、焼き直していません: {_key_label(k, key)}（再ベイクしてください）",
+                    f"{SETTING_CHANGED_TEXT[changed]}: {_key_label(k, key)}（再ベイクしてください）",
                     **base,
                 )
             )
@@ -1337,6 +1478,8 @@ __all__: Sequence[str] = (
     "perspective_bake_keys",
     "perspective_value_ok",
     "exclude_signature",
+    "split_signature",
+    "bake_setting_changed",
     "normalize_exclude",
     "suggest_names",
     "case_only_match",
