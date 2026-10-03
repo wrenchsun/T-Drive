@@ -200,7 +200,7 @@ FacialController（カメラ角度に応じた顔の補正。UE 版からの移�
 | F2-3 | ポーズをシェイプにする・中間形・誇張形（`_Ex`）・組み合わせ補正 | R-24 R-37 | 2 | F1-4 | 今の状態を 1 個のシェイプにできる。2 つのシェイプの同時使用の補正が作れる | ✅ ポーズをシェイプにする・中間形・誇張形（`_Ex` を作り可動域を 0〜2 に。評価は F5）・組み合わせ補正（`fcs_combo_…`。Maya の中だけの評価でベイクに含まれる） |
 | F2-4 | 別メッシュへ写す（同じ頂点 = 複写 / 違う = 近接で転写） | R-24 | 2 | F2-2 | 顔のシェイプをまつ毛・別の頭へ写せる | ✅ 同じ頂点なら複写、違えば近接（proximityWrap）で転写。写し先の元からのシェイプは確認なしで上書きしない |
 | F2-5 | 整理（微小な差分の掃除・空 / 未使用の一覧・プロファイルに沿った改名・不足一覧）・ゴースト表示 | R-15 | 1.5 | F0-5 | 不足している標準シェイプと未使用のシェイプが一覧に出る | ✅ 微小な差分の掃除・空 / 未使用 / 孤立の一覧と削除（fcs_ / FC_ だけ）・標準シェイプの不足。ゴースト表示は未実装 |
-| F2-6 | 格子のサムネイル・ビューポートの格子の球（点をクリック） | R-30 | 2 | F1-2 | 各点の小さな画像が格子に出る。球の点をクリックで選べる | ⬜ |
+| F2-6 | 格子のサムネイル・ビューポートの格子の球（点をクリック） | R-30 | 2 | F1-2 | 各点の小さな画像が格子に出る。球の点をクリックで選べる | ✅ `thumbnails.py` + グリッドタブ「サムネイルを表示 / 作り直す」（一時カメラで撮影・一時フォルダに保存・ポーズが変わった画像は出さない）。**実際の撮影（playblast）は裏の Maya では試せないため未確認**。ビューポートの格子の球は未実装 |
 | F2-7 | アニメから読み込む（今のフレーム / Unity の `.anim` / ARKit 名のカーブ）+ 土台の表情としてのプレビュー | R-26 | 2 | F1-3 | shizuku の `face_happy01.anim` を読んでポーズ・土台の表情にできる | ✅ `core/unity_anim.py`（Unity の .anim の読み取り。PyYAML なし）・`anim_import.py`・ポーズタブ「アニメから読み込む…」と「土台の表情」。shizuku の表情アニメ 49 個がすべて読める（`face_happy01.anim` は 10 シェイプすべて一致）。ARKit 名などの名前の対応付けも可 |
 | F2-8 | キーに焼く（時間範囲をサンプルして FC_* の重みにキー → プレビューの仕組みを外す） | R-19 | 1 | F1-5 | 焼いたあとプレビュー用ノードを消しても同じ見た目で再生される | ✅ `preview_rig.bake_to_keys` + プレビューの「キーに焼く…」（F1-5 と一緒に実装） |
 
@@ -228,9 +228,9 @@ FacialController（カメラ角度に応じた顔の補正。UE 版からの移�
 |---|---|---|---|---|---|---|
 | FT-1 | `FacialCorrectionTrack` / `Clip` / `Mixer`（強さ・感情の重み・角度の固定・視点・カット補正・コマ打ち。クリップのブレンド。プレビュー後に元へ戻す） | R-36 | 3 | FU-3 | Timeline のスクラブと再生で補正が変わる。プレビューを抜けると元の値 | ✅ `Runtime/Timeline/`（FacialCorrectionTrack / Clip / Mixer。強さ・感情の重み・角度の固定（部分的な重なりはカメラ角度と補間）・視点・カット補正（ポーズを加算、終わると元に戻る）。再生していないスクラブでも補正が見える）。コマ打ちは値を渡すだけ（F5）。Timeline のテスト 16 件。Timeline ウィンドウでの操作感は人の確認待ち |
 | FT-2 | D-Drive ブリッジ: バインドの補助（同じ役名の AnimationTrack）・検証（IValidator）・プール返却の確認テスト・D-Drive のカットシーンでのサンプル | — | 2.5 | FT-1 | MS2026 で `Cutscene.Play` → 補正が動く・シークとスキップに追従。D-Drive を変更していない | ✅ `Bridges/DDrive/`（`<役名>_Facial` → 同じ役名の AnimationTrack のバインド先・D-Drive の検証 `TD-FACIAL-001〜005`）。プール返却はインスタンスが無効化されるので Runner が FC_* を戻す（追加の処理は不要）。D-Drive は変更していない。`Cutscene.Play` での再生は人の確認待ち |
-| FT-3 | Maya → Timeline: `.fctrack` の出力（プレビュー用ノードのキー）+ Unity 側で `.playable` にトラックを足す / 更新する | — | 3 | FT-2 F1-5 | Maya で打ったキーが Timeline のクリップ / カーブになる。再出力でデザイナーが足したトラックは残る | ⬜ |
+| FT-3 | Maya → Timeline: `.fctrack` の出力（プレビュー用ノードのキー）+ Unity 側で `.playable` にトラックを足す / 更新する | — | 3 | FT-2 F1-5 | Maya で打ったキーが Timeline のクリップ / カーブになる。再出力でデザイナーが足したトラックは残る | ✅ Maya: 出力タブの `.fctrack`。Unity: `FctrackImporter` → `FacialTrackAsset`、クリップがカーブで動く、`FacialTrackTimelineSync`（`<役名>_Facial(auto)` を 1 本だけ管理）、D-Drive では `Assets/SourceAssets/Cutscene/<分類>/<ショット>__<モデル>.fctrack` を置くと自動で反映して SameAsTrack で結ぶ（順番が前後したら再試行 + メニューでやり直し）。**実際のカットシーンでの取り込みは未確認** |
 | FT-4 | D-Drive 側への提案の起票（チケット 7-8 の書き換え案・C-1〜C-9）※ D-Drive のリポジトリは読み取りのみなので、文面を用意して渡す | — | 0.5 | — | [16](16_ddrive_changes_for_facial.md) の内容が D-Drive のチケットの形になっている | ✅ D-Drive 側で起票済み（D-Drive `docs/51_tdrive_integration.md`・`docs/11_tasks.md` FC-0〜FC-10、PR #86）。対応表は [16](16_ddrive_changes_for_facial.md) 冒頭 |
-| FT-5 | D-Drive の新しい拡張点に合わせる（D-Drive main `8af02ea` の FC-1 / FC-2 / FC-12）: ブリッジで Runner を `IModelInstanceListener` に対応（スポーン後にキャッシュを作り直す・返却前に戻す）、FC-2 の重みの復元と Runner の戻しが二重になっても壊れないテスト、`.fctrack` の取り込み（FT-3）では `SameAsTrack` の Binding を足す | — | 1.5 | FT-2 | D-Drive のプールから出し直したキャラクターで補正が正しく掛かる。SameAsTrack で結んだ Facial トラックが動く | ⬜ |
+| FT-5 | D-Drive の新しい拡張点に合わせる（D-Drive main `8af02ea` の FC-1 / FC-2 / FC-12）: ブリッジで Runner を `IModelInstanceListener` に対応（スポーン後にキャッシュを作り直す・返却前に戻す）、FC-2 の重みの復元と Runner の戻しが二重になっても壊れないテスト、`.fctrack` の取り込み（FT-3）では `SameAsTrack` の Binding を足す | — | 1.5 | FT-2 | D-Drive のプールから出し直したキャラクターで補正が正しく掛かる。SameAsTrack で結んだ Facial トラックが動く | ✅ `FacialModelInstanceBridge`（モデルの Prefab に付ける。スポーン後に作り直し・返却前に戻す）、D-Drive の重みの復元と二重になっても壊れないテスト、検証が SameAsTrack をたどる。**D-Drive 1.4.0 のタグが出たら版の条件を付ける**（今はブリッジが FC-1 / FC-12 入りの D-Drive を前提にする） |
 
 ## Phase F5: UE 版の未実装項目
 
