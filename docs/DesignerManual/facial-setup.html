@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>はじめに（FacialController） - T-Drive デザイナーマニュアル</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<nav class="breadcrumb"><a href="Readme.html">トップ</a> › <a href="facial.html">FacialController</a> › はじめに</nav>
+<h1>はじめに（セットアップタブ）</h1>
+<p class="lastupdate">最終更新日: 2026-10-03</p>
+
+<p>最初にデータを作り、顔のメッシュ・基準ボーン・格子などを決めます。ここで決めた内容が、以降のすべての作業のもとになります。</p>
+
+<h2>エディタを開く</h2>
+<ol>
+<li>顔のブレンドシェイプが付いたモデルを Maya で開きます</li>
+<li><strong>T-Drive › エディタ</strong> を開き、1 段目のタブで <strong>FacialController</strong> を選びます</li>
+<li>2 段目のタブは左から <strong>セットアップ / グリッド / ポーズ / シェイプ / レイヤー / 検証 / 出力</strong>。<strong>シェイプ</strong>タブは<span class="soon">準備中</span>です</li>
+</ol>
+
+<h2>新規・開く・保存</h2>
+<p>画面の上に <strong>データ: …</strong> の行と 4 つのボタンがあります。保存していない変更があると <strong>●未保存</strong> と出ます。</p>
+<table>
+<tr><th>ボタン</th><th>はたらき</th></tr>
+<tr><td>新規</td><td>新しいデータを作ります。<strong>キャラクター ID</strong>（英小文字・数字・_ だけ）・<strong>対象メッシュ</strong>（ブレンドシェイプのあるメッシュ。選択中のものが初期値）・<strong>プロファイル</strong>（あとで変えられます）を決めます</td></tr>
+<tr><td>開く</td><td>保存したデータを開きます</td></tr>
+<tr><td>保存 / 別名で保存</td><td>データを保存します。Maya のシーンを保存すると、どのデータを開いていたかも覚えられ、開き直すと同じデータが開きます</td></tr>
+</table>
+<p>データは<strong>プロジェクトフォルダ</strong>の中の <span class="path">facial\&lt;キャラクター&gt;\&lt;キャラクター&gt;.fcpose.json</span> に保存されます（プロジェクトは<a href="setup.html#project">はじめに（導入）</a>）。Toon の Look とは別のファイルです。</p>
+
+<h2>「編集」ボタン</h2>
+<p>データの下にある <strong>編集</strong> ボタンは、ポーズを作るためのスイッチです。</p>
+<ul>
+<li><strong>オン</strong> — シーンが<strong>基準姿勢</strong>（バインドポーズ・シェイプの重みがすべて 0）になります。グリッド / ポーズタブで点のポーズを作れます。画面には <strong>編集中</strong> と出ます</li>
+<li><strong>オフ</strong> — 元の姿勢（表情やアニメの途中の姿）に戻ります</li>
+</ul>
+<div class="tip">グリッドで点をクリックしても、自動で編集が始まります。編集中は顔の表情が消えて見えますが、故障ではありません。オフにすれば戻ります。</div>
+<div class="warn">編集のまま放置しないでください。エディタを閉じる・ツールをリロードする・別のシーンを開くと元の姿勢に戻りますが（タブを切り替えただけでは戻りません）、作業が終わったらオフにする習慣をつけると安全です。</div>
+
+<figure>
+<img src="images/facial_setup.png" alt="セットアップタブ">
+<figcaption>セットアップタブ（上から順に項目が並びます）。画像はテスト用の小さなモデルで撮ったものです。実際の Maya では配色が少し違います</figcaption>
+</figure>
+
+<h2>セットアップタブの項目</h2>
+<table>
+<tr><th>項目</th><th>意味</th></tr>
+<tr><td>対象のメッシュ › 顔のメッシュ</td><td>補正を焼き込む顔のメッシュ。「選択から」で Maya で選んでいるメッシュに変えられます</td></tr>
+<tr><td>追加のメッシュ</td><td>まつ毛・眉など、顔と一緒に補正したい別メッシュ。「選択から追加」「外す」で増減</td></tr>
+<tr><td>基準ボーン</td><td>頭のボーン。「自動検出」で名前から探します。「選択から」で Maya で選んでいるジョイントにもできます</td></tr>
+<tr><td>顔の前方向</td><td>顔が向いている方向（基準ボーンの軸）。Maya は Y が上なので +X / −X / +Z / −Z から選びます</td></tr>
+<tr><td>中心のずらし(cm)</td><td>格子の中心を基準ボーンからずらす量。通常は 0 のままで構いません</td></tr>
+<tr><td>格子</td><td><strong>点の数</strong>（列 × 行）、<strong>角度の範囲</strong>（Yaw / Pitch の全体の幅）、<strong>端のフェード</strong>（格子の端で補正をなめらかに弱める角度）。「適用」で変更。<strong>作った点は角度で引き継がれ</strong>、新しい格子に乗らなくなるキーは、先に確認が出ます</td></tr>
+<tr><td>ミラー（左右反転）</td><td>「使う」をオフにすると、左右反転の貼り付け・自動生成の鏡映ができません。<strong>名前の末尾</strong>（左 <code>_L</code> / 右 <code>_R</code>）、<strong>反転しないもの</strong>（名前にこの文字を含むものは反転しない。カンマ区切り）、<strong>ボーンの反転軸</strong></td></tr>
+<tr><td>自動生成とベイク</td><td><strong>作り方</strong>: IDW（まわりのキーをなめらかに混ぜる）か最近傍（いちばん近いキーをそのまま使う）。<strong>べき乗（IDW）</strong>: 大きいほど近いキーの影響が強い。<strong>ベイクのしきい値</strong>: これより小さい頂点の動きは捨てる</td></tr>
+<tr><td>命名規則プロファイル</td><td>シェイプ名の決まり（左右の名前・動かせる範囲・標準のシェイプ）。ARKit 52 / VRChat ビセム / MetaHuman / shizuku が付属。選んで「適用」すると左右の名前と動かせる範囲が入ります。「上書き」をオンにすると、このキャラクターで変えた範囲もプロファイルの値になります。足りない標準シェイプの数も表示されます</td></tr>
+<tr id="t20"><td>Toon のカメラ角度補正（T-20）</td><td>「カメラ角度補正（T-20）から取り込む…」で、Toon のキャラクタータブで作った補正（正面 / 3/4 / 横）を、Neutral レイヤーの Pitch 0・Yaw 0 / 45 / 90° のキーにします。T-20 のデータと Look は変わりません。左側（Yaw −）は、取り込んだあとに<a href="facial-grid.html">グリッドの「自動生成」</a>で埋めます</td></tr>
+<tr><td>作業セット</td><td>補正で触るシェイプとボーンにチェックを入れます（「絞り込み」「表示中を全部オン」「全部オフ」「選択中のジョイントを追加」）。チェックしたものだけが<a href="facial-pose.html">ポーズタブ</a>に並びます。選んだものをビューポートで光らせる機能は<span class="soon">準備中</span>です</td></tr>
+</table>
+
+<footer><a href="Readme.html">トップへ戻る</a> / 前: <a href="facial.html">FacialController とは</a> / 次: <a href="facial-grid.html">グリッド</a></footer>
+</body>
+</html>

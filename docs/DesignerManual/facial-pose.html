@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ポーズ（FacialController） - T-Drive デザイナーマニュアル</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<nav class="breadcrumb"><a href="Readme.html">トップ</a> › <a href="facial.html">FacialController</a> › ポーズ</nav>
+<h1>ポーズタブ</h1>
+<p class="lastupdate">最終更新日: 2026-10-03</p>
+
+<p>グリッドで選んだ<strong>1 つの点</strong>の補正ポーズを作る場所です。ポーズは「シェイプの重み」と「ボーンのずれ」でできています。</p>
+
+<figure>
+<img src="images/facial_pose.png" alt="ポーズタブ">
+<figcaption>ポーズタブ。上に編集中の点、ボタン、シェイプ、ボーンが並びます。変えた行は黄色で太字になります。画像はテスト用の小さなモデルで撮ったものです。実際の Maya では配色が少し違います</figcaption>
+</figure>
+
+<h2>1 点のポーズを作る手順</h2>
+<ol>
+<li><a href="facial-grid.html">グリッドタブ</a>で、作りたい角度の点をクリックします。カメラがその角度へ動き、編集が始まります（上に「編集中: レイヤー「Neutral」 点 R1, C3 …」と出ます）</li>
+<li>顔の形を直します。やり方は 3 通りで、混ぜて使えます
+  <ul>
+  <li><strong>スライダー</strong> — このタブのシェイプ欄のスライダーや数値を動かす</li>
+  <li><strong>Maya の標準の道具</strong> — Shape Editor やチャンネルボックスでシェイプを動かす</li>
+  <li><strong>ボーン</strong> — 目などのジョイントを Maya の移動 / 回転ツールで動かす</li>
+  </ul>
+</li>
+<li>Maya 側で動かしたときは、<strong>シーンから取り込む</strong> を押します。動かした値が、編集中のポーズに入ります</li>
+<li><strong>保存（この点をキーにする）</strong> を押します。点が緑（キー）になります</li>
+<li>グリッドで<a href="facial-grid.html#bake">ベイク</a>します</li>
+</ol>
+<div class="warn">保存するまで、データは変わりません。保存せずに別の点へ移ろうとすると、<strong>保存 / 破棄 / キャンセル</strong>を聞かれます（レイヤーを切り替えるときも同じです）。全部 0 のポーズを保存すると、その点は消えます。</div>
+
+<h2>ボタン</h2>
+<table>
+<tr><th>ボタン</th><th>はたらき</th></tr>
+<tr><td>保存（この点をキーにする）</td><td>編集中のポーズをこの点に保存します</td></tr>
+<tr><td>読み直す</td><td>編集中の値を捨てて、保存してあるポーズを読み直します</td></tr>
+<tr><td>ゼロに戻す</td><td>シェイプもボーンも全部 0（元の姿勢）にします。保存するまでデータは変わりません</td></tr>
+<tr><td>左右反転</td><td>編集中のポーズの左右を入れ替えます（<code>_L</code> と <code>_R</code>、ボーンのずれも鏡映）</td></tr>
+<tr><td>この点を書き出し…</td><td>編集中のポーズを、単独のポーズファイル（<span class="path">.fcpose.json</span>）に書き出します。全部 0 のポーズは書き出されません</td></tr>
+<tr><td>読み込み…</td><td>ポーズファイルを編集中の値へ読み込みます。保存するまでデータは変わりません。ポーズを別のキャラクターへ持っていくときに使います</td></tr>
+<tr><td>シーンから取り込む</td><td>Maya の Shape Editor・チャンネルボックス・回転 / 移動ツールで動かした値を取り込みます。<strong>作業セットだけ</strong>にチェックすると、作業セットのものだけが対象です。編集中のときだけ使えます</td></tr>
+</table>
+
+<h2>シェイプ欄</h2>
+<ul>
+<li>作業セットのシェイプが、スライダーと数値で並びます。<strong>0 のボタン</strong>でそのシェイプを 0 に戻せます</li>
+<li>動かせる範囲はプロファイルで決まります（ツールチップに「範囲 0 〜 1」と出ます）。範囲を超える値は丸められます</li>
+<li>上の「絞り込み」で名前の一部を入れると探せます。「作業セットだけ」を外すと、作業セット以外も出ます</li>
+<li>0 でない行は、黄色の太字になります。「編集した値: ○ 本」で数が分かります</li>
+</ul>
+
+<h2>ボーン欄</h2>
+<p>目などのジョイントの<strong>基準姿勢からのずれ</strong>を、数値で見られます。数値は<strong>親のボーンから見た移動（cm）と回転（度）</strong>です。</p>
+<ul>
+<li><strong>移動 cm</strong> の X・Y・Z、<strong>回転 °</strong> の X・Y・Z。回転は Maya の回転順 XYZ と同じです。<strong>回転 Y は ±90° まで</strong>です</li>
+<li>行の左の丸でボーンを選び、<strong>選んだボーンを Maya で選択</strong> を押すと、Maya でそのジョイントが選ばれます。移動 / 回転ツールで動かしたら、<strong>シーンから取り込む</strong> を押してください</li>
+<li><strong>このボーンを戻す</strong>（または行の「戻す」）で 1 本、<strong>ボーンを全部戻す</strong> で全部を元へ戻します（シェイプは触りません）</li>
+<li>ボーンが多いときは、60 本までを表示します。残りは「絞り込み」で探してください</li>
+</ul>
+<div class="tip">スケール（拡大縮小）の欄はありません。ボーンの補正は移動と回転だけです。</div>
+
+<footer><a href="Readme.html">トップへ戻る</a> / 前: <a href="facial-grid.html">グリッド</a> / 次: <a href="facial-layers.html">レイヤーと検証</a></footer>
+</body>
+</html>

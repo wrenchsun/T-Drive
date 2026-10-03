@@ -9,7 +9,7 @@
 <body>
 <nav class="breadcrumb"><a href="Readme.html">トップ</a> › キャラクター設定</nav>
 <h1>キャラクター設定（キャラクタータブ）</h1>
-<p class="lastupdate">最終更新日: 2026-09-30</p>
+<p class="lastupdate">最終更新日: 2026-10-03</p>
 
 <p>部位やマテリアルではなく、<strong>キャラクター全体</strong>に掛かる設定です。多くはゲーム（Unity）側の仕組み（T-Drive の Unity パッケージのコンポーネントや画面効果）が使うものですが、<strong>ゲームと同じ計算で Maya でも確認できます</strong>（接地影は簡易表示）。Maya で確認できないのは髪越し表示（ステンシル）だけで、<strong>（Unity でのみ）</strong> と表示されます。値は Look に保存され、Unity に渡ります。</p>
 <div class="tip">項目が見当たらないときは、<a href="features.html">機能タブ</a>でその機能がオフになっています（オフの機能の欄は隠れます）。</div>
@@ -32,7 +32,7 @@
 <tr><td>接地影</td><td>足元に影を残して、キャラクターが浮いて見えないようにします。<strong>半径</strong> = 足からの影の広がり（m）、<strong>濃さ</strong> = 足元の暗さ。足を上げると薄く小さくなります</td><td>簡易表示（足元に影の板を置きます。地面が無いので背景に落ちます。モデルの書き出しには入りません）</td></tr>
 <tr><td>奥行き圧縮</td><td>顔を平面的にして、2D の作画に近づけます。<strong>量</strong> をここで、<strong>効かせる部位</strong> をルックタブ › 手前に出す › 奥行き圧縮の効かせ具合（例: 顔だけ 1）で決めます</td><td>できる</td></tr>
 <tr><td>顔影マップ（SDF）</td><td>ライトの角度に応じて、顔の影が「作画どおりの形」で進むようにします（下の手順）</td><td>できる</td></tr>
-<tr><td>カメラ角度補正</td><td>正面・3/4・横で顔の形を補正する BlendShape（下の手順）</td><td>できる（カメラに連動）</td></tr>
+<tr><td>カメラ角度補正</td><td>正面・3/4・横で顔の形を補正する BlendShape（下の手順）。格子・ふかん/あおり・感情に対応した上位版は <a href="facial.html">FacialController</a></td><td>できる（カメラに連動）</td></tr>
 <tr><td>表情パラメータ</td><td>「頬の赤み」のような名前を付けたつまみ（0〜1）と、それで動かす値の対応表。ゲームでは表情に合わせてこのつまみを動かします</td><td>できる（プレビュー）</td></tr>
 </table>
 
@@ -73,6 +73,7 @@
 <div class="tip">左からのライトは、マップを左右反転して使います（顔の UV が左右対称である前提）。</div>
 
 <h2 id="view-correction">カメラ角度補正の作り方</h2>
+<div class="tip">格子・ふかん/あおり・感情に対応した上位版は <a href="facial.html">FacialController</a> です。ここで作った補正は FacialController へ<a href="facial-setup.html#t20">取り込めます</a>。</div>
 <p>横顔や 3/4 で「目を前に出す」「鼻を短くする」「輪郭を整える」など、角度ごとに顔の形を作画的に補正します。</p>
 <ol>
 <li>顔のメッシュを選択して、<strong>横</strong>（など補正したい角度）の <strong>作る</strong> → 顔の複製（<code>…_vc_side</code>）が横に並びます</li>

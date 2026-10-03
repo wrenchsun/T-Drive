@@ -57,8 +57,11 @@
 <tr><td>髪越し表示（ステンシル）の確認</td><td>Unity でのみ</td><td><a href="unity-parity.html">Unity との見た目の一致</a></td></tr>
 <tr><td>Unity 出力（見た目の設定 + FBX）</td><td><span class="ok">使える</span></td><td><a href="export.html">Unity 出力</a></td></tr>
 <tr><td>インストーラーで導入（プロジェクトに自動で登録）・Maya の中から更新・前の版に戻す</td><td><span class="ok">使える</span></td><td><a href="setup.html">はじめに</a> / <a href="update.html">更新のしかた</a></td></tr>
-<tr><td>エディタが 2 段タブに（1 段目: Toon / FacialController）。メニューは「T-Drive」</td><td><span class="ok">使える</span>（FacialController は <span class="soon">準備中</span>）</td><td><a href="setup.html#dock">はじめに</a></td></tr>
+<tr><td>エディタが 2 段タブに（1 段目: Toon / FacialController）。メニューは「T-Drive」</td><td><span class="ok">使える</span></td><td><a href="setup.html#dock">はじめに</a></td></tr>
 <tr><td>エディタのドッキング（位置を記憶）</td><td><span class="ok">使える</span></td><td><a href="setup.html#dock">はじめに</a></td></tr>
+<tr><td>FacialController: セットアップ・グリッド・ポーズ・ベイク・プレビュー（カメラの角度に合わせた顔の補正）</td><td><span class="ok">使える</span></td><td><a href="facial.html">FacialController</a> / <a href="facial-setup.html">はじめに</a> / <a href="facial-grid.html">グリッド</a> / <a href="facial-pose.html">ポーズ</a></td></tr>
+<tr><td>FacialController: 感情レイヤー・検証・Unity 向け出力・Unity での実行と調整</td><td><span class="ok">使える</span>（Unity の通し確認は確認中）</td><td><a href="facial-layers.html">レイヤーと検証</a> / <a href="facial-export.html">出力と Unity</a></td></tr>
+<tr><td>FacialController: シェイプタブ・Timeline トラック</td><td><span class="soon">準備中</span></td><td><a href="facial-export.html#soon">出力と Unity</a></td></tr>
 </table>
 
 <h2>ページ一覧</h2>
@@ -73,6 +76,12 @@
 <li><a href="features.html">機能のオン/オフ</a><p>使う表現だけをオンにする。Unity ではその分だけ入った専用シェーダーになり軽くなる。</p></li>
 <li><a href="recipes.html">表現のレシピ</a><p>眉を前髪の上に・顔の影を綺麗に・鼻を線に・目のハイライト固定・インナーライン・天使の輪。</p></li>
 <li><a href="export.html">Unity 出力</a><p>見た目の設定とモデル（FBX）を Unity 用に書き出す。</p></li>
+<li><a href="facial.html">FacialController</a><p>カメラの角度に合わせて顔の形を補正する。何のための機能か・作業の流れ・用語。</p></li>
+<li><a href="facial-setup.html">FacialController: はじめに</a><p>新規・開く・保存、編集ボタン、セットアップタブの各項目。</p></li>
+<li><a href="facial-grid.html">FacialController: グリッド</a><p>格子の見方、点の操作、ベイク、プレビュー。</p></li>
+<li><a href="facial-pose.html">FacialController: ポーズ</a><p>1 点のポーズの作り方（シェイプ・ボーン）。</p></li>
+<li><a href="facial-layers.html">FacialController: レイヤーと検証</a><p>感情レイヤー、検証タブの見方と直し方。</p></li>
+<li><a href="facial-export.html">FacialController: 出力と Unity</a><p>Unity 向け出力と、Unity での使い方・調整。</p></li>
 <li><a href="unity-parity.html">Unity との見た目の一致</a><p>何が一致して、何が一致しないか。</p></li>
 <li><a href="troubleshooting.html">困ったとき</a><p>Toon 表示にならない・色がおかしい・Maya が固まった など。</p></li>
 </ul>
@@ -81,6 +90,7 @@
 <table>
 <tr><th>用語</th><th>意味</th></tr>
 <tr><td>プロジェクト（フォルダ）</td><td>Look・Unity 出力・キャプチャを置くフォルダ。ツール本体とは別（<a href="setup.html#project">はじめに</a>）</td></tr>
+<tr><td>FacialController</td><td>カメラの角度に合わせて顔の形を補正する機能（<a href="facial.html">詳しくは</a>）</td></tr>
 <tr><td>Look（ルック）</td><td>1 キャラクター分の見た目の設定ファイル（プロジェクトの <span class="path">looks/&lt;キャラクター&gt;/look.json</span>）。これが正本で、Unity にもこの内容が渡ります</td></tr>
 <tr><td>部位</td><td>名前を付けたマテリアルのまとまり（例: 「face」= 顔と口のマテリアル）</td></tr>
 <tr><td>ロール</td><td>部位の種類（顔 / 髪 / 目 / 眉 …）。登録したときの初期値（プリセット）が決まります</td></tr>

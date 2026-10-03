@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>出力と Unity（FacialController） - T-Drive デザイナーマニュアル</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<nav class="breadcrumb"><a href="Readme.html">トップ</a> › <a href="facial.html">FacialController</a> › 出力と Unity</nav>
+<h1>出力と Unity</h1>
+<p class="lastupdate">最終更新日: 2026-10-03</p>
+
+<p>Maya で作った補正を Unity に渡し、ゲームの中で動かすまでの手順です。</p>
+<div class="warn"><strong>確認中:</strong> Unity 側の部品は動作テストを通っていますが、<strong>Maya が出力した実際のファイルを Unity に置いての通し確認は、まだ終わっていません</strong>。うまくいかないときは<a href="troubleshooting.html#facial">困ったとき</a>を見て、状況を開発者に伝えてください。</div>
+
+<h2>出力タブ（Maya）</h2>
+<figure>
+<img src="images/facial_export.png" alt="出力タブ">
+<figcaption>出力タブ。Unity 向けに出力した直後（下の欄に結果が出ます）。画像はテスト用の小さなモデルで撮ったものです。実際の Maya では配色が少し違います</figcaption>
+</figure>
+<table>
+<tr><th>項目</th><th>内容</th></tr>
+<tr><td><strong>Unity 向けに出力</strong></td><td>FBX と補正データ（<span class="path">.fcpose</span>）を書き出します。別のプロセスで書くので、Maya の画面は止まりません（「書き出し中… ○ 秒」と出ます）。<strong>中止</strong>・<strong>フォルダを開く</strong>もあります。開いているシーンは変わりません</td></tr>
+<tr><td>UE 版向けに出力…</td><td>補正データを <span class="path">.fcpose.json</span> のまま書き出します（Unreal Engine 版の FacialController 用）</td></tr>
+<tr><td>Timeline 用に出力（.fctrack）</td><td>プレビューの強さ・感情・手動角度に打ったキーを、ショットごとのファイル（<span class="path">&lt;ショット名&gt;__&lt;モデル名&gt;.fctrack</span>）にします。<strong>Unity 側の取り込みは <span class="soon">準備中</span></strong>（先に書き出しておけます）</td></tr>
+</table>
+<p>出力の前に自動で検証が走り、エラー・未ベイク・ベイク後の変更があれば、<strong>それでも出力する / やめる</strong>を聞かれます。出力前に<a href="facial-layers.html#validate">検証タブ</a>で直しておくのがおすすめです。</p>
+
+<h3>出力されるファイル</h3>
+<p>プロジェクトフォルダの <span class="path">facial\&lt;キャラクター&gt;\export\unity\</span> に、次の 2 つができます。</p>
+<table>
+<tr><th>ファイル</th><th>内容</th></tr>
+<tr><td><span class="path">&lt;キャラクター&gt;.fbx</span></td><td>顔のメッシュと同じ骨格のモデル。ブレンドシェイプに、焼いた <code>FC_</code> のシェイプが入ります（彫り用の <code>fcs_</code> のシェイプと作業用のノードは入りません）</td></tr>
+<tr><td><span class="path">&lt;キャラクター&gt;.fcpose</span></td><td>補正データ（格子・ポーズ・感情レイヤー・方針）</td></tr>
+</table>
+<p>結果の欄に、メッシュの数・FBX に入った <code>FC_</code> の数・除いた <code>fcs_</code> の数・警告が出ます。</p>
+
+<h2 id="unity">Unity での使い方</h2>
+<ol>
+<li><strong>2 つのファイルを Unity のプロジェクトに置く</strong>（Assets の中）。<span class="path">.fcpose</span> を置くと、補正のデータ（<code>FacialCorrectionData</code>）が自動でできます。FBX の Blend Shape Normals は <strong>Import</strong> にしてください（検証で確認できます）</li>
+<li>キャラクターの Prefab（またはシーンのオブジェクト）に <strong>Facial Correction Runner</strong> を付けます（Add Component › T-Drive › Facial Correction Runner）</li>
+<li>Runner の <strong>データ</strong>の欄に、できたデータを入れます。対象のメッシュと基準ボーンは、空なら名前から自動で探します</li>
+<li>再生すると、ゲーム中のカメラ（既定はメインカメラ）の角度に合わせて補正が掛かります。再生しなくても、Runner のプレビューで確認できます</li>
+</ol>
+
+<h3>Runner のインスペクター</h3>
+<table>
+<tr><th>欄</th><th>内容</th></tr>
+<tr><td>プレビュー</td><td>再生しなくても、Scene ビューのカメラの角度で補正を掛けて確認します。<strong>プレビュー: オン / オフ</strong>、<strong>補正あり / 補正なし</strong>（比べる）、<strong>視点</strong>（Scene ビューのカメラ / ターンテーブル / 角度を指定）、<strong>格子ビューアを開く</strong>。オフにする・保存する・再生に入ると元の値に戻り、シーンは変更されません</td></tr>
+<tr><td>データと対象</td><td>データ・調整用アセット・対象メッシュ・基準ボーンなどの設定</td></tr>
+<tr><td>状態</td><td>見つかったシェイプの数・足りないシェイプ・今の Yaw / Pitch・倍率（表情 × 距離 × 強さ）・今の重み。足りないシェイプがあるときは、Maya で出力し直します</td></tr>
+<tr><td>調整（簡単なパラメータ）</td><td>下の「調整できる値」。調整用アセットがあれば、値を上書きして保存できます</td></tr>
+<tr><td>感情の重み</td><td>感情レイヤーごとの重み（0〜1）と<strong>ミュート</strong>（オンで 0 として扱う）</td></tr>
+<tr><td>視点</td><td>補正の角度を決める視点（空ならメインカメラ）。<strong>手動の角度を使う</strong>をオンにすると、Yaw / Pitch を直接指定できます</td></tr>
+<tr><td>マテリアル出力（任意）</td><td>マテリアルへ角度・感情の重みを渡します。使わなければそのままで構いません</td></tr>
+<tr><td>検証</td><td>エラー / 警告 / 情報の件数と内容。シェイプの過不足・基準ボーン・取り込み設定などを確認します。「もう一度検証する」で取り直し</td></tr>
+<tr><td>ボタン</td><td><strong>FC_* を 0 に戻す</strong> / <strong>キャッシュを作り直す</strong>（メッシュやボーンを変えたとき）/ <strong>Maya へ戻す JSON を書き出す…</strong></td></tr>
+</table>
+
+<h3>調整用アセット</h3>
+<p>Runner の「調整」で<strong>調整用アセットを作る…</strong>を押して保存場所を決めると、値を変えて保存できます。取り込んだデータは変わらず、<strong>.fcpose を取り込み直しても調整は残ります</strong>。「上書き」にチェックを入れた行だけが使われます。Ctrl+Z で戻せます。</p>
+
+<h3>グリッドのウィンドウ</h3>
+<p>メニュー <strong>T-Drive › Facial › グリッド</strong> で開きます。Runner（またはデータ）を選ぶと、Maya のグリッドタブと同じ向き（上がふかん・左が −Yaw）で格子を表示します。緑 = キー / 水色 = 自動生成 / 灰 = 無し / 赤い枠 = メッシュに <code>FC_</code> のシェイプが無い / 赤い点 = 今の角度。<strong>点をクリック</strong>すると、Scene ビューのカメラがその角度へ動き、プレビューが始まります。「固定」で表示対象を固定、「プレビュー」でオン / オフ、レイヤーも切り替えられます。</p>
+
+<h3>Maya へ戻す JSON</h3>
+<p>Unity で調整した値を Maya に持ち帰りたいときは、<strong>Maya へ戻す JSON を書き出す…</strong>を使います。強さ・追従などの値が JSON に出ます（<strong>端のフェードは入りません</strong>。Maya のセットアップタブで変えてください）。</p>
+
+<h2>調整できる値</h2>
+<table>
+<tr><th>項目</th><th>意味</th></tr>
+<tr><td>全体の強さ</td><td>補正全体の強さ（0〜1）。0 で補正なし</td></tr>
+<tr><td>追従の速さ</td><td>重みが目標へ追いつく速さ。大きいほど速い。0 以下 = 即時</td></tr>
+<tr><td>スナップの角度（度）</td><td>視点がこの角度より大きく飛んだら、カット切り替えとみなして即時に反映します</td></tr>
+<tr><td>距離フェード 開始 / 終了（m）</td><td>視点が遠くなると補正が弱まり始める距離 / 補正が 0 になる距離。開始 = 終了 = 0 で無効</td></tr>
+<tr><td>表情での弱め具合</td><td>表情が強いとき補正を弱める度合い（0〜1）。0 = 弱めない</td></tr>
+<tr><td>端のフェード（度）</td><td>格子の範囲の外側で、補正が 0 へ消えていく幅</td></tr>
+<tr><td>シャープさ <span class="soon">準備中</span></td><td>キー角度の近くでキーのポーズそのものに寄せる度合い。欄はありますが、まだ効きません</td></tr>
+<tr><td>コマ打ち fps <span class="soon">準備中</span></td><td>補正の更新を間引く fps。欄はありますが、まだ効きません</td></tr>
+</table>
+
+<h2>Unity でできないこと</h2>
+<ul>
+<li>ポーズの編集・格子の変更・ベイクは、<strong>Maya で行います</strong>。直したら出力し直してください</li>
+<li>Unity が使う FBX は、必ず Maya でベイクして出力したものにしてください（頂点の並びが合うため）</li>
+</ul>
+
+<h2 id="soon">準備中の機能</h2>
+<table>
+<tr><th>機能</th><th>状態</th></tr>
+<tr><td>シェイプタブ（この角度で彫る・左右に分ける・ミラー・別メッシュへ写す・整理・格子のサムネイル・アニメから読み込む など）</td><td><span class="soon">準備中</span></td></tr>
+<tr><td>Timeline のトラック（演出で強さ・感情・角度を動かす）と、Maya の <span class="path">.fctrack</span> の取り込み</td><td><span class="soon">準備中</span></td></tr>
+<tr><td>Unity の実行中のデバッグ表示</td><td><span class="soon">準備中</span></td></tr>
+<tr><td>シャープさ・コマ打ち・距離でレイヤーの重み・パース補正・誇張・部位別の強さ・LOD1 以降へのベイク・リップシンク</td><td><span class="soon">準備中</span></td></tr>
+<tr><td>Maya のターンテーブル、他のデータからのコピー</td><td><span class="soon">準備中</span></td></tr>
+</table>
+
+<footer><a href="Readme.html">トップへ戻る</a> / 前: <a href="facial-layers.html">レイヤーと検証</a> / <a href="facial.html">FacialController とは</a></footer>
+</body>
+</html>

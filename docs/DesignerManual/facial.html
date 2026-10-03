@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FacialController とは - T-Drive デザイナーマニュアル</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<nav class="breadcrumb"><a href="Readme.html">トップ</a> › FacialController とは</nav>
+<h1>FacialController とは</h1>
+<p class="lastupdate">最終更新日: 2026-10-03</p>
+
+<p>アニメ調の顔は、<strong>あおり・ふかん・横顔</strong>で形が崩れやすくなります。FacialController は、<strong>カメラの角度に合わせて顔の形を補正する</strong>仕組みです。角度ごとに「この角度ならこの形」というポーズを Maya で作っておくと、ゲーム（Unity）ではカメラの角度に応じて、まわりのポーズがなめらかに混ざります。</p>
+
+<div class="tip">表情を切り替える道具（表情プリセット・まばたき・視線）ではありません。<strong>カメラから見た顔の崩れを直す</strong>ための道具です。</div>
+
+<h2>作業の流れ</h2>
+<ol>
+<li><strong>Maya で作る</strong> — 角度の格子の点ごとに、補正ポーズを作ります（<a href="facial-setup.html">はじめに</a>・<a href="facial-grid.html">グリッド</a>・<a href="facial-pose.html">ポーズ</a>）</li>
+<li><strong>ベイク</strong> — 作ったポーズを、顔のメッシュの形（<code>FC_</code> で始まるシェイプ）に焼き込みます</li>
+<li><strong>プレビューで確認</strong> — カメラを回して、補正が効いていることを Maya で見ます（<a href="facial-grid.html#preview">プレビュー</a>）</li>
+<li><strong>Unity 向けに出力</strong> — モデル（FBX）と補正のデータを書き出します（<a href="facial-export.html">出力と Unity</a>）</li>
+<li><strong>Unity で実行</strong> — キャラクターに補正の部品を付けると、ゲーム中のカメラに合わせて補正が掛かります</li>
+</ol>
+
+<h2>役割分担</h2>
+<table>
+<tr><th>場所</th><th>役割</th></tr>
+<tr><td>Maya</td><td><strong>作る・直す</strong>。格子・ポーズ・感情レイヤーの編集、自動生成、ベイク、検証、プレビュー、Unity 向けの出力</td></tr>
+<tr><td>Unity</td><td><strong>動かす・確認する・簡単な調整</strong>。補正の実行、再生しないでのプレビュー、格子の確認、検証、強さや追従の速さなどの調整</td></tr>
+</table>
+<div class="warn">Unity では<strong>ポーズの編集とベイクはできません</strong>。直したいときは Maya で直して、出力し直します。</div>
+
+<h2>用語</h2>
+<table>
+<tr><th>用語</th><th>意味</th></tr>
+<tr><td>格子</td><td>カメラの角度を表す升目。横が左右（Yaw）、縦が上下（Pitch）。既定は 5 列 × 3 行</td></tr>
+<tr><td>点</td><td>格子の 1 マス。1 点が 1 つの角度に対応し、その角度の補正ポーズを持ちます</td></tr>
+<tr><td>キー</td><td>自分で作って保存した点（グリッドでは緑）</td></tr>
+<tr><td>自動生成</td><td>キーから、残りの点を自動で埋めること（グリッドでは水色）。左右反転と補間で作ります</td></tr>
+<tr><td>レイヤー</td><td>補正のまとまり。<strong>Neutral</strong>（無表情のときの補正）が土台で、<strong>感情</strong>（喜び・怒りなど）は Neutral との差だけを持ち、重みを掛けて上乗せします（<a href="facial-layers.html">レイヤー</a>）</td></tr>
+<tr><td>ベイク</td><td>点のポーズを、顔メッシュの 1 つのシェイプに焼き込むこと</td></tr>
+<tr><td>FC_ で始まるシェイプ</td><td>ベイクでできる補正用のシェイプ（例: <code>FC_mini_Neutral_R1_C3</code>）。ツールが作り直せるもので、元のシェイプには触りません</td></tr>
+<tr><td>作業セット</td><td>このキャラクターの補正で触るシェイプとボーンの選択。ポーズタブにはこれだけが並びます</td></tr>
+<tr><td>基準ボーン</td><td>頭のボーン。格子の中心と、顔の向きの基準になります</td></tr>
+</table>
+
+<h2>今できること</h2>
+<table>
+<tr><th>機能</th><th>状態</th><th>ページ</th></tr>
+<tr><td>新規・開く・保存、セットアップ（メッシュ・基準ボーン・格子・ミラーなど）</td><td><span class="ok">使える</span></td><td><a href="facial-setup.html">はじめに</a></td></tr>
+<tr><td>カメラ角度補正（T-20）からの取り込み</td><td><span class="ok">使える</span></td><td><a href="facial-setup.html#t20">はじめに</a></td></tr>
+<tr><td>グリッド（点の選択・自動生成・キー解除・クリア・右クリック）</td><td><span class="ok">使える</span></td><td><a href="facial-grid.html">グリッド</a></td></tr>
+<tr><td>ベイク（Maya の Ctrl+Z 1 回で戻せる）</td><td><span class="ok">使える</span></td><td><a href="facial-grid.html#bake">グリッド</a></td></tr>
+<tr><td>カメラ連動プレビュー・補正あり / なし・キーに焼く</td><td><span class="ok">使える</span></td><td><a href="facial-grid.html#preview">グリッド</a></td></tr>
+<tr><td>ポーズの作成（シェイプ・ボーン）・保存・左右反転・書き出し / 読み込み</td><td><span class="ok">使える</span></td><td><a href="facial-pose.html">ポーズ</a></td></tr>
+<tr><td>感情レイヤー・表情が強いときに補正を弱める</td><td><span class="ok">使える</span></td><td><a href="facial-layers.html">レイヤーと検証</a></td></tr>
+<tr><td>検証（一覧・候補で一括改名・無い参照の削除・再ベイク）</td><td><span class="ok">使える</span></td><td><a href="facial-layers.html#validate">レイヤーと検証</a></td></tr>
+<tr><td>Unity 向け出力（FBX + 補正データ）・UE 版向け出力</td><td><span class="ok">使える</span></td><td><a href="facial-export.html">出力と Unity</a></td></tr>
+<tr><td>Unity: 補正の実行・インスペクターでの調整・プレビュー・格子のウィンドウ・検証</td><td><span class="ok">使える</span>（実際のデータでの通し確認は <strong>確認中</strong>）</td><td><a href="facial-export.html#unity">出力と Unity</a></td></tr>
+<tr><td>シェイプタブ（この角度で彫る・左右に分ける・ミラー・別メッシュへ写す など）</td><td><span class="soon">準備中</span></td><td><a href="facial-export.html#soon">出力と Unity</a></td></tr>
+<tr><td>Timeline のトラック・Maya から Timeline への取り込み</td><td><span class="soon">準備中</span></td><td><a href="facial-export.html#soon">出力と Unity</a></td></tr>
+<tr><td>デバッグ表示・シャープさ・コマ打ち・誇張 など</td><td><span class="soon">準備中</span></td><td><a href="facial-export.html#soon">出力と Unity</a></td></tr>
+</table>
+
+<h2>カメラ角度補正（T-20）との関係</h2>
+<p><a href="character.html#view-correction">キャラクタータブのカメラ角度補正</a>（T-20）は、正面・3/4・横の 3 つだけの簡易版です。FacialController はその上位版で、<strong>格子・ふかん/あおり・感情</strong>に対応します。T-20 は残してあり、作ったデータは FacialController の格子へ<a href="facial-setup.html#t20">取り込めます</a>（T-20 側は消えません）。新しく作るキャラクターは FacialController がおすすめです。</p>
+<div class="warn">T-20 と FacialController のプレビューを両方オンにすると、顔が二重に補正されます。FacialController を使うときは、Toon 側のカメラ連動をオフにしてください。</div>
+
+<div class="tip">このページ以降の画像は、<strong>テスト用の小さなモデル</strong>で撮ったものです。実際の Maya では配色が少し違います。</div>
+
+<footer><a href="Readme.html">トップへ戻る</a> / 次: <a href="facial-setup.html">はじめに（FacialController）</a></footer>
+</body>
+</html>

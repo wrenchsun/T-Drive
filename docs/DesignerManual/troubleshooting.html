@@ -114,6 +114,26 @@
 <td>「T-Drive」メニューが無い（v0.4.0 までは「T-Drive Toon」という名前でした）</td>
 <td><a href="setup.html">ツールの登録</a>（install_maya_module.ps1）をして Maya を再起動してください</td>
 </tr>
+<tr id="facial">
+<td>FacialController で「編集」をオンにしたら、顔の表情が消えた</td>
+<td>編集中は、シーンが基準姿勢（シェイプの重み 0・バインドポーズ）になるためです。故障ではありません。<strong>編集をオフ</strong>にすると元の姿勢に戻ります（<a href="facial-setup.html">はじめに</a>）</td>
+</tr>
+<tr>
+<td>プレビューに「格子やベイクが変わりました。作り直してください」と出る</td>
+<td>プレビューを作ったあとで、格子やベイクが変わりました。グリッドタブのプレビューで<strong>作り直す</strong>を押してください（<a href="facial-grid.html#preview">グリッド</a>）</td>
+</tr>
+<tr>
+<td>ベイクしたのに、カメラを回しても補正が出ない</td>
+<td>次を確認してください。(1) プレビューを作っていない → 「プレビューを作る」 (2) ボタンが<strong>補正なし</strong>になっている → 「補正あり」へ (3) <strong>編集中</strong>は補正が止まる → 編集をオフに (4) 強さが 0 になっていないか (5) 点が<strong>未ベイク</strong>（黄色の破線）のまま（<a href="facial-grid.html#preview">グリッド</a>）</td>
+</tr>
+<tr>
+<td>検証に「左右の相手がモデルにありません」と出る</td>
+<td>そのシェイプの左右の名前が、モデルで合っていません（綴りが左右で違うなど）。左右反転できないだけで、補正は動きます。名前をそろえるか、セットアップタブの<strong>反転しないもの</strong>に入れてください（<a href="facial-layers.html#validate">検証</a>）</td>
+</tr>
+<tr>
+<td>Unity で補正が出ない</td>
+<td>(1) FBX に <code>FC_</code> で始まるシェイプが入っているか（Maya の出力タブで「FBX に入った FC_*」の数を確認）(2) Runner の<strong>状態</strong>の「足りないシェイプ」が 0 か (3) Runner の<strong>検証</strong>のエラー・警告 (4) データ・基準ボーンが設定されているか (5) 補正が弱くなっていないか（全体の強さ・距離フェード）。直らなければ Maya で出し直してください（<a href="facial-export.html#unity">出力と Unity</a>）</td>
+</tr>
 </table>
 
 <div class="tip">

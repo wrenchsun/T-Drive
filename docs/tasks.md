@@ -189,7 +189,7 @@ FacialController（カメラ角度に応じた顔の補正。UE 版からの移�
 | F1-7 | 検証タブ（検出一覧・一括改名・再ベイク）+ 他のデータからコピー | R-09 R-31 | 2 | F1-4 | シェイプ名を変えたモデルで不一致が一覧に出て、候補から一括で直せる | ✅ `ui_validate.py`（一覧・候補から一括改名・無い参照の削除・変更のある点だけベイク・点へ移動）。他のデータからのコピー（`autofill.copy_from`）の画面は未実装 → F2 で |
 | F1-8 | 出力タブ: Unity 向け FBX（FC_* 入り・`fcs_*` と作業用ノードを除く）+ `.fcpose` の写し、UE 版向け JSON | JSON | 2 | F1-4 | 出力した FBX に FC_* がそろい fcs_* が無い。UE 版で JSON を読める（手動確認） | ✅ `export.py` + `ui_export.py`（Unity 向け FBX + `.fcpose` を別プロセスで・UE 版向け・Timeline 用 `.fctrack`）。shizuku で出力を確認（6.9 秒）。Unity への取り込みの通し確認は未実施 |
 | F1-9 | T-20（カメラ角度補正 BlendShape）のデータを格子へ取り込む | — | 1 | F1-3 | UnityChan / shizuku の T-20 の 3 キーが Yaw 0 / 45 / 90° のキーとして入る。T-20 側は消さない | ✅ `session.import_t20` + セットアップタブのボタン（正面 / 3/4 / 横 → Yaw 0 / 45 / 90° のキー。T-20 と Look は変えない）。開いている Look からの取り込みは実機で未確認 |
-| F1-10 | デザイナーマニュアル: FacialController の章（はじめに・セットアップ・グリッド・ポーズ・ベイク・プレビュー・出力）と「今できること」 | — | 1.5 | F1-8 | 各チケットで該当ページを同じコミットで更新したうえで、通しで読めること | ⬜ |
+| F1-10 | デザイナーマニュアル: FacialController の章（はじめに・セットアップ・グリッド・ポーズ・ベイク・プレビュー・出力）と「今できること」 | — | 1.5 | F1-8 | 各チケットで該当ページを同じコミットで更新したうえで、通しで読めること | ✅ `docs/DesignerManual/facial*.html`（6 ページ: とは・はじめに・グリッド・ポーズ・レイヤーと検証・出力と Unity）+ 画像 7 枚（テスト用の小さなモデルで撮影）。Readme・character・troubleshooting から参照 |
 
 ## Phase F2: Maya ならではのシェイプ作成支援
 
@@ -218,7 +218,7 @@ FacialController（カメラ角度に応じた顔の補正。UE 版からの移�
 | FU-5 | エディタ: プレビュー（Scene ビューのカメラ・A/B・ターンテーブル）・格子ビューア・検証 | R-01 R-30 R-31 | 3 | FU-3 | 再生せずに補正を確認でき、抜けると元に戻る。FC_* の不足が検証に出る | ✅ プレビュー（`Editor/Preview/FacialPreviewDriver.cs`: Scene ビューのカメラ / ターンテーブル / 角度指定・A/B。保存・再生・再コンパイル・終了の前に重みを戻す。シーンを汚さない）・格子ビューア（`Editor/Grid/`、メニュー T-Drive/Facial/グリッド）・検証（`Editor/Validation/FacialValidation.cs`）。計算はテスト済み、ウィンドウの見た目とカメラの動きは人の確認待ち |
 | FU-6 | 簡単なパラメータ調整: `FacialCorrectionOverrides`・Runner のインスペクター・JSON への書き出し（Maya へ戻す） | — | 1.5 | FU-3 | 強さ・追従などを変えて保存 → 取り込み直しても残る → 書き出した値を Maya で読める | ✅ Runner / Data / Overrides のインスペクター（状態・調整・感情の重み・視点・検証）、調整用アセットの作成、Maya へ戻す JSON の書き出し（`policy` / `quality`。**端のフェード（`grid.edgeFade`）は未対応** → 次の修正で追加） |
 | FU-7 | デバッグ表示（HUD・3D 表示） | R-27 | 1 | FU-3 | 角度・重み・スナップが実行中に見える | ⬜ |
-| FU-8 | マニュアル（Unity での使い方・調整できる値・取り込み設定） | — | 1 | FU-6 | — | ⬜ |
+| FU-8 | マニュアル（Unity での使い方・調整できる値・取り込み設定） | — | 1 | FU-6 | — | ✅ `facial-export.html` に Unity での使い方・調整できる値・準備中の一覧（Unity の画面の画像は無し） |
 
 ## Phase FT: TimeLine / D-Drive 連携
 
