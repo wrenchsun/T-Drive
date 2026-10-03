@@ -323,6 +323,16 @@ D-Drive を変更しない前提でできることだけを入れる（変更が
 | 検証 | `IValidator` 実装: CutsceneData の `.playable` にある FacialCorrectionTrack のバインド先に Runner があるか、Data の FC_* がモデルにそろっているか |
 | fctrack の取り込み | `AssetPostprocessor`（D-Drive の Cutscene 取り込みより後の順番）で、`SourceAssets/Cutscene/<Category>/<Shot>__<Model>.fctrack` から、対応する `.playable` に `FacialCorrectionTrack` を足す / 更新する。自動で作ったトラックは名前 `<Model>_Facial(auto)` で見分け、デザイナーのトラックは触らない |
 
+### 5.v パース補正の計算（F5-4、2026-10-04）
+
+- 純粋関数（Python `core/evaluate.py` / C# `FacialCore`。共通のテストデータの種類 `perspective`）
+  - `perspective_weights(values: list[float], x: float) -> list[float]` — `values` はキーの `value`（配列の順 = シェイプの番号。並んでいなくてよい）。戻りは同じ順の重み。昇順に並べたとき x を挟む 2 つを直線で混ぜる。範囲の外は端のキーが 1。キー 0 個 → 空。x が NaN → 全部 0
+  - 出力の重み = `perspective_weights × perspective.strength（上書き可）× 全体の強さ`。角度の補正の結果に**加算**（別のシェイプ `FC_<asset>_Persp_K{n}` なので、同じシェイプへの合算は起きない）
+- 軸の値: `distance` = 視点の位置と格子の中心（基準ボーン + 中心のずらし）の距離をデータの単位（cm）で。`fov` = 視点の縦の画角（度）。画角が分からないときは NaN（= 補正 0）
+- コマ打ち・追従（スムージング）は角度の補正と同じ扱い（同じ更新の回で計算し、同じ速さで追従）
+- Maya のプレビュー: 式に距離 / 画角から重みを求める部分を足す（キーが無い・使わないときは式が従来と同一）。カメラの画角は `focalLength` と `verticalFilmAperture` から求める
+- Unity: `FacialCorrectionData.perspective`（軸・強さ・キーの値とシェイプ名）。Runner は視点の位置と画角（`FacialViewResolver` の値、または視点の Transform に付いた Camera）から計算。調整値 `overridePerspectiveStrength`、クリップ「パース補正を使う / 強さ」、`.fctrack` の固定カーブ `perspective`
+
 ### 5.w 頭の角度の規則（2026-10-03 決定。レビュー C-6）
 
 - 頭から見たカメラの Yaw / Pitch の求め方は、**T-Drive の規則（Unity 準拠。Python と C# で共通）を正とする**。UE 版とは、前方向が ±Y で、頭にロールとピッチが両方あるとき、最大 7° ほど違う（UE 版には合わせない。ポーズは T-Drive で作るので実害はない）
