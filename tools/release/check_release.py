@@ -4,7 +4,7 @@
 
 検査:
   1. 作業ツリーがクリーン
-  2. CHANGELOG の [Unreleased] に「### 互換性」があり、中身が記入されている
+  2. CHANGELOG（ルートと unity/com.tdrive.facial/）の [Unreleased] に「### 互換性」があり、記入されている。package.json の version = VERSION
   3. パラメータ契約とスナップショット（tests/snapshots/params.json）の差分から必要な上げ幅を出し、指定と矛盾しない
   4. looks/*/look.json が検証を通る
 終了コード: 問題なし 0 / 問題あり 1
@@ -33,13 +33,17 @@ def main(argv: list[str] | None = None) -> int:
     if not a.allow_dirty and not rl.working_tree_clean():
         problems.append("作業ツリーに未コミットの変更がある")
 
-    section = rl.unreleased_section(rl.CHANGELOG.read_text(encoding="utf-8"))
-    if section is None:
-        problems.append("CHANGELOG に ## [Unreleased] が無い")
-    elif "### 互換性" not in section:
-        problems.append("CHANGELOG の [Unreleased] に ### 互換性 が無い")
-    elif "（リリース前に記入）" in section:
-        problems.append("CHANGELOG の ### 互換性 が未記入")
+    problems += rl.changelog_problems(rl.CHANGELOG.read_text(encoding="utf-8"), "CHANGELOG")
+    if not rl.PACKAGE_CHANGELOG.exists():
+        problems.append("Unity パッケージの CHANGELOG（unity/com.tdrive.facial/CHANGELOG.md）が無い")
+    else:
+        problems += rl.changelog_problems(rl.PACKAGE_CHANGELOG.read_text(encoding="utf-8"), "パッケージの CHANGELOG")
+    if not rl.PACKAGE_JSON.exists():
+        problems.append("Unity パッケージの package.json が無い")
+    else:
+        pv = rl.package_version(rl.PACKAGE_JSON.read_text(encoding="utf-8"))
+        if pv != cur:
+            problems.append(f"package.json の version（{pv}）が VERSION（{cur}）と違う（同時にリリースする）")
 
     need, notes = rl.required_part(rl.load_snapshot(), rl.contract(), rl.parse(cur)[0])
     print(f"パラメータ契約の変化から必要な上げ幅: {need}")

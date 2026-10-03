@@ -17,6 +17,10 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 VERSION_FILE = REPO / "VERSION"
 CHANGELOG = REPO / "CHANGELOG.md"
+# Unity パッケージ。タグ vX.Y.Z = package.json の version（D-Drive の更新ウィンドウの前提）
+PACKAGE_DIR = REPO / "unity" / "com.tdrive.facial"
+PACKAGE_JSON = PACKAGE_DIR / "package.json"
+PACKAGE_CHANGELOG = PACKAGE_DIR / "CHANGELOG.md"
 SNAPSHOT = REPO / "tests" / "snapshots" / "params.json"
 SEMVER = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
 PARTS = ("major", "minor", "patch")
@@ -117,6 +121,33 @@ def release_changelog(text: str, version: str, date: str) -> str:
         raise ValueError("CHANGELOG に ## [Unreleased] が無い")
     fresh = "## [Unreleased]\n\n### 互換性\n- （リリース前に記入）\n\n"
     return text.replace("## [Unreleased]\n", fresh + f"## [{version}] - {date}\n", 1)
+
+
+_PKG_VERSION = re.compile(r'("version"\s*:\s*")[^"]*(")')
+
+
+def package_version(text: str) -> str | None:
+    m = _PKG_VERSION.search(text)
+    return re.search(r'"version"\s*:\s*"([^"]*)"', text)[1] if m else None
+
+
+def set_package_version(text: str, version: str) -> str:
+    """package.json の最初の "version" だけを書き換える（体裁・キー順・他の項目はそのまま）。"""
+    if not _PKG_VERSION.search(text):
+        raise ValueError('package.json に "version" が無い')
+    return _PKG_VERSION.sub(lambda m: m[1] + version + m[2], text, count=1)
+
+
+def changelog_problems(text: str, label: str) -> list[str]:
+    """[Unreleased] に「### 互換性」があり記入済みか（docs/06）。"""
+    section = unreleased_section(text)
+    if section is None:
+        return [f"{label} に ## [Unreleased] が無い"]
+    if "### 互換性" not in section:
+        return [f"{label} の [Unreleased] に ### 互換性 が無い"]
+    if "（リリース前に記入）" in section:
+        return [f"{label} の ### 互換性 が未記入"]
+    return []
 
 
 def today() -> str:

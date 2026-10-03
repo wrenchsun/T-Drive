@@ -54,16 +54,24 @@ D-Drive の運用（`D-Drive/docs/42_distribution.md` §4〜5、`docs/12_review.
 D-Drive の Tools/Release と同じ手順・引数体系。この PC には PowerShell 7 が無いため Python（uv で実行）で実装している。
 
 ```
-1. CHANGELOG.md の [Unreleased] → ### 互換性 を埋める
+1. CHANGELOG.md と unity/com.tdrive.facial/CHANGELOG.md の [Unreleased] → ### 互換性 を埋める
 2. uv run --no-project python tools/release/check_release.py --version X.Y.Z   # 検査のみ（下記）
 3. uv run --no-project --with pytest --with numpy --with pillow python -m pytest tests
       # 単体テスト + mayapy スモークテスト（tests/maya/smoke.py、Maya 2026 がある環境）
 4. python tools/parity/compare.py …                                            # ToonCore / シェーダーを変更した場合のみ（09 §5）
 5. uv run --no-project python tools/release/bump_version.py --version X.Y.Z --dry-run
 6. uv run --no-project python tools/release/bump_version.py --version X.Y.Z --tag
-      → VERSION・CHANGELOG・契約スナップショットを更新、"Release vX.Y.Z" でコミット、注釈付きタグ vX.Y.Z
+      → VERSION・CHANGELOG・契約スナップショット・Unity パッケージ（package.json の version と CHANGELOG）を更新、"Release vX.Y.Z" でコミット、注釈付きタグ vX.Y.Z
 7. git push --follow-tags   ※明示的に指示されたときだけ
 ```
+
+**Unity パッケージの配布（2026-10-04。D-Drive の配布サポート P-15 に合わせる）**
+
+- Maya と Unity は同じリポジトリ・同じ版で一緒にリリースする。Unity 側の導入 URL は `https://github.com/wrenchsun/T-Drive.git?path=unity/com.tdrive.facial`（D-Drive の `Tools > D-Drive > Update > 更新ウィンドウ` ›「URL を入力して追加」。D-Drive が無いプロジェクトは Package Manager に `…#vX.Y.Z` 付きで入れる）
+- D-Drive が求める形式: タグ `vX.Y.Z` = `package.json` の `version` / パッケージ直下の `CHANGELOG.md`（各版に `### 互換性`。壊す変更のときだけ、その節に「破壊あり」と書く = D-Drive がこの語で判定する）/ `package.json` の `ddriveUpdate`（`compatibleWith` = 任意の相手の最低版、`requires` = 必須の相手の最低版。値は `X.Y.Z`）
+- 今の宣言: `compatibleWith: { "com.ddrive.core": "1.4.0" }`（D-Drive が古いと更新ウィンドウと検証に警告。D-Drive が無ければ何も出ない）
+- リリース用スクリプトが、パッケージの版と CHANGELOG を本体と一緒に更新し、`VERSION` と食い違うと検査で止まる
+- Unity パッケージが入る最初のリリースは v0.4.0 の次（v0.4.0 のタグには `unity/` が無い）
 
 `check_release.py` の検査項目:
 
