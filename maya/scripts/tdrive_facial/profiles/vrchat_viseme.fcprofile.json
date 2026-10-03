@@ -41,5 +41,22 @@
     "vrc.v_rr": [0, 1],
     "vrc.v_ss": [0, 1],
     "vrc.v_th": [0, 1]
+  },
+  "lipSync": {
+    "sil": "vrc.v_sil",
+    "PP": "vrc.v_pp",
+    "FF": "vrc.v_ff",
+    "TH": "vrc.v_th",
+    "DD": "vrc.v_dd",
+    "kk": "vrc.v_kk",
+    "CH": "vrc.v_ch",
+    "SS": "vrc.v_ss",
+    "nn": "vrc.v_nn",
+    "RR": "vrc.v_rr",
+    "aa": "vrc.v_aa",
+    "E": "vrc.v_e",
+    "ih": "vrc.v_ih",
+    "oh": "vrc.v_oh",
+    "ou": "vrc.v_ou"
   }
 }

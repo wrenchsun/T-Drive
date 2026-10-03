@@ -10,6 +10,7 @@ Python（`core/evaluate.py`）と C#（`FacialCore`）が同じファイルを�
 | `layer_distance.json` | `scalar`（`fn: layerWeightFromDistance`） | 距離でレイヤーの重みを決める（R-35） |
 | `step.json` | `step`（新） | コマ打ちの判定（R-33） |
 | `perspective.json` | `perspective`（新） | パース補正のキーの重み（R-34） |
+| `lipsync.json` | `lipsync`（新） | リップシンクの対応表（R-18。F5-8） |
 
 ## evaluate への追加キー
 
@@ -48,3 +49,18 @@ Python（`core/evaluate.py`）と C#（`FacialCore`）が同じファイルを�
 - 期待値 = `perspective_weights(values, x)` × `clamp(strength)` × `alpha`。戻りは `values` と同じ順
 - `perspective_weights`: 重複を除いた value を昇順に並べ、x を挟む 2 つを直線で混ぜる。端の外は端のキーが 1。キー 0 個 → `[]`、
   1 個 → `[1]`、x が NaN → 全部 0。同じ value のキーは添字が小さいほうだけが重みを受け取る（残りは 0）。有限でない value のキーは常に 0
+
+## kind: lipsync（`lipsync_output` / `lipsync_activity` / `lipsync_apply`）
+
+```jsonc
+{ "name": "…", "source": "…",
+  "lipSync": { /* .fcpose の lipSync と同じ形（from / to のキー） */ },
+  "weights": { "A": 0.5 }, "volume": 0.5, "emotions": { "Joy": 0.5 },
+  "current": { "a": 0.4 }, "limits": { "a": [0, 2] },
+  "expect": { "output": { "a": 0.5 }, "activity": 0.5, "final": { "a": 0.6 } } }
+```
+
+- `volume` 省略 / null = 声量なし（倍率 = to）。`emotions` = 感情レイヤー名 → 重み（各値は 0〜1 に丸め、合計が 1 を超えたら合計で割る）。`current` 省略 = 空。`limits` = シェイプ名 → [下限, 上限]（上限だけ使う。無い名前は 1）
+- `output` = 対応表に出てくる**全シェイプ**（音素の一覧にある音素の行だけ。寄与が無ければ 0）。キーの集合も比べる。無効・行なしのときは `{}`
+- `activity` = saturate(Σ 各音素の強さ)（音素の一覧にある音素だけ数える）。`final` = `current × (1 − activity) + output` を 0〜上限に丸めた値（`output` と同じキー集合）
+- 音素の一覧の重複・空の名前は 1 度だけ・数えない。同じ音素 × 感情の行は先のものだけが効く。比べる許容は 1e-4

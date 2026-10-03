@@ -37,6 +37,9 @@ from .model import (
     Grid,
     GridPoint,
     Layer,
+    LipSync,
+    LipSyncEntry,
+    LipSyncVolume,
     LodMesh,
     Material,
     Meta,
@@ -362,6 +365,54 @@ def _read_perspective(d: dict) -> Perspective:
     )
 
 
+_LIP_ENTRY_KEYS = ("phoneme", "emotion", "curves")
+_LIP_VOLUME_KEYS = ("min", "max", "from", "to")
+_LIP_KEYS = ("enabled", "strength", "phonemes", "entries", "volume", "follow")
+
+
+def _read_lip_entry(d: Any) -> Optional[LipSyncEntry]:
+    if not isinstance(d, dict):
+        warnings.warn("オブジェクトでないリップシンクの行を読み飛ばしました", UserWarning, stacklevel=4)
+        return None
+    if not isinstance(d.get("phoneme"), str):
+        warnings.warn("phoneme が文字列でないリップシンクの行を読み飛ばしました", UserWarning, stacklevel=4)
+        return None
+    pose = _read_pose(d.get("curves"), None)
+    return LipSyncEntry(
+        phoneme=d["phoneme"], emotion=_s(d.get("emotion"), ""), curves=pose.curves, extra=_extra(d, _LIP_ENTRY_KEYS)
+    )
+
+
+def _read_lip_volume(d: Optional[dict]) -> LipSyncVolume:
+    v = LipSyncVolume()
+    if d is None:
+        return v
+    return LipSyncVolume(
+        min=_f(d.get("min"), v.min),
+        max=_f(d.get("max"), v.max),
+        from_=_f(d.get("from"), v.from_),
+        to=_f(d.get("to"), v.to),
+        extra=_extra(d, _LIP_VOLUME_KEYS),
+    )
+
+
+def _read_lip_sync(d: dict) -> LipSync:
+    entries = d.get("entries")
+    out = []
+    if isinstance(entries, list):
+        out = [e for e in (_read_lip_entry(x) for x in entries) if e is not None]
+    base = LipSync()
+    return LipSync(
+        enabled=_b(d.get("enabled"), True),
+        strength=_f(d.get("strength"), base.strength),
+        phonemes=_strs(d.get("phonemes")),
+        entries=out,
+        volume=_read_lip_volume(_obj(d, "volume")),
+        follow=_f(d.get("follow"), base.follow),
+        extra=_extra(d, _LIP_KEYS),
+    )
+
+
 def _read_limits(d: dict) -> dict[str, tuple[float, float]]:
     out: dict[str, tuple[float, float]] = {}
     for name, v in d.items():
@@ -381,7 +432,7 @@ def _read_sculpt(d: dict) -> SculptShapes:
 
 _DOC_KEYS = (
     "format", "version", "meta", "grid", "policy", "layers", "workingSet", "mirror", "autogen", "exclude",
-    "intensityCurves", "profile", "asset", "target", "bake", "limits", "material", "quality", "perspective",
+    "intensityCurves", "profile", "asset", "target", "bake", "limits", "material", "quality", "perspective", "lipSync",
     "layerWeights", "sculptShapes",
 )  # fmt: skip
 _POSE_KEYS = ("format", "version", "meta", "curves", "bones")
@@ -436,6 +487,7 @@ def _read_document(d: dict) -> Document:
         ("material", "material", _read_material),
         ("quality", "quality", _read_quality),
         ("perspective", "perspective", _read_perspective),
+        ("lipSync", "lip_sync", _read_lip_sync),
         ("layerWeights", "layer_weights", _read_layer_weights),
         ("sculptShapes", "sculpt_shapes", _read_sculpt),
     ):
@@ -661,6 +713,8 @@ def to_dict(doc: AnyDocument) -> dict[str, Any]:
         out["quality"] = _with_extra(qd, q.extra)
     if doc.perspective is not None:
         out["perspective"] = _perspective_dict(doc.perspective)
+    if doc.lip_sync is not None:
+        out["lipSync"] = _lip_sync_dict(doc.lip_sync)
     if doc.layer_weights is not None:
         out["layerWeights"] = copy.deepcopy(doc.layer_weights)
     if doc.sculpt_shapes is not None:
@@ -680,6 +734,24 @@ def _perspective_dict(p: Perspective) -> dict[str, Any]:
         keys.append(_with_extra({"value": k.value, "curves": curves, "bones": bones}, k.extra))
     d["keys"] = keys
     return _with_extra(d, p.extra)
+
+
+def _lip_sync_dict(l: LipSync) -> dict[str, Any]:
+    entries = [
+        _with_extra({"phoneme": e.phoneme, "emotion": e.emotion, "curves": dict(e.curves)}, e.extra) for e in l.entries
+    ]
+    vol = _with_extra(
+        {"min": l.volume.min, "max": l.volume.max, "from": l.volume.from_, "to": l.volume.to}, l.volume.extra
+    )
+    d = {
+        "enabled": l.enabled,
+        "strength": l.strength,
+        "phonemes": list(l.phonemes),
+        "entries": entries,
+        "volume": vol,
+        "follow": l.follow,
+    }
+    return _with_extra(d, l.extra)
 
 
 def _fmt_number(v: Union[int, float]) -> str:

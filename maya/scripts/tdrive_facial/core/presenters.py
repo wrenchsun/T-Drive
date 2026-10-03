@@ -36,21 +36,33 @@ from typing import Callable, Iterator, Mapping, Optional, Sequence, Union
 
 from . import autofill, fcpose_io, naming, space
 from . import validate as V
-from .evaluate import KINDA_SMALL_NUMBER, GridShape, compute_grid_cell, point_angles
+from .evaluate import (
+    KINDA_SMALL_NUMBER,
+    GridShape,
+    compute_grid_cell,
+    lipsync_evaluate,
+    lipsync_table_curves,
+    point_angles,
+)
 from .model import (
+    LIPSYNC_BASE,
+    LIPSYNC_VOLUME_MAX,
     MAX_LAYERS,
+    MAX_LIPSYNC_PHONEMES,
     MAX_PERSPECTIVE_KEYS,
     PERSPECTIVE_AXES,
     BoneOffset,
     Document,
     GridPoint,
     Layer,
+    LipSync,
+    LipSyncEntry,
     Perspective,
     PerspectiveKey,
     PoseDocument,
     SourcePose,
 )
-from .profile import NamingProfile, clamp_value, effective_limit, has_limit
+from .profile import NamingProfile, clamp_value, curve_matches, effective_limit, has_limit
 
 # ---------------------------------------------------------------------------
 # 定数
@@ -112,6 +124,8 @@ CURVE_DIRTY_EPS = 1e-3  # 「未保存」の判定で同じとみなす重みの
 BONE_T_EPS = 1e-3  # 平行移動（文書の単位）
 BONE_R_EPS = 1e-4  # 回転（クォータニオンの成分）
 BONE_S_EPS = 1e-4  # スケール（UE 版は持たない。T-Drive の追加）
+
+_LIP_TOKEN = object()  # PosePresenter の読み込み元の指紋で「リップシンクのマス」を表す目印
 
 SEVERITY_ORDER = (V.SEVERITY_ERROR, V.SEVERITY_WARNING, V.SEVERITY_INFO)
 SEVERITY_LABEL = {V.SEVERITY_ERROR: "エラー", V.SEVERITY_WARNING: "警告", V.SEVERITY_INFO: "情報"}
@@ -178,6 +192,7 @@ class EditContext(Observable):
         self.active_layer = 0
         self.selection: Optional[tuple[int, int]] = None
         self.key_target: Optional[int] = None  # 編集の対象がパース補正のキーのとき、その番号（このとき selection は None）
+        self.lip_target: Optional[tuple[str, str]] = None  # 編集の対象がリップシンクのマスのとき、(音素, 感情。基本は "")（このとき selection / key_target は None）
         self.clipboard: Optional[SourcePose] = None
         self.pose: Optional["PosePresenter"] = None  # PosePresenter が自分で登録する
 
@@ -195,8 +210,18 @@ class EditContext(Observable):
 
     @property
     def has_target(self) -> bool:
-        """編集の対象（格子の点かパース補正のキー）がある。"""
-        return self.selection is not None or self.key_target is not None
+        """編集の対象（格子の点・パース補正のキー・リップシンクのマス）がある。"""
+        return self.selection is not None or self.key_target is not None or self.lip_target is not None
+
+    def selected_lip(self) -> Optional[tuple[str, str]]:
+        """編集の対象のリップシンクのマス (音素, 感情)。音素が一覧に無い・感情が基本でも既存の感情レイヤーでもなければ None。"""
+        l = self.doc.lip_sync
+        t = self.lip_target
+        if l is None or t is None or t[0] not in l.phonemes:
+            return None
+        if t[1] != LIPSYNC_BASE and t[1] not in {x.name for x in self.doc.layers[1:]}:
+            return None
+        return t
 
     def selected_key(self) -> Optional[int]:
         """編集の対象のパース補正のキーの番号（範囲外・キーが無ければ None）。"""
@@ -210,6 +235,10 @@ class EditContext(Observable):
         if k is not None:
             key = self.doc.perspective.keys[k]
             return SourcePose(curves=dict(key.curves), bones=copy.deepcopy(key.bones))
+        lc = self.selected_lip()
+        if lc is not None:  # リップシンクのマス: シェイプだけ（行が無ければ空のポーズ）
+            e = self.doc.lip_sync.find_entry(*lc)
+            return SourcePose(curves=dict(e.curves)) if e is not None else SourcePose()
         if self.selection is None:
             return None
         p = self.layer.points.get(self.selection)
@@ -223,6 +252,7 @@ class EditContext(Observable):
         self.active_layer = 0
         self.selection = None
         self.key_target = None
+        self.lip_target = None
         self._emit("document")
 
     def set_bake_state(self, bake_state: Optional[dict[str, str]]) -> None:
@@ -250,12 +280,21 @@ class EditContext(Observable):
     def set_selection(self, selection: Optional[tuple[int, int]]) -> None:
         self.selection = selection
         self.key_target = None  # 点を選ぶ（外す）と、キーの対象は外れる
+        self.lip_target = None
         self._emit("selection")
 
     def set_key_target(self, index: Optional[int]) -> None:
         """編集の対象をパース補正のキーにする（None で外す）。格子の点の選択は外れる。"""
         self.key_target = index
         self.selection = None
+        self.lip_target = None
+        self._emit("selection")
+
+    def set_lip_target(self, cell: Optional[tuple[str, str]]) -> None:
+        """編集の対象をリップシンクのマス (音素, 感情) にする（None で外す）。点・キーの選択は外れる。"""
+        self.lip_target = cell
+        self.selection = None
+        self.key_target = None
         self._emit("selection")
 
     def set_active_layer(self, index: int) -> None:
@@ -269,6 +308,8 @@ class EditContext(Observable):
     def _selected_signature(self) -> Optional[tuple]:
         if self.selected_key() is not None:
             return ("key", id(self.doc.perspective.keys[self.key_target]), V.pose_hash(self.saved_pose() or SourcePose()))
+        if self.selected_lip() is not None:  # 名前は入れない（音素・感情の改名で「別の対象」にしない）
+            return ("lip", V.pose_hash(self.saved_pose() or SourcePose()))
         if self.selection is None:
             return None
         return (self.active_layer, self.selection, V.pose_hash(self.saved_pose() or SourcePose()))
@@ -525,13 +566,15 @@ class SelectResult:
     ユーザーに聞いて `confirm_select` / `confirm_set_active` を呼ぶ（UE 版の YesNoCancel）。"""
 
     status: str
-    kind: str = "point"  # "point" | "layer" | "key"
+    kind: str = "point"  # "point" | "layer" | "key" | "lip"
     row: Optional[int] = None  # point: 切り替え先（needs_confirm のときは保留中の点）/ layer: 今の選択
     col: Optional[int] = None
     layer: Optional[int] = None
     yaw: Optional[float] = None  # 点の角度（カメラ移動用）
     pitch: Optional[float] = None
     index: Optional[int] = None  # kind = "key": パース補正のキーの番号
+    phoneme: str = ""  # kind = "lip": リップシンクのマスの音素
+    emotion: str = ""  # kind = "lip": 感情（基本は ""）
     camera_jump: bool = False  # ビューはカメラをこの点へ動かし、点のポーズをシーンへ当てる
     saved: bool = False  # 確認で「保存」してから切り替えた
     message: str = ""
@@ -1006,6 +1049,7 @@ class PoseView:
     hidden_bones: int
     edited_curves: int
     edited_bones: int
+    lip: Optional[tuple[str, str]] = None  # 編集の対象がリップシンクのマスのとき (音素, 感情)（このとき selection / key_index は None。ボーンは保存されない）
 
 
 @dataclass
@@ -1054,6 +1098,8 @@ class PosePresenter(Observable):
         sp = self.ctx.saved_pose()
         if sp is None:
             return None
+        if self.ctx.selected_lip() is not None:  # リップシンクのマスもレイヤーに属さない（名前でなく「リップシンクの対象」として見る）
+            return (_LIP_TOKEN, None, V.pose_hash(sp))
         if self.ctx.selected_key() is not None:  # キーはレイヤーに属さない
             k = self.ctx.doc.perspective.keys[self.ctx.selected_key()]
             return (k, None, V.pose_hash(sp))  # キーは番号でなくオブジェクトで見る（削除で番号が詰まっても同じキーなら読み直さない）
@@ -1072,12 +1118,16 @@ class PosePresenter(Observable):
         self._base = self._signature()
         self._base_pose = copy.deepcopy(sp) if sp is not None else None
 
+    def rebase_signature(self) -> None:
+        """読み込み元の指紋だけを今に合わせる（編集中の値は触らない）。リップシンクの音素・感情の改名の途中で呼ぶ。"""
+        self._base = self._signature()
+
     def _was_dirty(self) -> bool:
         """読み込んだときの保存済みのポーズに対して未保存の編集があったか（保存済みが差し替わった後でも使える）。"""
         return self._base_pose is not None and not poses_equal(SourcePose(self.curves, self.bones), self._base_pose)
 
     def _on_ctx(self, event: str) -> None:
-        if event == "active_layer" and self.ctx.selected_key() is not None:
+        if event == "active_layer" and (self.ctx.selected_key() is not None or self.ctx.selected_lip() is not None):
             pass  # キーを編集中にレイヤーを切り替えても、編集中の値はそのまま
         elif event in ("selection", "active_layer"):
             # 切り替えの確認は呼ぶ側（GridPresenter / PerspectivePresenter / LayerPresenter）が済ませている。「破棄」を選んだ場合はここで捨てる
@@ -1100,7 +1150,7 @@ class PosePresenter(Observable):
 
     @property
     def has_point(self) -> bool:
-        """編集の対象（格子の点かパース補正のキー）がある。"""
+        """編集の対象（格子の点・パース補正のキー・リップシンクのマス）がある。"""
         return self.ctx.has_target
 
     @property
@@ -1133,7 +1183,7 @@ class PosePresenter(Observable):
 
     def _need_point(self) -> Optional[PoseResult]:
         if not self.has_point:
-            return _fail("no_point", "点（またはパース補正のキー）が選択されていません", PoseResult)
+            return _fail("no_point", "点（またはパース補正のキー・リップシンクのマス）が選択されていません", PoseResult)
         return None
 
     def set_curve(self, name: str, value: float) -> PoseResult:
@@ -1238,6 +1288,25 @@ class PosePresenter(Observable):
                 key = ctx.doc.perspective.keys[k]
                 key.curves, key.bones = pose.curves, pose.bones
             return PoseResult(message="キーのポーズを保存しました" if changed else "キーのポーズは変わっていません")
+        lc = ctx.selected_lip()
+        if lc is not None:  # 対象がリップシンクのマス: シェイプだけ保存する（ボーンは捨てる）
+            pose = self.trimmed()
+            note = "（ボーンはリップシンクには保存されません）" if pose.bones else ""
+            changed = not poses_equal(ctx.saved_pose() or SourcePose(), SourcePose(curves=pose.curves))
+            existing = ctx.doc.lip_sync.find_entry(*lc)
+            removed = False
+            with ctx.edit():
+                if not pose.curves and not keep_empty_key:
+                    if existing is not None:
+                        ctx.doc.lip_sync.entries.remove(existing)
+                        removed = True
+                elif existing is None:
+                    ctx.doc.lip_sync.entries.append(LipSyncEntry(phoneme=lc[0], emotion=lc[1], curves=dict(pose.curves)))
+                else:
+                    existing.curves = dict(pose.curves)
+            if removed:
+                return PoseResult(message="行を消しました（シェイプが空）" + note, removed=True)
+            return PoseResult(message=("行を保存しました" if changed else "行は変わっていません") + note)
         rc = ctx.selection
         assert rc is not None
         pose = self.trimmed()
@@ -1266,7 +1335,10 @@ class PosePresenter(Observable):
     def pose_to_apply(self) -> SourcePose:
         """シーンへ当てるポーズ（保存されるのと同じ。ほぼ 0 は除く）。ここに無いシェイプ・ボーンは基準（0 / 元の姿勢）へ戻す
         のが Maya 層（pose_apply）の約束。除外・作業セットの外を触らない判断もそちら。"""
-        return self.trimmed()
+        t = self.trimmed()
+        if self.ctx.selected_lip() is not None:
+            t.bones = {}  # リップシンクのマスはシェイプだけ
+        return t
 
     def ingest(
         self,
@@ -1466,6 +1538,7 @@ class PosePresenter(Observable):
             selection=ctx.selection,
             layer=ctx.layer.name,
             key_index=ctx.selected_key(),
+            lip=ctx.selected_lip(),
             dirty=dirty,
             status_text=" [未保存]" if dirty else "",
             can_edit=self.has_point,
@@ -1628,7 +1701,7 @@ class LayerPresenter(Observable):
             return SelectResult(SELECT_INVALID, "layer", sel[0], sel[1], index, message="レイヤーが範囲外です")
         if index == ctx.active_layer:
             return SelectResult(SELECT_SAME, "layer", sel[0], sel[1], index)
-        if ctx.pose is not None and ctx.pose.dirty and ctx.selected_key() is None:  # キーの編集はレイヤーに関係しない
+        if ctx.pose is not None and ctx.pose.dirty and ctx.selected_key() is None and ctx.selected_lip() is None:  # キー・リップシンクのマスの編集はアクティブレイヤーに関係しない
             self.pending = index
             return SelectResult(
                 SELECT_NEEDS_CONFIRM,
@@ -1708,11 +1781,20 @@ class LayerPresenter(Observable):
             return LayerResult(code="unchanged", index=index, message="名前は変わりません")
         old = layer.name
         stale = layer_morph_names(self.ctx, layer)
-        with self.ctx.edit():
+        ctx = self.ctx
+        with ctx.edit():
             layer.name = chk.name
             lw = self.doc.layer_weights
             if lw and old in lw:  # 重みの出どころ（layerWeights）はレイヤー名がキー: 名前に付いていく
                 lw[chk.name] = lw.pop(old)
+            if self.doc.lip_sync is not None:  # リップシンクの行の感情も名前に付いていく
+                for e in self.doc.lip_sync.entries:
+                    if e.emotion == old:
+                        e.emotion = chk.name
+                if ctx.lip_target is not None and ctx.lip_target[1] == old:
+                    ctx.lip_target = (ctx.lip_target[0], chk.name)
+                    if ctx.pose is not None:
+                        ctx.pose.rebase_signature()  # 編集中の値は同じマスのものとして残す
         return LayerResult(
             index=index,
             message=f"レイヤー名を「{old}」から「{chk.name}」にしました",
@@ -1816,6 +1898,8 @@ class LayerPresenter(Observable):
             del self.doc.layers[index]
             if self.doc.layer_weights:
                 self.doc.layer_weights.pop(name, None)  # そのレイヤーの重みの出どころも消す
+            if self.doc.lip_sync is not None:  # そのレイヤーの感情のリップシンクの行も消す
+                self.doc.lip_sync.entries = [e for e in self.doc.lip_sync.entries if e.emotion != name]
             ctx.active_layer = new_active  # 通知はブロックを抜けるときの "document" 1 回（同じレイヤーなら編集中の値は残る）
         discarded = scope.discarded_edits
         return LayerResult(
@@ -2247,6 +2331,527 @@ class PerspectivePresenter(Observable):
 
 
 # ---------------------------------------------------------------------------
+# Presenter: リップシンクの対応表（R-18。docs/14 §5.8c）
+# ---------------------------------------------------------------------------
+
+LIPSYNC_BASE_LABEL = "基本"
+
+
+def _lip_cell_ok(doc: Document, cell: Optional[tuple[str, str]]) -> bool:
+    """マス (音素, 感情) が編集の対象にできるか（音素が一覧にあり、感情が基本か Neutral 以外の既存のレイヤー）。"""
+    l = doc.lip_sync
+    if l is None or cell is None or cell[0] not in l.phonemes:
+        return False
+    return cell[1] == LIPSYNC_BASE or cell[1] in {x.name for x in doc.layers[1:]}
+
+
+@dataclass
+class LipSyncColumn:
+    name: str  # 感情レイヤー名（基本は ""）
+    label: str  # 表示名（基本は「基本」）
+    is_base: bool
+
+
+@dataclass
+class LipSyncCell:
+    phoneme: str
+    emotion: str  # 基本は ""
+    has_entry: bool  # 行がある（空の行も「ある」。基本の行が無いマスは「なし」）
+    curves: int  # 行のシェイプの数
+    valid: bool  # 行があって問題が無い（同じマスの行が 2 つ・有限でない値は False）。行が無いマスは True
+    selected: bool  # 編集の対象
+    tooltip: str
+
+
+@dataclass
+class LipSyncRow:
+    phoneme: str
+    index: int
+    valid: bool  # 名前が空でなく重複していない
+    entries: int  # この音素の行の数（基本 + 感情）
+    cells: list[LipSyncCell]  # columns と同じ並び
+
+
+@dataclass
+class LipSyncView:
+    present: bool  # doc.lip_sync がある
+    enabled: bool
+    strength: float
+    volume_min: float
+    volume_max: float
+    volume_from: float
+    volume_to: float
+    follow: float
+    columns: list[LipSyncColumn]  # 基本 + Neutral 以外の感情レイヤー
+    rows: list[LipSyncRow]
+    phonemes: list[str]
+    count: int
+    limit: int
+    can_add: bool
+    summary: str
+    selected: Optional[tuple[str, str]] = None  # 編集の対象のマス
+    orphan_entries: int = 0  # 音素の一覧・感情レイヤーのどちらかに無い行の数（表には出ない。検証が知らせる）
+
+
+@dataclass
+class LipSyncResult(CommandResult):
+    phoneme: str = ""
+    emotion: str = ""
+    created: int = 0  # create_from_profile: 作った（置き換えた）基本の行の数
+    kept: list[str] = field(default_factory=list)  # create_from_profile: すでに基本の行があって残した音素
+    missing: list[tuple[str, str]] = field(default_factory=list)  # create_from_profile: モデルに無くて入れなかった (音素, シェイプ名)
+    ambiguous: list[tuple[str, str, str]] = field(default_factory=list)  # (音素, プロファイルの名前, 選んだシェイプ) 同じ名前が複数のノードにあり、先頭を選んだ
+
+
+class LipSyncPresenter(Observable):
+    """リップシンクの対応表（使う / 強さ / 声量 / 追従 / 音素の一覧 / 行のポーズ）の編集と、表の状態。
+    どれも「1 回の呼び出し = 1 つの確定した変更」で、失敗は Document を変えない（Undo は呼び出し側のスナップショット方式）。
+    マスを選ぶと編集の対象になる（点・パース補正のキーと同じ流れ。保存はシェイプだけ）。"""
+
+    def __init__(self, ctx: EditContext) -> None:
+        super().__init__()
+        self.ctx = ctx
+        self.pending: Optional[tuple[str, str]] = None  # 未保存の編集があって確認待ちのマス
+        ctx.subscribe(self._on_ctx)
+
+    def _on_ctx(self, event: str) -> None:
+        if event in ("document", "scene", "selection", "profile"):
+            self._emit("lipsync")
+
+    @property
+    def doc(self) -> Document:
+        return self.ctx.doc
+
+    def _ensure(self) -> LipSync:
+        if self.doc.lip_sync is None:
+            self.doc.lip_sync = LipSync()
+        return self.doc.lip_sync
+
+    # --- 編集の対象（マスを選ぶ）---
+
+    @property
+    def selected(self) -> Optional[tuple[str, str]]:
+        return self.ctx.selected_lip()
+
+    def columns(self) -> list[LipSyncColumn]:
+        out = [LipSyncColumn(LIPSYNC_BASE, LIPSYNC_BASE_LABEL, True)]
+        out += [LipSyncColumn(l.name, l.name, False) for l in self.doc.layers[1:]]
+        return out
+
+    def _cell_check(self, phoneme: str, emotion: str) -> Optional[LipSyncResult]:
+        if self.doc.lip_sync is None or phoneme not in self.doc.lip_sync.phonemes:
+            return _fail("phoneme", f"音素「{phoneme}」が一覧にありません", LipSyncResult, phoneme=phoneme, emotion=emotion)
+        if emotion != LIPSYNC_BASE and emotion not in {x.name for x in self.doc.layers[1:]}:
+            return _fail("emotion", f"感情「{emotion}」のレイヤーがありません", LipSyncResult, phoneme=phoneme, emotion=emotion)
+        return None
+
+    def select_lip_cell(self, phoneme: str, emotion: str = LIPSYNC_BASE) -> SelectResult:
+        """マスを編集の対象にする（点・キーの選択は外れる）。別の対象の編集中のポーズに未保存の変更があれば needs_confirm
+        （`confirm_select_lip_cell` で答える）。同じマスを選び直しても編集中の値は保つ。"""
+        bad = self._cell_check(phoneme, emotion)
+        if bad:
+            return SelectResult(SELECT_INVALID, "lip", phoneme=phoneme, emotion=emotion, message=bad.message)
+        ctx = self.ctx
+        if ctx.selected_lip() == (phoneme, emotion):
+            return SelectResult(SELECT_SAME, "lip", phoneme=phoneme, emotion=emotion)
+        if ctx.pose is not None and ctx.pose.dirty:
+            self.pending = (phoneme, emotion)
+            return SelectResult(
+                SELECT_NEEDS_CONFIRM,
+                "lip",
+                phoneme=phoneme,
+                emotion=emotion,
+                message="未保存のポーズ編集があります。保存 / 破棄 / 取りやめのどれかを選んでください",
+            )
+        self.pending = None
+        ctx.set_lip_target((phoneme, emotion))
+        return SelectResult(SELECT_SELECTED, "lip", phoneme=phoneme, emotion=emotion)
+
+    def confirm_select_lip_cell(self, choice: str) -> SelectResult:
+        """needs_confirm への答え。choice = "save" / "discard" / "cancel"。"""
+        ctx = self.ctx
+        if self.pending is None:
+            return SelectResult(SELECT_INVALID, "lip", message="確認待ちのマスがありません")
+        phoneme, emotion = self.pending
+        if choice == CONFIRM_CANCEL:
+            self.pending = None
+            self._emit("lipsync")
+            cur = ctx.selected_lip() or ("", "")
+            return SelectResult(SELECT_CANCELLED, "lip", phoneme=cur[0], emotion=cur[1], message="切り替えを取りやめました")
+        if choice not in (CONFIRM_SAVE, CONFIRM_DISCARD):
+            return SelectResult(SELECT_INVALID, "lip", phoneme=phoneme, emotion=emotion, message=f"未知の答え: {choice!r}")
+        saved = False
+        if choice == CONFIRM_SAVE and ctx.pose is not None:
+            saved = ctx.pose.save().ok
+        self.pending = None
+        if self._cell_check(phoneme, emotion):  # 保存の途中でマスが無くなった
+            return SelectResult(SELECT_INVALID, "lip", phoneme=phoneme, emotion=emotion, message="そのマスはもうありません")
+        ctx.set_lip_target((phoneme, emotion))
+        return SelectResult(SELECT_SELECTED, "lip", phoneme=phoneme, emotion=emotion, saved=saved)
+
+    def deselect_lip_cell(self) -> None:
+        """編集の対象のマスを外す（編集中の値は捨てる。呼ぶ側が先に確認する）。"""
+        if self.ctx.lip_target is not None:
+            self.ctx.set_lip_target(None)
+
+    # --- 設定 ---
+
+    def set_enabled(self, enabled: bool) -> LipSyncResult:
+        with self.ctx.edit():
+            self._ensure().enabled = bool(enabled)
+        return LipSyncResult()
+
+    def set_strength(self, strength: float) -> LipSyncResult:
+        """全体の強さ（0〜1）。範囲外は失敗。"""
+        try:
+            v = float(strength)
+        except (TypeError, ValueError):
+            return _fail("strength", "強さは数で入力してください", LipSyncResult)
+        if not (math.isfinite(v) and 0.0 <= v <= 1.0):
+            return _fail("strength", "強さは 0〜1 にしてください", LipSyncResult)
+        with self.ctx.edit():
+            self._ensure().strength = v
+        return LipSyncResult()
+
+    def set_volume(
+        self,
+        min: Optional[float] = None,  # noqa: A002
+        max: Optional[float] = None,  # noqa: A002
+        from_: Optional[float] = None,
+        to: Optional[float] = None,
+    ) -> LipSyncResult:
+        """声量の設定。省いた値は今のまま。min / max は 0 以上、from_ / to（倍率）は 0〜2。max <= min は許す（しきい値になる）。"""
+        cur = self.doc.lip_sync.volume if self.doc.lip_sync is not None else LipSync().volume
+        vals = {"min": cur.min, "max": cur.max, "from_": cur.from_, "to": cur.to}
+        for key, given in (("min", min), ("max", max), ("from_", from_), ("to", to)):
+            if given is None:
+                continue
+            try:
+                v = float(given)
+            except (TypeError, ValueError):
+                return _fail("volume", "声量の設定は数で入力してください", LipSyncResult)
+            if not math.isfinite(v):
+                return _fail("volume", "声量の設定は有限の数にしてください", LipSyncResult)
+            vals[key] = v
+        if vals["min"] < 0.0 or vals["max"] < 0.0:
+            return _fail("volume", "声量の範囲（最小・最大）は 0 以上にしてください", LipSyncResult)
+        if not (0.0 <= vals["from_"] <= LIPSYNC_VOLUME_MAX and 0.0 <= vals["to"] <= LIPSYNC_VOLUME_MAX):
+            return _fail("volume", f"声量の倍率は 0〜{LIPSYNC_VOLUME_MAX:g} にしてください", LipSyncResult)
+        with self.ctx.edit():
+            v = self._ensure().volume
+            v.min, v.max, v.from_, v.to = vals["min"], vals["max"], vals["from_"], vals["to"]
+        return LipSyncResult()
+
+    def set_follow(self, follow: float) -> LipSyncResult:
+        """追従の速さ（1/秒。0 = 即時）。負の数・有限でない数は失敗。"""
+        try:
+            v = float(follow)
+        except (TypeError, ValueError):
+            return _fail("follow", "追従の速さは数で入力してください", LipSyncResult)
+        if not (math.isfinite(v) and v >= 0.0):
+            return _fail("follow", "追従の速さは 0 以上にしてください（0 = 即時）", LipSyncResult)
+        with self.ctx.edit():
+            self._ensure().follow = v
+        return LipSyncResult()
+
+    # --- 音素 ---
+
+    @property
+    def can_add(self) -> bool:
+        l = self.doc.lip_sync
+        return (len(l.phonemes) if l is not None else 0) < MAX_LIPSYNC_PHONEMES
+
+    def check_phoneme_name(self, name: str, ignore: Optional[str] = None) -> NameCheck:
+        """音素名の検査: 前後の空白を除いて空でない・ほかの音素と重ならない（大文字小文字は区別する。何でも使える文字列）。"""
+        n = (name or "").strip()
+        if not n:
+            return NameCheck(False, n, "empty", "名前が空です")
+        l = self.doc.lip_sync
+        if any(p == n and p != ignore for p in (l.phonemes if l is not None else ())):
+            return NameCheck(False, n, "duplicate", f"音素「{n}」はすでにあります")
+        return NameCheck(True, n)
+
+    def add_phoneme(self, name: str) -> LipSyncResult:
+        """音素を足す（最後。最大 32）。リップシンクのデータが無ければ作る。"""
+        if not self.can_add:
+            return _fail("limit", f"音素は最大 {MAX_LIPSYNC_PHONEMES} 個です", LipSyncResult)
+        chk = self.check_phoneme_name(name)
+        if not chk.ok:
+            return _fail(chk.code, chk.message, LipSyncResult)
+        with self.ctx.edit():
+            self._ensure().phonemes.append(chk.name)
+        return LipSyncResult(phoneme=chk.name, message=f"音素「{chk.name}」を足しました")
+
+    def rename_phoneme(self, old: str, new: str) -> LipSyncResult:
+        """音素の名前を変える（その音素の行も付いていく。編集の対象が同じ音素なら対象も付いていく）。"""
+        l = self.doc.lip_sync
+        if l is None or old not in l.phonemes:
+            return _fail("phoneme", f"音素「{old}」が一覧にありません", LipSyncResult, phoneme=old)
+        chk = self.check_phoneme_name(new, ignore=old)
+        if not chk.ok:
+            return _fail(chk.code, chk.message, LipSyncResult, phoneme=old)
+        if chk.name == old:
+            return LipSyncResult(code="unchanged", phoneme=old, message="名前は変わりません")
+        ctx = self.ctx
+        with ctx.edit():
+            l.phonemes[l.phonemes.index(old)] = chk.name
+            for e in l.entries:
+                if e.phoneme == old:
+                    e.phoneme = chk.name
+            if ctx.lip_target is not None and ctx.lip_target[0] == old:
+                ctx.lip_target = (chk.name, ctx.lip_target[1])
+                if ctx.pose is not None:
+                    ctx.pose.rebase_signature()
+        return LipSyncResult(
+            phoneme=chk.name,
+            message=f"音素の名前を「{old}」から「{chk.name}」にしました",
+        )
+
+    def remove_phoneme(self, name: str) -> LipSyncResult:
+        """音素を消す（その音素の行も消える。編集の対象がその音素なら対象なしになり、編集中の値は消える）。"""
+        l = self.doc.lip_sync
+        if l is None or name not in l.phonemes:
+            return _fail("phoneme", f"音素「{name}」が一覧にありません", LipSyncResult, phoneme=name)
+        ctx = self.ctx
+        was_target = ctx.lip_target is not None and ctx.lip_target[0] == name
+        n_rows = sum(1 for e in l.entries if e.phoneme == name)
+        with ctx.edit():
+            l.phonemes = [p for p in l.phonemes if p != name]
+            l.entries = [e for e in l.entries if e.phoneme != name]
+        if was_target:
+            ctx.set_lip_target(None)
+        msg = f"音素「{name}」を削除しました" + (f"（行 {n_rows} 個も消えました）" if n_rows else "")
+        return LipSyncResult(phoneme=name, message=msg)
+
+    def move_phoneme(self, name: str, to_index: int) -> LipSyncResult:
+        """音素を並べ替える（to_index = 移動後の位置。範囲外は端に収める）。"""
+        l = self.doc.lip_sync
+        if l is None or name not in l.phonemes:
+            return _fail("phoneme", f"音素「{name}」が一覧にありません", LipSyncResult, phoneme=name)
+        cur = l.phonemes.index(name)
+        to = max(0, min(len(l.phonemes) - 1, int(to_index)))
+        if to == cur:
+            return LipSyncResult(code="unchanged", phoneme=name)
+        with self.ctx.edit():
+            l.phonemes.pop(cur)
+            l.phonemes.insert(to, name)
+        return LipSyncResult(phoneme=name)
+
+    # --- マスのポーズ ---
+
+    def cell_pose(self, phoneme: str, emotion: str = LIPSYNC_BASE) -> SourcePose:
+        """マスのポーズの複製（編集用。シェイプだけ）。行が無い・マスが範囲外なら空のポーズ。"""
+        l = self.doc.lip_sync
+        e = l.find_entry(phoneme, emotion) if l is not None else None
+        return SourcePose(curves=dict(e.curves)) if e is not None else SourcePose()
+
+    def set_cell_pose(self, phoneme: str, emotion: str, pose: SourcePose, keep_empty: bool = False) -> LipSyncResult:
+        """マスのポーズを置き換える（シェイプだけ。ボーンは捨てる。ほぼ 0 のシェイプも捨てる）。空のポーズは行を消す
+        （keep_empty=True なら「全部 0」の行として残す。感情の行で「基本を使わず口を閉じる」を表したいとき）。
+        変わらなければ code="unchanged"（Document は変えない）。"""
+        bad = self._cell_check(phoneme, emotion)
+        if bad:
+            return bad
+        l = self.doc.lip_sync
+        curves = trim_pose(SourcePose(curves=dict(pose.curves))).curves
+        e = l.find_entry(phoneme, emotion)
+        if e is None and not curves and not keep_empty:
+            return LipSyncResult(code="unchanged", phoneme=phoneme, emotion=emotion)
+        if e is not None and curves and poses_equal(e.pose, SourcePose(curves=curves)):
+            return LipSyncResult(code="unchanged", phoneme=phoneme, emotion=emotion)
+        with self.ctx.edit():
+            if not curves and not keep_empty:
+                if e is not None:
+                    l.entries.remove(e)
+            elif e is None:
+                l.entries.append(LipSyncEntry(phoneme=phoneme, emotion=emotion, curves=curves))
+            else:
+                e.curves = curves
+        return LipSyncResult(phoneme=phoneme, emotion=emotion)
+
+    def clear_cell(self, phoneme: str, emotion: str = LIPSYNC_BASE) -> LipSyncResult:
+        """マスの行を消す（無ければ unchanged）。"""
+        l = self.doc.lip_sync
+        e = l.find_entry(phoneme, emotion) if l is not None else None
+        if e is None:
+            return LipSyncResult(code="unchanged", phoneme=phoneme, emotion=emotion)
+        with self.ctx.edit():
+            l.entries.remove(e)
+        return LipSyncResult(phoneme=phoneme, emotion=emotion, message="行を消しました")
+
+    # --- プロファイルから作る ---
+
+    def _resolve_shape(self, name: str, available: Optional[Sequence[str]]) -> tuple[Optional[str], bool]:
+        """プロファイルのシェイプ名をシーンの名前にする（curve_matches と同じ規則）。戻り = (名前 / 無ければ None, 複数候補から先頭を選んだか)。
+        available が None（シーンの情報なし）のときは、書かれた名前のまま使う。"""
+        if available is None:
+            return name, False
+        have = sorted(set(available))
+        if name in have:
+            return name, False
+        if "." in name:
+            return None, False
+        hits = [a for a in have if "." in a and a.partition(".")[2] == name]
+        if not hits:
+            return (name, False) if name in have else (None, False)
+        return hits[0], len(hits) > 1
+
+    def create_from_profile(
+        self,
+        profile: Optional[NamingProfile] = None,
+        available: Optional[Sequence[str]] = None,
+        overwrite: bool = False,
+    ) -> LipSyncResult:
+        """プロファイルの `lipSync`（音素 → シェイプ名）から基本の行を作る。profile を省くと ctx.profile、available を省くと ctx.scene.curves。
+        - 音素が一覧に無ければ足す（上限は超えない）。基本の行がすでにある音素は残す（overwrite=True なら置き換える。感情の行は触らない）
+        - シェイプ名はシーンの名前に合わせる（ノード名なしの名前はどのノードの同名ターゲットにも一致。複数なら先頭を選んで ambiguous に入れる）。
+          モデルに無いシェイプは入れず missing に入れる。シーンの情報が無ければ書かれた名前のまま
+        - リップシンクのデータが無ければ作る（使う = オン）。1 つも作れなければ失敗（Document は変えない）"""
+        prof = profile if profile is not None else self.ctx.profile
+        if prof is None or not prof.lip_sync:
+            return _fail("no_profile", "プロファイルにリップシンクの対応（音素 → シェイプ）がありません", LipSyncResult)
+        if available is None and self.ctx.scene is not None and self.ctx.scene.curves is not None:
+            available = list(self.ctx.scene.curves)
+        l = self.doc.lip_sync
+        existing = list(l.phonemes) if l is not None else []
+        plan: list[tuple[str, dict[str, float]]] = []
+        kept: list[str] = []
+        missing: list[tuple[str, str]] = []
+        ambiguous: list[tuple[str, str, str]] = []
+        new_phonemes = list(existing)
+        for phoneme, shapes in prof.lip_sync.items():
+            if phoneme not in new_phonemes:
+                if len(new_phonemes) >= MAX_LIPSYNC_PHONEMES:
+                    continue
+                new_phonemes.append(phoneme)
+            has_base = l is not None and l.find_entry(phoneme, LIPSYNC_BASE) is not None
+            if has_base and not overwrite:
+                kept.append(phoneme)
+                continue
+            curves: dict[str, float] = {}
+            for shape, w in shapes.items():
+                name, amb = self._resolve_shape(shape, available)
+                if name is None:
+                    missing.append((phoneme, shape))
+                    continue
+                if amb:
+                    ambiguous.append((phoneme, shape, name))
+                curves[name] = curves.get(name, 0.0) + w
+            if curves:
+                plan.append((phoneme, curves))
+        if not plan and not (set(new_phonemes) - set(existing)):
+            return _fail("nothing", "作れる行がありませんでした（シェイプがモデルに無いか、すでに行があります）", LipSyncResult, kept=kept, missing=missing)
+        with self.ctx.edit():
+            lip = self._ensure()
+            if l is None:
+                lip.enabled = True
+            lip.phonemes = new_phonemes
+            for phoneme, curves in plan:
+                e = lip.find_entry(phoneme, LIPSYNC_BASE)
+                if e is None:
+                    lip.entries.append(LipSyncEntry(phoneme=phoneme, emotion=LIPSYNC_BASE, curves=curves))
+                else:
+                    e.curves = curves
+        msg = f"プロファイル「{prof.name}」から基本の行を {len(plan)} 個作りました"
+        if missing:
+            msg += f"（モデルに無いシェイプ {len(missing)} 個は入れていません）"
+        return LipSyncResult(created=len(plan), kept=kept, missing=missing, ambiguous=ambiguous, message=msg)
+
+    # --- 「試す」---
+
+    def limit_map(self) -> dict[str, tuple[float, float]]:
+        """対応表に出てくるシェイプの可動域（ドキュメント → プロファイル → 0〜1）。lipsync_apply の limits に渡す。"""
+        return {c: effective_limit(self.doc, self.ctx.profile, c) for c in lipsync_table_curves(self.doc.lip_sync)}
+
+    def evaluate(
+        self,
+        current: Mapping[str, float],
+        phoneme_weights: Mapping[str, float],
+        volume: Optional[float] = None,
+        emotion_weights: Optional[Mapping[str, float]] = None,
+    ) -> dict[str, float]:
+        """「試す」の計算（シーンへ当てる値 `{シェイプ名: 値}`）。current = 試す前のシェイプの値（呼ぶ側が保持する元の値）。
+        使わない・行なしなら {}。データもシーンも変えない。"""
+        return lipsync_evaluate(self.doc.lip_sync, current, phoneme_weights, volume, emotion_weights, self.limit_map())
+
+    # --- 表示 ---
+
+    def view(self) -> LipSyncView:
+        doc = self.doc
+        l = doc.lip_sync
+        cols = self.columns()
+        sel = self.selected
+        rows: list[LipSyncRow] = []
+        seen_ph: set[str] = set()
+        counts: dict[tuple[str, str], int] = {}
+        for e in l.entries if l is not None else ():
+            counts[(e.phoneme, e.emotion)] = counts.get((e.phoneme, e.emotion), 0) + 1
+        col_names = {c.name for c in cols}
+        orphan = 0
+        for e in l.entries if l is not None else ():
+            if e.phoneme not in (l.phonemes if l is not None else ()) or e.emotion not in col_names:
+                orphan += 1
+        for i, ph in enumerate(l.phonemes if l is not None else ()):
+            cells = []
+            n_entries = 0
+            for c in cols:
+                e = l.find_entry(ph, c.name)
+                has = e is not None
+                n_entries += 1 if has else 0
+                ok = True
+                if has:
+                    ok = counts.get((ph, c.name), 0) == 1 and all(math.isfinite(v) for v in e.curves.values())
+                if has:
+                    tip = f"音素「{ph}」× {c.label}: シェイプ {len(e.curves)} 個"
+                elif c.is_base:
+                    tip = f"音素「{ph}」の基本の行はまだありません。選んでポーズを作って保存してください"
+                else:
+                    tip = f"音素「{ph}」× {c.label}: 行なし（基本のまま）"
+                cells.append(
+                    LipSyncCell(
+                        phoneme=ph,
+                        emotion=c.name,
+                        has_entry=has,
+                        curves=len(e.curves) if e is not None else 0,
+                        valid=ok,
+                        selected=sel == (ph, c.name),
+                        tooltip=tip,
+                    )
+                )
+            valid = bool(ph.strip()) and ph not in seen_ph
+            seen_ph.add(ph)
+            rows.append(LipSyncRow(phoneme=ph, index=i, valid=valid, entries=n_entries, cells=cells))
+        n = len(rows)
+        enabled = bool(l.enabled) if l is not None else False
+        if l is None or n == 0:
+            summary = "音素がありません（リップシンクは何もしません）"
+        else:
+            total = sum(r.entries for r in rows)
+            summary = f"音素 {n} / {MAX_LIPSYNC_PHONEMES}・行 {total}" + ("" if enabled else "（使わない設定です）")
+        vol = l.volume if l is not None else LipSync().volume
+        base = LipSync()
+        return LipSyncView(
+            present=l is not None,
+            enabled=enabled,
+            strength=l.strength if l is not None else base.strength,
+            volume_min=vol.min,
+            volume_max=vol.max,
+            volume_from=vol.from_,
+            volume_to=vol.to,
+            follow=l.follow if l is not None else base.follow,
+            columns=cols,
+            rows=rows,
+            phonemes=list(l.phonemes) if l is not None else [],
+            count=n,
+            limit=MAX_LIPSYNC_PHONEMES,
+            can_add=self.can_add,
+            summary=summary,
+            selected=sel,
+            orphan_entries=orphan,
+        )
+
+
+# ---------------------------------------------------------------------------
 # Presenter 4: 検証
 # ---------------------------------------------------------------------------
 
@@ -2273,6 +2878,8 @@ class IssueRow:
     can_select_point: bool  # row / col があり、点へ移動できる
     key: Optional[int] = None  # パース補正のキーの番号（キーの問題のとき）
     can_select_key: bool = False  # key があり、そのキーを編集の対象にできる
+    lip: Optional[tuple[str, str]] = None  # リップシンクの行 (音素, 感情) の問題のとき
+    can_select_lip: bool = False  # lip があり、そのマスを編集の対象にできる（音素が一覧にあり、感情が基本か既存のレイヤー）
 
 
 @dataclass
@@ -2427,6 +3034,8 @@ class ValidationPresenter(Observable):
                     can_select_point=i.layer is not None and i.row is not None and i.col is not None,
                     key=i.key,
                     can_select_key=i.key is not None and doc.perspective is not None and 0 <= i.key < len(doc.perspective.keys),
+                    lip=i.lip,
+                    can_select_lip=_lip_cell_ok(doc, i.lip),
                 )
             )
         groups = [
@@ -2510,7 +3119,7 @@ class ValidationPresenter(Observable):
 
 
 class PresenterSet:
-    """4 つの Presenter + 共有の EditContext（ビューを作る側が 1 つ持つ）。"""
+    """Presenter 6 種（pose / grid / layers / validation / perspective / lipsync）+ 共有の EditContext（ビューを作る側が 1 つ持つ）。"""
 
     def __init__(
         self,
@@ -2525,6 +3134,7 @@ class PresenterSet:
         self.layers = LayerPresenter(self.ctx)
         self.validation = ValidationPresenter(self.ctx)
         self.perspective = PerspectivePresenter(self.ctx)
+        self.lipsync = LipSyncPresenter(self.ctx)
 
 
 __all__: Sequence[str] = (
@@ -2540,6 +3150,12 @@ __all__: Sequence[str] = (
     "PerspectiveView",
     "PerspectiveKeyRow",
     "PerspectiveResult",
+    "LipSyncPresenter",
+    "LipSyncView",
+    "LipSyncRow",
+    "LipSyncCell",
+    "LipSyncColumn",
+    "LipSyncResult",
     "CommandResult",
     "GenerateResult",
     "ResizeResult",

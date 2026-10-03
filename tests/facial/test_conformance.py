@@ -8,13 +8,14 @@ from pathlib import Path
 import pytest
 
 from tdrive_facial.core import evaluate as ev
+from tdrive_facial.core import fcpose_io
 from tdrive_facial.core import space as sp
 from tdrive_facial.core.model import BoneOffset
 
 CONF = Path(__file__).parent / "conformance"
 WEIGHT_TOL = 1e-4
 F5_SOURCE = "python-port (F5; UE 未実装)"
-F5_FILES = ("evaluate_sharpness.json", "evaluate_exaggeration.json", "layer_distance.json", "step.json", "perspective.json")
+F5_FILES = ("evaluate_sharpness.json", "evaluate_exaggeration.json", "layer_distance.json", "step.json", "perspective.json", "lipsync.json")
 
 UE_TESTS = {
     "ExactGridPoint", "BilinearCenter", "EmotionBlend", "ZeroWeightSkip", "EdgeFade", "UnbakedPointFailSoft",
@@ -49,7 +50,7 @@ def test_every_file_has_kind_description_and_cases():
         assert {"kind", "description", "cases"} <= set(data), fname
         assert isinstance(data["cases"], list) and data["cases"], fname
         kinds.add(data["kind"])
-    assert kinds == {"evaluate", "view_angles", "scalar", "smooth", "convert", "autofill", "presenter", "step", "perspective"}
+    assert kinds == {"evaluate", "view_angles", "scalar", "smooth", "convert", "autofill", "presenter", "step", "perspective", "lipsync"}
 
 
 def test_case_names_are_unique_per_file_and_sources_are_marked():
@@ -185,6 +186,34 @@ def test_perspective(c):
     assert len(got) == len(expect)
     for a, b in zip(got, expect):
         assert a == pytest.approx(b, abs=WEIGHT_TOL)
+
+
+# --- lipsync（リップシンクの対応表。F5-8）---
+
+
+@pytest.mark.parametrize("c", cases_of("lipsync"))
+def test_lipsync(c):
+    doc = fcpose_io.from_dict({"format": "FacialCorrection", "version": 1, "lipSync": c["lipSync"]})
+    lip = doc.lip_sync
+    vol = c.get("volume")
+    weights = c["weights"]
+    emotions = c.get("emotions")
+    expect = c["expect"]
+    out = ev.lipsync_output(lip, weights, vol, emotions)
+    assert set(out) == set(expect["output"]), (sorted(out), sorted(expect["output"]))
+    for k, v in expect["output"].items():
+        assert out[k] == pytest.approx(v, abs=WEIGHT_TOL), k
+    if "activity" in expect:
+        assert ev.lipsync_activity(weights, lip.phonemes) == pytest.approx(expect["activity"], abs=WEIGHT_TOL)
+    if "final" in expect:
+        limits = {k: tuple(v) for k, v in c.get("limits", {}).items()} or None
+        a = ev.lipsync_activity(weights, lip.phonemes)
+        got = ev.lipsync_apply(c.get("current", {}), out, a, limits) if out else {}
+        assert set(got) == set(expect["final"]), (sorted(got), sorted(expect["final"]))
+        for k, v in expect["final"].items():
+            assert got[k] == pytest.approx(v, abs=WEIGHT_TOL), k
+        again = ev.lipsync_evaluate(lip, c.get("current", {}), weights, vol, emotions, limits)
+        assert again == got
 
 
 def test_f5_files_are_marked_and_present():

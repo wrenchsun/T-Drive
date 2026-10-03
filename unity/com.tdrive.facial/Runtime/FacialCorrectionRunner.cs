@@ -259,6 +259,30 @@ namespace TDrive.Facial
         ShapeBinding[] _perspBind = new ShapeBinding[0];
         FacialPerspectiveKeyData[] _cachePerspKeys;
         double _lastPerspAxis = double.NaN, _lastPerspStrength;
+        // リップシンク（F5-8）。表は結ぶとき 1 度だけ作る。値は評価のたびにデータから読む
+        LipSyncTable _lipTable;
+        readonly List<string> _lipMissing = new List<string>();
+        double[] _lipW = new double[0];       // 追従を掛けた音素の強さ（表の音素の並び）
+        double[] _lipTarget = new double[0];  // 入力された音素の強さ（追従の目標）
+        double[] _lipEmo = new double[0];     // 感情の重み（レイヤー 1 以降）
+        double[] _lipOut = new double[0];     // シェイプごとの出力
+        double[] _lipUpper = new double[0];   // シェイプごとの上限（可動域。無ければ 1）
+        double _lipVol = double.NaN, _lipTargetVol = double.NaN, _lipActivity;
+        bool _lipHasInput, _lipAnyWeight, _lipAnyWritten;
+        // 書き込み先（シェイプ c は _lipSlotStart[c] 以上 _lipSlotStart[c + 1] 未満。メッシュごと）
+        int[] _lipSlotStart = new int[1];
+        SkinnedMeshRenderer[] _lipSlotR = new SkinnedMeshRenderer[0];
+        int[] _lipSlotIndex = new int[0];
+        Mesh[] _lipSlotMesh = new Mesh[0];
+        int[] _lipSlotLod = new int[0];
+        float[] _lipSlotBase = new float[0];     // 「書く前の値」（外から決まる値。0〜100）
+        float[] _lipSlotWritten = new float[0];  // 前回書いた値
+        bool[] _lipSlotHas = new bool[0];        // 書いている最中（戻す対象）
+        string[] _lipMapNames = new string[0];   // 名前 → 番号の対応（同じ文字列の参照が並んでいる間は使い回す）
+        int[] _lipMap = new int[0];
+        int _lipMapCount = -1;
+        FacialLipSyncEntryData[] _cacheLipEntries;
+        string[] _cacheLipPhonemes;
         // コマ打ち（F5-2）
         bool _stepHolding;
         double _stepAccum, _lastStepFps, _lastSharpness = 1.0, _lastExaggeration = 1.0;
@@ -416,6 +440,8 @@ namespace TDrive.Facial
         void ResetCore(bool zeroAllBound)
         {
             RestorePose(); // カット補正で加算した分も元へ
+            RestoreLip(); // リップシンクで書いた口のシェイプは 0 でなく書く前の値へ
+            ZeroLipState();
             if (zeroAllBound)
             {
                 foreach (ShapeBinding b in _bindings.Values) WriteRaw(b, 0f, true, true);
@@ -561,6 +587,7 @@ namespace TDrive.Facial
         {
             RestorePose(); // 前回のカット補正を戻してから評価する（加算が積もらない）
             DropDestroyedOwners();
+            StepLipSync(deltaTime); // 口のシェイプ（角度の補正・表情での弱めの読み取りより前。弱めは口を書いたあとの値を読む）
 
             StepCore(deltaTime, viewerParam, explicitAngles, explicitYaw, explicitPitch);
 
@@ -947,6 +974,290 @@ namespace TDrive.Facial
             }
         }
 
+        // ---------------------------------------------------------------- リップシンク（R-18、F5-8）
+
+        /// <summary>リップシンクの対応表を使える（データに表があり、有効で、出力するシェイプがある）。</summary>
+        public bool LipSyncActive
+        {
+            get
+            {
+                if (data == null || !data.lipSync.enabled || data.lipSync.entries == null || data.lipSync.entries.Length == 0) return false;
+                EnsureCache();
+                return _lipTable != null && _lipTable.CurveCount > 0;
+            }
+        }
+
+        /// <summary>対応表の音素の数（SetLipSyncByIndex の重みの並び）。表が無ければ 0。</summary>
+        public int LipSyncPhonemeCount { get { EnsureCache(); return _lipTable != null ? _lipTable.PhonemeCount : 0; } }
+
+        /// <summary>対応表の音素の名前（番号 0 〜 LipSyncPhonemeCount - 1。範囲外は空文字）。</summary>
+        public string GetLipSyncPhonemeName(int index)
+        {
+            EnsureCache();
+            return _lipTable != null && index >= 0 && index < _lipTable.PhonemeCount ? _lipTable.PhonemeName(index) : "";
+        }
+
+        /// <summary>今の音素の強さ（追従を掛けたあと 0〜1。範囲外は 0）。</summary>
+        public float GetLipSyncPhonemeWeight(int index) { return index >= 0 && index < _lipW.Length ? (float)_lipW[index] : 0f; }
+
+        /// <summary>今の声量（追従を掛けたあと）。声量が与えられていないときは NaN。</summary>
+        public float LipSyncVolume { get { return (float)_lipVol; } }
+
+        /// <summary>直近の評価での口の活動量（音素の強さの合計。0〜1）。</summary>
+        public float LipSyncActivity { get { return (float)_lipActivity; } }
+
+        /// <summary>対応表のシェイプのうち、どの対象メッシュにも無いもの（飛ばしたもの）。</summary>
+        public IReadOnlyList<string> GetMissingLipSyncShapeNames() { EnsureCache(); return _lipMissing; }
+
+        /// <summary>
+        /// リップシンクの入力（音素の名前と強さ・声量）。値は Runner のバッファへコピーする（呼び出し側の配列は保持しない）。
+        /// 表にない音素の名前は無視。weights は 0〜1 に丸める。volume が NaN = 声量は与えられない（最大の倍率）。
+        /// 同じ名前が並んでいたら大きいほう。名前の探索は、同じ文字列（参照）が並んでいる間は引き直さない。割り当てなし。
+        /// 入力が来なくなったときは ClearLipSync を呼ぶ（呼ばないと最後の値のまま）。
+        /// </summary>
+        public void SetLipSync(IReadOnlyList<string> phonemeNames, IReadOnlyList<float> weights, int count, float volume)
+        {
+            if (phonemeNames == null || weights == null) return;
+            EnsureCache();
+            if (_lipTable == null) return;
+            int n = Mathf.Min(count, Mathf.Min(phonemeNames.Count, weights.Count));
+            if (n < 0) n = 0;
+            bool same = n == _lipMapCount;
+            if (same)
+                for (int i = 0; i < n; i++)
+                    if (!ReferenceEquals(phonemeNames[i], _lipMapNames[i])) { same = false; break; }
+            if (!same)
+            {
+                if (_lipMapNames.Length < n) { _lipMapNames = new string[n]; _lipMap = new int[n]; }
+                for (int i = 0; i < n; i++) { _lipMapNames[i] = phonemeNames[i]; _lipMap[i] = _lipTable.IndexOfPhoneme(phonemeNames[i]); }
+                _lipMapCount = n;
+            }
+            for (int p = 0; p < _lipTarget.Length; p++) _lipTarget[p] = 0.0;
+            for (int i = 0; i < n; i++)
+            {
+                int idx = _lipMap[i];
+                if (idx < 0) continue;
+                double w = FacialLipSync.Saturate((double)weights[i]);
+                if (w > _lipTarget[idx]) _lipTarget[idx] = w;
+            }
+            _lipTargetVol = volume;
+            _lipHasInput = true;
+        }
+
+        /// <summary>声量なしの SetLipSync（声量 = NaN）。</summary>
+        public void SetLipSync(IReadOnlyList<string> phonemeNames, IReadOnlyList<float> weights, int count)
+        {
+            SetLipSync(phonemeNames, weights, count, float.NaN);
+        }
+
+        /// <summary>
+        /// 名前を使わない入力（文字列の探索なし）。weights の並び = 対応表の音素の並び（GetLipSyncPhonemeName の番号）。count が足りない分は 0。
+        /// volume が NaN = 声量は与えられない。
+        /// </summary>
+        public void SetLipSyncByIndex(IReadOnlyList<float> weights, int count, float volume)
+        {
+            if (weights == null) return;
+            EnsureCache();
+            if (_lipTable == null) return;
+            int n = Mathf.Min(count, weights.Count);
+            for (int p = 0; p < _lipTarget.Length; p++)
+                _lipTarget[p] = p < n ? FacialLipSync.Saturate((double)weights[p]) : 0.0;
+            _lipTargetVol = volume;
+            _lipHasInput = true;
+        }
+
+        /// <summary>入力を止める。音素の強さは追従の速さで 0 へ戻り、戻りきったところで口のシェイプは書く前の値へ戻る。</summary>
+        public void ClearLipSync()
+        {
+            for (int p = 0; p < _lipTarget.Length; p++) _lipTarget[p] = 0.0;
+            _lipHasInput = false;
+        }
+
+        // 毎フレーム（Step の頭。角度の補正・表情での弱めの読み取りより前）
+        void StepLipSync(float deltaTime)
+        {
+            FacialCorrectionData d = data;
+            if (d == null)
+            {
+                if (_lipAnyWritten) RestoreLip();
+                return;
+            }
+            if (!_lipAnyWritten && !_lipHasInput && !_lipAnyWeight) return; // 何もしていない（毎フレームの無駄を避ける）
+            EnsureCache();
+            LipSyncTable t = _lipTable;
+            if (t == null || !d.lipSync.enabled || t.CurveCount == 0)
+            {
+                if (_lipAnyWritten) RestoreLip();
+                ZeroLipState();
+                return;
+            }
+            FacialEffectiveParams p = FacialCorrectionOverrides.Resolve(d, overrides);
+            t.Enabled = true;
+            t.Strength = FacialLipSync.Saturate((double)p.lipSyncStrength);
+            t.VolumeMin = d.lipSync.volume.min; t.VolumeMax = d.lipSync.volume.max;
+            t.VolumeFrom = d.lipSync.volume.from; t.VolumeTo = d.lipSync.volume.to;
+            double follow = p.lipSyncFollow;
+
+            // 追従（follow <= 0 は即時）。声量は与えられている間だけ追従する（NaN との間は跳ぶ）
+            bool any = false;
+            for (int i = 0; i < _lipW.Length; i++)
+            {
+                double w = FacialCore.FInterpTo(_lipW[i], _lipTarget[i], deltaTime, follow);
+                if (follow > 0.0 && _lipTarget[i] == 0.0 && w < 1e-4) w = 0.0; // 0 へ戻りきったことにする（書き込みを終わらせる）
+                _lipW[i] = w;
+                if (w > 0.0) any = true;
+            }
+            if (double.IsNaN(_lipTargetVol)) _lipVol = double.NaN;
+            else if (double.IsNaN(_lipVol)) _lipVol = _lipTargetVol;
+            else _lipVol = FacialCore.FInterpTo(_lipVol, _lipTargetVol, deltaTime, follow);
+            _lipAnyWeight = any;
+            if (!any)
+            {
+                _lipActivity = 0.0;
+                if (_lipAnyWritten) RestoreLip(); // しゃべっていない: 書く前の値へ戻して、そのまま何もしない
+                return;
+            }
+
+            // 感情の重み（Runner の実効の値）。上書き（Timeline）> 距離で決めるレイヤーは前回の評価の値 > Runner の emotionWeights。ミュート・無効のレイヤーは 0
+            FacialFrameOverride ov;
+            bool hadOverride = MergeOverrides(d.layers != null ? d.layers.Length : 0, out ov);
+            float[] ovEmo = hadOverride ? ov.emotionWeights : null;
+            int layerCount = d.layers != null ? d.layers.Length : 0;
+            for (int k = 0; k < _lipEmo.Length; k++)
+            {
+                int i = k + 1;
+                double w = 0.0;
+                if (i < layerCount)
+                {
+                    FacialLayerWeightData lwd = d.layers[i].weight;
+                    float f = ovEmo != null && i < ovEmo.Length ? ovEmo[i] : float.NaN;
+                    if (lwd.source == FacialLayerWeightSource.Distance)
+                    {
+                        if (!float.IsNaN(f)) w = f;
+                        else if (i < _emo.Length) w = _emo[i];
+                    }
+                    else
+                    {
+                        if (float.IsNaN(f)) f = emotionWeights != null && i < emotionWeights.Length ? emotionWeights[i] : 0f;
+                        w = f;
+                    }
+                    if (!(w > 0.0)) w = 0.0;
+                    if ((mutedLayers != null && i < mutedLayers.Length && mutedLayers[i]) || !d.layers[i].enabled) w = 0.0;
+                }
+                _lipEmo[k] = w;
+            }
+
+            t.Output(_lipW, _lipVol, _lipEmo, _lipOut);
+            double act = t.Activity(_lipW);
+            _lipActivity = act;
+            for (int c = 0; c < t.CurveCount; c++)
+            {
+                for (int s = _lipSlotStart[c]; s < _lipSlotStart[c + 1]; s++)
+                {
+                    SkinnedMeshRenderer r = _lipSlotR[s];
+                    if (r == null || r.sharedMesh != _lipSlotMesh[s]) continue;
+                    if (_lodLimit > 0 && _lipSlotLod[s] > _lodLimit) { RestoreLipSlot(s); continue; } // LOD の上限を超える Renderer には書かない
+                    float cur = r.GetBlendShapeWeight(_lipSlotIndex[s]);
+                    // 「今の値」は外から決まる値。前回自分が書いた値のままなら、誰も書き直していない = 前回の外の値を使う（自分の出力を読み戻して積み上げない）
+                    float ext;
+                    if (_lipSlotHas[s] && Mathf.Abs(cur - _lipSlotWritten[s]) < 1e-3f) ext = _lipSlotBase[s];
+                    else ext = cur;
+                    float v = (float)(FacialLipSync.Apply((double)ext * ToWeight, _lipOut[c], act, _lipUpper[c]) * 100.0);
+                    r.SetBlendShapeWeight(_lipSlotIndex[s], v);
+                    _lipSlotBase[s] = ext;
+                    _lipSlotWritten[s] = v;
+                    if (!_lipSlotHas[s]) { _lipSlotHas[s] = true; }
+                    _lipAnyWritten = true;
+                }
+            }
+        }
+
+        // 1 つの書き込み先を、書く前の値へ戻す（今の値が自分の書いた値のときだけ。ほかが書き直していたらそれを尊重する）
+        void RestoreLipSlot(int s)
+        {
+            if (!_lipSlotHas[s]) return;
+            _lipSlotHas[s] = false;
+            SkinnedMeshRenderer r = _lipSlotR[s];
+            if (r == null || r.sharedMesh != _lipSlotMesh[s]) return;
+            if (Mathf.Abs(r.GetBlendShapeWeight(_lipSlotIndex[s]) - _lipSlotWritten[s]) < 1e-3f)
+                r.SetBlendShapeWeight(_lipSlotIndex[s], _lipSlotBase[s]);
+        }
+
+        void RestoreLip()
+        {
+            for (int s = 0; s < _lipSlotHas.Length; s++) RestoreLipSlot(s);
+            _lipAnyWritten = false;
+        }
+
+        void ZeroLipState()
+        {
+            for (int i = 0; i < _lipW.Length; i++) { _lipW[i] = 0.0; _lipTarget[i] = 0.0; }
+            _lipVol = double.NaN; _lipTargetVol = double.NaN;
+            _lipHasInput = false; _lipAnyWeight = false; _lipActivity = 0.0;
+        }
+
+        void ResetLipBindings()
+        {
+            _lipTable = null;
+            _lipMissing.Clear();
+            _lipW = new double[0]; _lipTarget = new double[0]; _lipEmo = new double[0]; _lipOut = new double[0]; _lipUpper = new double[0];
+            _lipSlotStart = new int[1];
+            _lipSlotR = new SkinnedMeshRenderer[0]; _lipSlotIndex = new int[0]; _lipSlotMesh = new Mesh[0]; _lipSlotLod = new int[0];
+            _lipSlotBase = new float[0]; _lipSlotWritten = new float[0]; _lipSlotHas = new bool[0];
+            _lipMapCount = -1; _lipMapNames = new string[0]; _lipMap = new int[0];
+            _lipVol = double.NaN; _lipTargetVol = double.NaN; _lipHasInput = false; _lipAnyWeight = false; _lipAnyWritten = false; _lipActivity = 0.0;
+            _cacheLipEntries = null;
+            _cacheLipPhonemes = null;
+        }
+
+        // 結ぶ（RebuildCore から）: 対応表のシェイプ名を対象メッシュの番号に引く。メッシュに無いものは _lipMissing へ
+        void BuildLipSync(FacialCorrectionData d, FacialShapeIndex[] shapeIndex)
+        {
+            ResetLipBindings();
+            _cacheLipEntries = d.lipSync.entries;
+            _cacheLipPhonemes = d.lipSync.phonemes;
+            if (d.lipSync.entries == null || d.lipSync.entries.Length == 0) return;
+
+            var emotionNames = new List<string>();
+            if (d.layers != null)
+                for (int i = 1; i < d.layers.Length; i++) emotionNames.Add(d.layers[i].name);
+            var table = new LipSyncTable(d.lipSync.ToCore(), emotionNames);
+            _lipTable = table;
+            int pc = table.PhonemeCount, cc = table.CurveCount;
+            _lipW = new double[pc]; _lipTarget = new double[pc]; _lipEmo = new double[emotionNames.Count]; _lipOut = new double[cc]; _lipUpper = new double[cc];
+            var start = new List<int>(cc + 1);
+            var rs = new List<SkinnedMeshRenderer>();
+            var ix = new List<int>();
+            for (int c = 0; c < cc; c++)
+            {
+                start.Add(rs.Count);
+                string nm = table.CurveName(c);
+                _lipUpper[c] = 1.0;
+                if (d.limits != null)
+                    for (int i = 0; i < d.limits.Length; i++)
+                        if (d.limits[i].name == nm) { _lipUpper[c] = d.limits[i].max; break; }
+                bool found = false;
+                for (int tg = 0; tg < _targets.Count; tg++)
+                {
+                    int idx = shapeIndex[tg].Find(nm);
+                    if (idx < 0)
+                    {
+                        int dot = nm.IndexOf('.'); // ノード名つきの名前でメッシュ側に付いていないとき、後ろだけで探す
+                        if (dot >= 0 && dot + 1 < nm.Length) idx = shapeIndex[tg].Find(nm.Substring(dot + 1));
+                    }
+                    if (idx >= 0) { rs.Add(_targets[tg]); ix.Add(idx); found = true; }
+                }
+                if (!found) _lipMissing.Add(nm);
+            }
+            start.Add(rs.Count);
+            _lipSlotStart = start.ToArray();
+            int n = rs.Count;
+            _lipSlotR = rs.ToArray(); _lipSlotIndex = ix.ToArray();
+            _lipSlotMesh = new Mesh[n]; _lipSlotLod = new int[n];
+            _lipSlotBase = new float[n]; _lipSlotWritten = new float[n]; _lipSlotHas = new bool[n];
+            for (int s = 0; s < n; s++) { _lipSlotMesh[s] = rs[s].sharedMesh; _lipSlotLod[s] = LodOf(rs[s]); }
+        }
+
         // ---------------------------------------------------------------- カット補正（R-36）
 
         /// <summary>ポーズが指すボーンの Transform を output へ入れる（Timeline の GatherProperties 用。output は先に空にする）。</summary>
@@ -1122,7 +1433,8 @@ namespace TDrive.Facial
             FacialCorrectionData d = data;
             if (d == null) return false;
             return !ReferenceEquals(d.layers, _cacheLayers) || d.grid.cols != _cacheCols || d.grid.rows != _cacheRows
-                || !ReferenceEquals(d.perspective.keys, _cachePerspKeys);
+                || !ReferenceEquals(d.perspective.keys, _cachePerspKeys)
+                || !ReferenceEquals(d.lipSync.entries, _cacheLipEntries) || !ReferenceEquals(d.lipSync.phonemes, _cacheLipPhonemes);
         }
 
         void Rebuild()
@@ -1153,6 +1465,7 @@ namespace TDrive.Facial
             _intIndices = new int[0];
             _perspCount = 0;
             _perspValues = new double[0]; _perspW = new double[0]; _perspNames = new string[0]; _perspBind = new ShapeBinding[0];
+            ResetLipBindings();
 
             _built = true;
             _scanFrame = Time.frameCount;
@@ -1278,6 +1591,7 @@ namespace TDrive.Facial
                     _perspBind[k] = _bindings[nm];
                 }
             }
+            BuildLipSync(d, shapeIndex);
             if (d.limits != null)
                 for (int i = 0; i < d.limits.Length; i++)
                 {

@@ -18,7 +18,7 @@ namespace TDrive.Facial.Editor
             "emotionWeights", "mutedLayers", "materialOutput", "materialTargets",
         };
 
-        bool _foldTargets, _foldMissing, _foldWeights;
+        bool _foldTargets, _foldMissing, _foldWeights, _foldLipSync = true;
         bool _foldTuning = true, _foldEmotion = true, _foldViewer = true, _foldMaterial, _foldValidation = true;
         List<FacialIssue> _issues;
         FacialCorrectionData _issuesData;
@@ -53,6 +53,7 @@ namespace TDrive.Facial.Editor
                 DrawState(r);
                 DrawTuning(r);
                 DrawEmotion(r);
+                DrawLipSync(r);
                 DrawViewer();
                 DrawMaterial(r);
                 DrawValidation(r);
@@ -110,6 +111,66 @@ namespace TDrive.Facial.Editor
             }
             if (GUI.changed) st.forceEval = true;
             if (GUILayout.Button("格子ビューアを開く")) FacialGridWindow.Open(r);
+            DrawLipPreview(r, st);
+        }
+
+        // プレビューの口: 音素ごとの強さと声量のスライダー。動かすと、対応表の計算結果が口のシェイプに出る（シーンの保存データは変わらない）
+        void DrawLipPreview(FacialCorrectionRunner r, FacialPreviewState st)
+        {
+            if (!r.LipSyncActive) return;
+            int n = r.LipSyncPhonemeCount;
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField("リップシンクのプレビュー", EditorStyles.miniBoldLabel);
+            if (st.lipWeights == null || st.lipWeights.Length != n) st.lipWeights = new float[n];
+            EditorGUI.BeginChangeCheck();
+            for (int i = 0; i < n; i++)
+                st.lipWeights[i] = EditorGUILayout.Slider(new GUIContent("音素 " + r.GetLipSyncPhonemeName(i), "この音素の強さ。口のシェイプに出ます（0〜1）"), st.lipWeights[i], 0f, 1f);
+            bool hasVol = !float.IsNaN(st.lipVolume);
+            EditorGUILayout.BeginHorizontal();
+            bool nowVol = EditorGUILayout.ToggleLeft(new GUIContent("声量を与える", "オフのときは声量なし（最大の倍率）"), hasVol, GUILayout.Width(110));
+            using (new EditorGUI.DisabledScope(!nowVol))
+            {
+                float v = hasVol ? st.lipVolume : 1f;
+                v = EditorGUILayout.Slider(v, 0f, 1f);
+                st.lipVolume = nowVol ? v : float.NaN;
+            }
+            EditorGUILayout.EndHorizontal();
+            if (EditorGUI.EndChangeCheck())
+            {
+                st.lipFeed = true;
+                st.forceEval = true;
+                st.settleUntil = EditorApplication.timeSinceStartup + 1.0; // 追従が落ち着くまで評価し続ける
+            }
+            if (GUILayout.Button("口を戻す"))
+            {
+                for (int i = 0; i < n; i++) st.lipWeights[i] = 0f;
+                st.lipVolume = float.NaN;
+                st.lipFeed = true;
+                st.forceEval = true;
+                st.settleUntil = EditorApplication.timeSinceStartup + 1.0;
+            }
+        }
+
+        // ---------------------------------------------------------------- リップシンク
+
+        void DrawLipSync(FacialCorrectionRunner r)
+        {
+            if (!r.LipSyncActive) return;
+            EditorGUILayout.Space();
+            _foldLipSync = EditorGUILayout.Foldout(_foldLipSync, "リップシンク", true, EditorStyles.foldoutHeader);
+            if (!_foldLipSync) return;
+            int n = r.LipSyncPhonemeCount;
+            EditorGUILayout.LabelField("音素の数", n.ToString());
+            EditorGUILayout.LabelField("口の活動量", r.LipSyncActivity.ToString("0.##"));
+            EditorGUILayout.LabelField("声量", float.IsNaN(r.LipSyncVolume) ? "（与えられていません）" : r.LipSyncVolume.ToString("0.##"));
+            for (int i = 0; i < n; i++)
+                EditorGUILayout.LabelField("  " + r.GetLipSyncPhonemeName(i), r.GetLipSyncPhonemeWeight(i).ToString("0.##"));
+            IReadOnlyList<string> missing = r.GetMissingLipSyncShapeNames();
+            if (missing.Count > 0)
+            {
+                EditorGUILayout.HelpBox("対応表の口のシェイプが、メッシュに無いものがあります（その口は動きません）: " + string.Join(", ", missing), MessageType.Warning);
+            }
+            EditorGUILayout.LabelField("音素の強さ・声量は FacialULipSyncBridge などから SetLipSync で渡します。強さ・追従の速さは「調整」で上書きできます。", EditorStyles.wordWrappedMiniLabel);
         }
 
         // ---------------------------------------------------------------- 状態

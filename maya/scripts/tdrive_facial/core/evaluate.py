@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import Iterable, Optional, Sequence
+from typing import Iterable, Mapping, Optional, Sequence
 
 KINDA_SMALL_NUMBER = 1e-4  # UE の KINDA_SMALL_NUMBER
 SMALL_NUMBER = 1e-8  # UE の UE_SMALL_NUMBER（FMath::IsNearlyZero の既定の許容）
@@ -438,3 +438,141 @@ def smooth_weights(
         new_value = t.weight if instant else finterp_to(0.0, t.weight, delta_time, interp_speed)
         out.append(MorphWeight(t.morph_name, new_value))
     return out
+
+
+# ---------------------------------------------------------------------------
+# リップシンクの対応表（R-18、F5-8。docs/14 §5.8c）
+# ---------------------------------------------------------------------------
+
+
+def saturate(x: float) -> float:
+    """0〜1 に丸める。NaN は 0。"""
+    if math.isnan(x):
+        return 0.0
+    return 0.0 if x < 0.0 else 1.0 if x > 1.0 else x
+
+
+def lipsync_volume_scale(vol, volume: Optional[float]) -> float:
+    """声量 → 口の大きさの倍率。`lerp(from, to, saturate((v - min) / (max - min)))`。
+    max <= min のときは v >= min なら to、それ以外は from。声量が無い（None / NaN）ときは to。
+    倍率が有限でなければ 1。vol は LipSyncVolume（min / max / from_ / to を持つもの）。"""
+    lo, hi, a, b = float(vol.min), float(vol.max), float(vol.from_), float(vol.to)
+    if volume is None or math.isnan(volume):
+        out = b
+    elif hi <= lo:
+        out = b if volume >= lo else a
+    else:
+        out = a + (b - a) * saturate((volume - lo) / (hi - lo))
+    return out if math.isfinite(out) else 1.0
+
+
+def lipsync_table_curves(lip) -> list[str]:
+    """対応表に出てくるシェイプ名（`phonemes` にある音素の行だけ。初めて出てきた順）。"""
+    if lip is None:
+        return []
+    known = {p for p in lip.phonemes if p}
+    seen: dict[str, None] = {}
+    for e in lip.entries:
+        if e.phoneme in known:
+            for c in e.curves:
+                seen.setdefault(c, None)
+    return list(seen)
+
+
+def lipsync_activity(phoneme_weights: Mapping[str, float], phonemes: Optional[Iterable[str]] = None) -> float:
+    """口の活動量 a = saturate(Σ w_p)。各 w_p は 0〜1 に丸める。phonemes を渡すと、その名前だけ数える（表に無い音素は無視）。"""
+    names = None if phonemes is None else {n for n in phonemes if n}
+    total = 0.0
+    for name, w in phoneme_weights.items():
+        if names is not None and name not in names:
+            continue
+        total += saturate(float(w))
+    return saturate(total)
+
+
+def lipsync_emotion_weights(emotion_weights: Optional[Mapping[str, float]]) -> dict[str, float]:
+    """感情の重みを整える: 各値を 0〜1 に丸め、合計が 1 を超えたら合計で割る。名前が空のもの・0 のものは除く。"""
+    if not emotion_weights:
+        return {}
+    raw = {n: saturate(float(w)) for n, w in emotion_weights.items() if n}
+    raw = {n: w for n, w in raw.items() if w > 0.0}
+    total = sum(raw.values())
+    if total > 1.0:
+        raw = {n: w / total for n, w in raw.items()}
+    return raw
+
+
+def lipsync_output(
+    lip,
+    phoneme_weights: Mapping[str, float],
+    volume: Optional[float] = None,
+    emotion_weights: Optional[Mapping[str, float]] = None,
+) -> dict[str, float]:
+    """リップシンクの出力 `{シェイプ名: 値}`（docs/14 §5.8c の 1・2）。lip = model.LipSync（None / enabled=False / 行なし → {}）。
+
+    - 音素 p のポーズ = 基本の行 B_p + Σ_L e_L × (E_{p,L} − B_p)（行に無いシェイプは 0。感情の行が無い感情は基本のまま）
+    - 出力 c = Σ_p w_p × pose_p[c] × 声量の倍率 × strength。w_p は 0〜1 に丸める（合計は 1 でなくてよい）
+    - 表にない音素の名前は無視（音素の一覧の重複・空の名前は 1 度だけ・空は数えない。同じ音素 × 感情の行は先のものだけが効く）。戻りには対応表に出てくる全シェイプ（lipsync_table_curves）を入れる（寄与が無ければ 0）。
+      上限・下限では丸めない（丸めは lipsync_apply）
+    """
+    if lip is None or not lip.enabled or not lip.entries:
+        return {}
+    curves = lipsync_table_curves(lip)
+    out = {c: 0.0 for c in curves}
+    if not curves:
+        return out
+    scale = lipsync_volume_scale(lip.volume, volume) * saturate(float(lip.strength))
+    emo = lipsync_emotion_weights(emotion_weights)
+    for p in dict.fromkeys(n for n in lip.phonemes if n):  # 重複・空の名前は 1 度だけ・数えない
+        w = saturate(float(phoneme_weights.get(p, 0.0)))
+        if w <= 0.0:
+            continue
+        base = lip.find_entry(p, "")
+        pose: dict[str, float] = dict(base.curves) if base is not None else {}
+        for layer, e in emo.items():
+            entry = lip.find_entry(p, layer)
+            if entry is None:
+                continue
+            b_curves = base.curves if base is not None else {}
+            for c in set(entry.curves) | set(b_curves):
+                pose[c] = pose.get(c, 0.0) + e * (entry.curves.get(c, 0.0) - b_curves.get(c, 0.0))
+        for c, v in pose.items():
+            out[c] += w * v * scale
+    return out
+
+
+def lipsync_apply(
+    current: Mapping[str, float],
+    output: Mapping[str, float],
+    activity: float,
+    limits: Optional[Mapping[str, tuple[float, float]]] = None,
+) -> dict[str, float]:
+    """今の値に対応表の出力を重ねる（§5.8c の 3）。`最終 = 今の値 × (1 − a) + 出力` を 0〜可動域の上限に丸める。
+    戻りは output にあるシェイプだけ（= 対応表に出てくるシェイプ。current に無いものは 0 とみなす）。
+    limits = シェイプ名 → (下限, 上限)。無い名前の上限は 1。下限は常に 0。"""
+    a = saturate(float(activity))
+    out: dict[str, float] = {}
+    for c, o in output.items():
+        hi = 1.0
+        if limits is not None and c in limits:
+            hi = float(limits[c][1])
+        v = float(current.get(c, 0.0)) * (1.0 - a) + o
+        if math.isnan(v):
+            v = 0.0
+        out[c] = max(0.0, min(hi, v)) if hi > 0.0 else 0.0
+    return out
+
+
+def lipsync_evaluate(
+    lip,
+    current: Mapping[str, float],
+    phoneme_weights: Mapping[str, float],
+    volume: Optional[float] = None,
+    emotion_weights: Optional[Mapping[str, float]] = None,
+    limits: Optional[Mapping[str, tuple[float, float]]] = None,
+) -> dict[str, float]:
+    """output → activity → apply を続けて行う（「試す」・Unity と同じ結果）。lip が無効・行なしなら {}。"""
+    out = lipsync_output(lip, phoneme_weights, volume, emotion_weights)
+    if not out:
+        return {}
+    return lipsync_apply(current, out, lipsync_activity(phoneme_weights, lip.phonemes), limits)

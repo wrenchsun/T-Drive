@@ -112,6 +112,39 @@ namespace TDrive.Facial.Core
         public readonly List<FcPerspectiveKey> Keys = new List<FcPerspectiveKey>();
     }
 
+    /// <summary>リップシンクの行 1 つ（音素 × 感情 → シェイプの重み。ボーンは持たない）。Emotion "" = 基本。</summary>
+    public sealed class FcLipSyncEntry
+    {
+        public string Phoneme = "";
+        public string Emotion = "";
+        public readonly Dictionary<string, double> Curves = new Dictionary<string, double>();
+    }
+
+    /// <summary>声量 → 口の大きさの倍率: lerp(From, To, saturate((v - Min) / (Max - Min)))。</summary>
+    public sealed class FcLipSyncVolume
+    {
+        public double Min = 0.0, Max = 1.0, From = 0.5, To = 1.0;
+    }
+
+    /// <summary>リップシンクの対応表（lipSync。R-18）。音声の解析は持たない。Follow = 追従の速さ（1/秒。0 以下 = 即時）。</summary>
+    public sealed class FcLipSync
+    {
+        public bool Enabled = true;
+        public double Strength = 1.0;
+        public readonly List<string> Phonemes = new List<string>();
+        public readonly List<FcLipSyncEntry> Entries = new List<FcLipSyncEntry>();
+        public FcLipSyncVolume Volume = new FcLipSyncVolume();
+        public double Follow = 20.0;
+
+        /// <summary>(音素, 感情) の行。同じ組が複数あれば先のもの。無ければ null。</summary>
+        public FcLipSyncEntry FindEntry(string phoneme, string emotion)
+        {
+            for (int i = 0; i < Entries.Count; i++)
+                if (Entries[i].Phoneme == phoneme && Entries[i].Emotion == emotion) return Entries[i];
+            return null;
+        }
+    }
+
     public sealed class FcLimit
     {
         public double Min;
@@ -141,6 +174,8 @@ namespace TDrive.Facial.Core
         public FcQuality Quality = new FcQuality();
         /// <summary>パース補正。無ければ null（何もしない）。</summary>
         public FcPerspective Perspective;
+        /// <summary>リップシンクの対応表。無ければ null（何もしない）。</summary>
+        public FcLipSync LipSync;
         /// <summary>レイヤー名 → 重みの入力元（無ければ入力は呼び出し側 = direct）。F5-3。</summary>
         public readonly Dictionary<string, FcLayerWeight> LayerWeights = new Dictionary<string, FcLayerWeight>();
     }

@@ -19,6 +19,8 @@ namespace TDrive.Facial
         public float stepFps;
         public float exaggeration;
         public float perspectiveStrength;
+        public float lipSyncStrength;
+        public float lipSyncFollow; // 0 以下 = 即時
         public int maxLod; // 補正を書く LOD の上限（0 = 制限なし。N = LOD N まで）
     }
 
@@ -61,6 +63,12 @@ namespace TDrive.Facial
         [Tooltip("パース補正の強さを上書きする")] public bool overridePerspectiveStrength;
         [Tooltip("パース補正の強さ（0〜1）。0 = 補正なし")] [Range(0f, 1f)] public float perspectiveStrength = 1f;
 
+        [Tooltip("リップシンクの全体の強さを上書きする")] public bool overrideLipSyncStrength;
+        [Tooltip("リップシンクの全体の強さ（0〜1）。0 = 口のシェイプを書かない")] [Range(0f, 1f)] public float lipSyncStrength = 1f;
+
+        [Tooltip("リップシンクの追従の速さを上書きする")] public bool overrideLipSyncFollow;
+        [Tooltip("音素の強さ・声量の追従の速さ（1/秒）。0 以下 = 即時")] public float lipSyncFollow = 20f;
+
         /// <summary>data と overrides（null 可）から実効の値を求める。data が null なら既定値。</summary>
         public static FacialEffectiveParams Resolve(FacialCorrectionData data, FacialCorrectionOverrides ov)
         {
@@ -78,12 +86,15 @@ namespace TDrive.Facial
                 p.stepFps = data.quality.stepFps;
                 p.exaggeration = data.quality.hasExaggeration ? Mathf.Clamp01(data.quality.exaggeration) : 1f;
                 p.perspectiveStrength = Mathf.Clamp01(data.perspective.strength);
+                p.lipSyncStrength = Mathf.Clamp01(data.lipSync.strength);
+                p.lipSyncFollow = data.lipSync.follow;
                 p.maxLod = Mathf.Max(0, data.quality.maxLod);
             }
             else
             {
                 p.globalAlpha = 1f; p.interpSpeed = 10f; p.snapAngle = 45f; p.expressionDampen = 0.5f;
                 p.edgeFade = 15f; p.sharpness = 1f; p.exaggeration = 1f; p.perspectiveStrength = 1f;
+                p.lipSyncStrength = 1f; p.lipSyncFollow = 20f;
             }
             if (ov == null) return p;
             if (ov.overrideGlobalAlpha) p.globalAlpha = ov.globalAlpha;
@@ -97,6 +108,8 @@ namespace TDrive.Facial
             if (ov.overrideStepFps) p.stepFps = ov.stepFps;
             if (ov.overrideExaggeration) p.exaggeration = Mathf.Clamp01(ov.exaggeration);
             if (ov.overridePerspectiveStrength) p.perspectiveStrength = Mathf.Clamp01(ov.perspectiveStrength);
+            if (ov.overrideLipSyncStrength) p.lipSyncStrength = Mathf.Clamp01(ov.lipSyncStrength);
+            if (ov.overrideLipSyncFollow) p.lipSyncFollow = ov.lipSyncFollow;
             if (ov.overrideMaxLod) p.maxLod = Mathf.Max(0, ov.maxLod);
             return p;
         }

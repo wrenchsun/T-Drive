@@ -1,0 +1,2716 @@
+{
+ "kind": "lipsync",
+ "description": "リップシンクの対応表（R-18、F5-8）。lipsync_output(lip, weights, volume, emotions) → 出力 {シェイプ: 値}（表に出てくる全シェイプ。寄与が無ければ 0）、lipsync_activity（表の音素だけ数える）、lipsync_apply（最終 = current × (1 − a) + 出力 を 0〜上限に丸める。上限は limits、無ければ 1）。Python 版で作成（UE 版には無い）",
+ "cases": [
+  {
+   "name": "single_phoneme",
+   "source": "python-port (F5; UE 未実装)",
+   "lipSync": {
+    "enabled": true,
+    "strength": 1.0,
+    "phonemes": [
+     "A",
+     "I",
+     "U"
+    ],
+    "entries": [
+     {
+      "phoneme": "A",
+      "emotion": "",
+      "curves": {
+       "a": 1.0
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "",
+      "curves": {
+       "i": 1.0
+      }
+     },
+     {
+      "phoneme": "U",
+      "emotion": "",
+      "curves": {
+       "u": 1.0
+      }
+     },
+     {
+      "phoneme": "A",
+      "emotion": "Joy",
+      "curves": {
+       "a": 0.8,
+       "smile": 0.3
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "Joy",
+      "curves": {
+       "i": 0.9
+      }
+     }
+    ],
+    "volume": {
+     "min": 0,
+     "max": 1,
+     "from": 1,
+     "to": 1
+    },
+    "follow": 20
+   },
+   "weights": {
+    "A": 1
+   },
+   "current": {
+    "a": 0.2
+   },
+   "expect": {
+    "output": {
+     "a": 1,
+     "i": 0,
+     "u": 0,
+     "smile": 0
+    },
+    "activity": 1,
+    "final": {
+     "a": 1,
+     "i": 0,
+     "u": 0,
+     "smile": 0
+    }
+   }
+  },
+  {
+   "name": "multiple_phonemes",
+   "source": "python-port (F5; UE 未実装)",
+   "lipSync": {
+    "enabled": true,
+    "strength": 1.0,
+    "phonemes": [
+     "A",
+     "I",
+     "U"
+    ],
+    "entries": [
+     {
+      "phoneme": "A",
+      "emotion": "",
+      "curves": {
+       "a": 1.0
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "",
+      "curves": {
+       "i": 1.0
+      }
+     },
+     {
+      "phoneme": "U",
+      "emotion": "",
+      "curves": {
+       "u": 1.0
+      }
+     },
+     {
+      "phoneme": "A",
+      "emotion": "Joy",
+      "curves": {
+       "a": 0.8,
+       "smile": 0.3
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "Joy",
+      "curves": {
+       "i": 0.9
+      }
+     }
+    ],
+    "volume": {
+     "min": 0,
+     "max": 1,
+     "from": 1,
+     "to": 1
+    },
+    "follow": 20
+   },
+   "weights": {
+    "A": 0.5,
+    "I": 0.25
+   },
+   "current": {
+    "a": 0.4,
+    "i": 0.4,
+    "u": 0.4
+   },
+   "expect": {
+    "output": {
+     "a": 0.5,
+     "i": 0.25,
+     "u": 0,
+     "smile": 0
+    },
+    "activity": 0.75,
+    "final": {
+     "a": 0.6,
+     "i": 0.35,
+     "u": 0.1,
+     "smile": 0
+    }
+   }
+  },
+  {
+   "name": "weights_sum_over_one",
+   "source": "python-port (F5; UE 未実装)",
+   "lipSync": {
+    "enabled": true,
+    "strength": 1.0,
+    "phonemes": [
+     "A",
+     "I",
+     "U"
+    ],
+    "entries": [
+     {
+      "phoneme": "A",
+      "emotion": "",
+      "curves": {
+       "a": 1.0
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "",
+      "curves": {
+       "i": 1.0
+      }
+     },
+     {
+      "phoneme": "U",
+      "emotion": "",
+      "curves": {
+       "u": 1.0
+      }
+     },
+     {
+      "phoneme": "A",
+      "emotion": "Joy",
+      "curves": {
+       "a": 0.8,
+       "smile": 0.3
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "Joy",
+      "curves": {
+       "i": 0.9
+      }
+     }
+    ],
+    "volume": {
+     "min": 0,
+     "max": 1,
+     "from": 1,
+     "to": 1
+    },
+    "follow": 20
+   },
+   "weights": {
+    "A": 0.8,
+    "I": 0.7
+   },
+   "current": {
+    "a": 0.5,
+    "u": 0.9
+   },
+   "expect": {
+    "output": {
+     "a": 0.8,
+     "i": 0.7,
+     "u": 0,
+     "smile": 0
+    },
+    "activity": 1,
+    "final": {
+     "a": 0.8,
+     "i": 0.7,
+     "u": 0,
+     "smile": 0
+    }
+   }
+  },
+  {
+   "name": "weight_above_one_is_clamped",
+   "source": "python-port (F5; UE 未実装)",
+   "lipSync": {
+    "enabled": true,
+    "strength": 1.0,
+    "phonemes": [
+     "A",
+     "I",
+     "U"
+    ],
+    "entries": [
+     {
+      "phoneme": "A",
+      "emotion": "",
+      "curves": {
+       "a": 1.0
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "",
+      "curves": {
+       "i": 1.0
+      }
+     },
+     {
+      "phoneme": "U",
+      "emotion": "",
+      "curves": {
+       "u": 1.0
+      }
+     },
+     {
+      "phoneme": "A",
+      "emotion": "Joy",
+      "curves": {
+       "a": 0.8,
+       "smile": 0.3
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "Joy",
+      "curves": {
+       "i": 0.9
+      }
+     }
+    ],
+    "volume": {
+     "min": 0,
+     "max": 1,
+     "from": 1,
+     "to": 1
+    },
+    "follow": 20
+   },
+   "weights": {
+    "A": 2.0
+   },
+   "expect": {
+    "output": {
+     "a": 1,
+     "i": 0,
+     "u": 0,
+     "smile": 0
+    },
+    "activity": 1
+   }
+  },
+  {
+   "name": "negative_weight_is_zero",
+   "source": "python-port (F5; UE 未実装)",
+   "lipSync": {
+    "enabled": true,
+    "strength": 1.0,
+    "phonemes": [
+     "A",
+     "I",
+     "U"
+    ],
+    "entries": [
+     {
+      "phoneme": "A",
+      "emotion": "",
+      "curves": {
+       "a": 1.0
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "",
+      "curves": {
+       "i": 1.0
+      }
+     },
+     {
+      "phoneme": "U",
+      "emotion": "",
+      "curves": {
+       "u": 1.0
+      }
+     },
+     {
+      "phoneme": "A",
+      "emotion": "Joy",
+      "curves": {
+       "a": 0.8,
+       "smile": 0.3
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "Joy",
+      "curves": {
+       "i": 0.9
+      }
+     }
+    ],
+    "volume": {
+     "min": 0,
+     "max": 1,
+     "from": 1,
+     "to": 1
+    },
+    "follow": 20
+   },
+   "weights": {
+    "A": -0.5,
+    "I": 0.5
+   },
+   "expect": {
+    "output": {
+     "a": 0,
+     "i": 0.5,
+     "u": 0,
+     "smile": 0
+    },
+    "activity": 0.5
+   }
+  },
+  {
+   "name": "no_input_keeps_current",
+   "source": "python-port (F5; UE 未実装)",
+   "lipSync": {
+    "enabled": true,
+    "strength": 1.0,
+    "phonemes": [
+     "A",
+     "I",
+     "U"
+    ],
+    "entries": [
+     {
+      "phoneme": "A",
+      "emotion": "",
+      "curves": {
+       "a": 1.0
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "",
+      "curves": {
+       "i": 1.0
+      }
+     },
+     {
+      "phoneme": "U",
+      "emotion": "",
+      "curves": {
+       "u": 1.0
+      }
+     },
+     {
+      "phoneme": "A",
+      "emotion": "Joy",
+      "curves": {
+       "a": 0.8,
+       "smile": 0.3
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "Joy",
+      "curves": {
+       "i": 0.9
+      }
+     }
+    ],
+    "volume": {
+     "min": 0,
+     "max": 1,
+     "from": 1,
+     "to": 1
+    },
+    "follow": 20
+   },
+   "weights": {},
+   "current": {
+    "a": 0.3,
+    "u": 0.7
+   },
+   "expect": {
+    "output": {
+     "a": 0,
+     "i": 0,
+     "u": 0,
+     "smile": 0
+    },
+    "activity": 0,
+    "final": {
+     "a": 0.3,
+     "i": 0,
+     "u": 0.7,
+     "smile": 0
+    }
+   }
+  },
+  {
+   "name": "emotion_blend",
+   "source": "python-port (F5; UE 未実装)",
+   "lipSync": {
+    "enabled": true,
+    "strength": 1.0,
+    "phonemes": [
+     "A",
+     "I",
+     "U"
+    ],
+    "entries": [
+     {
+      "phoneme": "A",
+      "emotion": "",
+      "curves": {
+       "a": 1.0
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "",
+      "curves": {
+       "i": 1.0
+      }
+     },
+     {
+      "phoneme": "U",
+      "emotion": "",
+      "curves": {
+       "u": 1.0
+      }
+     },
+     {
+      "phoneme": "A",
+      "emotion": "Joy",
+      "curves": {
+       "a": 0.8,
+       "smile": 0.3
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "Joy",
+      "curves": {
+       "i": 0.9
+      }
+     }
+    ],
+    "volume": {
+     "min": 0,
+     "max": 1,
+     "from": 1,
+     "to": 1
+    },
+    "follow": 20
+   },
+   "weights": {
+    "A": 1
+   },
+   "emotions": {
+    "Joy": 0.5
+   },
+   "expect": {
+    "output": {
+     "a": 0.9,
+     "i": 0,
+     "u": 0,
+     "smile": 0.15
+    },
+    "activity": 1
+   }
+  },
+  {
+   "name": "emotion_full",
+   "source": "python-port (F5; UE 未実装)",
+   "lipSync": {
+    "enabled": true,
+    "strength": 1.0,
+    "phonemes": [
+     "A",
+     "I",
+     "U"
+    ],
+    "entries": [
+     {
+      "phoneme": "A",
+      "emotion": "",
+      "curves": {
+       "a": 1.0
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "",
+      "curves": {
+       "i": 1.0
+      }
+     },
+     {
+      "phoneme": "U",
+      "emotion": "",
+      "curves": {
+       "u": 1.0
+      }
+     },
+     {
+      "phoneme": "A",
+      "emotion": "Joy",
+      "curves": {
+       "a": 0.8,
+       "smile": 0.3
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "Joy",
+      "curves": {
+       "i": 0.9
+      }
+     }
+    ],
+    "volume": {
+     "min": 0,
+     "max": 1,
+     "from": 1,
+     "to": 1
+    },
+    "follow": 20
+   },
+   "weights": {
+    "A": 1
+   },
+   "emotions": {
+    "Joy": 1.0
+   },
+   "expect": {
+    "output": {
+     "a": 0.8,
+     "i": 0,
+     "u": 0,
+     "smile": 0.3
+    },
+    "activity": 1
+   }
+  },
+  {
+   "name": "emotion_entry_missing_some_shapes_treated_as_zero",
+   "source": "python-port (F5; UE 未実装)",
+   "lipSync": {
+    "enabled": true,
+    "strength": 1.0,
+    "phonemes": [
+     "A"
+    ],
+    "entries": [
+     {
+      "phoneme": "A",
+      "emotion": "",
+      "curves": {
+       "a": 1.0,
+       "b": 0.5
+      }
+     },
+     {
+      "phoneme": "A",
+      "emotion": "Joy",
+      "curves": {
+       "a": 0.8
+      }
+     }
+    ],
+    "volume": {
+     "min": 0,
+     "max": 1,
+     "from": 1,
+     "to": 1
+    },
+    "follow": 20
+   },
+   "weights": {
+    "A": 1
+   },
+   "emotions": {
+    "Joy": 1.0
+   },
+   "expect": {
+    "output": {
+     "a": 0.8,
+     "b": 0.0
+    },
+    "activity": 1
+   }
+  },
+  {
+   "name": "emotion_entry_missing_some_shapes_half",
+   "source": "python-port (F5; UE 未実装)",
+   "lipSync": {
+    "enabled": true,
+    "strength": 1.0,
+    "phonemes": [
+     "A"
+    ],
+    "entries": [
+     {
+      "phoneme": "A",
+      "emotion": "",
+      "curves": {
+       "a": 1.0,
+       "b": 0.5
+      }
+     },
+     {
+      "phoneme": "A",
+      "emotion": "Joy",
+      "curves": {
+       "a": 0.8
+      }
+     }
+    ],
+    "volume": {
+     "min": 0,
+     "max": 1,
+     "from": 1,
+     "to": 1
+    },
+    "follow": 20
+   },
+   "weights": {
+    "A": 1
+   },
+   "emotions": {
+    "Joy": 0.5
+   },
+   "expect": {
+    "output": {
+     "a": 0.9,
+     "b": 0.25
+    },
+    "activity": 1
+   }
+  },
+  {
+   "name": "emotion_shape_only_in_emotion_row",
+   "source": "python-port (F5; UE 未実装)",
+   "lipSync": {
+    "enabled": true,
+    "strength": 1.0,
+    "phonemes": [
+     "A",
+     "I",
+     "U"
+    ],
+    "entries": [
+     {
+      "phoneme": "A",
+      "emotion": "",
+      "curves": {
+       "a": 1.0
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "",
+      "curves": {
+       "i": 1.0
+      }
+     },
+     {
+      "phoneme": "U",
+      "emotion": "",
+      "curves": {
+       "u": 1.0
+      }
+     },
+     {
+      "phoneme": "A",
+      "emotion": "Joy",
+      "curves": {
+       "a": 0.8,
+       "smile": 0.3
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "Joy",
+      "curves": {
+       "i": 0.9
+      }
+     }
+    ],
+    "volume": {
+     "min": 0,
+     "max": 1,
+     "from": 1,
+     "to": 1
+    },
+    "follow": 20
+   },
+   "weights": {
+    "I": 1
+   },
+   "emotions": {
+    "Joy": 1.0
+   },
+   "expect": {
+    "output": {
+     "a": 0,
+     "i": 0.9,
+     "u": 0,
+     "smile": 0
+    },
+    "activity": 1
+   }
+  },
+  {
+   "name": "emotion_without_row_uses_base",
+   "source": "python-port (F5; UE 未実装)",
+   "lipSync": {
+    "enabled": true,
+    "strength": 1.0,
+    "phonemes": [
+     "A",
+     "I",
+     "U"
+    ],
+    "entries": [
+     {
+      "phoneme": "A",
+      "emotion": "",
+      "curves": {
+       "a": 1.0
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "",
+      "curves": {
+       "i": 1.0
+      }
+     },
+     {
+      "phoneme": "U",
+      "emotion": "",
+      "curves": {
+       "u": 1.0
+      }
+     },
+     {
+      "phoneme": "A",
+      "emotion": "Joy",
+      "curves": {
+       "a": 0.8,
+       "smile": 0.3
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "Joy",
+      "curves": {
+       "i": 0.9
+      }
+     }
+    ],
+    "volume": {
+     "min": 0,
+     "max": 1,
+     "from": 1,
+     "to": 1
+    },
+    "follow": 20
+   },
+   "weights": {
+    "A": 1
+   },
+   "emotions": {
+    "Anger": 1.0
+   },
+   "expect": {
+    "output": {
+     "a": 1,
+     "i": 0,
+     "u": 0,
+     "smile": 0
+    },
+    "activity": 1
+   }
+  },
+  {
+   "name": "emotion_sum_over_one_is_normalised",
+   "source": "python-port (F5; UE 未実装)",
+   "lipSync": {
+    "enabled": true,
+    "strength": 1.0,
+    "phonemes": [
+     "A"
+    ],
+    "entries": [
+     {
+      "phoneme": "A",
+      "emotion": "",
+      "curves": {
+       "a": 1.0
+      }
+     },
+     {
+      "phoneme": "A",
+      "emotion": "Joy",
+      "curves": {
+       "a": 0.5
+      }
+     },
+     {
+      "phoneme": "A",
+      "emotion": "Sad",
+      "curves": {
+       "a": 0.25
+      }
+     }
+    ],
+    "volume": {
+     "min": 0,
+     "max": 1,
+     "from": 1,
+     "to": 1
+    },
+    "follow": 20
+   },
+   "weights": {
+    "A": 1
+   },
+   "emotions": {
+    "Joy": 0.8,
+    "Sad": 0.8
+   },
+   "expect": {
+    "output": {
+     "a": 0.375
+    },
+    "activity": 1
+   }
+  },
+  {
+   "name": "emotion_weight_is_clamped_to_one",
+   "source": "python-port (F5; UE 未実装)",
+   "lipSync": {
+    "enabled": true,
+    "strength": 1.0,
+    "phonemes": [
+     "A",
+     "I",
+     "U"
+    ],
+    "entries": [
+     {
+      "phoneme": "A",
+      "emotion": "",
+      "curves": {
+       "a": 1.0
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "",
+      "curves": {
+       "i": 1.0
+      }
+     },
+     {
+      "phoneme": "U",
+      "emotion": "",
+      "curves": {
+       "u": 1.0
+      }
+     },
+     {
+      "phoneme": "A",
+      "emotion": "Joy",
+      "curves": {
+       "a": 0.8,
+       "smile": 0.3
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "Joy",
+      "curves": {
+       "i": 0.9
+      }
+     }
+    ],
+    "volume": {
+     "min": 0,
+     "max": 1,
+     "from": 1,
+     "to": 1
+    },
+    "follow": 20
+   },
+   "weights": {
+    "A": 1
+   },
+   "emotions": {
+    "Joy": 3.0
+   },
+   "expect": {
+    "output": {
+     "a": 0.8,
+     "i": 0,
+     "u": 0,
+     "smile": 0.3
+    },
+    "activity": 1
+   }
+  },
+  {
+   "name": "emotion_sum_under_one_not_normalised",
+   "source": "python-port (F5; UE 未実装)",
+   "lipSync": {
+    "enabled": true,
+    "strength": 1.0,
+    "phonemes": [
+     "A"
+    ],
+    "entries": [
+     {
+      "phoneme": "A",
+      "emotion": "",
+      "curves": {
+       "a": 1.0
+      }
+     },
+     {
+      "phoneme": "A",
+      "emotion": "Joy",
+      "curves": {
+       "a": 0.5
+      }
+     },
+     {
+      "phoneme": "A",
+      "emotion": "Sad",
+      "curves": {
+       "a": 0.25
+      }
+     }
+    ],
+    "volume": {
+     "min": 0,
+     "max": 1,
+     "from": 1,
+     "to": 1
+    },
+    "follow": 20
+   },
+   "weights": {
+    "A": 1
+   },
+   "emotions": {
+    "Joy": 0.4
+   },
+   "expect": {
+    "output": {
+     "a": 0.8
+    },
+    "activity": 1
+   }
+  },
+  {
+   "name": "volume_inside_range",
+   "source": "python-port (F5; UE 未実装)",
+   "lipSync": {
+    "enabled": true,
+    "strength": 1.0,
+    "phonemes": [
+     "A",
+     "I",
+     "U"
+    ],
+    "entries": [
+     {
+      "phoneme": "A",
+      "emotion": "",
+      "curves": {
+       "a": 1.0
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "",
+      "curves": {
+       "i": 1.0
+      }
+     },
+     {
+      "phoneme": "U",
+      "emotion": "",
+      "curves": {
+       "u": 1.0
+      }
+     },
+     {
+      "phoneme": "A",
+      "emotion": "Joy",
+      "curves": {
+       "a": 0.8,
+       "smile": 0.3
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "Joy",
+      "curves": {
+       "i": 0.9
+      }
+     }
+    ],
+    "volume": {
+     "min": 0.2,
+     "max": 0.8,
+     "from": 0.5,
+     "to": 1
+    },
+    "follow": 20
+   },
+   "weights": {
+    "A": 1
+   },
+   "volume": 0.5,
+   "expect": {
+    "output": {
+     "a": 0.75,
+     "i": 0,
+     "u": 0,
+     "smile": 0
+    },
+    "activity": 1
+   }
+  },
+  {
+   "name": "volume_below_min",
+   "source": "python-port (F5; UE 未実装)",
+   "lipSync": {
+    "enabled": true,
+    "strength": 1.0,
+    "phonemes": [
+     "A",
+     "I",
+     "U"
+    ],
+    "entries": [
+     {
+      "phoneme": "A",
+      "emotion": "",
+      "curves": {
+       "a": 1.0
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "",
+      "curves": {
+       "i": 1.0
+      }
+     },
+     {
+      "phoneme": "U",
+      "emotion": "",
+      "curves": {
+       "u": 1.0
+      }
+     },
+     {
+      "phoneme": "A",
+      "emotion": "Joy",
+      "curves": {
+       "a": 0.8,
+       "smile": 0.3
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "Joy",
+      "curves": {
+       "i": 0.9
+      }
+     }
+    ],
+    "volume": {
+     "min": 0.2,
+     "max": 0.8,
+     "from": 0.5,
+     "to": 1
+    },
+    "follow": 20
+   },
+   "weights": {
+    "A": 1
+   },
+   "volume": 0.1,
+   "expect": {
+    "output": {
+     "a": 0.5,
+     "i": 0,
+     "u": 0,
+     "smile": 0
+    },
+    "activity": 1
+   }
+  },
+  {
+   "name": "volume_above_max",
+   "source": "python-port (F5; UE 未実装)",
+   "lipSync": {
+    "enabled": true,
+    "strength": 1.0,
+    "phonemes": [
+     "A",
+     "I",
+     "U"
+    ],
+    "entries": [
+     {
+      "phoneme": "A",
+      "emotion": "",
+      "curves": {
+       "a": 1.0
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "",
+      "curves": {
+       "i": 1.0
+      }
+     },
+     {
+      "phoneme": "U",
+      "emotion": "",
+      "curves": {
+       "u": 1.0
+      }
+     },
+     {
+      "phoneme": "A",
+      "emotion": "Joy",
+      "curves": {
+       "a": 0.8,
+       "smile": 0.3
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "Joy",
+      "curves": {
+       "i": 0.9
+      }
+     }
+    ],
+    "volume": {
+     "min": 0.2,
+     "max": 0.8,
+     "from": 0.5,
+     "to": 1
+    },
+    "follow": 20
+   },
+   "weights": {
+    "A": 1
+   },
+   "volume": 1.0,
+   "expect": {
+    "output": {
+     "a": 1.0,
+     "i": 0,
+     "u": 0,
+     "smile": 0
+    },
+    "activity": 1
+   }
+  },
+  {
+   "name": "volume_none_uses_to",
+   "source": "python-port (F5; UE 未実装)",
+   "lipSync": {
+    "enabled": true,
+    "strength": 1.0,
+    "phonemes": [
+     "A",
+     "I",
+     "U"
+    ],
+    "entries": [
+     {
+      "phoneme": "A",
+      "emotion": "",
+      "curves": {
+       "a": 1.0
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "",
+      "curves": {
+       "i": 1.0
+      }
+     },
+     {
+      "phoneme": "U",
+      "emotion": "",
+      "curves": {
+       "u": 1.0
+      }
+     },
+     {
+      "phoneme": "A",
+      "emotion": "Joy",
+      "curves": {
+       "a": 0.8,
+       "smile": 0.3
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "Joy",
+      "curves": {
+       "i": 0.9
+      }
+     }
+    ],
+    "volume": {
+     "min": 0,
+     "max": 1,
+     "from": 0.5,
+     "to": 0.9
+    },
+    "follow": 20
+   },
+   "weights": {
+    "A": 1
+   },
+   "expect": {
+    "output": {
+     "a": 0.9,
+     "i": 0,
+     "u": 0,
+     "smile": 0
+    },
+    "activity": 1
+   }
+  },
+  {
+   "name": "volume_max_equals_min_at_min",
+   "source": "python-port (F5; UE 未実装)",
+   "lipSync": {
+    "enabled": true,
+    "strength": 1.0,
+    "phonemes": [
+     "A",
+     "I",
+     "U"
+    ],
+    "entries": [
+     {
+      "phoneme": "A",
+      "emotion": "",
+      "curves": {
+       "a": 1.0
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "",
+      "curves": {
+       "i": 1.0
+      }
+     },
+     {
+      "phoneme": "U",
+      "emotion": "",
+      "curves": {
+       "u": 1.0
+      }
+     },
+     {
+      "phoneme": "A",
+      "emotion": "Joy",
+      "curves": {
+       "a": 0.8,
+       "smile": 0.3
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "Joy",
+      "curves": {
+       "i": 0.9
+      }
+     }
+    ],
+    "volume": {
+     "min": 0.5,
+     "max": 0.5,
+     "from": 0.2,
+     "to": 1
+    },
+    "follow": 20
+   },
+   "weights": {
+    "A": 1
+   },
+   "volume": 0.5,
+   "expect": {
+    "output": {
+     "a": 1.0,
+     "i": 0,
+     "u": 0,
+     "smile": 0
+    },
+    "activity": 1
+   }
+  },
+  {
+   "name": "volume_max_equals_min_below",
+   "source": "python-port (F5; UE 未実装)",
+   "lipSync": {
+    "enabled": true,
+    "strength": 1.0,
+    "phonemes": [
+     "A",
+     "I",
+     "U"
+    ],
+    "entries": [
+     {
+      "phoneme": "A",
+      "emotion": "",
+      "curves": {
+       "a": 1.0
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "",
+      "curves": {
+       "i": 1.0
+      }
+     },
+     {
+      "phoneme": "U",
+      "emotion": "",
+      "curves": {
+       "u": 1.0
+      }
+     },
+     {
+      "phoneme": "A",
+      "emotion": "Joy",
+      "curves": {
+       "a": 0.8,
+       "smile": 0.3
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "Joy",
+      "curves": {
+       "i": 0.9
+      }
+     }
+    ],
+    "volume": {
+     "min": 0.5,
+     "max": 0.5,
+     "from": 0.2,
+     "to": 1
+    },
+    "follow": 20
+   },
+   "weights": {
+    "A": 1
+   },
+   "volume": 0.4,
+   "expect": {
+    "output": {
+     "a": 0.2,
+     "i": 0,
+     "u": 0,
+     "smile": 0
+    },
+    "activity": 1
+   }
+  },
+  {
+   "name": "volume_max_below_min_above",
+   "source": "python-port (F5; UE 未実装)",
+   "lipSync": {
+    "enabled": true,
+    "strength": 1.0,
+    "phonemes": [
+     "A",
+     "I",
+     "U"
+    ],
+    "entries": [
+     {
+      "phoneme": "A",
+      "emotion": "",
+      "curves": {
+       "a": 1.0
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "",
+      "curves": {
+       "i": 1.0
+      }
+     },
+     {
+      "phoneme": "U",
+      "emotion": "",
+      "curves": {
+       "u": 1.0
+      }
+     },
+     {
+      "phoneme": "A",
+      "emotion": "Joy",
+      "curves": {
+       "a": 0.8,
+       "smile": 0.3
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "Joy",
+      "curves": {
+       "i": 0.9
+      }
+     }
+    ],
+    "volume": {
+     "min": 0.6,
+     "max": 0.3,
+     "from": 0.2,
+     "to": 1
+    },
+    "follow": 20
+   },
+   "weights": {
+    "A": 1
+   },
+   "volume": 0.6,
+   "expect": {
+    "output": {
+     "a": 1.0,
+     "i": 0,
+     "u": 0,
+     "smile": 0
+    },
+    "activity": 1
+   }
+  },
+  {
+   "name": "volume_max_below_min_below",
+   "source": "python-port (F5; UE 未実装)",
+   "lipSync": {
+    "enabled": true,
+    "strength": 1.0,
+    "phonemes": [
+     "A",
+     "I",
+     "U"
+    ],
+    "entries": [
+     {
+      "phoneme": "A",
+      "emotion": "",
+      "curves": {
+       "a": 1.0
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "",
+      "curves": {
+       "i": 1.0
+      }
+     },
+     {
+      "phoneme": "U",
+      "emotion": "",
+      "curves": {
+       "u": 1.0
+      }
+     },
+     {
+      "phoneme": "A",
+      "emotion": "Joy",
+      "curves": {
+       "a": 0.8,
+       "smile": 0.3
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "Joy",
+      "curves": {
+       "i": 0.9
+      }
+     }
+    ],
+    "volume": {
+     "min": 0.6,
+     "max": 0.3,
+     "from": 0.2,
+     "to": 1
+    },
+    "follow": 20
+   },
+   "weights": {
+    "A": 1
+   },
+   "volume": 0.59,
+   "expect": {
+    "output": {
+     "a": 0.2,
+     "i": 0,
+     "u": 0,
+     "smile": 0
+    },
+    "activity": 1
+   }
+  },
+  {
+   "name": "volume_scale_down_from_zero",
+   "source": "python-port (F5; UE 未実装)",
+   "lipSync": {
+    "enabled": true,
+    "strength": 1.0,
+    "phonemes": [
+     "A",
+     "I",
+     "U"
+    ],
+    "entries": [
+     {
+      "phoneme": "A",
+      "emotion": "",
+      "curves": {
+       "a": 1.0
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "",
+      "curves": {
+       "i": 1.0
+      }
+     },
+     {
+      "phoneme": "U",
+      "emotion": "",
+      "curves": {
+       "u": 1.0
+      }
+     },
+     {
+      "phoneme": "A",
+      "emotion": "Joy",
+      "curves": {
+       "a": 0.8,
+       "smile": 0.3
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "Joy",
+      "curves": {
+       "i": 0.9
+      }
+     }
+    ],
+    "volume": {
+     "min": 0,
+     "max": 1,
+     "from": 0,
+     "to": 1
+    },
+    "follow": 20
+   },
+   "weights": {
+    "A": 1
+   },
+   "volume": 0.25,
+   "expect": {
+    "output": {
+     "a": 0.25,
+     "i": 0,
+     "u": 0,
+     "smile": 0
+    },
+    "activity": 1
+   }
+  },
+  {
+   "name": "strength_scales_output_not_activity",
+   "source": "python-port (F5; UE 未実装)",
+   "lipSync": {
+    "enabled": true,
+    "strength": 0.5,
+    "phonemes": [
+     "A",
+     "I",
+     "U"
+    ],
+    "entries": [
+     {
+      "phoneme": "A",
+      "emotion": "",
+      "curves": {
+       "a": 1.0
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "",
+      "curves": {
+       "i": 1.0
+      }
+     },
+     {
+      "phoneme": "U",
+      "emotion": "",
+      "curves": {
+       "u": 1.0
+      }
+     },
+     {
+      "phoneme": "A",
+      "emotion": "Joy",
+      "curves": {
+       "a": 0.8,
+       "smile": 0.3
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "Joy",
+      "curves": {
+       "i": 0.9
+      }
+     }
+    ],
+    "volume": {
+     "min": 0,
+     "max": 1,
+     "from": 1,
+     "to": 1
+    },
+    "follow": 20
+   },
+   "weights": {
+    "A": 1
+   },
+   "current": {
+    "a": 1.0
+   },
+   "expect": {
+    "output": {
+     "a": 0.5,
+     "i": 0,
+     "u": 0,
+     "smile": 0
+    },
+    "activity": 1,
+    "final": {
+     "a": 0.5,
+     "i": 0,
+     "u": 0,
+     "smile": 0
+    }
+   }
+  },
+  {
+   "name": "strength_zero",
+   "source": "python-port (F5; UE 未実装)",
+   "lipSync": {
+    "enabled": true,
+    "strength": 0.0,
+    "phonemes": [
+     "A",
+     "I",
+     "U"
+    ],
+    "entries": [
+     {
+      "phoneme": "A",
+      "emotion": "",
+      "curves": {
+       "a": 1.0
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "",
+      "curves": {
+       "i": 1.0
+      }
+     },
+     {
+      "phoneme": "U",
+      "emotion": "",
+      "curves": {
+       "u": 1.0
+      }
+     },
+     {
+      "phoneme": "A",
+      "emotion": "Joy",
+      "curves": {
+       "a": 0.8,
+       "smile": 0.3
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "Joy",
+      "curves": {
+       "i": 0.9
+      }
+     }
+    ],
+    "volume": {
+     "min": 0,
+     "max": 1,
+     "from": 1,
+     "to": 1
+    },
+    "follow": 20
+   },
+   "weights": {
+    "A": 1
+   },
+   "current": {
+    "a": 1.0
+   },
+   "expect": {
+    "output": {
+     "a": 0,
+     "i": 0,
+     "u": 0,
+     "smile": 0
+    },
+    "activity": 1,
+    "final": {
+     "a": 0,
+     "i": 0,
+     "u": 0,
+     "smile": 0
+    }
+   }
+  },
+  {
+   "name": "strength_volume_emotion_together",
+   "source": "python-port (F5; UE 未実装)",
+   "lipSync": {
+    "enabled": true,
+    "strength": 0.8,
+    "phonemes": [
+     "A",
+     "I",
+     "U"
+    ],
+    "entries": [
+     {
+      "phoneme": "A",
+      "emotion": "",
+      "curves": {
+       "a": 1.0
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "",
+      "curves": {
+       "i": 1.0
+      }
+     },
+     {
+      "phoneme": "U",
+      "emotion": "",
+      "curves": {
+       "u": 1.0
+      }
+     },
+     {
+      "phoneme": "A",
+      "emotion": "Joy",
+      "curves": {
+       "a": 0.8,
+       "smile": 0.3
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "Joy",
+      "curves": {
+       "i": 0.9
+      }
+     }
+    ],
+    "volume": {
+     "min": 0,
+     "max": 1,
+     "from": 0,
+     "to": 1
+    },
+    "follow": 20
+   },
+   "weights": {
+    "A": 1
+   },
+   "volume": 0.5,
+   "emotions": {
+    "Joy": 0.5
+   },
+   "expect": {
+    "output": {
+     "a": 0.36,
+     "i": 0,
+     "u": 0,
+     "smile": 0.06
+    },
+    "activity": 1
+   }
+  },
+  {
+   "name": "unknown_phoneme_is_ignored",
+   "source": "python-port (F5; UE 未実装)",
+   "lipSync": {
+    "enabled": true,
+    "strength": 1.0,
+    "phonemes": [
+     "A",
+     "I",
+     "U"
+    ],
+    "entries": [
+     {
+      "phoneme": "A",
+      "emotion": "",
+      "curves": {
+       "a": 1.0
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "",
+      "curves": {
+       "i": 1.0
+      }
+     },
+     {
+      "phoneme": "U",
+      "emotion": "",
+      "curves": {
+       "u": 1.0
+      }
+     },
+     {
+      "phoneme": "A",
+      "emotion": "Joy",
+      "curves": {
+       "a": 0.8,
+       "smile": 0.3
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "Joy",
+      "curves": {
+       "i": 0.9
+      }
+     }
+    ],
+    "volume": {
+     "min": 0,
+     "max": 1,
+     "from": 1,
+     "to": 1
+    },
+    "follow": 20
+   },
+   "weights": {
+    "X": 1,
+    "A": 0.5
+   },
+   "expect": {
+    "output": {
+     "a": 0.5,
+     "i": 0,
+     "u": 0,
+     "smile": 0
+    },
+    "activity": 0.5
+   }
+  },
+  {
+   "name": "only_unknown_phoneme",
+   "source": "python-port (F5; UE 未実装)",
+   "lipSync": {
+    "enabled": true,
+    "strength": 1.0,
+    "phonemes": [
+     "A",
+     "I",
+     "U"
+    ],
+    "entries": [
+     {
+      "phoneme": "A",
+      "emotion": "",
+      "curves": {
+       "a": 1.0
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "",
+      "curves": {
+       "i": 1.0
+      }
+     },
+     {
+      "phoneme": "U",
+      "emotion": "",
+      "curves": {
+       "u": 1.0
+      }
+     },
+     {
+      "phoneme": "A",
+      "emotion": "Joy",
+      "curves": {
+       "a": 0.8,
+       "smile": 0.3
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "Joy",
+      "curves": {
+       "i": 0.9
+      }
+     }
+    ],
+    "volume": {
+     "min": 0,
+     "max": 1,
+     "from": 1,
+     "to": 1
+    },
+    "follow": 20
+   },
+   "weights": {
+    "X": 1
+   },
+   "current": {
+    "a": 0.4
+   },
+   "expect": {
+    "output": {
+     "a": 0,
+     "i": 0,
+     "u": 0,
+     "smile": 0
+    },
+    "activity": 0,
+    "final": {
+     "a": 0.4,
+     "i": 0,
+     "u": 0,
+     "smile": 0
+    }
+   }
+  },
+  {
+   "name": "phoneme_without_entries_still_counts_as_activity",
+   "source": "python-port (F5; UE 未実装)",
+   "lipSync": {
+    "enabled": true,
+    "strength": 1.0,
+    "phonemes": [
+     "A",
+     "B"
+    ],
+    "entries": [
+     {
+      "phoneme": "A",
+      "emotion": "",
+      "curves": {
+       "a": 1.0
+      }
+     }
+    ],
+    "volume": {
+     "min": 0,
+     "max": 1,
+     "from": 1,
+     "to": 1
+    },
+    "follow": 20
+   },
+   "weights": {
+    "B": 1
+   },
+   "current": {
+    "a": 0.6
+   },
+   "expect": {
+    "output": {
+     "a": 0
+    },
+    "activity": 1,
+    "final": {
+     "a": 0
+    }
+   }
+  },
+  {
+   "name": "entry_for_phoneme_not_in_list_is_ignored",
+   "source": "python-port (F5; UE 未実装)",
+   "lipSync": {
+    "enabled": true,
+    "strength": 1.0,
+    "phonemes": [
+     "A"
+    ],
+    "entries": [
+     {
+      "phoneme": "A",
+      "emotion": "",
+      "curves": {
+       "a": 1.0
+      }
+     },
+     {
+      "phoneme": "Z",
+      "emotion": "",
+      "curves": {
+       "z": 1.0
+      }
+     }
+    ],
+    "volume": {
+     "min": 0,
+     "max": 1,
+     "from": 1,
+     "to": 1
+    },
+    "follow": 20
+   },
+   "weights": {
+    "Z": 1,
+    "A": 1
+   },
+   "expect": {
+    "output": {
+     "a": 1
+    },
+    "activity": 1
+   }
+  },
+  {
+   "name": "apply_blends_current_by_activity",
+   "source": "python-port (F5; UE 未実装)",
+   "lipSync": {
+    "enabled": true,
+    "strength": 1.0,
+    "phonemes": [
+     "A",
+     "I",
+     "U"
+    ],
+    "entries": [
+     {
+      "phoneme": "A",
+      "emotion": "",
+      "curves": {
+       "a": 1.0
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "",
+      "curves": {
+       "i": 1.0
+      }
+     },
+     {
+      "phoneme": "U",
+      "emotion": "",
+      "curves": {
+       "u": 1.0
+      }
+     },
+     {
+      "phoneme": "A",
+      "emotion": "Joy",
+      "curves": {
+       "a": 0.8,
+       "smile": 0.3
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "Joy",
+      "curves": {
+       "i": 0.9
+      }
+     }
+    ],
+    "volume": {
+     "min": 0,
+     "max": 1,
+     "from": 1,
+     "to": 1
+    },
+    "follow": 20
+   },
+   "weights": {
+    "A": 0.5
+   },
+   "current": {
+    "a": 0.9,
+    "i": 0.4
+   },
+   "expect": {
+    "output": {
+     "a": 0.5,
+     "i": 0,
+     "u": 0,
+     "smile": 0
+    },
+    "activity": 0.5,
+    "final": {
+     "a": 0.95,
+     "i": 0.2,
+     "u": 0,
+     "smile": 0
+    }
+   }
+  },
+  {
+   "name": "apply_clamps_to_default_upper_limit",
+   "source": "python-port (F5; UE 未実装)",
+   "lipSync": {
+    "enabled": true,
+    "strength": 1.0,
+    "phonemes": [
+     "A",
+     "I",
+     "U"
+    ],
+    "entries": [
+     {
+      "phoneme": "A",
+      "emotion": "",
+      "curves": {
+       "a": 1.0
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "",
+      "curves": {
+       "i": 1.0
+      }
+     },
+     {
+      "phoneme": "U",
+      "emotion": "",
+      "curves": {
+       "u": 1.0
+      }
+     },
+     {
+      "phoneme": "A",
+      "emotion": "Joy",
+      "curves": {
+       "a": 0.8,
+       "smile": 0.3
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "Joy",
+      "curves": {
+       "i": 0.9
+      }
+     }
+    ],
+    "volume": {
+     "min": 0,
+     "max": 1,
+     "from": 2,
+     "to": 2
+    },
+    "follow": 20
+   },
+   "weights": {
+    "A": 1
+   },
+   "current": {},
+   "expect": {
+    "output": {
+     "a": 2,
+     "i": 0,
+     "u": 0,
+     "smile": 0
+    },
+    "activity": 1,
+    "final": {
+     "a": 1,
+     "i": 0,
+     "u": 0,
+     "smile": 0
+    }
+   }
+  },
+  {
+   "name": "apply_clamps_to_given_upper_limit",
+   "source": "python-port (F5; UE 未実装)",
+   "lipSync": {
+    "enabled": true,
+    "strength": 1.0,
+    "phonemes": [
+     "A",
+     "I",
+     "U"
+    ],
+    "entries": [
+     {
+      "phoneme": "A",
+      "emotion": "",
+      "curves": {
+       "a": 1.0
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "",
+      "curves": {
+       "i": 1.0
+      }
+     },
+     {
+      "phoneme": "U",
+      "emotion": "",
+      "curves": {
+       "u": 1.0
+      }
+     },
+     {
+      "phoneme": "A",
+      "emotion": "Joy",
+      "curves": {
+       "a": 0.8,
+       "smile": 0.3
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "Joy",
+      "curves": {
+       "i": 0.9
+      }
+     }
+    ],
+    "volume": {
+     "min": 0,
+     "max": 1,
+     "from": 2,
+     "to": 2
+    },
+    "follow": 20
+   },
+   "weights": {
+    "A": 1
+   },
+   "current": {},
+   "limits": {
+    "a": [
+     0,
+     1.5
+    ]
+   },
+   "expect": {
+    "output": {
+     "a": 2,
+     "i": 0,
+     "u": 0,
+     "smile": 0
+    },
+    "activity": 1,
+    "final": {
+     "a": 1.5,
+     "i": 0,
+     "u": 0,
+     "smile": 0
+    }
+   }
+  },
+  {
+   "name": "apply_upper_limit_above_one",
+   "source": "python-port (F5; UE 未実装)",
+   "lipSync": {
+    "enabled": true,
+    "strength": 1.0,
+    "phonemes": [
+     "A",
+     "I",
+     "U"
+    ],
+    "entries": [
+     {
+      "phoneme": "A",
+      "emotion": "",
+      "curves": {
+       "a": 1.0
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "",
+      "curves": {
+       "i": 1.0
+      }
+     },
+     {
+      "phoneme": "U",
+      "emotion": "",
+      "curves": {
+       "u": 1.0
+      }
+     },
+     {
+      "phoneme": "A",
+      "emotion": "Joy",
+      "curves": {
+       "a": 0.8,
+       "smile": 0.3
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "Joy",
+      "curves": {
+       "i": 0.9
+      }
+     }
+    ],
+    "volume": {
+     "min": 0,
+     "max": 1,
+     "from": 2,
+     "to": 2
+    },
+    "follow": 20
+   },
+   "weights": {
+    "A": 1
+   },
+   "current": {},
+   "limits": {
+    "a": [
+     0,
+     2
+    ]
+   },
+   "expect": {
+    "output": {
+     "a": 2,
+     "i": 0,
+     "u": 0,
+     "smile": 0
+    },
+    "activity": 1,
+    "final": {
+     "a": 2,
+     "i": 0,
+     "u": 0,
+     "smile": 0
+    }
+   }
+  },
+  {
+   "name": "apply_current_above_limit_is_clamped",
+   "source": "python-port (F5; UE 未実装)",
+   "lipSync": {
+    "enabled": true,
+    "strength": 1.0,
+    "phonemes": [
+     "A",
+     "I",
+     "U"
+    ],
+    "entries": [
+     {
+      "phoneme": "A",
+      "emotion": "",
+      "curves": {
+       "a": 1.0
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "",
+      "curves": {
+       "i": 1.0
+      }
+     },
+     {
+      "phoneme": "U",
+      "emotion": "",
+      "curves": {
+       "u": 1.0
+      }
+     },
+     {
+      "phoneme": "A",
+      "emotion": "Joy",
+      "curves": {
+       "a": 0.8,
+       "smile": 0.3
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "Joy",
+      "curves": {
+       "i": 0.9
+      }
+     }
+    ],
+    "volume": {
+     "min": 0,
+     "max": 1,
+     "from": 1,
+     "to": 1
+    },
+    "follow": 20
+   },
+   "weights": {},
+   "current": {
+    "a": 1.7
+   },
+   "expect": {
+    "output": {
+     "a": 0,
+     "i": 0,
+     "u": 0,
+     "smile": 0
+    },
+    "activity": 0,
+    "final": {
+     "a": 1,
+     "i": 0,
+     "u": 0,
+     "smile": 0
+    }
+   }
+  },
+  {
+   "name": "apply_missing_current_is_zero",
+   "source": "python-port (F5; UE 未実装)",
+   "lipSync": {
+    "enabled": true,
+    "strength": 1.0,
+    "phonemes": [
+     "A",
+     "I",
+     "U"
+    ],
+    "entries": [
+     {
+      "phoneme": "A",
+      "emotion": "",
+      "curves": {
+       "a": 1.0
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "",
+      "curves": {
+       "i": 1.0
+      }
+     },
+     {
+      "phoneme": "U",
+      "emotion": "",
+      "curves": {
+       "u": 1.0
+      }
+     },
+     {
+      "phoneme": "A",
+      "emotion": "Joy",
+      "curves": {
+       "a": 0.8,
+       "smile": 0.3
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "Joy",
+      "curves": {
+       "i": 0.9
+      }
+     }
+    ],
+    "volume": {
+     "min": 0,
+     "max": 1,
+     "from": 1,
+     "to": 1
+    },
+    "follow": 20
+   },
+   "weights": {
+    "I": 0.5
+   },
+   "current": {},
+   "expect": {
+    "output": {
+     "a": 0,
+     "i": 0.5,
+     "u": 0,
+     "smile": 0
+    },
+    "activity": 0.5,
+    "final": {
+     "a": 0,
+     "i": 0.5,
+     "u": 0,
+     "smile": 0
+    }
+   }
+  },
+  {
+   "name": "disabled_does_nothing",
+   "source": "python-port (F5; UE 未実装)",
+   "lipSync": {
+    "enabled": false,
+    "strength": 1.0,
+    "phonemes": [
+     "A",
+     "I",
+     "U"
+    ],
+    "entries": [
+     {
+      "phoneme": "A",
+      "emotion": "",
+      "curves": {
+       "a": 1.0
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "",
+      "curves": {
+       "i": 1.0
+      }
+     },
+     {
+      "phoneme": "U",
+      "emotion": "",
+      "curves": {
+       "u": 1.0
+      }
+     },
+     {
+      "phoneme": "A",
+      "emotion": "Joy",
+      "curves": {
+       "a": 0.8,
+       "smile": 0.3
+      }
+     },
+     {
+      "phoneme": "I",
+      "emotion": "Joy",
+      "curves": {
+       "i": 0.9
+      }
+     }
+    ],
+    "volume": {
+     "min": 0,
+     "max": 1,
+     "from": 1,
+     "to": 1
+    },
+    "follow": 20
+   },
+   "weights": {
+    "A": 1
+   },
+   "current": {
+    "a": 0.5
+   },
+   "expect": {
+    "output": {},
+    "final": {}
+   }
+  },
+  {
+   "name": "no_entries_does_nothing",
+   "source": "python-port (F5; UE 未実装)",
+   "lipSync": {
+    "enabled": true,
+    "strength": 1.0,
+    "phonemes": [
+     "A"
+    ],
+    "entries": [],
+    "volume": {
+     "min": 0,
+     "max": 1,
+     "from": 1,
+     "to": 1
+    },
+    "follow": 20
+   },
+   "weights": {
+    "A": 1
+   },
+   "current": {
+    "a": 0.5
+   },
+   "expect": {
+    "output": {},
+    "final": {}
+   }
+  }
+ ]
+}

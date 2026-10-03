@@ -86,6 +86,7 @@ namespace TDrive.Facial.Editor
             };
 
             data.perspective = BuildPerspective(doc, asset, cv, warn);
+            data.lipSync = BuildLipSync(doc.LipSync, warn);
 
             // レイヤー: 作った点だけシェイプ名を持つ（名前は規則から決まる）。格子の外の点は使わない
             int cols = Math.Max(0, doc.Grid.Cols), rows = Math.Max(0, doc.Grid.Rows);
@@ -149,6 +150,36 @@ namespace TDrive.Facial.Editor
             data.source = SourceInfo(doc.Meta, doc.Version, doc.Profile, doc.Grid.ForwardAxis, doc.Grid.CenterOffset,
                 doc.Policy.FadeStart, doc.Policy.FadeEnd);
             return data;
+        }
+
+        // リップシンク: 音素の一覧・行・声量・追従の値をそのまま持つ（座標・長さを含まないので変換なし）。
+        // 重複・空の音素名、一覧にない音素の行は Runner が使わないだけなので、そのまま写す（Maya の検証が知らせる）
+        static FacialLipSyncData BuildLipSync(FcLipSync src, Action<string> warn)
+        {
+            var def = new FacialLipSyncData { enabled = false, strength = 1f, follow = 20f, phonemes = new string[0], entries = new FacialLipSyncEntryData[0],
+                volume = new FacialLipSyncVolumeData { min = 0f, max = 1f, from = 0.5f, to = 1f } };
+            if (src == null) return def;
+            var entries = new FacialLipSyncEntryData[src.Entries.Count];
+            for (int i = 0; i < entries.Length; i++)
+            {
+                FcLipSyncEntry e = src.Entries[i];
+                var shapes = new List<FacialLipSyncShapeData>(e.Curves.Count);
+                foreach (KeyValuePair<string, double> kv in e.Curves)
+                    shapes.Add(new FacialLipSyncShapeData { name = kv.Key, weight = (float)kv.Value });
+                entries[i] = new FacialLipSyncEntryData { phoneme = e.Phoneme, emotion = e.Emotion, shapes = shapes.ToArray() };
+            }
+            return new FacialLipSyncData
+            {
+                enabled = src.Enabled,
+                strength = (float)FacialCore.Clamp(src.Strength, 0.0, 1.0),
+                phonemes = src.Phonemes.ToArray(),
+                entries = entries,
+                volume = new FacialLipSyncVolumeData
+                {
+                    min = (float)src.Volume.Min, max = (float)src.Volume.Max, from = (float)src.Volume.From, to = (float)src.Volume.To,
+                },
+                follow = (float)src.Follow,
+            };
         }
 
         // パース補正: 距離の値は meta の長さの単位 → m（距離フェード・距離のレイヤーと同じ変換）。画角（度）はそのまま。

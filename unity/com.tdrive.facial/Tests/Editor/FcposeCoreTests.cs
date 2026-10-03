@@ -1,5 +1,6 @@
 // .fcpose の読み取り（Core。UnityEngine 非依存）と命名規則のテスト。
 // Unity の EditMode と unity/FacialCoreTests（素の .NET）の両方で動く。期待値は Python 版（core/fcpose_io.py・naming.py）に合わせる。
+using System;
 using System.Collections.Generic;
 using System.IO;
 using NUnit.Framework;
@@ -320,6 +321,69 @@ namespace TDrive.Facial.Tests
             FacialCore.PerspectiveWeights(new[] { 30.0 }, 1, 5.0, o);
             Assert.AreEqual(1.0, o[0]);
             FacialCore.PerspectiveWeights(new[] { 30.0, 80.0 }, 0, 5.0, o); // キー 0 個は何も書かない
+        }
+
+        const string LipJson = "{\"format\":\"FacialCorrection\",\"lipSync\":{\"enabled\":true,\"strength\":0.5,\"phonemes\":[\"A\",\"I\",\"A\",\"\"],"
+            + "\"entries\":[{\"phoneme\":\"A\",\"curves\":{\"a\":1}},{\"phoneme\":\"A\",\"curves\":{\"a\":0.1}},\"x\",{\"emotion\":\"Joy\"},"
+            + "{\"phoneme\":\"I\",\"emotion\":\"Joy\",\"curves\":{\"i\":0.7,\"bad\":\"x\"}}],"
+            + "\"volume\":{\"min\":0.1,\"max\":0.9,\"from\":0.2,\"to\":1.5},\"follow\":12}}";
+
+        [Test]
+        public void LipSyncSectionIsReadAndBadEntriesAreDropped()
+        {
+            Action<string> sink;
+            List<string> warnings = NewWarnings(out sink);
+            FcDocument doc = FcposeReader.ReadDocument(LipJson, sink);
+            FcLipSync l = doc.LipSync;
+            Assert.IsNotNull(l);
+            Assert.AreEqual(0.5, l.Strength); Assert.AreEqual(12.0, l.Follow);
+            Assert.AreEqual(0.2, l.Volume.From); Assert.AreEqual(1.5, l.Volume.To);
+            Assert.AreEqual(3, l.Entries.Count);
+            Assert.AreEqual(2, warnings.Count);
+            Assert.AreEqual(1, l.FindEntry("I", "Joy").Curves.Count);
+            Assert.AreEqual(1.0, l.FindEntry("A", "").Curves["a"]); // 同じ組は先のもの
+            Assert.IsNull(FcposeReader.ReadDocument("{\"format\":\"FacialCorrection\"}", null).LipSync);
+        }
+
+        [Test]
+        public void LipSyncTableIgnoresDuplicateAndEmptyPhonemesAndSecondEntry()
+        {
+            FcDocument doc = FcposeReader.ReadDocument(LipJson, null);
+            var t = new LipSyncTable(doc.LipSync, new[] { "Joy" });
+            Assert.AreEqual(2, t.PhonemeCount); // A, I（重複・空は除く）
+            Assert.AreEqual(2, t.CurveCount);   // a, i
+            Assert.AreEqual(1, t.IndexOfPhoneme("I")); Assert.AreEqual(-1, t.IndexOfPhoneme("Z"));
+            var o = new double[2];
+            // 声量 0.5: 倍率 = 0.2 + (1.5 - 0.2) * 0.5 = 0.85、強さ 0.5
+            Assert.IsTrue(t.Output(new[] { 1.0, 1.0 }, 0.5, new[] { 1.0 }, o));
+            Assert.AreEqual(1.0 * 0.85 * 0.5, o[0], 1e-9);          // a: 感情 Joy に A の行が無いので基本のまま
+            Assert.AreEqual(0.7 * 0.85 * 0.5, o[1], 1e-9);          // i: 基本に無い（0）→ Joy 1.0 で 0.7
+            Assert.AreEqual(1.0, t.Activity(new[] { 1.0, 1.0 }));
+        }
+
+        [Test]
+        public void LipSyncTableDisabledOrEmptyIsInactive()
+        {
+            Assert.IsFalse(new LipSyncTable(null, null).Active);
+            var l = new FcLipSync { Enabled = false };
+            l.Phonemes.Add("A");
+            var e = new FcLipSyncEntry { Phoneme = "A" };
+            e.Curves["a"] = 1.0;
+            l.Entries.Add(e);
+            Assert.IsFalse(new LipSyncTable(l, null).Active);
+            l.Enabled = true;
+            Assert.IsTrue(new LipSyncTable(l, null).Active);
+            Assert.IsTrue(new LipSyncTable(l, null).Output(new double[1], double.NaN, null, new double[1]));
+        }
+
+        [Test]
+        public void LipSyncApplyAndVolumeScaleSpotChecks()
+        {
+            Assert.AreEqual(0.95, FacialLipSync.Apply(0.9, 0.5, 0.5, 1.0), 1e-12);
+            Assert.AreEqual(1.0, FacialLipSync.Apply(0.9, 2.0, 1.0, 1.0));
+            Assert.AreEqual(0.0, FacialLipSync.Apply(double.NaN, 0.0, 0.0, 1.0));
+            Assert.AreEqual(1.0, FacialLipSync.VolumeScale(0, 1, 0.5, 1.0, double.NaN));
+            Assert.AreEqual(1.0, FacialLipSync.VolumeScale(0, 1, double.NaN, 1.0, 0.5)); // 有限でない倍率は 1
         }
 
         [Test]

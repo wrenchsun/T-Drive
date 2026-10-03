@@ -161,5 +161,12 @@
     "bs.other_ase_cheek": [0, 1],
     "bs.other_ase_jaw": [0, 1],
     "bs.other_aozame": [0, 1]
+  },
+  "lipSync": {
+    "A": "bs.lipSync_a",
+    "I": "bs.lipSync_i",
+    "U": "bs.lipSync_u",
+    "E": "bs.lipSync_e",
+    "O": "bs.lipSync_o"
   }
 }

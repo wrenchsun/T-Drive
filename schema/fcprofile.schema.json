@@ -37,6 +37,16 @@
         "minItems": 2,
         "maxItems": 2
       }
+    },
+    "lipSync": {
+      "type": "object",
+      "description": "リップシンクの音素 → シェイプ名（任意。docs/14 §5.8c の「プロファイルから作る」が基本の行を作る）。名前は standardCurves と同じ書き方。順番 = 音素の並び",
+      "additionalProperties": {
+        "oneOf": [
+          { "type": "string", "minLength": 1, "description": "シェイプ 1 つ（重み 1）" },
+          { "type": "object", "minProperties": 1, "additionalProperties": { "type": "number" }, "description": "シェイプ名 → 重み（複数）" }
+        ]
+      }
     }
   },
   "additionalProperties": true

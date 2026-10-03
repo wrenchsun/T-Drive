@@ -31,6 +31,8 @@ namespace TDrive.Facial.Editor
             new Row { label = "誇張（0〜1）", tooltip = "重み 1 を超えるポーズ（_Ex シェイプ）をどれだけ効かせるか。1 = 作った通り、0 = 1 までに収める。_Ex の無いキャラクターでは変化なし。値は Maya へ戻す JSON にも入ります", flag = "overrideExaggeration", value = "exaggeration", get = p => p.exaggeration, hasMin = true, min = 0f, format = "0.###" },
             new Row { label = "書き込む LOD の上限", tooltip = "補正のシェイプを書く LOD の上限。0 = 制限なし（すべての LOD に書く）、N = LOD N まで書き、それより粗い LOD の Renderer には書かない。LODGroup に入っていない Renderer は常に書く。値は Maya へ戻す JSON にも入ります", flag = "overrideMaxLod", value = "maxLod", get = p => p.maxLod, hasMin = true, min = 0f, format = "0" },
             new Row { label = "パース補正の強さ（0〜1）", tooltip = "広角で寄ったときの奥行きを押さえる補正（パース補正）の強さ。0 = 補正なし、1 = 作った通り。パース補正を使っていないキャラクターでは変化なし。取り込んだ値はキャラクターのデータの強さです", flag = "overridePerspectiveStrength", value = "perspectiveStrength", get = p => p.perspectiveStrength, hasMin = true, min = 0f, format = "0.###" },
+            new Row { label = "リップシンクの強さ（0〜1）", tooltip = "口のシェイプ（リップシンク）を書く強さ。0 = 口を動かさない、1 = 対応表の通り。リップシンクを使っていないキャラクターでは変化なし", flag = "overrideLipSyncStrength", value = "lipSyncStrength", get = p => p.lipSyncStrength, hasMin = true, min = 0f, format = "0.###" },
+            new Row { label = "リップシンクの追従（1/秒）", tooltip = "音素の強さ・声量が目標へ追いつく速さ。大きいほど速い。0 以下 = 即時", flag = "overrideLipSyncFollow", value = "lipSyncFollow", get = p => p.lipSyncFollow, hasMin = true, min = 0f, format = "0.##" },
         };
 
         /// <summary>行の一覧を描く。imported = 取り込んだ値（データが無ければ null で「—」）。値を変えたら true。</summary>

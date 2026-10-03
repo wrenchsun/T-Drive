@@ -1,9 +1,10 @@
 """命名規則プロファイル `.fcprofile.json`（Maya 非依存）。形式は docs/14 §4.4、UE 版の `UFacialNamingProfile` に合わせる。
 
-- 持つもの: 標準シェイプ名の一覧（不足チェック用）、ミラー規則（L/R の接尾辞と除外パターン）、シェイプごとの可動域
+- 持つもの: 標準シェイプ名の一覧（不足チェック用）、ミラー規則（L/R の接尾辞と除外パターン）、シェイプごとの可動域、
+  リップシンクの音素 → シェイプ名（`lipSync`。任意）
 - 読み込み: 知らないキーは `extra` に保持して書き戻す。欠けたキーは UE 版の既定値（接尾辞 `_L` / `_R`、一覧・可動域は空）。
   `version` が新しいときは ProfileVersionWarning を出して読める所だけ読む
-- 書き出し: キーの順は固定（format → version → name → description → standardCurves → mirror → limits → 知らないキー）。
+- 書き出し: キーの順は固定（format → version → name → description → standardCurves → mirror → limits → lipSync（あれば）→ 知らないキー）。
   UTF-8（BOM なし）・改行 `\\n`・末尾に改行 1 つ。数値は整数と等しい浮動小数を整数で書く
 - プリセット（ツールに同梱。`tdrive_facial/profiles/*.fcprofile.json`）: ARKit 52、VRChat ビセム、MetaHuman、shizuku
 - プロファイルを選ぶと mirror と limits が Document に入る（`apply_to_document`）。UE 版では手で写す必要があった（R-15 の未実装部分）
@@ -61,6 +62,8 @@ class NamingProfile:
     standard_curves: list[str] = field(default_factory=list)
     mirror: MirrorRule = field(default_factory=MirrorRule)
     limits: dict[str, Limit] = field(default_factory=dict)
+    # リップシンク: 音素の名前 → {シェイプ名: 重み}（JSON では文字列 1 つ = {名前: 1.0} でもよい）。順番 = 音素の並び。空 = 持たない
+    lip_sync: dict[str, dict[str, float]] = field(default_factory=dict)
     extra: dict[str, Any] = field(default_factory=dict)  # 知らないキー（トップレベル）
 
     @property
@@ -85,7 +88,7 @@ def _extra(d: dict, known: tuple[str, ...]) -> dict[str, Any]:
     return {k: copy.deepcopy(v) for k, v in d.items() if k not in known}
 
 
-_PROFILE_KEYS = ("format", "version", "name", "description", "standardCurves", "mirror", "limits")
+_PROFILE_KEYS = ("format", "version", "name", "description", "standardCurves", "mirror", "limits", "lipSync")
 _MIRROR_KEYS = ("suffixL", "suffixR", "exclude")
 
 
@@ -125,8 +128,27 @@ def from_dict(d: Any) -> NamingProfile:
         standard_curves=_strs(d.get("standardCurves")),
         mirror=mirror,
         limits=limits,
+        lip_sync=_read_lip_sync(d.get("lipSync")),
         extra=_extra(d, _PROFILE_KEYS),
     )
+
+
+def _read_lip_sync(raw: Any) -> dict[str, dict[str, float]]:
+    """`lipSync`: 音素 → 文字列（シェイプ 1 つ。重み 1）または {シェイプ名: 重み}。読めない項目は読み飛ばす（警告）。"""
+    out: dict[str, dict[str, float]] = {}
+    if not isinstance(raw, dict):
+        return out
+    for phoneme, v in raw.items():
+        shapes: dict[str, float] = {}
+        if isinstance(v, str) and v:
+            shapes = {v: 1.0}
+        elif isinstance(v, dict):
+            shapes = {k: float(x) for k, x in v.items() if k and _is_num(x)}
+        if not phoneme or not shapes:
+            warnings.warn(f"プロファイルの lipSync「{phoneme}」を読み飛ばしました（シェイプ名が読めません）", UserWarning, stacklevel=3)
+            continue
+        out[phoneme] = shapes
+    return out
 
 
 def loads(text: str) -> NamingProfile:
@@ -160,6 +182,11 @@ def to_dict(profile: NamingProfile) -> dict[str, Any]:
         },
         "limits": {k: [v[0], v[1]] for k, v in profile.limits.items()},
     }
+    if profile.lip_sync:  # 無いときは出さない（既存のファイルを変えない）
+        out["lipSync"] = {
+            p: (next(iter(s)) if len(s) == 1 and next(iter(s.values())) == 1.0 else dict(s))
+            for p, s in profile.lip_sync.items()
+        }
     for k, v in profile.extra.items():
         out[k] = copy.deepcopy(v)
     return out

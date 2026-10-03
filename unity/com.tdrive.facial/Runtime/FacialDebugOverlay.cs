@@ -129,6 +129,15 @@ namespace TDrive.Facial
                 for (int k = 0; k < r.PerspectiveKeyCount; k++) sb.Append(k == 0 ? " " : "/").Append(r.GetPerspectiveKeyWeight(k).ToString("F2"));
                 sb.Append('\n');
             }
+            if (r.LipSyncActive)
+            {
+                sb.Append("  Lip act ").Append(r.LipSyncActivity.ToString("F2")).Append("  Vol ");
+                if (float.IsNaN(r.LipSyncVolume)) sb.Append("n/a"); else sb.Append(r.LipSyncVolume.ToString("F2"));
+                sb.Append("  W");
+                for (int k = 0; k < r.LipSyncPhonemeCount; k++)
+                    sb.Append(k == 0 ? " " : "/").Append(r.GetLipSyncPhonemeName(k)).Append(':').Append(r.GetLipSyncPhonemeWeight(k).ToString("F2"));
+                sb.Append('\n');
+            }
             sb.Append("  Viewer ").Append(r.LastViewerSource.ToString());
             if (r.LastViewer != null) sb.Append(" (").Append(r.LastViewer.name).Append(')');
             else if (r.LastViewerSource == FacialViewerSource.Fallback) sb.Append(" (provider)");

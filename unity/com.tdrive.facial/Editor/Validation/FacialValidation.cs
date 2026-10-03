@@ -26,6 +26,7 @@ namespace TDrive.Facial.Editor
         LimitIgnored,
         BlendShapeNormals,
         AmbiguousShape,
+        MissingLipSyncShape,
     }
 
     public sealed class FacialIssue
@@ -133,6 +134,26 @@ namespace TDrive.Facial.Editor
                         Add(issues, FacialIssueSeverity.Warning, FacialIssueKind.MissingShape,
                             "データにあるパース補正のシェイプ '" + nm + "' がメッシュにありません（そのキーの補正は飛ばされます。FBX を出し直してください）", nm, null);
                 }
+            // リップシンクの対応表のシェイプ（使う設定のときだけ。元のシェイプなので FC_ ではない）。メッシュに無ければ、その行の口は動かない
+            if (data.lipSync.enabled && data.lipSync.entries != null && targetCount > 0)
+            {
+                var lipSeen = new HashSet<string>(StringComparer.Ordinal);
+                for (int i = 0; i < data.lipSync.entries.Length; i++)
+                {
+                    FacialLipSyncShapeData[] shapes = data.lipSync.entries[i].shapes;
+                    if (shapes == null) continue;
+                    for (int k = 0; k < shapes.Length; k++)
+                    {
+                        string nm = shapes[k].name;
+                        if (string.IsNullOrEmpty(nm) || !lipSeen.Add(nm)) continue;
+                        int dot = nm.IndexOf('.');
+                        bool found = meshShapes.Contains(nm) || (dot >= 0 && dot + 1 < nm.Length && meshShapes.Contains(nm.Substring(dot + 1)));
+                        if (!found)
+                            Add(issues, FacialIssueSeverity.Warning, FacialIssueKind.MissingLipSyncShape,
+                                "リップシンクの口のシェイプ '" + nm + "' がメッシュにありません（その口は動きません。シェイプ名を確かめるか、FBX を出し直してください）", nm, null);
+                    }
+                }
+            }
             string assetPrefix = string.IsNullOrEmpty(data.assetName) ? FacialNaming.FcPrefix : FacialNaming.AssetPrefix(data.assetName);
             for (int i = 0; i < fcShapes.Count; i++)
             {

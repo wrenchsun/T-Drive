@@ -28,7 +28,9 @@ from . import strength as part_strength_mod
 from .model import (
     FILL_MODES,
     FORWARD_AXES,
+    LIPSYNC_VOLUME_MAX,
     MAX_LAYERS,
+    MAX_LIPSYNC_PHONEMES,
     MAX_PERSPECTIVE_KEYS,
     MIRROR_AXES,
     PERSPECTIVE_AXES,
@@ -80,6 +82,7 @@ class Issue:
     suggestion: str = ""
     candidates: tuple[str, ...] = ()
     key: Optional[int] = None  # パース補正のキーの番号（キーの問題のとき。シェイプ名の K{n} の n）
+    lip: Optional[tuple[str, str]] = None  # リップシンクの行（音素, 感情。基本は ""）の問題のとき
 
 
 @dataclass
@@ -343,11 +346,12 @@ def validate(
     _check_layers(doc, add)
     _check_layer_weights(doc, add)
     _check_perspective(doc, add)
+    _check_lipsync(doc, add)
 
     # --- 参照（シェイプ・ボーン）---
     curve_refs, bone_refs = _collect_refs(doc)
     if scene.curves is not None:
-        _check_missing(KIND_CURVE, curve_refs, set(scene.curves), doc, add)
+        _check_missing(KIND_CURVE, _with_lip_refs(doc, curve_refs), set(scene.curves), doc, add)
     if scene.bones is not None:
         _check_missing(KIND_BONE, bone_refs, set(scene.bones), doc, add)
     _check_mirror(doc, scene, profile, curve_refs, bone_refs, add)
@@ -693,6 +697,83 @@ def _check_perspective(doc: Document, add) -> None:
             seen[key.value] = k
 
 
+def lipsync_label(phoneme: str, emotion: str) -> str:
+    return f"リップシンクの行（音素「{phoneme}」× {'基本' if not emotion else '感情「' + emotion + '」'}）"
+
+
+def _check_lipsync(doc: Document, add) -> None:
+    """リップシンクの対応表（R-18）: 強さ・声量・追従の値、音素の名前、行の重複・音素・感情。"""
+    l = doc.lip_sync
+    if l is None:
+        return
+
+    def finite(v) -> bool:
+        return isinstance(v, (int, float)) and math.isfinite(v)
+
+    if not (finite(l.strength) and 0.0 <= l.strength <= 1.0):
+        add(Issue("lipsync_strength_invalid", SEVERITY_WARNING, f"リップシンクの強さ {_fmt(l.strength)} が範囲外です（0〜1。範囲に丸めて使います）"))
+    v = l.volume
+    if not all(finite(x) for x in (v.min, v.max, v.from_, v.to)):
+        add(Issue("lipsync_volume_invalid", SEVERITY_WARNING, "リップシンクの声量の設定に有限でない数があります（最小・最大・から・まで）"))
+    else:
+        if v.min < 0.0 or v.max < 0.0:
+            add(Issue("lipsync_volume_invalid", SEVERITY_WARNING, f"リップシンクの声量の範囲（最小 {_fmt(v.min)} / 最大 {_fmt(v.max)}）は 0 以上にしてください"))
+        for label, x in (("から", v.from_), ("まで", v.to)):
+            if not 0.0 <= x <= LIPSYNC_VOLUME_MAX:
+                add(Issue("lipsync_volume_invalid", SEVERITY_WARNING, f"リップシンクの声量の倍率「{label}」{_fmt(x)} が範囲外です（0〜{LIPSYNC_VOLUME_MAX:g}）"))
+    if not finite(l.follow):
+        add(Issue("lipsync_follow_invalid", SEVERITY_WARNING, "リップシンクの追従の速さが有限の数ではありません"))
+    if len(l.phonemes) > MAX_LIPSYNC_PHONEMES:
+        add(Issue("lipsync_phoneme_count_exceeded", SEVERITY_ERROR, f"リップシンクの音素が {len(l.phonemes)} 個あります（最大 {MAX_LIPSYNC_PHONEMES}）"))
+    seen_p: set[str] = set()
+    for name in l.phonemes:
+        if not name.strip():
+            add(Issue("lipsync_phoneme_empty", SEVERITY_ERROR, "リップシンクに、名前が空の音素があります", name=name))
+        elif name in seen_p:
+            add(Issue("lipsync_phoneme_duplicate", SEVERITY_ERROR, f"リップシンクの音素「{name}」が重複しています", name=name))
+        seen_p.add(name)
+    layer_names = {x.name for x in doc.layers[1:]}
+    neutral = doc.layers[0].name if doc.layers else NEUTRAL_LAYER
+    seen_e: set[tuple[str, str]] = set()
+    for e in l.entries:
+        key = (e.phoneme, e.emotion)
+        if key in seen_e:
+            add(
+                Issue(
+                    "lipsync_entry_duplicate",
+                    SEVERITY_ERROR,
+                    f"{lipsync_label(*key)}が 2 つあります（同じ音素 × 感情の行は 1 つだけです。先のものだけが効きます）",
+                    name=e.phoneme,
+                    lip=key,
+                )
+            )
+        seen_e.add(key)
+        if e.phoneme not in seen_p:
+            add(
+                Issue(
+                    "lipsync_entry_phoneme_unknown",
+                    SEVERITY_WARNING,
+                    f"{lipsync_label(*key)}の音素が、音素の一覧にありません（この行は使われません）",
+                    name=e.phoneme,
+                    lip=key,
+                )
+            )
+        if e.emotion and e.emotion not in layer_names:
+            why = f"「{neutral}」は基本として扱うので、感情の欄は空にしてください" if e.emotion == neutral else "その名前の感情レイヤーがありません"
+            add(Issue("lipsync_entry_emotion_unknown", SEVERITY_WARNING, f"{lipsync_label(*key)}の感情「{e.emotion}」が使えません（{why}。この行は使われません）", name=e.emotion, lip=key))
+
+
+def _with_lip_refs(doc: Document, curve_refs: dict[str, list]) -> dict[str, list]:
+    """シェイプの参照（_collect_refs の結果）にリップシンクの行のシェイプを足した複製。ミラー等の検査には元の辞書を使う（口のシェイプは左右の相手を持たない）。"""
+    if doc.lip_sync is None:
+        return curve_refs
+    out = {k: list(v) for k, v in curve_refs.items()}
+    for e in doc.lip_sync.entries:
+        for n in e.curves:
+            out.setdefault(n, []).append(None)
+    return out
+
+
 # --- 参照 ---
 
 _Loc = Optional[tuple[int, tuple[int, int]]]  # (layer index, (row, col))。作業セットなど点以外は None
@@ -900,6 +981,21 @@ def _check_limits(doc: Document, profile: Optional[NamingProfile], add) -> None:
                     )
                 )
 
+
+    if doc.lip_sync is not None:
+        for e in doc.lip_sync.entries:
+            for name, w in e.curves.items():
+                lo, hi = effective_limit(doc, profile, name)
+                if w < lo - _LIMIT_TOL or w > hi + _LIMIT_TOL:
+                    add(
+                        Issue(
+                            "limit_exceeded",
+                            SEVERITY_WARNING,
+                            f"{lipsync_label(e.phoneme, e.emotion)}の {name} = {_fmt(w)} が可動域 [{_fmt(lo)}, {_fmt(hi)}] の外です",
+                            name=name,
+                            lip=(e.phoneme, e.emotion),
+                        )
+                    )
 
     for k, key in _iter_perspective(doc):
         for name, w in key.curves.items():
@@ -1383,6 +1479,12 @@ def rename_report(doc: Document, mapping: Mapping[str, str], kind: str) -> Renam
             rep.bone_replacements += n
         rep.collisions += c
 
+    if kind == KIND_CURVE and doc.lip_sync is not None:  # リップシンクの行のシェイプも同じ
+        for e in doc.lip_sync.entries:
+            e.curves, n, c = _rename_dict(e.curves, mp)
+            rep.curve_replacements += n
+            rep.collisions += c
+
     ws = doc.working_set
     if kind == KIND_CURVE:
         ws.curves, n = _rename_list(ws.curves, mp)
@@ -1443,6 +1545,12 @@ def remove_missing_references(doc: Document, scene_info: SceneInfo, include_case
             for n in dead:
                 del key.curves[n]
             removed += len(dead)
+        if doc.lip_sync is not None:
+            for e in doc.lip_sync.entries:
+                dead = [n for n in e.curves if gone(n, avail, pool)]
+                for n in dead:
+                    del e.curves[n]
+                removed += len(dead)
         for attr_owner, attr in ((doc.working_set, "curves"), (doc, "intensity_curves")):
             cur = getattr(attr_owner, attr)
             keep = [n for n in cur if not gone(n, avail, pool)]
@@ -1477,6 +1585,7 @@ __all__: Sequence[str] = (
     "perspective_key_hash",
     "perspective_bake_keys",
     "perspective_value_ok",
+    "lipsync_label",
     "exclude_signature",
     "split_signature",
     "bake_setting_changed",

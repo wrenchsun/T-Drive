@@ -1,6 +1,7 @@
 // .fcpose から作る、ランタイム用の軽いデータ（ScriptableObject）。インポーターが作る。
 // 座標・長さは取り込み時に Unity の系（m / Y-up / 左手）へ変換済み。実行時は読み取り専用（Runner は書き換えない）。
 using System;
+using TDrive.Facial.Core;
 using UnityEngine;
 
 namespace TDrive.Facial
@@ -85,6 +86,62 @@ namespace TDrive.Facial
     }
 
     [Serializable]
+    public struct FacialLipSyncShapeData
+    {
+        [Tooltip("シェイプ名（.fcpose に書かれた名前。メッシュのシェイプには完全一致 → 末尾一致で結ぶ）")] public string name;
+        [Tooltip("重み（0〜1。誇張で 1 を超えることもある）")] public float weight;
+    }
+
+    /// <summary>リップシンクの行 1 つ（音素 × 感情 → シェイプの重み）。emotion が空 = 基本。</summary>
+    [Serializable]
+    public struct FacialLipSyncEntryData
+    {
+        [Tooltip("音素の名前")] public string phoneme;
+        [Tooltip("感情レイヤー名。空 = 基本")] public string emotion;
+        [Tooltip("口のシェイプの重み")] public FacialLipSyncShapeData[] shapes;
+    }
+
+    /// <summary>声量 → 口の大きさの倍率: lerp(from, to, saturate((v - min) / (max - min)))。max が min 以下のときは v が min 以上なら to、それ以外は from。</summary>
+    [Serializable]
+    public struct FacialLipSyncVolumeData
+    {
+        [Tooltip("声量の下限（これ以下で「から」の倍率）")] public float min;
+        [Tooltip("声量の上限（これ以上で「まで」の倍率）")] public float max;
+        [Tooltip("声量が下限のときの口の大きさの倍率")] public float from;
+        [Tooltip("声量が上限のとき（声量が与えられないときも）の口の大きさの倍率")] public float to;
+    }
+
+    /// <summary>リップシンクの対応表。音声の解析は持たず、音素の強さ・声量を受け取って口のシェイプの重みに変える。</summary>
+    [Serializable]
+    public struct FacialLipSyncData
+    {
+        [Tooltip("リップシンクを使う")] public bool enabled;
+        [Tooltip("全体の強さ（0〜1）")] public float strength;
+        [Tooltip("音素の名前（順番 = Maya の表の並び）")] public string[] phonemes;
+        [Tooltip("音素 × 感情の行")] public FacialLipSyncEntryData[] entries;
+        [Tooltip("声量 → 口の大きさの倍率")] public FacialLipSyncVolumeData volume;
+        [Tooltip("追従の速さ（1/秒）。0 以下 = 即時")] public float follow;
+
+        /// <summary>計算用（Core）の形にする。取り込み・結ぶときだけ使う（割り当てあり）。</summary>
+        public FcLipSync ToCore()
+        {
+            var l = new FcLipSync { Enabled = enabled, Strength = strength, Follow = follow };
+            l.Volume = new FcLipSyncVolume { Min = volume.min, Max = volume.max, From = volume.from, To = volume.to };
+            if (phonemes != null) for (int i = 0; i < phonemes.Length; i++) l.Phonemes.Add(phonemes[i] ?? "");
+            if (entries != null)
+                for (int i = 0; i < entries.Length; i++)
+                {
+                    var e = new FcLipSyncEntry { Phoneme = entries[i].phoneme ?? "", Emotion = entries[i].emotion ?? "" };
+                    if (entries[i].shapes != null)
+                        for (int k = 0; k < entries[i].shapes.Length; k++)
+                            if (!string.IsNullOrEmpty(entries[i].shapes[k].name)) e.Curves[entries[i].shapes[k].name] = entries[i].shapes[k].weight;
+                    l.Entries.Add(e);
+                }
+            return l;
+        }
+    }
+
+    [Serializable]
     public struct FacialLimitEntry
     {
         [Tooltip("シェイプ名")] public string name;
@@ -120,6 +177,12 @@ namespace TDrive.Facial
 
         [Tooltip("パース補正（キーの値とシェイプ名）。使わない設定・キーなしのときは何もしない")]
         public FacialPerspectiveData perspective = new FacialPerspectiveData { strength = 1f };
+
+        [Tooltip("リップシンクの対応表（音素 × 感情 → 口のシェイプ）。使わない設定・行なしのときは何もしない")]
+        public FacialLipSyncData lipSync = new FacialLipSyncData
+        {
+            strength = 1f, follow = 20f, volume = new FacialLipSyncVolumeData { min = 0f, max = 1f, from = 0.5f, to = 1f },
+        };
 
         [Tooltip("レイヤー（0 番 = Neutral）。各点のシェイプ名を持つ")]
         public FacialLayerData[] layers = new FacialLayerData[0];

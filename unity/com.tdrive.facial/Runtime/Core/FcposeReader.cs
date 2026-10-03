@@ -247,6 +247,56 @@ namespace TDrive.Facial.Core
             return p;
         }
 
+        /// <summary>lipSync のオブジェクト（パース済み）→ FcLipSync。共通のテストデータの読み込みにも使う。</summary>
+        public static FcLipSync ReadLipSync(Dictionary<string, object> d, Action<string> warn)
+        {
+            var def = new FcLipSync();
+            var l = new FcLipSync
+            {
+                Enabled = B(d, "enabled", true),
+                Strength = F(d, "strength", def.Strength),
+                Follow = F(d, "follow", def.Follow),
+            };
+            Strs(d, "phonemes", l.Phonemes);
+            Dictionary<string, object> vd = Obj(d, "volume");
+            if (vd != null)
+            {
+                var dv = new FcLipSyncVolume();
+                l.Volume = new FcLipSyncVolume
+                {
+                    Min = F(vd, "min", dv.Min),
+                    Max = F(vd, "max", dv.Max),
+                    From = F(vd, "from", dv.From),
+                    To = F(vd, "to", dv.To),
+                };
+            }
+            object ev;
+            var entries = d.TryGetValue("entries", out ev) ? ev as List<object> : null;
+            if (entries == null) return l;
+            for (int i = 0; i < entries.Count; i++)
+            {
+                var ed = entries[i] as Dictionary<string, object>;
+                if (ed == null)
+                {
+                    if (warn != null) warn("オブジェクトでないリップシンクの行を読み飛ばしました");
+                    continue;
+                }
+                string ph = Str(ed, "phoneme", null);
+                if (ph == null)
+                {
+                    if (warn != null) warn("phoneme が文字列でないリップシンクの行を読み飛ばしました");
+                    continue;
+                }
+                var entry = new FcLipSyncEntry { Phoneme = ph, Emotion = Str(ed, "emotion", "") };
+                object cv;
+                ed.TryGetValue("curves", out cv);
+                FcPose pose = ReadPose(cv, null);
+                foreach (KeyValuePair<string, double> kv in pose.Curves) entry.Curves[kv.Key] = kv.Value;
+                l.Entries.Add(entry);
+            }
+            return l;
+        }
+
         static FcDocument ReadDocument(Dictionary<string, object> d, Action<string> warn)
         {
             var doc = new FcDocument();
@@ -334,6 +384,8 @@ namespace TDrive.Facial.Core
             }
             Dictionary<string, object> ps = Obj(d, "perspective");
             if (ps != null) doc.Perspective = ReadPerspective(ps, warn);
+            Dictionary<string, object> ls = Obj(d, "lipSync");
+            if (ls != null) doc.LipSync = ReadLipSync(ls, warn);
             Dictionary<string, object> lw = Obj(d, "layerWeights");
             if (lw != null)
                 foreach (KeyValuePair<string, object> kv in lw)

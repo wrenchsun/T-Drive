@@ -15,7 +15,7 @@ namespace TDrive.Facial.Tests
     public static class ConformanceData
     {
         public const string EnvVar = "TDRIVE_CONFORMANCE_DIR";
-        static readonly string[] KnownKinds = { "evaluate", "view_angles", "scalar", "smooth", "convert", "step", "perspective" };
+        static readonly string[] KnownKinds = { "evaluate", "view_angles", "scalar", "smooth", "convert", "step", "perspective", "lipsync" };
         // Python 版だけが使う kind（C# には対応する実装が無い）。ここに無い kind は失敗にする（新しい kind の取りこぼしを防ぐ）
         static readonly string[] PythonOnlyKinds = { "autofill", "presenter" };
 
@@ -336,6 +336,68 @@ namespace TDrive.Facial.Tests
                 Assert.That(got[i] * scale, Is.EqualTo(Num(expect[i])).Within(1e-4), c + " [" + i + "]");
         }
 
+        // --- lipsync（リップシンクの対応表。F5-8）---
+
+        [TestCaseSource(typeof(ConformanceData), "Of", new object[] { "lipsync" })]
+        public void LipSync(ConformanceData.Case c)
+        {
+            RequireDir(c);
+            Obj d = c.Data;
+            FcLipSync lip = FcposeReader.ReadLipSync(O(d["lipSync"]), null);
+            var emotionNames = new List<string>();
+            object eo;
+            if (d.TryGetValue("emotions", out eo) && eo != null)
+                foreach (KeyValuePair<string, object> kv in O(eo)) emotionNames.Add(kv.Key);
+            for (int i = 0; i < lip.Entries.Count; i++)
+                if (lip.Entries[i].Emotion.Length > 0 && !emotionNames.Contains(lip.Entries[i].Emotion)) emotionNames.Add(lip.Entries[i].Emotion);
+            var table = new LipSyncTable(lip, emotionNames);
+
+            var pw = new double[table.PhonemeCount];
+            foreach (KeyValuePair<string, object> kv in O(d["weights"]))
+            {
+                int pi = table.IndexOfPhoneme(kv.Key);
+                if (pi >= 0) pw[pi] = Num(kv.Value);
+            }
+            var ew = new double[emotionNames.Count];
+            if (eo != null)
+                foreach (KeyValuePair<string, object> kv in O(eo)) ew[emotionNames.IndexOf(kv.Key)] = Num(kv.Value);
+            object vo;
+            double volume = d.TryGetValue("volume", out vo) && vo != null ? Num(vo) : double.NaN;
+
+            Obj expect = O(d["expect"]);
+            Obj expOut = O(expect["output"]);
+            var output = new double[table.CurveCount];
+            bool active = table.Output(pw, volume, ew, output);
+            Assert.AreEqual(expOut.Count > 0, active, c.ToString() + " active");
+            if (expOut.Count > 0)
+            {
+                Assert.AreEqual(expOut.Count, table.CurveCount, c.ToString() + " curves");
+                for (int i = 0; i < table.CurveCount; i++)
+                {
+                    Assert.IsTrue(expOut.ContainsKey(table.CurveName(i)), c + " curve " + table.CurveName(i));
+                    Assert.That(output[i], Is.EqualTo(Num(expOut[table.CurveName(i)])).Within(1e-4), c + " out " + table.CurveName(i));
+                }
+            }
+            double activity = table.Activity(pw);
+            if (expect.ContainsKey("activity"))
+                Assert.That(activity, Is.EqualTo(Num(expect["activity"])).Within(1e-4), c + " activity");
+            if (expect.ContainsKey("final") && active)
+            {
+                Obj expFinal = O(expect["final"]);
+                Obj cur = d.ContainsKey("current") ? O(d["current"]) : new Obj();
+                Obj lim = d.ContainsKey("limits") ? O(d["limits"]) : new Obj();
+                Assert.AreEqual(expFinal.Count, table.CurveCount, c.ToString() + " final curves");
+                for (int i = 0; i < table.CurveCount; i++)
+                {
+                    string name = table.CurveName(i);
+                    double now = cur.ContainsKey(name) ? Num(cur[name]) : 0.0;
+                    double upper = lim.ContainsKey(name) ? Num(A(lim[name])[1]) : 1.0;
+                    double got = FacialLipSync.Apply(now, output[i], activity, upper);
+                    Assert.That(got, Is.EqualTo(Num(expFinal[name])).Within(1e-4), c + " final " + name);
+                }
+            }
+        }
+
         // --- smooth ---
 
         static List<MorphWeight> Weights(object list)
@@ -431,7 +493,7 @@ namespace TDrive.Facial.Tests
         {
             Assert.That(ConformanceData.Error, Is.Null);
             TestContext.Out.WriteLine("conformance dir: " + ConformanceData.Directory);
-            foreach (string k in new[] { "evaluate", "view_angles", "scalar", "smooth", "convert", "step", "perspective" })
+            foreach (string k in new[] { "evaluate", "view_angles", "scalar", "smooth", "convert", "step", "perspective", "lipsync" })
             {
                 TestContext.Out.WriteLine("kind " + k + ": " + ConformanceData.Count(k) + " cases");
                 Assert.That(ConformanceData.Count(k), Is.GreaterThan(0), k);

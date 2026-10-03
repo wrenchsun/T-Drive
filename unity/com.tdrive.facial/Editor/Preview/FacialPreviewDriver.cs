@@ -34,6 +34,12 @@ namespace TDrive.Facial.Editor
         /// <summary>仮想の視点の距離（m）。</summary>
         public float distance = 1.5f;
 
+        /// <summary>リップシンクのプレビュー: 音素ごとの強さ（対応表の音素の並び。null = 使わない）と声量（NaN = 与えない）。</summary>
+        public float[] lipWeights;
+        public float lipVolume = float.NaN;
+        /// <summary>true の間、プレビューの評価で Runner へ lipWeights / lipVolume を渡す（スライダーを触り始めたら立つ）。</summary>
+        public bool lipFeed;
+
         internal bool applied;
         /// <summary>true の間、次の更新で必ず評価する（設定を変えたときに立てる）。</summary>
         public bool forceEval = true;
@@ -278,6 +284,8 @@ namespace TDrive.Facial.Editor
 
             var ov = new FacialFrameOverride { viewer = viewer };
             runner.PushOverride(ov);
+            if (st.lipFeed && st.lipWeights != null) runner.SetLipSyncByIndex(st.lipWeights, st.lipWeights.Length, st.lipVolume);
+            else if (runner.LipSyncActive) runner.ClearLipSync();
             runner.EvaluateNow(viewer, dt);
             st.lastEval = now;
             st.forceEval = false;

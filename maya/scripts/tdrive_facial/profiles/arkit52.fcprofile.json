@@ -115,5 +115,36 @@
     "noseSneerLeft": [0, 1],
     "noseSneerRight": [0, 1],
     "tongueOut": [0, 1]
+  },
+  "lipSync": {
+    "A": {
+      "jawOpen": 0.8,
+      "mouthLowerDownLeft": 0.3,
+      "mouthLowerDownRight": 0.3
+    },
+    "I": {
+      "jawOpen": 0.2,
+      "mouthStretchLeft": 0.6,
+      "mouthStretchRight": 0.6,
+      "mouthSmileLeft": 0.2,
+      "mouthSmileRight": 0.2
+    },
+    "U": {
+      "jawOpen": 0.15,
+      "mouthPucker": 0.8,
+      "mouthFunnel": 0.3
+    },
+    "E": {
+      "jawOpen": 0.4,
+      "mouthStretchLeft": 0.4,
+      "mouthStretchRight": 0.4,
+      "mouthLowerDownLeft": 0.2,
+      "mouthLowerDownRight": 0.2
+    },
+    "O": {
+      "jawOpen": 0.45,
+      "mouthFunnel": 0.7,
+      "mouthPucker": 0.3
+    }
   }
 }

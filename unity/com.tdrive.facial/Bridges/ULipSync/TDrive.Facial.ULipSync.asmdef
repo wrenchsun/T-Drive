@@ -1,0 +1,16 @@
+{
+  "name": "TDrive.Facial.ULipSync",
+  "rootNamespace": "TDrive.Facial.ULipSync",
+  "references": ["TDrive.Facial.Core", "TDrive.Facial.Runtime", "uLipSync.Runtime"],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": ["TDRIVE_FACIAL_ULIPSYNC"],
+  "versionDefines": [
+    { "name": "com.hecomi.ulipsync", "expression": "3.0.0", "define": "TDRIVE_FACIAL_ULIPSYNC" }
+  ],
+  "noEngineReferences": false
+}

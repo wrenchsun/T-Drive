@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://t-drive.local/schema/fcpose.schema.json",
   "title": "T-Drive FacialController .fcpose.json",
-  "description": "UE 版 FacialController が書く .fcpose.json（format: FacialCorrection / FacialPose, version 1）に、T-Drive の追加キー（asset / target / bake / limits / material / quality / perspective / layerWeights / sculptShapes）と forwardAxis の ±Z を足した形式。docs/14 §4.2。知らないキーはどの階層でも許す（読む側は無視して保持する）。必須にしているのは UE 版が必ず書くキーのうち、読み手が座標系や格子を決めるのに要るものだけ（欠けたキーは読む側が既定値で補う）。",
+  "description": "UE 版 FacialController が書く .fcpose.json（format: FacialCorrection / FacialPose, version 1）に、T-Drive の追加キー（asset / target / bake / limits / material / quality / perspective / lipSync / layerWeights / sculptShapes）と forwardAxis の ±Z を足した形式。docs/14 §4.2。知らないキーはどの階層でも許す（読む側は無視して保持する）。必須にしているのは UE 版が必ず書くキーのうち、読み手が座標系や格子を決めるのに要るものだけ（欠けたキーは読む側が既定値で補う）。",
   "type": "object",
   "required": ["format", "version"],
   "properties": {
@@ -261,6 +261,41 @@
                 "additionalProperties": true
               }
             }
+          },
+          "additionalProperties": true
+        },
+        "lipSync": {
+          "type": "object",
+          "description": "T-Drive 追加（R-18。docs/14 §5.8c）。音素 × 感情 → 口のシェイプの重みの対応表。音声の解析は持たない（音素の強さ・声量を受け取って重みに変える）",
+          "properties": {
+            "enabled": { "type": "boolean", "description": "既定 true" },
+            "strength": { "type": "number", "minimum": 0, "maximum": 1, "description": "全体の強さ。既定 1" },
+            "phonemes": { "type": "array", "maxItems": 32, "items": { "type": "string", "minLength": 1 }, "description": "音素の名前（自由な文字列。順番 = 画面の並び。重複不可）" },
+            "entries": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["phoneme"],
+                "properties": {
+                  "phoneme": { "type": "string", "description": "phonemes のどれか" },
+                  "emotion": { "type": "string", "description": "感情レイヤー名。\"\"（省略）= 基本。同じ音素 × 感情の行は 1 つだけ" },
+                  "curves": { "type": "object", "additionalProperties": { "type": "number" }, "description": "シェイプ名 → 重み（ボーンは持たない）" }
+                },
+                "additionalProperties": true
+              }
+            },
+            "volume": {
+              "type": "object",
+              "description": "声量 v → 口の大きさの倍率 = lerp(from, to, saturate((v - min) / (max - min)))。max <= min のときは v >= min なら to、それ以外は from。声量が無いときは to",
+              "properties": {
+                "min": { "type": "number", "minimum": 0, "description": "既定 0" },
+                "max": { "type": "number", "minimum": 0, "description": "既定 1" },
+                "from": { "type": "number", "minimum": 0, "maximum": 2, "description": "既定 0.5" },
+                "to": { "type": "number", "minimum": 0, "maximum": 2, "description": "既定 1" }
+              },
+              "additionalProperties": true
+            },
+            "follow": { "type": "number", "minimum": 0, "description": "追従の速さ（1/秒。0 以下 = 即時）。Unity だけで使う。既定 20" }
           },
           "additionalProperties": true
         },

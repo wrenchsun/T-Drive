@@ -7,7 +7,7 @@
   expressionDampen = 0.5、interpSpeed = 10、snapAngle = 45、idwPower = 2
   （Maya の新規データは session 側が meta・forwardAxis・boneAxis を明示して作る）
 - 各データクラスの `extra` は「知らないキー」。読み込みで受け取り、書き出しで戻す（往復で落とさない）
-- T-Drive の追加キー（asset / target / bake / limits / material / quality / perspective /
+- T-Drive の追加キー（asset / target / bake / limits / material / quality / perspective / lipSync /
   layerWeights / sculptShapes）は None = JSON に無い（書き出しでも出さない）。UE 版が書いたファイルを
   読んで書いても追加キーが増えないようにするため
 - 点（GridPoint）は「作った点だけ」を `Layer.points` に持つ。消すときは辞書から消す
@@ -235,6 +235,56 @@ class Perspective:
     extra: dict[str, Any] = field(default_factory=dict)
 
 
+# --- リップシンクの対応表（docs/14 §5.8c）---
+
+MAX_LIPSYNC_PHONEMES = 32  # 音素の数の上限（画面の表・Unity の配列の大きさの目安）
+LIPSYNC_VOLUME_MAX = 2.0  # 声量の倍率（from / to）の上限
+LIPSYNC_BASE = ""  # 感情の欄が空 = 基本（感情を足さない行）
+
+
+@dataclass
+class LipSyncEntry:
+    """音素 × 感情 1 つ分のポーズ（シェイプの重みだけ。ボーンは持たない）。emotion "" = 基本。"""
+
+    phoneme: str = ""
+    emotion: str = LIPSYNC_BASE
+    curves: dict[str, float] = field(default_factory=dict)
+    extra: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def pose(self) -> SourcePose:
+        """ポーズとして見る（curves は同じ辞書を共有する。ボーンは無い）。"""
+        return SourcePose(curves=self.curves)
+
+
+@dataclass
+class LipSyncVolume:
+    """声量 → 口の大きさの倍率。倍率 = lerp(from_, to, saturate((v - min) / (max - min)))。JSON のキーは from / to。"""
+
+    min: float = 0.0
+    max: float = 1.0
+    from_: float = 0.5
+    to: float = 1.0
+    extra: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class LipSync:
+    enabled: bool = True
+    strength: float = 1.0  # 0〜1。全体の強さ
+    phonemes: list[str] = field(default_factory=list)  # 音素の名前（順番 = 画面の並び）
+    entries: list[LipSyncEntry] = field(default_factory=list)
+    volume: LipSyncVolume = field(default_factory=LipSyncVolume)
+    follow: float = 20.0  # 追従の速さ（1/秒。0 以下 = 即時）。Unity だけで使う
+    extra: dict[str, Any] = field(default_factory=dict)
+
+    def find_entry(self, phoneme: str, emotion: str = LIPSYNC_BASE) -> Optional[LipSyncEntry]:
+        for e in self.entries:
+            if e.phoneme == phoneme and e.emotion == emotion:
+                return e
+        return None
+
+
 @dataclass
 class SculptShapes:
     prefix: str = "fcs_"
@@ -264,6 +314,7 @@ class Document:
     material: Optional[Material] = None
     quality: Optional[Quality] = None
     perspective: Optional[Perspective] = None
+    lip_sync: Optional[LipSync] = None
     layer_weights: Optional[dict[str, dict[str, Any]]] = None
     sculpt_shapes: Optional[SculptShapes] = None
     # 知らないキー（トップレベル）
