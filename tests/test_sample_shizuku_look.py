@@ -17,7 +17,7 @@ pytestmark = pytest.mark.skipif(not LOOK_PATH.exists(), reason="looks/shizuku/lo
 # 部位 → (ロール, マテリアル)。tools/setup_sample_shizuku_look.py の割り当てと同じ
 EXPECTED_PARTS = {
     "skin": ("skin", ["mat_body01"]),
-    "faceOption": ("mouth", ["mat_faceOption1"]),
+    "faceOption": ("blush", ["mat_faceOption1"]),
     "hair": ("hair", ["mat_hair01"]),
     "wear01": ("cloth", ["mat_wear01"]),
     "wear02": ("cloth", ["mat_wear02"]),
@@ -82,3 +82,15 @@ def test_albedo_and_normal(lk):
     assert lk["features"]["normalMap"] is True
     # マスク `_m` は意味が不明なので割り当てない
     assert not any("_m." in p for p in _texture_paths(lk))
+
+
+def test_blend_cutoff_and_overlay(lk):
+    """元の Unity マテリアル + 色テクスチャの alpha から決めた Blend（tools/setup_sample_shizuku_look.py の BLEND_FALLBACK と同じ）。"""
+    blends = {m: lk["materials"][m]["common"]["blend"] for m in lk["materials"]}
+    assert blends["mat_faceOption1"] == "Transparent"
+    assert blends["mat_hair01"] == "Cutout" and lk["materials"]["mat_hair01"]["common"]["cutoff"] == 0.5
+    assert blends["mat_wear01"] == "Transparent"
+    assert blends["mat_wear02"] == blends["mat_wear03"] == blends["mat_body01"] == "Opaque"
+    # オーバーレイのカードは輪郭線・影なし
+    card = lk["materials"]["mat_faceOption1"]
+    assert card["specific"]["_ToonOutlineWidth"] == 0.0 and card["specific"]["_ToonShadowStrength"] == 0.0

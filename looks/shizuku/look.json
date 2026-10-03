@@ -290,7 +290,7 @@
           1.0,
           1.0
         ],
-        "blend": "Opaque",
+        "blend": "Transparent",
         "cutoff": 0.5,
         "doubleSided": false,
         "emission": null,
@@ -304,7 +304,7 @@
         "normal": null,
         "normalScale": 1.0
       },
-      "renderQueueOffset": 0,
+      "renderQueueOffset": 40,
       "shader": "MS2026/Toon",
       "specific": {
         "_ToonBrightness": 1.0,
@@ -334,7 +334,7 @@
         "_ToonOutlineScreenSpace": 0.0,
         "_ToonOutlineShadowSide": 1.0,
         "_ToonOutlineSmoothNormal": 1.0,
-        "_ToonOutlineWidth": 0.4,
+        "_ToonOutlineWidth": 0.0,
         "_ToonReceiveShadow": 1.0,
         "_ToonRimColor": [
           1.0,
@@ -362,7 +362,7 @@
         ],
         "_ToonShadeFeather": 0.02,
         "_ToonShadeThreshold": 0.5,
-        "_ToonShadowStrength": 0.2,
+        "_ToonShadowStrength": 0.0,
         "_ToonTintColor": [
           1.0,
           0.6,
@@ -381,7 +381,7 @@
           1.0,
           1.0
         ],
-        "blend": "Opaque",
+        "blend": "Cutout",
         "cutoff": 0.5,
         "doubleSided": false,
         "emission": null,
@@ -472,7 +472,7 @@
           1.0,
           1.0
         ],
-        "blend": "Opaque",
+        "blend": "Transparent",
         "cutoff": 0.5,
         "doubleSided": false,
         "emission": null,
@@ -743,7 +743,7 @@
       "materials": [
         "mat_faceOption1"
       ],
-      "role": "mouth"
+      "role": "blush"
     },
     "hair": {
       "materials": [

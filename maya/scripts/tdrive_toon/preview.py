@@ -8,12 +8,13 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
 from maya import cmds
 
-from . import REPO_ROOT, environment, envmath, params, project
+from . import REPO_ROOT, environment, envmath, params, project, texture_orient
 
 SHADER_FILE = (REPO_ROOT / "maya" / "shaders" / "TDriveToon.fx").as_posix()
 NODE_TYPE = "dx11Shader"
@@ -412,6 +413,10 @@ def reload_textures() -> int:
         name = cmds.getAttr(f"{node}.fileTextureName")
         cmds.setAttr(f"{node}.fileTextureName", "", type="string")
         cmds.setAttr(f"{node}.fileTextureName", name, type="string")
+    for shader in preview_shaders():  # 描き直しで保存形式が変わっても追従する
+        for plug, node in zip(*[iter(cmds.listConnections(shader, source=True, destination=False, type="file", connections=True) or [])] * 2):
+            name = cmds.getAttr(f"{node}.fileTextureName")
+            _apply_flip_v(shader, plug.split(".", 1)[1], node, os.path.expandvars(name))
     try:
         cmds.ogs(reloadTextures=True)  # Viewport 2.0 のテクスチャのキャッシュも読み込み直す
     except (TypeError, RuntimeError):
@@ -424,6 +429,8 @@ def _set_texture(shader: str, attr: str, path: str | None, srgb: bool) -> None:
     if not path:
         _set(shader, enabled, False)
         return
+    # Maya ビューポート専用の V 反転。dx11Shader の属性が無い環境（mayapy）でも意図した値を残す
+    flip_intent[(shader, attr)] = texture_orient.texture_stored_top_down(project.from_project_path(path))
     if not cmds.attributeQuery(attr, node=shader, exists=True):
         return
     file_node = f"{shader}_{attr}"
@@ -440,6 +447,22 @@ def _set_texture(shader: str, attr: str, path: str | None, srgb: bool) -> None:
         cmds.setAttr(f"{file_node}.ignoreColorSpaceFileRules", True)
         cmds.setAttr(f"{file_node}.colorSpace", space, type="string")
     _set(shader, enabled, True)
+    _apply_flip_v(shader, attr, file_node, project.from_project_path(path))
+
+
+flip_intent: dict[tuple[str, str], bool] = {}  # (シェーダー, スロット) → FlipV に入れる値（確認用）
+FLIP_ATTR = "tdStoredTopDown"  # file ノード側にも判定結果を残す（dx11Shader の uniform が見えない環境の確認用）
+
+
+def _apply_flip_v(shader: str, attr: str, file_node: str, resolved_path: str) -> bool:
+    """画像の行の並びから <attr>FlipV を決める。Maya ビューポート専用の補正（Unity は無関係）。パスが変わるたびに評価し直す。"""
+    top_down = texture_orient.texture_stored_top_down(resolved_path)
+    flip_intent[(shader, attr)] = top_down
+    if not cmds.attributeQuery(FLIP_ATTR, node=file_node, exists=True):
+        cmds.addAttr(file_node, longName=FLIP_ATTR, attributeType="bool")
+    cmds.setAttr(f"{file_node}.{FLIP_ATTR}", top_down)
+    _set(shader, f"{attr}FlipV", top_down)
+    return top_down
 
 
 # ---------------------------------------------------------------- 環境（キャラクターライト / トーンマップ）

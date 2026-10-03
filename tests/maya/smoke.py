@@ -370,6 +370,15 @@ def run() -> None:
     check("テクスチャの差し替え: ↺ で元マテリアルのテクスチャに戻る",
           bool(original_tex) and s.value(body_mat, "common.albedo") == original_tex, f"{original_tex} / {s.value(body_mat, 'common.albedo')}")
     check("テクスチャを読み込み直す（画面の無い mayapy でも落ちない）", preview.reload_textures() >= 0)
+    # V 反転（Maya ビューポート専用）。PNG（上から）は 1、UnityChan の TGA（下原点）は 0。属性は見えないので意図した値で確かめる
+    cmds.shadingNode("lambert", asShader=True, name="probe_tdToon")  # 属性を持たない代役（mayapy の dx11Shader と同じ状況）
+    png = tmp / "flip_probe.png"
+    png.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
+    preview._set_texture("probe_tdToon", "BaseMap", png.as_posix(), srgb=True)
+    preview._set_texture("probe_tdToon", "NormalMap", "assets/unitychan/textures/body_01_NRM.tga", srgb=False)
+    check("FlipV: PNG のベースマップは 1・UnityChan の TGA は 0",
+          preview.flip_intent[("probe_tdToon", "BaseMap")] is True and preview.flip_intent[("probe_tdToon", "NormalMap")] is False,
+          str(preview.flip_intent))
     s.set_value(body_mat, "common.normal", "assets/unitychan/textures/body_01_NRM.tga")
     off = look.resolve(s.look)[body_mat]["common"]["normal"]
     s.set_feature("normalMap", True)

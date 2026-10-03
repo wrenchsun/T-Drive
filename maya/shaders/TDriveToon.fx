@@ -18,15 +18,18 @@ float2 gViewportPixelSize : ViewportPixelSize < string UIWidget = "None"; >;
 // ------------------------------------------------------------------ Common（D-Drive MaterialCommon）
 Texture2D BaseMap < string UIGroup = "Common"; string ResourceName = ""; string UIWidget = "FilePicker"; string UIName = "Base Map"; string ResourceType = "2D"; int UIOrder = 1; >;
 bool BaseMapEnabled < string UIGroup = "Common"; string UIName = "Base Map Enabled"; int UIOrder = 2; > = false;
+bool BaseMapFlipV < string UIGroup = "Common"; string UIName = "BaseMap Flip V"; int UIOrder = 200; > = false;  // Maya ビューポート専用: 上から並ぶ画像（PNG/JPG 等）の V を反転
 float4 BaseColor < string UIGroup = "Common"; string UIName = "Base Color"; string UIWidget = "ColorPicker"; int UIOrder = 3; > = {1.0, 1.0, 1.0, 1.0};
 bool AlphaClip < string UIGroup = "Common"; string UIName = "Alpha Clip (Cutout)"; int UIOrder = 4; > = false;
 float Cutoff < string UIGroup = "Common"; float UIMin = 0.0; float UIMax = 1.0; int UIOrder = 5; > = 0.5;
 // 法線マップ・発光（Common。docs/03 §2.2、機能 normalMap / emission）
 Texture2D NormalMap < string UIGroup = "Common"; string ResourceName = ""; string UIWidget = "FilePicker"; string UIName = "Normal Map"; string ResourceType = "2D"; int UIOrder = 6; >;
 bool NormalMapEnabled < string UIGroup = "Common"; int UIOrder = 7; > = false;
+bool NormalMapFlipV < string UIGroup = "Common"; string UIName = "NormalMap Flip V"; int UIOrder = 200; > = false;  // Maya ビューポート専用: 上から並ぶ画像（PNG/JPG 等）の V を反転
 float NormalScale < string UIGroup = "Common"; float UIMin = 0.0; float UIMax = 2.0; int UIOrder = 8; > = 1.0;
 Texture2D EmissionMap < string UIGroup = "Common"; string ResourceName = ""; string UIWidget = "FilePicker"; string UIName = "Emission Map"; string ResourceType = "2D"; int UIOrder = 9; >;
 bool EmissionMapEnabled < string UIGroup = "Common"; int UIOrder = 10; > = false;
+bool EmissionMapFlipV < string UIGroup = "Common"; string UIName = "EmissionMap Flip V"; int UIOrder = 200; > = false;  // Maya ビューポート専用: 上から並ぶ画像（PNG/JPG 等）の V を反転
 float3 EmissionColor < string UIGroup = "Common"; string UIWidget = "ColorPicker"; int UIOrder = 11; > = {0.0, 0.0, 0.0};
 float EmissionIntensity < string UIGroup = "Common"; float UIMin = 0.0; float UIMax = 10.0; int UIOrder = 12; > = 0.0;
 
@@ -50,6 +53,7 @@ float PreviewShadowNormalOffset < string UIGroup = "Preview"; string UIName = "S
 
 Texture2D ToonMaskMap < string UIGroup = "Mask"; string ResourceName = ""; string UIWidget = "FilePicker"; string ResourceType = "2D"; int UIOrder = 20; >;
 bool ToonMaskMapEnabled < string UIGroup = "Mask"; int UIOrder = 21; > = false;
+bool ToonMaskMapFlipV < string UIGroup = "Mask"; string UIName = "ToonMaskMap Flip V"; int UIOrder = 200; > = false;  // Maya ビューポート専用: 上から並ぶ画像（PNG/JPG 等）の V を反転
 bool VertexMaskEnabled < string UIGroup = "Mask"; string UIName = "Vertex Mask Enabled (tdToonMask)"; int UIOrder = 22; > = false;
 // マスクのチャンネル単位ペイント中だけ使う（Maya プレビュー専用）: 0 = なし / 1..4 = R G B A を作業用カラーセット（COLOR1）の値で置き換える
 int MaskEditChannel < string UIGroup = "Mask"; string UIName = "Mask Edit Channel"; string UIFieldNames = "None:R:G:B:A"; int UIOrder = 23; > = 0;
@@ -74,6 +78,7 @@ float ToonRimPower < string UIGroup = "Rim"; float UIMin = 0.5; float UIMax = 16
 float ToonRimStrength < string UIGroup = "Rim"; float UIMin = 0.0; float UIMax = 1.0; int UIOrder = 54; > = 0.0;
 Texture2D ToonHairHighlightMap < string UIGroup = "Hair"; string ResourceName = ""; string UIWidget = "FilePicker"; string ResourceType = "2D"; int UIOrder = 55; >;
 bool ToonHairHighlightMapEnabled < string UIGroup = "Hair"; int UIOrder = 56; > = false;
+bool ToonHairHighlightMapFlipV < string UIGroup = "Hair"; string UIName = "ToonHairHighlightMap Flip V"; int UIOrder = 200; > = false;  // Maya ビューポート専用: 上から並ぶ画像（PNG/JPG 等）の V を反転
 float4 ToonHairHighlightColor < string UIGroup = "Hair"; string UIWidget = "ColorPicker"; int UIOrder = 57; > = {1.0, 1.0, 0.95, 1.0};
 float ToonHairHighlightShift < string UIGroup = "Hair"; float UIMin = -0.5; float UIMax = 0.5; int UIOrder = 58; > = 0.0;
 
@@ -114,6 +119,7 @@ float ToonDepthCompressWeight < string UIGroup = "Depth"; float UIMin = 0.0; flo
 // T-21 SDF 顔影マップ（顔の向きはキャラクター単位。Unity では頭のボーンから）
 Texture2D ToonFaceShadowMap < string UIGroup = "FaceShadow"; string ResourceName = ""; string UIWidget = "FilePicker"; string ResourceType = "2D"; int UIOrder = 70; >;
 bool ToonFaceShadowMapEnabled < string UIGroup = "FaceShadow"; int UIOrder = 71; > = false;
+bool ToonFaceShadowMapFlipV < string UIGroup = "FaceShadow"; string UIName = "ToonFaceShadowMap Flip V"; int UIOrder = 200; > = false;  // Maya ビューポート専用: 上から並ぶ画像（PNG/JPG 等）の V を反転
 float ToonFaceShadowWeight < string UIGroup = "FaceShadow"; float UIMin = 0.0; float UIMax = 1.0; int UIOrder = 72; > = 0.0;
 float3 PreviewFaceForward < string UIGroup = "Preview"; int UIOrder = 97; > = {0.0, 0.0, 1.0};
 float3 PreviewFaceRight < string UIGroup = "Preview"; int UIOrder = 98; > = {-1.0, 0.0, 0.0};
@@ -122,6 +128,13 @@ static const float3 kUp = float3(0.0, 1.0, 0.0);
 // 画面上の線（docs/03 §10）: 部位キー = 部位番号 × 2 + 線フラグ。0 = ToonId を書かない。Render Override（4-7）が 2 枚目の描画先として受ける
 float PreviewLineKey < string UIGroup = "Preview"; string UIName = "Line Part Key"; int UIOrder = 99; > = 0.0;
 int PreviewDebug < string UIGroup = "Preview"; string UIName = "Debug View"; string UIFieldNames = "Off:UV0:Normal:Lit:Mask R:Mask G:Mask B:Mask A:Base Map:Smooth Normal UV2"; int UIOrder = 93; > = 0;
+
+// テクスチャの V 反転（Maya ビューポート専用の補正。Unity はテクスチャを自前で取り込むので不要）
+// file ノード経由だと画像の行が保存順のまま渡り、上から並ぶ画像は上下逆に見える。preview.py が画像から FlipV を決める
+float2 FlipUV(float2 uv, bool flip)
+{
+    return float2(uv.x, flip ? 1.0 - uv.y : uv.y);
+}
 
 SamplerState SamLinearWrap { Filter = MIN_MAG_MIP_LINEAR; AddressU = Wrap; AddressV = Wrap; };
 
@@ -169,12 +182,12 @@ float4 VertexMask(float4 vertexColor, float4 editColor)
 
 float4 MaskMapSample(float2 uv)
 {
-    return ToonMaskMapEnabled ? ToonMaskMap.Sample(SamLinearWrap, uv) : kWhite;
+    return ToonMaskMapEnabled ? ToonMaskMap.Sample(SamLinearWrap, FlipUV(uv, ToonMaskMapFlipV)) : kWhite;
 }
 
 float4 MaskMapSampleLevel0(float2 uv)
 {
-    return ToonMaskMapEnabled ? ToonMaskMap.SampleLevel(SamLinearWrap, uv, 0) : kWhite;
+    return ToonMaskMapEnabled ? ToonMaskMap.SampleLevel(SamLinearWrap, FlipUV(uv, ToonMaskMapFlipV), 0) : kWhite;
 }
 
 SamplerState SamShadowDepth
@@ -208,7 +221,7 @@ float4 SampleBase(float2 uv)
 {
     float4 c = BaseColor;
     if (BaseMapEnabled)
-        c *= BaseMap.Sample(SamLinearWrap, uv);
+        c *= BaseMap.Sample(SamLinearWrap, FlipUV(uv, BaseMapFlipV));
     return c;
 }
 
@@ -255,7 +268,7 @@ float4 ShadeMain(VSOut i, bool frontFace)
         discard;
     float3 N = normalize(i.normalWS) * (frontFace ? 1.0 : -1.0);
     if (NormalMapEnabled)
-        N = Toon_NormalFromMap(NormalMap.Sample(SamLinearWrap, i.uv), NormalScale, N, normalize(i.tangentWS.xyz), i.tangentWS.w);
+        N = Toon_NormalFromMap(NormalMap.Sample(SamLinearWrap, FlipUV(i.uv, NormalMapFlipV)), NormalScale, N, normalize(i.tangentWS.xyz), i.tangentWS.w);
     float3 L = normalize(PreviewLightDir);
     float4 mask = Toon_CombineMask(i.vertexMask, MaskMapSample(i.uv));
     float shadeThreshold = ToonShadeThreshold;
@@ -264,7 +277,7 @@ float4 ShadeMain(VSOut i, bool frontFace)
     float lit = Toon_LitFactor(N, L, mask, shadeThreshold, ToonShadeFeather, ToonShadowStrength);
     if (ToonFaceShadowMapEnabled && ToonFaceShadowWeight > 0.0)
     {
-        float value = ToonFaceShadowMap.Sample(SamLinearWrap, Toon_FaceShadowUV(i.uv, PreviewFaceRight, L)).r;
+        float value = ToonFaceShadowMap.Sample(SamLinearWrap, FlipUV(Toon_FaceShadowUV(i.uv, PreviewFaceRight, L), ToonFaceShadowMapFlipV)).r;
         lit = Toon_FaceShadowLit(lit, value, Toon_FaceLightAngle01(PreviewFaceForward, L), ToonShadeFeather, ToonShadowStrength, ToonFaceShadowWeight);
     }
     if (ToonReceiveShadow > 0.0)
@@ -277,7 +290,7 @@ float4 ShadeMain(VSOut i, bool frontFace)
         else if (PreviewDebug == 2) d = N * 0.5 + 0.5;
         else if (PreviewDebug == 3) d = lit.xxx;
         else if (PreviewDebug >= 4 && PreviewDebug <= 7) d = mask[PreviewDebug - 4].xxx;
-        else if (PreviewDebug == 8) d = BaseMap.Sample(SamLinearWrap, i.uv).rgb;
+        else if (PreviewDebug == 8) d = BaseMap.Sample(SamLinearWrap, FlipUV(i.uv, BaseMapFlipV)).rgb;
         else if (PreviewDebug == 9) d = float3(i.uv2 * 0.5 + 0.5, 0.0);
         return float4(d, 1.0);
     }
@@ -293,13 +306,13 @@ float4 ShadeMain(VSOut i, bool frontFace)
     col += ToonRimColor.rgb * Toon_Rim(N, V, ToonRimPower, ToonRimStrength, lit) * lightC;
     if (ToonHairHighlightMapEnabled)
     {
-        float h = ToonHairHighlightMap.Sample(SamLinearWrap, Toon_HairHighlightUV(i.uv, V, kUp, ToonHairHighlightShift)).r;
+        float h = ToonHairHighlightMap.Sample(SamLinearWrap, FlipUV(Toon_HairHighlightUV(i.uv, V, kUp, ToonHairHighlightShift), ToonHairHighlightMapFlipV)).r;
         col += ToonHairHighlightColor.rgb * h * lit * lightC;
     }
     col = Toon_ApplyTint(col, mask, ToonTintColor.rgb, ToonTintStrength);
     col = Toon_ColorCorrect(col, ToonSaturation, ToonBrightness);
     if (EmissionIntensity > 0.0)
-        col = Toon_Emission(col, EmissionMapEnabled ? EmissionMap.Sample(SamLinearWrap, i.uv).rgb : float3(1.0, 1.0, 1.0), EmissionColor, EmissionIntensity);
+        col = Toon_Emission(col, EmissionMapEnabled ? EmissionMap.Sample(SamLinearWrap, FlipUV(i.uv, EmissionMapFlipV)).rgb : float3(1.0, 1.0, 1.0), EmissionColor, EmissionIntensity);
     col = Toon_Tonemap(col, PreviewTonemap);
     return float4(col, base.a);
 }
