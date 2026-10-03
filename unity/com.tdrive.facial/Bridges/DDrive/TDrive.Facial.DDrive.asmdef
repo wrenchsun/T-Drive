@@ -1,0 +1,16 @@
+{
+  "name": "TDrive.Facial.DDrive",
+  "rootNamespace": "TDrive.Facial.DDrive",
+  "references": ["TDrive.Facial.Core", "TDrive.Facial.Runtime", "DDrive.Runtime"],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": ["TDRIVE_FACIAL_DDRIVE"],
+  "versionDefines": [
+    { "name": "com.ddrive.core", "expression": "1.0.0", "define": "TDRIVE_FACIAL_DDRIVE" }
+  ],
+  "noEngineReferences": false
+}

@@ -1,0 +1,16 @@
+{
+  "name": "TDrive.Facial.DDrive.Editor",
+  "rootNamespace": "TDrive.Facial.DDrive.Editor",
+  "references": ["TDrive.Facial.Core", "TDrive.Facial.Runtime", "TDrive.Facial.Editor", "TDrive.Facial.DDrive", "DDrive.Runtime", "DDrive.Editor"],
+  "includePlatforms": ["Editor"],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": ["TDRIVE_FACIAL_DDRIVE"],
+  "versionDefines": [
+    { "name": "com.ddrive.core", "expression": "1.0.0", "define": "TDRIVE_FACIAL_DDRIVE" }
+  ],
+  "noEngineReferences": false
+}

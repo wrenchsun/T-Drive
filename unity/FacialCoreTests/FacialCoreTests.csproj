@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>TDrive.Facial.Tests</RootNamespace>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Unity のパッケージと同じソースをリンクで使う（Unity なしで計算を検証する） -->
+    <Compile Include="..\com.tdrive.facial\Runtime\Core\**\*.cs" Link="Core\%(Filename)%(Extension)" />
+    <Compile Include="..\com.tdrive.facial\Tests\Editor\ConformanceTests.cs" Link="Tests\ConformanceTests.cs" />
+    <Compile Include="..\com.tdrive.facial\Tests\Editor\MiniJson.cs" Link="Tests\MiniJson.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="NUnit" Version="3.14.0" />
+    <PackageReference Include="NUnit3TestAdapter" Version="4.6.0" />
+  </ItemGroup>
+
+</Project>

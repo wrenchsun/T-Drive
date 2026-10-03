@@ -1,0 +1,14 @@
+{
+  "name": "TDrive.Facial.Runtime",
+  "rootNamespace": "TDrive.Facial",
+  "references": ["TDrive.Facial.Core"],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

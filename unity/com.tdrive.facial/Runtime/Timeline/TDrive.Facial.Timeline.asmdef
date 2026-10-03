@@ -1,0 +1,16 @@
+{
+  "name": "TDrive.Facial.Timeline",
+  "rootNamespace": "TDrive.Facial.Timeline",
+  "references": ["TDrive.Facial.Runtime", "Unity.Timeline"],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": ["TDRIVE_FACIAL_TIMELINE"],
+  "versionDefines": [
+    { "name": "com.unity.timeline", "expression": "1.0.0", "define": "TDRIVE_FACIAL_TIMELINE" }
+  ],
+  "noEngineReferences": false
+}

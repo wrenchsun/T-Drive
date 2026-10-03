@@ -1,0 +1,14 @@
+{
+  "name": "TDrive.Facial.Editor",
+  "rootNamespace": "TDrive.Facial.Editor",
+  "references": ["TDrive.Facial.Core", "TDrive.Facial.Runtime"],
+  "includePlatforms": ["Editor"],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

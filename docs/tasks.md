@@ -209,8 +209,8 @@ FacialController（カメラ角度に応じた顔の補正。UE 版からの移�
 
 | # | チケット | 要件 | 日数 | 依存 | 受け入れ条件 | 状態 |
 |---|---|---|---|---|---|---|
-| FU-0 | パッケージ雛形（asmdef 5 つ・package.json・検証用プロジェクト `unity/TDriveSandbox` を U-1 と共用） | — | 1 | — | Sandbox と MS2026 でコンパイルが通る。D-Drive なしでも通る | ⬜ |
-| FU-1 | `TDrive.Facial.Core`（C# の計算）+ 共通のテストデータの EditMode テスト | R-12 | 2 | F0-2 FU-0 | Python と同じテストデータが全部通る | ⬜ |
+| FU-0 | パッケージ雛形（asmdef 5 つ・package.json・検証用プロジェクト `unity/TDriveSandbox` を U-1 と共用） | — | 1 | — | Sandbox と MS2026 でコンパイルが通る。D-Drive なしでも通る | 🔶 雛形あり（`unity/com.tdrive.facial`: package.json・asmdef 7 つ）。**Unity での初回取り込みが未実施**（.meta ファイルの生成とコミット、Sandbox / MS2026 でのコンパイル確認が残り） |
+| FU-1 | `TDrive.Facial.Core`（C# の計算）+ 共通のテストデータの EditMode テスト | R-12 | 2 | F0-2 FU-0 | Python と同じテストデータが全部通る | ✅ `Runtime/Core/{FacialCore,FacialSpace,FacialTypes}.cs`。Unity を使わない `unity/FacialCoreTests`（dotnet test）で共通のテストデータ 167 件が Python と一致。Unity の EditMode での実行は FU-0 の残りと一緒に |
 | FU-2 | 取り込み（`.fcpose` → `FacialCorrectionData`）・座標変換・FBX の取り込み設定の確認 | JSON R-13 | 2 | FU-1 F0-3 | Maya の出力を置くとデータができる。取り込み直しても Overrides が残る | ⬜ |
 | FU-3 | `FacialCorrectionRunner`（視点の解決・重み・表情での弱め・距離フェード・スムージング / スナップ・LOD / 非表示の打ち切り・シェイプ番号の事前解決・OnDisable で戻す） | R-10 R-11 R-12 R-28 R-29 | 3.5 | FU-2 | shizuku でカメラを回すと Maya のプレビューと同じ重み（数値一致）。プールへ返すと FC_* が 0 | ⬜ |
 | FU-4 | マテリアル出力（MaterialPropertyBlock: `_FC_Angles` / `_FC_Emotion*`） | R-14 | 1 | FU-3 | 対象の Renderer にだけ値が入る（2 体で衝突しない） | ⬜ |
