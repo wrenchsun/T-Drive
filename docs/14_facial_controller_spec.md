@@ -390,7 +390,7 @@ Unity 側のブリッジが、D-Drive の作った `.playable` に `FacialCorrec
 
 | 使うもの | 場所 | 内容 |
 |---|---|---|
-| メッシュ・ボーン・ブレンドシェイプ | `shizuku/FBX/shizuku.fbx` | メッシュ 7（`mdl_face02` `mdl_body02` `mdl_hair01_F` `mdl_hair01_B` `mdl_wear01〜03`）、ボーン 217、顔のシェイプ 77（`bs.*`。うち区切り用 2、リップシンク 5、視線 `LookingUp/Down`）。顔のボーンは目だけ（`bone_eye_L/R`、`bone_eyescale_L/R`）。基準ボーン = `bone_head` |
+| メッシュ・ボーン・ブレンドシェイプ | `shizuku/FBX/shizuku.fbx` | メッシュ 7（`mdl_face02` `mdl_body02` `mdl_hair01_F` `mdl_hair01_B` `mdl_wear01〜03`）、ジョイント 219、顔のシェイプ 77（blendShape ノード `bs`。うち区切り用 2、リップシンク 5、視線 `LookingUp/Down`）、体のシェイプ 14（ノード `body02`。体型の調整用で補正には使わない）。顔のボーンは目だけ（`bone_eye_L/R`、`bone_eyescale_L/R`）。基準ボーン = `bone_head`。マテリアルは `mat_body01` `mat_faceOption1` `mat_hair01` `mat_wear01〜03` と `lambert2`（腕時計の液晶 4 面）。顔メッシュは肌（`mat_body01`）と顔のオプション（`mat_faceOption1`）の 2 マテリアル |
 | テクスチャ | `shizuku/Textures/` | `*_d`（色）/ `*_m`（マスク）/ `*_n`（法線）。body01 / faceOption / hair01 / wear01〜03 |
 | 体のアニメーション | `shizuku/Animations/Base/*.fbx`、`Gesture/handPose01.fbx` | 待機・歩き・走り・落下・着地など |
 | 表情のアニメーション | `shizuku/Animations/FX/face_*.anim`（約 45 個） | Unity の `.anim`（`mdl_face02` のブレンドシェイプと目のボーンのカーブ）。Maya では §5.4 の読み込みでポーズ・土台の表情として使う |
@@ -399,6 +399,9 @@ Unity 側のブリッジが、D-Drive の作った `.playable` に `FacialCorrec
   **シェーダーの扱いは UnityChan と同じ**: 元のマテリアル・シェーダーは参照せず、T-Drive の Toon（`looks/shizuku/look.json`）で作る
 - **置き場所とライセンス**: 市販 / 配布アバターのため、利用規約を確認できるまで**リポジトリにコミットしない**（`assets/shizuku/` は .gitignore。各自のプロジェクトフォルダに置く）。
   自動テストはモデルに頼らない小さな合成データ（球 + ジョイント数本 + シェイプ数個をテスト内で作る）を主にし、shizuku を使う確認は「あるときだけ」走らせる
+- **シェイプの名前**: `.fcpose.json` の `curves` のキーは **`<blendShape ノード名>.<ターゲット名>`**（例 `bs.eye_close_L`）。UE・Unity（FBX 取り込み後のシェイプ名）と同じ表記で、Maya ではそのままアトリビュートのパス（ノード `bs` のターゲット `eye_close_L`）になる
+- **取り込み時の注意**（S-1 で確認）: FBX を取り込むと、ターゲットごとの非表示メッシュが最上位に 98 個できる（blendShape につながっているので消さない）。メッシュを数える・一覧する処理は表示中のものだけを対象にする
+- 取り込み手順: `mayapy tools/setup_sample_shizuku.py`（モデル・テクスチャ・アニメーションを `assets/shizuku/` へ写し、`shizuku.mb` と `setup_report.json` を作る。何度実行してもよい）
 - UnityChan（`assets/unitychan/`、`looks/unitychan/`）は当面残す（既存のテスト・マニュアルの画像が参照している）。置き換えは Phase S のチケットで段階的に行う
 
 ## 12. 決めること（要確認）

@@ -153,7 +153,7 @@ FacialController（カメラ角度に応じた顔の補正。UE 版からの移�
 
 | # | チケット | 技術 | 日数 | 依存 | 受け入れ条件 | 状態 |
 |---|---|---|---|---|---|---|
-| S-1 | shizuku の取り込み手順: `tools/setup_sample_shizuku.py`（`shizuku.fbx` とテクスチャをプロジェクトフォルダの `assets/shizuku/` へ写し、Maya シーンを作る。元のマテリアル・シェーダーは使わず lambert + テクスチャだけ）+ .gitignore | — | 1 | — | 手順 1 回でシーンが開き、メッシュ 7・ボーン 217・`mdl_face02` のシェイプ 77 個がある。リポジトリにモデルのファイルが入らない | ⬜ |
+| S-1 | shizuku の取り込み手順: `tools/setup_sample_shizuku.py`（`shizuku.fbx` とテクスチャをプロジェクトフォルダの `assets/shizuku/` へ写し、Maya シーンを作る。元のマテリアル・シェーダーは使わず lambert + テクスチャだけ）+ .gitignore | — | 1 | — | 手順 1 回でシーンが開き、メッシュ 7・ジョイント 219・`mdl_face02` のシェイプ 77 個がある。リポジトリにモデルのファイルが入らない | ✅ `tools/setup_sample_shizuku.py`（実機で実行済み: メッシュ 7・ジョイント 219・顔 77 / 体 14 シェイプ。2 回目は写し 0 件）。テクスチャは `$TDRIVE_PROJECT/assets/shizuku/textures/…` |
 | S-2 | shizuku の Look（`looks/shizuku/look.json`）: 部位登録（face / hair / eye / skin / cloth …）・ロール・テクスチャ（`_d` 色 / `_n` 法線。`_m` の扱いを決める）。UnityChan と同じ Toon シェーダー | — | 1.5 | S-1 | Toon 表示で破綻なく表示でき、Unity 出力が検証を通る | ⬜ |
 | S-3 | テスト・文書の切り替え: スモークは合成モデルを主に、shizuku は「あるときだけ」。CLAUDE.md の「UnityChan はテスト素体」を更新。マニュアルの画像は規約確認後に差し替え（Q2） | — | 2 | S-2 | UnityChan が無くてもテストが通る。CLAUDE.md・マニュアルの記述が実態と一致 | ⬜ |
 | S-4 | 体のアニメーション（`Animations/Base/*.fbx`）を Maya に読み込む手順（参照 / 取り込み）と確認用のシーン | — | 0.5 | S-1 | 待機・歩きを再生しながら Toon と FacialController のプレビューを確認できる | ⬜ |

@@ -49,3 +49,8 @@ Desktop.ini
 
 # テスト素体シーン（tools/fixtures/build_unitychan_scene.py で再生成できる）
 assets/unitychan/unitychan_test.ma
+
+# ===== サンプルモデル（shizuku。配布アバターのためリポジトリに入れない。docs/14 §11）=====
+assets/shizuku/
+# FacialController の Unity 向け出力（FBX にモデルが含まれる）
+facial/*/export/
