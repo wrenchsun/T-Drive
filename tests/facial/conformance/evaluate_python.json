@@ -1,0 +1,1030 @@
+{
+  "kind": "evaluate",
+  "description": "Python 実装（evaluate.py）で起こしたケース。UE 版の FacialCoreTests.cpp には無い境界・複数レイヤー・非正方格子。期待値は UE 版のコードを読んだ手計算と、Python 実装の出力が一致することを確認して固定した",
+  "cases": [
+    {
+      "name": "clamp_beyond_range_edge_fade_zero_yaw",
+      "source": "python-port",
+      "grid": {
+        "yawRange": 90,
+        "pitchRange": 45,
+        "cols": 3,
+        "rows": 3,
+        "edgeFade": 0
+      },
+      "layers": [
+        {
+          "name": "Neutral",
+          "enabled": true,
+          "emotionWeight": 0,
+          "morphs": ["FC_R0_C0", "FC_R0_C1", "FC_R0_C2", "FC_R1_C0", "FC_R1_C1", "FC_R1_C2", "FC_R2_C0", "FC_R2_C1", "FC_R2_C2"]
+        }
+      ],
+      "yaw": 120,
+      "pitch": 0,
+      "note": "edgeFade 0: 範囲を少しでも超えると即 0",
+      "expect": {
+        "weights": {}
+      }
+    },
+    {
+      "name": "clamp_beyond_range_edge_fade_zero_just_over",
+      "source": "python-port",
+      "grid": {
+        "yawRange": 90,
+        "pitchRange": 45,
+        "cols": 3,
+        "rows": 3,
+        "edgeFade": 0
+      },
+      "layers": [
+        {
+          "name": "Neutral",
+          "enabled": true,
+          "emotionWeight": 0,
+          "morphs": ["FC_R0_C0", "FC_R0_C1", "FC_R0_C2", "FC_R1_C0", "FC_R1_C1", "FC_R1_C2", "FC_R2_C0", "FC_R2_C1", "FC_R2_C2"]
+        }
+      ],
+      "yaw": 90.0001,
+      "pitch": 0,
+      "expect": {
+        "weights": {}
+      }
+    },
+    {
+      "name": "clamp_beyond_range_edge_fade_zero_pitch",
+      "source": "python-port",
+      "grid": {
+        "yawRange": 90,
+        "pitchRange": 45,
+        "cols": 3,
+        "rows": 3,
+        "edgeFade": 0
+      },
+      "layers": [
+        {
+          "name": "Neutral",
+          "enabled": true,
+          "emotionWeight": 0,
+          "morphs": ["FC_R0_C0", "FC_R0_C1", "FC_R0_C2", "FC_R1_C0", "FC_R1_C1", "FC_R1_C2", "FC_R2_C0", "FC_R2_C1", "FC_R2_C2"]
+        }
+      ],
+      "yaw": 0,
+      "pitch": -45.5,
+      "expect": {
+        "weights": {}
+      }
+    },
+    {
+      "name": "clamp_beyond_range_wide_fade_yaw",
+      "source": "python-port",
+      "grid": {
+        "yawRange": 90,
+        "pitchRange": 45,
+        "cols": 5,
+        "rows": 3,
+        "edgeFade": 15
+      },
+      "layers": [
+        {
+          "name": "Neutral",
+          "enabled": true,
+          "emotionWeight": 0,
+          "morphs": ["FC_R0_C0", "FC_R0_C1", "FC_R0_C2", "FC_R0_C3", "FC_R0_C4", "FC_R1_C0", "FC_R1_C1", "FC_R1_C2", "FC_R1_C3", "FC_R1_C4", "FC_R2_C0", "FC_R2_C1", "FC_R2_C2", "FC_R2_C3", "FC_R2_C4"]
+        }
+      ],
+      "yaw": 100,
+      "pitch": -20,
+      "note": "範囲外はクランプした位置（col 4）の点を、フェード係数 1-10/15 で弱めて使う",
+      "expect": {
+        "weights": {
+          "FC_R0_C4": 0.148148148148,
+          "FC_R1_C4": 0.185185185185
+        }
+      }
+    },
+    {
+      "name": "clamp_beyond_range_negative_side",
+      "source": "python-port",
+      "grid": {
+        "yawRange": 90,
+        "pitchRange": 45,
+        "cols": 5,
+        "rows": 3,
+        "edgeFade": 15
+      },
+      "layers": [
+        {
+          "name": "Neutral",
+          "enabled": true,
+          "emotionWeight": 0,
+          "morphs": ["FC_R0_C0", "FC_R0_C1", "FC_R0_C2", "FC_R0_C3", "FC_R0_C4", "FC_R1_C0", "FC_R1_C1", "FC_R1_C2", "FC_R1_C3", "FC_R1_C4", "FC_R2_C0", "FC_R2_C1", "FC_R2_C2", "FC_R2_C3", "FC_R2_C4"]
+        }
+      ],
+      "yaw": -100,
+      "pitch": 20,
+      "expect": {
+        "weights": {
+          "FC_R1_C0": 0.185185185185,
+          "FC_R2_C0": 0.148148148148
+        }
+      }
+    },
+    {
+      "name": "clamp_far_beyond_fade_width",
+      "source": "python-port",
+      "grid": {
+        "yawRange": 90,
+        "pitchRange": 45,
+        "cols": 5,
+        "rows": 3,
+        "edgeFade": 15
+      },
+      "layers": [
+        {
+          "name": "Neutral",
+          "enabled": true,
+          "emotionWeight": 0,
+          "morphs": ["FC_R0_C0", "FC_R0_C1", "FC_R0_C2", "FC_R0_C3", "FC_R0_C4", "FC_R1_C0", "FC_R1_C1", "FC_R1_C2", "FC_R1_C3", "FC_R1_C4", "FC_R2_C0", "FC_R2_C1", "FC_R2_C2", "FC_R2_C3", "FC_R2_C4"]
+        }
+      ],
+      "yaw": 500,
+      "pitch": 0,
+      "expect": {
+        "weights": {}
+      }
+    },
+    {
+      "name": "edge_fade_exactly_fade_width",
+      "source": "python-port",
+      "grid": {
+        "yawRange": 90,
+        "pitchRange": 45,
+        "cols": 5,
+        "rows": 3,
+        "edgeFade": 15
+      },
+      "layers": [
+        {
+          "name": "Neutral",
+          "enabled": true,
+          "emotionWeight": 0,
+          "morphs": ["FC_R0_C0", "FC_R0_C1", "FC_R0_C2", "FC_R0_C3", "FC_R0_C4", "FC_R1_C0", "FC_R1_C1", "FC_R1_C2", "FC_R1_C3", "FC_R1_C4", "FC_R2_C0", "FC_R2_C1", "FC_R2_C2", "FC_R2_C3", "FC_R2_C4"]
+        }
+      ],
+      "yaw": 105,
+      "pitch": 0,
+      "note": "超過量 = フェード幅ちょうど → 係数 0 → 出力なし",
+      "expect": {
+        "weights": {}
+      }
+    },
+    {
+      "name": "edge_fade_partial_both_axes",
+      "source": "python-port",
+      "grid": {
+        "yawRange": 90,
+        "pitchRange": 45,
+        "cols": 5,
+        "rows": 3,
+        "edgeFade": 15
+      },
+      "layers": [
+        {
+          "name": "Neutral",
+          "enabled": true,
+          "emotionWeight": 0,
+          "morphs": ["FC_R0_C0", "FC_R0_C1", "FC_R0_C2", "FC_R0_C3", "FC_R0_C4", "FC_R1_C0", "FC_R1_C1", "FC_R1_C2", "FC_R1_C3", "FC_R1_C4", "FC_R2_C0", "FC_R2_C1", "FC_R2_C2", "FC_R2_C3", "FC_R2_C4"]
+        }
+      ],
+      "yaw": 100,
+      "pitch": 50,
+      "note": "Yaw 超過 10（係数 1/3）× Pitch 超過 5（係数 2/3）",
+      "expect": {
+        "weights": {
+          "FC_R2_C4": 0.222222222222
+        }
+      }
+    },
+    {
+      "name": "edge_fade_partial_negative_corner",
+      "source": "python-port",
+      "grid": {
+        "yawRange": 90,
+        "pitchRange": 45,
+        "cols": 5,
+        "rows": 3,
+        "edgeFade": 15
+      },
+      "layers": [
+        {
+          "name": "Neutral",
+          "enabled": true,
+          "emotionWeight": 0,
+          "morphs": ["FC_R0_C0", "FC_R0_C1", "FC_R0_C2", "FC_R0_C3", "FC_R0_C4", "FC_R1_C0", "FC_R1_C1", "FC_R1_C2", "FC_R1_C3", "FC_R1_C4", "FC_R2_C0", "FC_R2_C1", "FC_R2_C2", "FC_R2_C3", "FC_R2_C4"]
+        }
+      ],
+      "yaw": -93,
+      "pitch": -48,
+      "expect": {
+        "weights": {
+          "FC_R0_C0": 0.64
+        }
+      }
+    },
+    {
+      "name": "edge_fade_wide_30deg",
+      "source": "python-port",
+      "grid": {
+        "yawRange": 90,
+        "pitchRange": 45,
+        "cols": 5,
+        "rows": 3,
+        "edgeFade": 30
+      },
+      "layers": [
+        {
+          "name": "Neutral",
+          "enabled": true,
+          "emotionWeight": 0,
+          "morphs": ["FC_R0_C0", "FC_R0_C1", "FC_R0_C2", "FC_R0_C3", "FC_R0_C4", "FC_R1_C0", "FC_R1_C1", "FC_R1_C2", "FC_R1_C3", "FC_R1_C4", "FC_R2_C0", "FC_R2_C1", "FC_R2_C2", "FC_R2_C3", "FC_R2_C4"]
+        }
+      ],
+      "yaw": 110,
+      "pitch": 10,
+      "expect": {
+        "weights": {
+          "FC_R1_C4": 0.259259259259,
+          "FC_R2_C4": 0.074074074074
+        }
+      }
+    },
+    {
+      "name": "two_emotion_layers",
+      "source": "python-port",
+      "grid": {
+        "yawRange": 90,
+        "pitchRange": 45,
+        "cols": 5,
+        "rows": 3,
+        "edgeFade": 15
+      },
+      "layers": [
+        {
+          "name": "Neutral",
+          "enabled": true,
+          "emotionWeight": 0,
+          "morphs": ["FC_R0_C0", "FC_R0_C1", "FC_R0_C2", "FC_R0_C3", "FC_R0_C4", "FC_R1_C0", "FC_R1_C1", "FC_R1_C2", "FC_R1_C3", "FC_R1_C4", "FC_R2_C0", "FC_R2_C1", "FC_R2_C2", "FC_R2_C3", "FC_R2_C4"]
+        },
+        {
+          "name": "Joy",
+          "enabled": true,
+          "emotionWeight": 0.5,
+          "morphs": ["FC_Joy_R0_C0", "FC_Joy_R0_C1", "FC_Joy_R0_C2", "FC_Joy_R0_C3", "FC_Joy_R0_C4", "FC_Joy_R1_C0", "FC_Joy_R1_C1", "FC_Joy_R1_C2", "FC_Joy_R1_C3", "FC_Joy_R1_C4", "FC_Joy_R2_C0", "FC_Joy_R2_C1", "FC_Joy_R2_C2", "FC_Joy_R2_C3", "FC_Joy_R2_C4"]
+        },
+        {
+          "name": "Anger",
+          "enabled": true,
+          "emotionWeight": 0.25,
+          "morphs": ["FC_Anger_R0_C0", "FC_Anger_R0_C1", "FC_Anger_R0_C2", "FC_Anger_R0_C3", "FC_Anger_R0_C4", "FC_Anger_R1_C0", "FC_Anger_R1_C1", "FC_Anger_R1_C2", "FC_Anger_R1_C3", "FC_Anger_R1_C4", "FC_Anger_R2_C0", "FC_Anger_R2_C1", "FC_Anger_R2_C2", "FC_Anger_R2_C3", "FC_Anger_R2_C4"]
+        }
+      ],
+      "yaw": 22.5,
+      "pitch": 11.25,
+      "note": "感情 2 枚。各レイヤーの 4 点 × 感情の重み。Neutral は常に全量",
+      "expect": {
+        "weights": {
+          "FC_R1_C2": 0.375,
+          "FC_R1_C3": 0.375,
+          "FC_R2_C2": 0.125,
+          "FC_R2_C3": 0.125,
+          "FC_Joy_R1_C2": 0.1875,
+          "FC_Joy_R1_C3": 0.1875,
+          "FC_Joy_R2_C2": 0.0625,
+          "FC_Joy_R2_C3": 0.0625,
+          "FC_Anger_R1_C2": 0.09375,
+          "FC_Anger_R1_C3": 0.09375,
+          "FC_Anger_R2_C2": 0.03125,
+          "FC_Anger_R2_C3": 0.03125
+        }
+      }
+    },
+    {
+      "name": "two_emotion_layers_sharing_morph_names",
+      "source": "python-port",
+      "grid": {
+        "yawRange": 90,
+        "pitchRange": 45,
+        "cols": 5,
+        "rows": 3,
+        "edgeFade": 15
+      },
+      "layers": [
+        {
+          "name": "Neutral",
+          "enabled": true,
+          "emotionWeight": 0,
+          "morphs": ["FC_R0_C0", "FC_R0_C1", "FC_R0_C2", "FC_R0_C3", "FC_R0_C4", "FC_R1_C0", "FC_R1_C1", "FC_R1_C2", "FC_R1_C3", "FC_R1_C4", "FC_R2_C0", "FC_R2_C1", "FC_R2_C2", "FC_R2_C3", "FC_R2_C4"]
+        },
+        {
+          "name": "Joy",
+          "enabled": true,
+          "emotionWeight": 0.5,
+          "morphs": ["FC_R0_C0", "FC_R0_C1", "FC_R0_C2", "FC_R0_C3", "FC_R0_C4", "FC_R1_C0", "FC_R1_C1", "FC_R1_C2", "FC_R1_C3", "FC_R1_C4", "FC_R2_C0", "FC_R2_C1", "FC_R2_C2", "FC_R2_C3", "FC_R2_C4"]
+        }
+      ],
+      "yaw": 22.5,
+      "pitch": 11.25,
+      "note": "同じシェイプ名を指すレイヤーは重みが足し合わさる",
+      "expect": {
+        "weights": {
+          "FC_R1_C2": 0.5625,
+          "FC_R1_C3": 0.5625,
+          "FC_R2_C2": 0.1875,
+          "FC_R2_C3": 0.1875
+        }
+      }
+    },
+    {
+      "name": "emotion_weight_above_one",
+      "source": "python-port",
+      "grid": {
+        "yawRange": 90,
+        "pitchRange": 45,
+        "cols": 5,
+        "rows": 3,
+        "edgeFade": 15
+      },
+      "layers": [
+        {
+          "name": "Neutral",
+          "enabled": true,
+          "emotionWeight": 0,
+          "morphs": ["FC_R0_C0", "FC_R0_C1", "FC_R0_C2", "FC_R0_C3", "FC_R0_C4", "FC_R1_C0", "FC_R1_C1", "FC_R1_C2", "FC_R1_C3", "FC_R1_C4", "FC_R2_C0", "FC_R2_C1", "FC_R2_C2", "FC_R2_C3", "FC_R2_C4"]
+        },
+        {
+          "name": "Joy",
+          "enabled": true,
+          "emotionWeight": 1.5,
+          "morphs": ["FC_Joy_R0_C0", "FC_Joy_R0_C1", "FC_Joy_R0_C2", "FC_Joy_R0_C3", "FC_Joy_R0_C4", "FC_Joy_R1_C0", "FC_Joy_R1_C1", "FC_Joy_R1_C2", "FC_Joy_R1_C3", "FC_Joy_R1_C4", "FC_Joy_R2_C0", "FC_Joy_R2_C1", "FC_Joy_R2_C2", "FC_Joy_R2_C3", "FC_Joy_R2_C4"]
+        }
+      ],
+      "yaw": 45,
+      "pitch": 0,
+      "note": "感情の重みは 1 を超えてもそのまま掛ける（丸めない）",
+      "expect": {
+        "weights": {
+          "FC_R1_C3": 1,
+          "FC_Joy_R1_C3": 1.5
+        }
+      }
+    },
+    {
+      "name": "emotion_weight_negative_is_not_skipped",
+      "source": "python-port",
+      "grid": {
+        "yawRange": 90,
+        "pitchRange": 45,
+        "cols": 5,
+        "rows": 3,
+        "edgeFade": 15
+      },
+      "layers": [
+        {
+          "name": "Neutral",
+          "enabled": true,
+          "emotionWeight": 0,
+          "morphs": ["FC_R0_C0", "FC_R0_C1", "FC_R0_C2", "FC_R0_C3", "FC_R0_C4", "FC_R1_C0", "FC_R1_C1", "FC_R1_C2", "FC_R1_C3", "FC_R1_C4", "FC_R2_C0", "FC_R2_C1", "FC_R2_C2", "FC_R2_C3", "FC_R2_C4"]
+        },
+        {
+          "name": "Joy",
+          "enabled": true,
+          "emotionWeight": -0.5,
+          "morphs": ["FC_Joy_R0_C0", "FC_Joy_R0_C1", "FC_Joy_R0_C2", "FC_Joy_R0_C3", "FC_Joy_R0_C4", "FC_Joy_R1_C0", "FC_Joy_R1_C1", "FC_Joy_R1_C2", "FC_Joy_R1_C3", "FC_Joy_R1_C4", "FC_Joy_R2_C0", "FC_Joy_R2_C1", "FC_Joy_R2_C2", "FC_Joy_R2_C3", "FC_Joy_R2_C4"]
+        }
+      ],
+      "yaw": 45,
+      "pitch": 0,
+      "note": "負の重みも 0 でなければ寄与する（UE 版の IsNearlyZero 判定どおり）",
+      "expect": {
+        "weights": {
+          "FC_R1_C3": 1,
+          "FC_Joy_R1_C3": -0.5
+        }
+      }
+    },
+    {
+      "name": "muted_layer_disabled",
+      "source": "python-port",
+      "grid": {
+        "yawRange": 90,
+        "pitchRange": 45,
+        "cols": 5,
+        "rows": 3,
+        "edgeFade": 15
+      },
+      "layers": [
+        {
+          "name": "Neutral",
+          "enabled": true,
+          "emotionWeight": 0,
+          "morphs": ["FC_R0_C0", "FC_R0_C1", "FC_R0_C2", "FC_R0_C3", "FC_R0_C4", "FC_R1_C0", "FC_R1_C1", "FC_R1_C2", "FC_R1_C3", "FC_R1_C4", "FC_R2_C0", "FC_R2_C1", "FC_R2_C2", "FC_R2_C3", "FC_R2_C4"]
+        },
+        {
+          "name": "Joy",
+          "enabled": false,
+          "emotionWeight": 1,
+          "morphs": ["FC_Joy_R0_C0", "FC_Joy_R0_C1", "FC_Joy_R0_C2", "FC_Joy_R0_C3", "FC_Joy_R0_C4", "FC_Joy_R1_C0", "FC_Joy_R1_C1", "FC_Joy_R1_C2", "FC_Joy_R1_C3", "FC_Joy_R1_C4", "FC_Joy_R2_C0", "FC_Joy_R2_C1", "FC_Joy_R2_C2", "FC_Joy_R2_C3", "FC_Joy_R2_C4"]
+        }
+      ],
+      "yaw": 45,
+      "pitch": 0,
+      "note": "enabled=false（ミュート）のレイヤーは寄与しない",
+      "expect": {
+        "weights": {
+          "FC_R1_C3": 1
+        }
+      }
+    },
+    {
+      "name": "disabled_neutral_layer",
+      "source": "python-port",
+      "grid": {
+        "yawRange": 90,
+        "pitchRange": 45,
+        "cols": 5,
+        "rows": 3,
+        "edgeFade": 15
+      },
+      "layers": [
+        {
+          "name": "Neutral",
+          "enabled": false,
+          "emotionWeight": 0,
+          "morphs": ["FC_R0_C0", "FC_R0_C1", "FC_R0_C2", "FC_R0_C3", "FC_R0_C4", "FC_R1_C0", "FC_R1_C1", "FC_R1_C2", "FC_R1_C3", "FC_R1_C4", "FC_R2_C0", "FC_R2_C1", "FC_R2_C2", "FC_R2_C3", "FC_R2_C4"]
+        },
+        {
+          "name": "Joy",
+          "enabled": true,
+          "emotionWeight": 0.5,
+          "morphs": ["FC_Joy_R0_C0", "FC_Joy_R0_C1", "FC_Joy_R0_C2", "FC_Joy_R0_C3", "FC_Joy_R0_C4", "FC_Joy_R1_C0", "FC_Joy_R1_C1", "FC_Joy_R1_C2", "FC_Joy_R1_C3", "FC_Joy_R1_C4", "FC_Joy_R2_C0", "FC_Joy_R2_C1", "FC_Joy_R2_C2", "FC_Joy_R2_C3", "FC_Joy_R2_C4"]
+        }
+      ],
+      "yaw": 45,
+      "pitch": 0,
+      "note": "Neutral を無効にすると Neutral の寄与も無くなる（常に全量なのは有効なときだけ）",
+      "expect": {
+        "weights": {
+          "FC_Joy_R1_C3": 0.5
+        }
+      }
+    },
+    {
+      "name": "neutral_emotion_weight_ignored",
+      "source": "python-port",
+      "grid": {
+        "yawRange": 90,
+        "pitchRange": 45,
+        "cols": 5,
+        "rows": 3,
+        "edgeFade": 15
+      },
+      "layers": [
+        {
+          "name": "Neutral",
+          "enabled": true,
+          "emotionWeight": 0,
+          "morphs": ["FC_R0_C0", "FC_R0_C1", "FC_R0_C2", "FC_R0_C3", "FC_R0_C4", "FC_R1_C0", "FC_R1_C1", "FC_R1_C2", "FC_R1_C3", "FC_R1_C4", "FC_R2_C0", "FC_R2_C1", "FC_R2_C2", "FC_R2_C3", "FC_R2_C4"]
+        }
+      ],
+      "yaw": 45,
+      "pitch": 0,
+      "note": "Neutral の emotionWeight は無視される（0 でも全量）",
+      "expect": {
+        "weights": {
+          "FC_R1_C3": 1
+        }
+      }
+    },
+    {
+      "name": "neutral_emotion_weight_ignored_nonzero",
+      "source": "python-port",
+      "grid": {
+        "yawRange": 90,
+        "pitchRange": 45,
+        "cols": 5,
+        "rows": 3,
+        "edgeFade": 15
+      },
+      "layers": [
+        {
+          "name": "Neutral",
+          "enabled": true,
+          "emotionWeight": 0.3,
+          "morphs": ["FC_R0_C0", "FC_R0_C1", "FC_R0_C2", "FC_R0_C3", "FC_R0_C4", "FC_R1_C0", "FC_R1_C1", "FC_R1_C2", "FC_R1_C3", "FC_R1_C4", "FC_R2_C0", "FC_R2_C1", "FC_R2_C2", "FC_R2_C3", "FC_R2_C4"]
+        }
+      ],
+      "yaw": 45,
+      "pitch": 0,
+      "note": "Neutral の emotionWeight が 0.3 でも全量",
+      "expect": {
+        "weights": {
+          "FC_R1_C3": 1
+        }
+      }
+    },
+    {
+      "name": "shared_morph_accumulates",
+      "source": "python-port",
+      "grid": {
+        "yawRange": 90,
+        "pitchRange": 45,
+        "cols": 5,
+        "rows": 3,
+        "edgeFade": 15
+      },
+      "layers": [
+        {
+          "name": "Neutral",
+          "enabled": true,
+          "emotionWeight": 0,
+          "morphs": ["FC_A", "FC_A", "FC_A", "FC_A", "FC_A", "FC_A", "FC_A", "FC_A", "FC_A", "FC_A", "FC_A", "FC_A", "FC_A", "FC_A", "FC_A"]
+        }
+      ],
+      "yaw": 22.5,
+      "pitch": 11.25,
+      "note": "4 点が同じシェイプ名なら 1 つにまとまり重みの合計 1",
+      "expect": {
+        "weights": {
+          "FC_A": 1
+        }
+      }
+    },
+    {
+      "name": "partial_unbaked_corners",
+      "source": "python-port",
+      "grid": {
+        "yawRange": 90,
+        "pitchRange": 45,
+        "cols": 5,
+        "rows": 3,
+        "edgeFade": 15
+      },
+      "layers": [
+        {
+          "name": "Neutral",
+          "enabled": true,
+          "emotionWeight": 0,
+          "morphs": ["FC_P0", null, "FC_P2", null, "FC_P4", null, "FC_P6", null, "FC_P8", null, "FC_P10", null, "FC_P12", null, "FC_P14"]
+        }
+      ],
+      "yaw": 22.5,
+      "pitch": 11.25,
+      "note": "4 隅のうち焼いていない点（null / 空文字）だけ飛ばす。重みは再正規化しない",
+      "expect": {
+        "weights": {
+          "FC_P8": 0.375,
+          "FC_P12": 0.125
+        }
+      }
+    },
+    {
+      "name": "empty_string_name_is_unbaked",
+      "source": "python-port",
+      "grid": {
+        "yawRange": 90,
+        "pitchRange": 45,
+        "cols": 5,
+        "rows": 3,
+        "edgeFade": 15
+      },
+      "layers": [
+        {
+          "name": "Neutral",
+          "enabled": true,
+          "emotionWeight": 0,
+          "morphs": ["", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+        }
+      ],
+      "yaw": 0,
+      "pitch": 0,
+      "expect": {
+        "weights": {}
+      }
+    },
+    {
+      "name": "layer_shorter_than_grid_fail_soft",
+      "source": "python-port",
+      "grid": {
+        "yawRange": 90,
+        "pitchRange": 45,
+        "cols": 5,
+        "rows": 3,
+        "edgeFade": 15
+      },
+      "layers": [
+        {
+          "name": "Neutral",
+          "enabled": true,
+          "emotionWeight": 0,
+          "morphs": ["FC_R0_C0", "FC_R0_C1", "FC_R0_C2", "FC_R0_C3", "FC_R0_C4", "FC_R1_C0", "FC_R1_C1", "FC_R1_C2", "FC_R1_C3", "FC_R1_C4", "FC_R2_C0", "FC_R2_C1", "FC_R2_C2", "FC_R2_C3", "FC_R2_C4"]
+        },
+        {
+          "name": "Joy",
+          "enabled": true,
+          "emotionWeight": 1,
+          "morphs": ["FC_J0", "FC_J1", "FC_J2"]
+        }
+      ],
+      "yaw": 45,
+      "pitch": 22.5,
+      "note": "感情レイヤーの点リストが格子より短い: 範囲外の index は 0 扱い（落ちない）",
+      "expect": {
+        "weights": {
+          "FC_R1_C3": 0.5,
+          "FC_R2_C3": 0.5
+        }
+      }
+    },
+    {
+      "name": "no_layers",
+      "source": "python-port",
+      "grid": {
+        "yawRange": 90,
+        "pitchRange": 45,
+        "cols": 5,
+        "rows": 3,
+        "edgeFade": 15
+      },
+      "layers": [],
+      "yaw": 0,
+      "pitch": 0,
+      "expect": {
+        "weights": {}
+      }
+    },
+    {
+      "name": "grid_5x3_center_front",
+      "source": "python-port",
+      "grid": {
+        "yawRange": 90,
+        "pitchRange": 45,
+        "cols": 5,
+        "rows": 3,
+        "edgeFade": 15
+      },
+      "layers": [
+        {
+          "name": "Neutral",
+          "enabled": true,
+          "emotionWeight": 0,
+          "morphs": ["FC_R0_C0", "FC_R0_C1", "FC_R0_C2", "FC_R0_C3", "FC_R0_C4", "FC_R1_C0", "FC_R1_C1", "FC_R1_C2", "FC_R1_C3", "FC_R1_C4", "FC_R2_C0", "FC_R2_C1", "FC_R2_C2", "FC_R2_C3", "FC_R2_C4"]
+        }
+      ],
+      "yaw": 0,
+      "pitch": 0,
+      "expect": {
+        "weights": {
+          "FC_R1_C2": 1
+        }
+      }
+    },
+    {
+      "name": "grid_5x3_between_columns",
+      "source": "python-port",
+      "grid": {
+        "yawRange": 90,
+        "pitchRange": 45,
+        "cols": 5,
+        "rows": 3,
+        "edgeFade": 15
+      },
+      "layers": [
+        {
+          "name": "Neutral",
+          "enabled": true,
+          "emotionWeight": 0,
+          "morphs": ["FC_R0_C0", "FC_R0_C1", "FC_R0_C2", "FC_R0_C3", "FC_R0_C4", "FC_R1_C0", "FC_R1_C1", "FC_R1_C2", "FC_R1_C3", "FC_R1_C4", "FC_R2_C0", "FC_R2_C1", "FC_R2_C2", "FC_R2_C3", "FC_R2_C4"]
+        }
+      ],
+      "yaw": 33.75,
+      "pitch": -11.25,
+      "expect": {
+        "weights": {
+          "FC_R0_C2": 0.0625,
+          "FC_R0_C3": 0.1875,
+          "FC_R1_C2": 0.1875,
+          "FC_R1_C3": 0.5625
+        }
+      }
+    },
+    {
+      "name": "grid_5x3_exact_corner_top_right",
+      "source": "python-port",
+      "grid": {
+        "yawRange": 90,
+        "pitchRange": 45,
+        "cols": 5,
+        "rows": 3,
+        "edgeFade": 15
+      },
+      "layers": [
+        {
+          "name": "Neutral",
+          "enabled": true,
+          "emotionWeight": 0,
+          "morphs": ["FC_R0_C0", "FC_R0_C1", "FC_R0_C2", "FC_R0_C3", "FC_R0_C4", "FC_R1_C0", "FC_R1_C1", "FC_R1_C2", "FC_R1_C3", "FC_R1_C4", "FC_R2_C0", "FC_R2_C1", "FC_R2_C2", "FC_R2_C3", "FC_R2_C4"]
+        }
+      ],
+      "yaw": 90,
+      "pitch": 45,
+      "expect": {
+        "weights": {
+          "FC_R2_C4": 1
+        }
+      }
+    },
+    {
+      "name": "grid_2x2_mid",
+      "source": "python-port",
+      "grid": {
+        "yawRange": 90,
+        "pitchRange": 45,
+        "cols": 2,
+        "rows": 2,
+        "edgeFade": 15
+      },
+      "layers": [
+        {
+          "name": "Neutral",
+          "enabled": true,
+          "emotionWeight": 0,
+          "morphs": ["FC_R0_C0", "FC_R0_C1", "FC_R1_C0", "FC_R1_C1"]
+        }
+      ],
+      "yaw": 45,
+      "pitch": -11.25,
+      "expect": {
+        "weights": {
+          "FC_R0_C0": 0.15625,
+          "FC_R0_C1": 0.46875,
+          "FC_R1_C0": 0.09375,
+          "FC_R1_C1": 0.28125
+        }
+      }
+    },
+    {
+      "name": "grid_2x2_exact",
+      "source": "python-port",
+      "grid": {
+        "yawRange": 90,
+        "pitchRange": 45,
+        "cols": 2,
+        "rows": 2,
+        "edgeFade": 15
+      },
+      "layers": [
+        {
+          "name": "Neutral",
+          "enabled": true,
+          "emotionWeight": 0,
+          "morphs": ["FC_R0_C0", "FC_R0_C1", "FC_R1_C0", "FC_R1_C1"]
+        }
+      ],
+      "yaw": 90,
+      "pitch": -45,
+      "expect": {
+        "weights": {
+          "FC_R0_C1": 1
+        }
+      }
+    },
+    {
+      "name": "grid_7x5",
+      "source": "python-port",
+      "grid": {
+        "yawRange": 120,
+        "pitchRange": 60,
+        "cols": 7,
+        "rows": 5,
+        "edgeFade": 20
+      },
+      "layers": [
+        {
+          "name": "Neutral",
+          "enabled": true,
+          "emotionWeight": 0,
+          "morphs": ["FC_R0_C0", "FC_R0_C1", "FC_R0_C2", "FC_R0_C3", "FC_R0_C4", "FC_R0_C5", "FC_R0_C6", "FC_R1_C0", "FC_R1_C1", "FC_R1_C2", "FC_R1_C3", "FC_R1_C4", "FC_R1_C5", "FC_R1_C6", "FC_R2_C0", "FC_R2_C1", "FC_R2_C2", "FC_R2_C3", "FC_R2_C4", "FC_R2_C5", "FC_R2_C6", "FC_R3_C0", "FC_R3_C1", "FC_R3_C2", "FC_R3_C3", "FC_R3_C4", "FC_R3_C5", "FC_R3_C6", "FC_R4_C0", "FC_R4_C1", "FC_R4_C2", "FC_R4_C3", "FC_R4_C4", "FC_R4_C5", "FC_R4_C6"]
+        }
+      ],
+      "yaw": -30,
+      "pitch": 17,
+      "expect": {
+        "weights": {
+          "FC_R2_C2": 0.325,
+          "FC_R2_C3": 0.108333333333,
+          "FC_R3_C2": 0.425,
+          "FC_R3_C3": 0.141666666667
+        }
+      }
+    },
+    {
+      "name": "grid_7x5_edge_fade",
+      "source": "python-port",
+      "grid": {
+        "yawRange": 120,
+        "pitchRange": 60,
+        "cols": 7,
+        "rows": 5,
+        "edgeFade": 20
+      },
+      "layers": [
+        {
+          "name": "Neutral",
+          "enabled": true,
+          "emotionWeight": 0,
+          "morphs": ["FC_R0_C0", "FC_R0_C1", "FC_R0_C2", "FC_R0_C3", "FC_R0_C4", "FC_R0_C5", "FC_R0_C6", "FC_R1_C0", "FC_R1_C1", "FC_R1_C2", "FC_R1_C3", "FC_R1_C4", "FC_R1_C5", "FC_R1_C6", "FC_R2_C0", "FC_R2_C1", "FC_R2_C2", "FC_R2_C3", "FC_R2_C4", "FC_R2_C5", "FC_R2_C6", "FC_R3_C0", "FC_R3_C1", "FC_R3_C2", "FC_R3_C3", "FC_R3_C4", "FC_R3_C5", "FC_R3_C6", "FC_R4_C0", "FC_R4_C1", "FC_R4_C2", "FC_R4_C3", "FC_R4_C4", "FC_R4_C5", "FC_R4_C6"]
+        }
+      ],
+      "yaw": 128,
+      "pitch": -61,
+      "expect": {
+        "weights": {
+          "FC_R0_C6": 0.57
+        }
+      }
+    },
+    {
+      "name": "grid_7x5_with_emotion",
+      "source": "python-port",
+      "grid": {
+        "yawRange": 120,
+        "pitchRange": 60,
+        "cols": 7,
+        "rows": 5,
+        "edgeFade": 20
+      },
+      "layers": [
+        {
+          "name": "Neutral",
+          "enabled": true,
+          "emotionWeight": 0,
+          "morphs": ["FC_R0_C0", "FC_R0_C1", "FC_R0_C2", "FC_R0_C3", "FC_R0_C4", "FC_R0_C5", "FC_R0_C6", "FC_R1_C0", "FC_R1_C1", "FC_R1_C2", "FC_R1_C3", "FC_R1_C4", "FC_R1_C5", "FC_R1_C6", "FC_R2_C0", "FC_R2_C1", "FC_R2_C2", "FC_R2_C3", "FC_R2_C4", "FC_R2_C5", "FC_R2_C6", "FC_R3_C0", "FC_R3_C1", "FC_R3_C2", "FC_R3_C3", "FC_R3_C4", "FC_R3_C5", "FC_R3_C6", "FC_R4_C0", "FC_R4_C1", "FC_R4_C2", "FC_R4_C3", "FC_R4_C4", "FC_R4_C5", "FC_R4_C6"]
+        },
+        {
+          "name": "Sad",
+          "enabled": true,
+          "emotionWeight": 0.8,
+          "morphs": ["FC_Sad_R0_C0", "FC_Sad_R0_C1", "FC_Sad_R0_C2", "FC_Sad_R0_C3", "FC_Sad_R0_C4", "FC_Sad_R0_C5", "FC_Sad_R0_C6", "FC_Sad_R1_C0", "FC_Sad_R1_C1", "FC_Sad_R1_C2", "FC_Sad_R1_C3", "FC_Sad_R1_C4", "FC_Sad_R1_C5", "FC_Sad_R1_C6", "FC_Sad_R2_C0", "FC_Sad_R2_C1", "FC_Sad_R2_C2", "FC_Sad_R2_C3", "FC_Sad_R2_C4", "FC_Sad_R2_C5", "FC_Sad_R2_C6", "FC_Sad_R3_C0", "FC_Sad_R3_C1", "FC_Sad_R3_C2", "FC_Sad_R3_C3", "FC_Sad_R3_C4", "FC_Sad_R3_C5", "FC_Sad_R3_C6", "FC_Sad_R4_C0", "FC_Sad_R4_C1", "FC_Sad_R4_C2", "FC_Sad_R4_C3", "FC_Sad_R4_C4", "FC_Sad_R4_C5", "FC_Sad_R4_C6"]
+        }
+      ],
+      "yaw": 70,
+      "pitch": 33,
+      "expect": {
+        "weights": {
+          "FC_R3_C4": 0.225,
+          "FC_R3_C5": 0.675,
+          "FC_R4_C4": 0.025,
+          "FC_R4_C5": 0.075,
+          "FC_Sad_R3_C4": 0.18,
+          "FC_Sad_R3_C5": 0.54,
+          "FC_Sad_R4_C4": 0.02,
+          "FC_Sad_R4_C5": 0.06
+        }
+      }
+    },
+    {
+      "name": "grid_1x3_single_column_ignores_yaw",
+      "source": "python-port",
+      "grid": {
+        "yawRange": 90,
+        "pitchRange": 45,
+        "cols": 1,
+        "rows": 3,
+        "edgeFade": 15
+      },
+      "layers": [
+        {
+          "name": "Neutral",
+          "enabled": true,
+          "emotionWeight": 0,
+          "morphs": ["FC_R0_C0", "FC_R1_C0", "FC_R2_C0"]
+        }
+      ],
+      "yaw": 500,
+      "pitch": 10,
+      "note": "列が 1 つの軸は常にその点を 100%（範囲外でもフェードしない。UE 版の SampleAxis どおり）",
+      "expect": {
+        "weights": {
+          "FC_R1_C0": 0.777777777778,
+          "FC_R2_C0": 0.222222222222
+        }
+      }
+    },
+    {
+      "name": "grid_3x1_single_row_ignores_pitch",
+      "source": "python-port",
+      "grid": {
+        "yawRange": 90,
+        "pitchRange": 45,
+        "cols": 3,
+        "rows": 1,
+        "edgeFade": 15
+      },
+      "layers": [
+        {
+          "name": "Neutral",
+          "enabled": true,
+          "emotionWeight": 0,
+          "morphs": ["FC_R0_C0", "FC_R0_C1", "FC_R0_C2"]
+        }
+      ],
+      "yaw": 45,
+      "pitch": -300,
+      "expect": {
+        "weights": {
+          "FC_R0_C1": 0.5,
+          "FC_R0_C2": 0.5
+        }
+      }
+    },
+    {
+      "name": "grid_1x1",
+      "source": "python-port",
+      "grid": {
+        "yawRange": 90,
+        "pitchRange": 45,
+        "cols": 1,
+        "rows": 1,
+        "edgeFade": 15
+      },
+      "layers": [
+        {
+          "name": "Neutral",
+          "enabled": true,
+          "emotionWeight": 0,
+          "morphs": ["FC_Only"]
+        }
+      ],
+      "yaw": 0,
+      "pitch": 0,
+      "expect": {
+        "weights": {
+          "FC_Only": 1
+        }
+      }
+    },
+    {
+      "name": "grid_zero_cols",
+      "source": "python-port",
+      "grid": {
+        "yawRange": 90,
+        "pitchRange": 45,
+        "cols": 0,
+        "rows": 3,
+        "edgeFade": 15
+      },
+      "layers": [
+        {
+          "name": "Neutral",
+          "enabled": true,
+          "emotionWeight": 0,
+          "morphs": ["FC_R0_C0", "FC_R0_C1", "FC_R0_C2", "FC_R1_C0", "FC_R1_C1", "FC_R1_C2", "FC_R2_C0", "FC_R2_C1", "FC_R2_C2"]
+        }
+      ],
+      "yaw": 0,
+      "pitch": 0,
+      "note": "cols <= 0 は何も返さない",
+      "expect": {
+        "weights": {}
+      }
+    },
+    {
+      "name": "narrow_range_clamped_by_small_number",
+      "source": "python-port",
+      "grid": {
+        "yawRange": 0,
+        "pitchRange": 0,
+        "cols": 3,
+        "rows": 3,
+        "edgeFade": 15
+      },
+      "layers": [
+        {
+          "name": "Neutral",
+          "enabled": true,
+          "emotionWeight": 0,
+          "morphs": ["FC_R0_C0", "FC_R0_C1", "FC_R0_C2", "FC_R1_C0", "FC_R1_C1", "FC_R1_C2", "FC_R2_C0", "FC_R2_C1", "FC_R2_C2"]
+        }
+      ],
+      "yaw": 0,
+      "pitch": 0,
+      "note": "range 0 は KINDA_SMALL_NUMBER（1e-4）に丸めて割る。角度 0 なら中央",
+      "expect": {
+        "weights": {
+          "FC_R1_C1": 1
+        }
+      }
+    }
+  ]
+}

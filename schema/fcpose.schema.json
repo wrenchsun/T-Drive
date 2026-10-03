@@ -1,0 +1,243 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://t-drive.local/schema/fcpose.schema.json",
+  "title": "T-Drive FacialController .fcpose.json",
+  "description": "UE 版 FacialController が書く .fcpose.json（format: FacialCorrection / FacialPose, version 1）に、T-Drive の追加キー（asset / target / bake / limits / material / quality / perspective / layerWeights / sculptShapes）と forwardAxis の ±Z を足した形式。docs/14 §4.2。知らないキーはどの階層でも許す（読む側は無視して保持する）。必須にしているのは UE 版が必ず書くキーのうち、読み手が座標系や格子を決めるのに要るものだけ（欠けたキーは読む側が既定値で補う）。",
+  "type": "object",
+  "required": ["format", "version"],
+  "properties": {
+    "format": { "enum": ["FacialCorrection", "FacialPose"] },
+    "version": { "type": "integer", "minimum": 1, "description": "この実装は 1。新しい版は警告して読める所だけ読む" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "format": { "const": "FacialCorrection" } }, "required": ["format"] },
+      "then": { "$ref": "#/$defs/correction" }
+    },
+    {
+      "if": { "properties": { "format": { "const": "FacialPose" } }, "required": ["format"] },
+      "then": { "$ref": "#/$defs/pose" }
+    }
+  ],
+  "additionalProperties": true,
+  "$defs": {
+    "vec3": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 },
+    "quat": {
+      "type": "array",
+      "items": { "type": "number" },
+      "minItems": 4,
+      "maxItems": 4,
+      "description": "[x, y, z, w]。正規化済み"
+    },
+    "stringList": { "type": "array", "items": { "type": "string" } },
+    "meta": {
+      "type": "object",
+      "required": ["unit", "upAxis", "handedness"],
+      "properties": {
+        "unit": { "type": "string", "description": "長さの単位。cm / m / mm / in / ft など" },
+        "upAxis": { "enum": ["Y", "Z"] },
+        "handedness": { "enum": ["left", "right"] },
+        "source": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "boneOffset": {
+      "type": "object",
+      "description": "親ボーン空間での加算トランスフォーム。適用順 Scale → Rotation → Translation",
+      "properties": {
+        "t": { "$ref": "#/$defs/vec3" },
+        "r": { "$ref": "#/$defs/quat" },
+        "s": { "$ref": "#/$defs/vec3" }
+      },
+      "additionalProperties": true
+    },
+    "curves": {
+      "type": "object",
+      "description": "シェイプ名（大文字小文字を区別する完全一致）→ 重み",
+      "additionalProperties": { "type": "number" }
+    },
+    "bones": {
+      "type": "object",
+      "description": "ボーン名（大文字小文字を区別する完全一致）→ BoneOffset",
+      "additionalProperties": { "$ref": "#/$defs/boneOffset" }
+    },
+    "pose": {
+      "required": ["meta", "curves", "bones"],
+      "properties": {
+        "meta": { "$ref": "#/$defs/meta" },
+        "curves": { "$ref": "#/$defs/curves" },
+        "bones": { "$ref": "#/$defs/bones" }
+      }
+    },
+    "point": {
+      "type": "object",
+      "required": ["row", "col"],
+      "properties": {
+        "row": { "type": "integer", "minimum": 0 },
+        "col": { "type": "integer", "minimum": 0 },
+        "isKey": { "type": "boolean", "description": "true = キー、false = 自動生成" },
+        "curves": { "$ref": "#/$defs/curves" },
+        "bones": { "$ref": "#/$defs/bones" }
+      },
+      "additionalProperties": true
+    },
+    "layer": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "emotionCurve": { "type": "string" },
+        "enabled": { "type": "boolean" },
+        "points": { "type": "array", "items": { "$ref": "#/$defs/point" }, "description": "作った点だけ" }
+      },
+      "additionalProperties": true
+    },
+    "correction": {
+      "required": ["meta", "grid", "layers"],
+      "properties": {
+        "meta": { "$ref": "#/$defs/meta" },
+        "grid": {
+          "type": "object",
+          "properties": {
+            "yawRange": { "type": "number", "exclusiveMinimum": 0 },
+            "pitchRange": { "type": "number", "exclusiveMinimum": 0 },
+            "cols": { "type": "integer", "minimum": 1, "maximum": 15 },
+            "rows": { "type": "integer", "minimum": 1, "maximum": 15 },
+            "baseBone": { "type": "string" },
+            "forwardAxis": {
+              "enum": ["+X", "-X", "+Y", "-Y", "+Z", "-Z"],
+              "description": "±Z は T-Drive が足した値（Y-up の環境用。UE 版へ持ち込むときは ±X / ±Y に直す）"
+            },
+            "centerOffset": { "$ref": "#/$defs/vec3" },
+            "edgeFade": { "type": "number", "minimum": 0 }
+          },
+          "additionalProperties": true
+        },
+        "policy": {
+          "type": "object",
+          "properties": {
+            "expressionDampen": { "type": "number", "minimum": 0, "maximum": 1 },
+            "interpSpeed": { "type": "number", "minimum": 0 },
+            "snapAngle": { "type": "number", "minimum": 0 },
+            "fade": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2 },
+            "globalAlpha": { "type": "number", "minimum": 0, "maximum": 1 }
+          },
+          "additionalProperties": true
+        },
+        "layers": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/layer" },
+          "minItems": 1,
+          "maxItems": 16,
+          "description": "レイヤー 0 は Neutral。感情レイヤーは Neutral との差分として焼く"
+        },
+        "workingSet": {
+          "type": "object",
+          "properties": {
+            "curves": { "$ref": "#/$defs/stringList" },
+            "bones": { "$ref": "#/$defs/stringList" }
+          },
+          "additionalProperties": true
+        },
+        "mirror": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "suffixL": { "type": "string" },
+            "suffixR": { "type": "string" },
+            "exclude": { "$ref": "#/$defs/stringList" },
+            "boneAxis": { "enum": ["X", "Y", "Z"] }
+          },
+          "additionalProperties": true
+        },
+        "autogen": {
+          "type": "object",
+          "properties": {
+            "mode": { "enum": ["IDW", "NearestKey"] },
+            "idwPower": { "type": "number", "exclusiveMinimum": 0 }
+          },
+          "additionalProperties": true
+        },
+        "exclude": {
+          "type": "object",
+          "properties": {
+            "curves": { "$ref": "#/$defs/stringList" },
+            "bones": { "$ref": "#/$defs/stringList" }
+          },
+          "additionalProperties": true
+        },
+        "intensityCurves": { "$ref": "#/$defs/stringList" },
+        "profile": { "type": "string" },
+        "asset": { "type": "string", "description": "T-Drive 追加。FC_<asset>_<layer>_R{r}_C{c} の <asset>" },
+        "target": {
+          "type": "object",
+          "description": "T-Drive 追加。焼く先のメッシュ",
+          "properties": {
+            "mesh": { "type": "string" },
+            "extraMeshes": { "$ref": "#/$defs/stringList" }
+          },
+          "additionalProperties": true
+        },
+        "bake": {
+          "type": "object",
+          "description": "T-Drive 追加",
+          "properties": {
+            "deltaThreshold": { "type": "number", "minimum": 0 },
+            "differential": { "type": "boolean" }
+          },
+          "additionalProperties": true
+        },
+        "limits": {
+          "type": "object",
+          "description": "T-Drive 追加。可動域（シェイプ名 → [min, max]）",
+          "additionalProperties": {
+            "type": "array",
+            "items": { "type": "number" },
+            "minItems": 2,
+            "maxItems": 2
+          }
+        },
+        "material": {
+          "type": "object",
+          "description": "T-Drive 追加",
+          "properties": { "mode": { "enum": ["none", "propertyBlock"] } },
+          "additionalProperties": true
+        },
+        "quality": {
+          "type": "object",
+          "description": "T-Drive 追加",
+          "properties": {
+            "sharpness": { "type": "number", "exclusiveMinimum": 0 },
+            "stepFps": { "type": "number", "minimum": 0 },
+            "angleEpsilon": { "type": "number", "minimum": 0 },
+            "maxLod": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": true
+        },
+        "perspective": {
+          "type": "object",
+          "description": "T-Drive 追加（R-34）。keys の形は F5-4 で決める",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "keys": { "type": "array" }
+          },
+          "additionalProperties": true
+        },
+        "layerWeights": {
+          "type": "object",
+          "description": "T-Drive 追加（R-35）。レイヤー名 → 重みの入力元",
+          "additionalProperties": {
+            "type": "object",
+            "properties": { "source": { "enum": ["curve", "direct", "distance"] } },
+            "additionalProperties": true
+          }
+        },
+        "sculptShapes": {
+          "type": "object",
+          "description": "T-Drive 追加。「この角度で彫る」で作る補助シェイプの接頭辞",
+          "properties": { "prefix": { "type": "string" } },
+          "additionalProperties": true
+        }
+      }
+    }
+  }
+}

@@ -8,6 +8,10 @@
 ### 互換性
 - MINOR: Python の公開モジュール名は転送モジュールで維持（`tdrive_toon.lifecycle` / `project` / `updater` / `ui_update` / `mcp_bridge` は `tdrive` に移したが、同じモジュールを返すので既存の import はそのまま動く）。Look・パラメータ契約に変更なし
 
+### 追加
+- FacialController の基盤（F0-2 / F0-3。まだ画面からは使えない）: Maya 非依存の計算（角度 → 重み。UE 版 FacialCore の移植）、`.fcpose.json` の読み書き（UE 版互換 + 追加キー）、座標系の変換、スキーマ、UE 版・Unity と共通のテストデータ
+- サンプルモデル shizuku の取り込み手順（S-1。`tools/setup_sample_shizuku.py`。モデルはリポジトリに含めない）
+
 ### 変更
 - エディタを 2 段タブに（F0-1）: ウィンドウとドッキングの見出しは「T-Drive <版>」、1 段目のタブは Toon（これまでのエディタ）と FacialController（準備中）。メインメニューは「T-Drive Toon」から「T-Drive」に改名し、Toon 表示 ON/OFF はサブメニュー「Toon」へ。Toon の動作は変わらない
 

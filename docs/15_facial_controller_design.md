@@ -118,7 +118,8 @@ class Document:    meta; grid; policy; layers: list[Layer]; working_set; mirror;
                    extra: dict   # 知らないキーはそのまま持って書き戻す（往復で落とさない）
 ```
 
-- 読み込み: 知らないキーは `extra` に保持。`version` が新しければ警告して読める所だけ読む。欠けたキーは既定値
+- 読み込み: 知らないキーは `extra` に保持。`version` が新しければ警告して読める所だけ読む。**欠けたキーは UE 版の既定値**（`meta` = cm / Z-up / 左手、`forwardAxis` = `+X`、`baseBone` = `head`、`mirror.boneAxis` = `Y`）として読む（UE 版が書いたファイルと同じ意味にするため）。上のデータクラスの既定値もこれに合わせる
+- Maya で新規作成するとき（F1-1）は、Maya の系の値（`meta` = cm / Y-up / 右手、`forwardAxis` = `+Z`、`mirror.boneAxis` = `X`）を**必ず明示して書く**。格子の外の点・空のポーズの点は読み込みで捨てない（UE 版は取り込み時に捨てる。T-Drive は往復で落とさないことを優先）
 - 書き出し: UE 版と同じキー順・同じ表記（クォータニオン `[x,y,z,w]`、作った点だけ）。**UE 版が書いたファイルを読んで何も変えずに書くと、意味が同じ JSON になる**（往復テスト）
 - ベイクの状態（焼いた時のポーズのハッシュ）は JSON に入れず、Maya シーン側（§4.1）に持つ
 
@@ -138,6 +139,9 @@ def smooth_weights(prev, target, speed, dt, snap) -> dict[str, float]
 - `GridShape` = 範囲・列行・端のフェード。`LayerEvalInput` = 重み・点ごとの「焼いたシェイプ名（無ければ None）」
 - 追加機能（シャープニング・コマ打ち・パース・距離の重み・誇張）は引数の既定値で「何もしない」になる形で足す（既存のテストデータの結果が変わらないこと）
 - `core/space.py`: Maya（Y-up 右手 cm）・Unity（Y-up 左手 m）・UE（Z-up 左手 cm）と正準空間の相互変換。位置・回転・`forwardAxis`・`boneAxis`。**ここだけが座標系を知っている**
+  - 軸の対応（系 → 正準）: Maya `(x, y, z) → (z, −x, y)`、Unity `(x, y, z) → (z, x, y)`、UE は恒等。上は上へ、慣例の前（Y-up なら +Z）は +X へ。右手 ⇔ 左手は鏡映なので回転の向きが逆になる
+  - ボーンのローカル軸はワールドと同じ軸の入れ替えに従う前提（FBX 経由でそろった骨格）。上向きの軸を `forwardAxis` に指定するとエラー
+  - Yaw の符号: 正 = カメラがキャラクターの左側（UE 版と同じ。共通のテストデータで固定）
 
 ### 3.3 共通のテストデータ（`tests/facial/conformance/`）
 

@@ -1,0 +1,147 @@
+{
+  "format": "FacialCorrection",
+  "version": 1,
+  "meta": {
+    "unit": "cm",
+    "upAxis": "Y",
+    "handedness": "right",
+    "source": "Maya2026 T-Drive 0.5.0",
+    "note": "unknown meta key"
+  },
+  "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 5,
+    "rows": 3,
+    "baseBone": "bone_head",
+    "forwardAxis": "+Z",
+    "centerOffset": [0, 1.5, 0.5],
+    "edgeFade": 15,
+    "futureGridKey": [1, 2, 3]
+  },
+  "policy": {
+    "expressionDampen": 0.5,
+    "interpSpeed": 10,
+    "snapAngle": 45,
+    "fade": [0, 0],
+    "globalAlpha": 1
+  },
+  "layers": [
+    {
+      "name": "Neutral",
+      "emotionCurve": "",
+      "enabled": true,
+      "points": [
+        {
+          "row": 1,
+          "col": 0,
+          "isKey": false,
+          "curves": {
+            "bs.mouth_smile_R": 0.4
+          },
+          "bones": {}
+        },
+        {
+          "row": 1,
+          "col": 4,
+          "isKey": true,
+          "curves": {
+            "bs.mouth_smile_L": 0.4
+          },
+          "bones": {
+            "bone_eye_L": {
+              "t": [0, 0.05, 0],
+              "r": [0, 0.0871557427476582, 0, 0.9961946980917455],
+              "s": [1, 1, 1]
+            }
+          },
+          "note": "point note"
+        }
+      ]
+    },
+    {
+      "name": "Joy",
+      "emotionCurve": "emo_joy",
+      "enabled": true,
+      "points": [
+        {
+          "row": 1,
+          "col": 2,
+          "isKey": true,
+          "curves": {
+            "bs.mouth_smile_L": 0.2,
+            "fcs_Joy_R1_C2": 1
+          },
+          "bones": {}
+        }
+      ],
+      "color": [1, 0.5, 0]
+    }
+  ],
+  "workingSet": {
+    "curves": ["bs.mouth_smile_L", "bs.mouth_smile_R"],
+    "bones": ["bone_eye_L"]
+  },
+  "mirror": {
+    "enabled": true,
+    "suffixL": "_L",
+    "suffixR": "_R",
+    "exclude": [],
+    "boneAxis": "X"
+  },
+  "autogen": {
+    "mode": "IDW",
+    "idwPower": 2
+  },
+  "exclude": {
+    "curves": [],
+    "bones": []
+  },
+  "intensityCurves": ["bs.mouth_smile_L"],
+  "profile": "shizuku",
+  "asset": "shizuku",
+  "target": {
+    "mesh": "mdl_face02",
+    "extraMeshes": ["mdl_eyelash"]
+  },
+  "bake": {
+    "deltaThreshold": 0.001,
+    "differential": true
+  },
+  "limits": {
+    "bs.mouth_smile_L": [0, 1],
+    "bs.jaw_open": [0, 2]
+  },
+  "material": {
+    "mode": "propertyBlock"
+  },
+  "quality": {
+    "sharpness": 1,
+    "stepFps": 0,
+    "angleEpsilon": 0.1,
+    "maxLod": 0
+  },
+  "perspective": {
+    "enabled": false,
+    "keys": []
+  },
+  "layerWeights": {
+    "Joy": {
+      "source": "curve"
+    }
+  },
+  "sculptShapes": {
+    "prefix": "fcs_"
+  },
+  "futureFeature": {
+    "a": 1,
+    "nested": [
+      {
+        "x": 1
+      },
+      {
+        "y": [2, 3]
+      }
+    ]
+  }
+}

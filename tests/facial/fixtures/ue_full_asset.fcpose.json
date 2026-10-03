@@ -1,0 +1,278 @@
+{
+	"format": "FacialCorrection",
+	"version": 1,
+	"meta":
+	{
+		"unit": "cm",
+		"upAxis": "Z",
+		"handedness": "left",
+		"source": "UE5.8"
+	},
+	"grid":
+	{
+		"yawRange": 90,
+		"pitchRange": 45,
+		"cols": 5,
+		"rows": 3,
+		"baseBone": "head",
+		"forwardAxis": "+X",
+		"centerOffset": [
+			0,
+			0,
+			3.5
+		],
+		"edgeFade": 15
+	},
+	"policy":
+	{
+		"expressionDampen": 0.5,
+		"interpSpeed": 10,
+		"snapAngle": 45,
+		"fade": [
+			0,
+			0
+		],
+		"globalAlpha": 1
+	},
+	"layers": [
+		{
+			"name": "Neutral",
+			"emotionCurve": "",
+			"enabled": true,
+			"points": [
+				{
+					"row": 0,
+					"col": 4,
+					"isKey": true,
+					"curves":
+					{
+						"bs.mouth_smile_L": 0.3499999940395355,
+						"bs.mouth_smile_R": 0.3499999940395355,
+						"bs.eye_close_L": 0.11999999731779099
+					},
+					"bones":
+					{
+						"bone_eye_L":
+						{
+							"t": [
+								0,
+								0.05000000074505806,
+								-0.019999999552965164
+							],
+							"r": [
+								0,
+								0,
+								0.02181488461792469,
+								0.9997619986534119
+							],
+							"s": [
+								1,
+								1,
+								1
+							]
+						}
+					}
+				},
+				{
+					"row": 1,
+					"col": 0,
+					"isKey": false,
+					"curves":
+					{
+						"bs.mouth_smile_L": 0.4000000059604645,
+						"bs.mouth_smile_R": 0.4000000059604645,
+						"bs.jaw_open": 0.05000000074505806
+					},
+					"bones": {}
+				},
+				{
+					"row": 1,
+					"col": 3,
+					"isKey": false,
+					"curves":
+					{
+						"bs.mouth_smile_L": 0.20000000298023224
+					},
+					"bones":
+					{
+						"bone_eye_R":
+						{
+							"t": [
+								0,
+								-0.05000000074505806,
+								0.019999999552965164
+							],
+							"r": [
+								0,
+								0,
+								-0.02181488461792469,
+								0.9997619986534119
+							],
+							"s": [
+								1,
+								1,
+								1
+							]
+						}
+					}
+				},
+				{
+					"row": 1,
+					"col": 4,
+					"isKey": true,
+					"curves":
+					{
+						"bs.mouth_smile_L": 0.5,
+						"bs.jaw_open": 0.10000000149011612,
+						"bs.brow_down": 0.20000000298023224
+					},
+					"bones":
+					{
+						"bone_neck":
+						{
+							"t": [
+								0,
+								0,
+								0
+							],
+							"r": [
+								0,
+								-0.3420201539993286,
+								0,
+								0.9396926164627075
+							],
+							"s": [
+								1,
+								1,
+								1
+							]
+						},
+						"bone_eye_L":
+						{
+							"t": [
+								0.009999999776482582,
+								0.019999999552965164,
+								0
+							],
+							"r": [
+								0,
+								0,
+								0.04361938685178757,
+								0.9990482330322266
+							],
+							"s": [
+								1,
+								1.0499999523162842,
+								1
+							]
+						}
+					}
+				},
+				{
+					"row": 2,
+					"col": 2,
+					"isKey": true,
+					"curves":
+					{
+						"bs.jaw_open": 0.25
+					},
+					"bones": {}
+				}
+			]
+		},
+		{
+			"name": "Joy",
+			"emotionCurve": "emo_joy",
+			"enabled": true,
+			"points": [
+				{
+					"row": 1,
+					"col": 2,
+					"isKey": true,
+					"curves":
+					{
+						"bs.mouth_smile_L": 0.15000000596046448,
+						"bs.mouth_smile_R": 0.15000000596046448
+					},
+					"bones": {}
+				},
+				{
+					"row": 1,
+					"col": 4,
+					"isKey": true,
+					"curves":
+					{
+						"bs.mouth_smile_L": 0.30000001192092896,
+						"bs.mouth_smile_R": 0.30000001192092896,
+						"bs.eye_close_L": 0.20000000298023224
+					},
+					"bones":
+					{
+						"bone_eye_R":
+						{
+							"t": [
+								0,
+								0,
+								0.029999999329447746
+							],
+							"r": [
+								0,
+								0,
+								0.06975647062063217,
+								0.9975640773773193
+							],
+							"s": [
+								1,
+								1,
+								1
+							]
+						}
+					}
+				}
+			]
+		}
+	],
+	"workingSet":
+	{
+		"curves": [
+			"bs.mouth_smile_L",
+			"bs.mouth_smile_R",
+			"bs.jaw_open",
+			"bs.eye_close_L",
+			"bs.brow_down"
+		],
+		"bones": [
+			"bone_neck",
+			"bone_eye_L",
+			"bone_eye_R"
+		]
+	},
+	"mirror":
+	{
+		"enabled": true,
+		"suffixL": "_L",
+		"suffixR": "_R",
+		"exclude": [
+			"bs.tongue*"
+		],
+		"boneAxis": "Y"
+	},
+	"autogen":
+	{
+		"mode": "IDW",
+		"idwPower": 2
+	},
+	"exclude":
+	{
+		"curves": [
+			"lipSync_*"
+		],
+		"bones": []
+	},
+	"intensityCurves": [
+		"bs.mouth_smile_L",
+		"bs.mouth_smile_R",
+		"bs.jaw_open"
+	],
+	"profile": "shizuku"
+}

@@ -1,0 +1,234 @@
+{
+  "kind": "evaluate",
+  "description": "UE 版 FacialCoreTests.cpp の自動テスト（EvaluateCorrection 系 6 件 = 8 ケース）を写したもの。3x3 格子・Yaw 範囲 90・Pitch 範囲 45・端のフェード 15",
+  "cases": [
+    {
+      "name": "exact_grid_point",
+      "source": "UE FacialCoreTests.cpp:ExactGridPoint",
+      "grid": {
+        "yawRange": 90,
+        "pitchRange": 45,
+        "cols": 3,
+        "rows": 3,
+        "edgeFade": 15
+      },
+      "layers": [
+        {
+          "name": "Neutral",
+          "enabled": true,
+          "emotionWeight": 0,
+          "morphs": ["FC_R0_C0", "FC_R0_C1", "FC_R0_C2", "FC_R1_C0", "FC_R1_C1", "FC_R1_C2", "FC_R2_C0", "FC_R2_C1", "FC_R2_C2"]
+        }
+      ],
+      "yaw": -90,
+      "pitch": -45,
+      "expect": {
+        "weights": {
+          "FC_R0_C0": 1
+        }
+      },
+      "note": "交点ちょうどではモーフ 1 個のみ・重み 1"
+    },
+    {
+      "name": "bilinear_center",
+      "source": "UE FacialCoreTests.cpp:BilinearCenter",
+      "grid": {
+        "yawRange": 90,
+        "pitchRange": 45,
+        "cols": 3,
+        "rows": 3,
+        "edgeFade": 15
+      },
+      "layers": [
+        {
+          "name": "Neutral",
+          "enabled": true,
+          "emotionWeight": 0,
+          "morphs": ["FC_R0_C0", "FC_R0_C1", "FC_R0_C2", "FC_R1_C0", "FC_R1_C1", "FC_R1_C2", "FC_R2_C0", "FC_R2_C1", "FC_R2_C2"]
+        }
+      ],
+      "yaw": -45,
+      "pitch": -22.5,
+      "expect": {
+        "weights": {
+          "FC_R0_C0": 0.25,
+          "FC_R0_C1": 0.25,
+          "FC_R1_C0": 0.25,
+          "FC_R1_C1": 0.25
+        }
+      },
+      "note": "4 点が均等（各 0.25）"
+    },
+    {
+      "name": "emotion_blend",
+      "source": "UE FacialCoreTests.cpp:EmotionBlend",
+      "grid": {
+        "yawRange": 90,
+        "pitchRange": 45,
+        "cols": 3,
+        "rows": 3,
+        "edgeFade": 15
+      },
+      "layers": [
+        {
+          "name": "Neutral",
+          "enabled": true,
+          "emotionWeight": 0,
+          "morphs": ["FC_R0_C0", "FC_R0_C1", "FC_R0_C2", "FC_R1_C0", "FC_R1_C1", "FC_R1_C2", "FC_R2_C0", "FC_R2_C1", "FC_R2_C2"]
+        },
+        {
+          "name": "Happy",
+          "enabled": true,
+          "emotionWeight": 0.5,
+          "morphs": ["FC_Happy_R0_C0", "FC_Happy_R0_C1", "FC_Happy_R0_C2", "FC_Happy_R1_C0", "FC_Happy_R1_C1", "FC_Happy_R1_C2", "FC_Happy_R2_C0", "FC_Happy_R2_C1", "FC_Happy_R2_C2"]
+        }
+      ],
+      "yaw": -90,
+      "pitch": -45,
+      "expect": {
+        "weights": {
+          "FC_R0_C0": 1,
+          "FC_Happy_R0_C0": 0.5
+        }
+      },
+      "note": "Neutral は常に全量、感情（差分ベイク）は感情の重み倍。UE 版の文書の 1-Σw 方式ではなくコードが正"
+    },
+    {
+      "name": "zero_weight_skip",
+      "source": "UE FacialCoreTests.cpp:ZeroWeightSkip",
+      "grid": {
+        "yawRange": 90,
+        "pitchRange": 45,
+        "cols": 3,
+        "rows": 3,
+        "edgeFade": 15
+      },
+      "layers": [
+        {
+          "name": "Neutral",
+          "enabled": true,
+          "emotionWeight": 0,
+          "morphs": ["FC_R0_C0", "FC_R0_C1", "FC_R0_C2", "FC_R1_C0", "FC_R1_C1", "FC_R1_C2", "FC_R2_C0", "FC_R2_C1", "FC_R2_C2"]
+        },
+        {
+          "name": "Happy",
+          "enabled": true,
+          "emotionWeight": 0,
+          "morphs": ["FC_Happy_R0_C0", "FC_Happy_R0_C1", "FC_Happy_R0_C2", "FC_Happy_R1_C0", "FC_Happy_R1_C1", "FC_Happy_R1_C2", "FC_Happy_R2_C0", "FC_Happy_R2_C1", "FC_Happy_R2_C2"]
+        }
+      ],
+      "yaw": -90,
+      "pitch": -45,
+      "expect": {
+        "weights": {
+          "FC_R0_C0": 1
+        }
+      },
+      "note": "感情の重み 0 のレイヤーは出力に含まれない"
+    },
+    {
+      "name": "edge_fade_at_boundary",
+      "source": "UE FacialCoreTests.cpp:EdgeFade",
+      "grid": {
+        "yawRange": 90,
+        "pitchRange": 45,
+        "cols": 3,
+        "rows": 3,
+        "edgeFade": 15
+      },
+      "layers": [
+        {
+          "name": "Neutral",
+          "enabled": true,
+          "emotionWeight": 0,
+          "morphs": ["FC_R0_C0", "FC_R0_C1", "FC_R0_C2", "FC_R1_C0", "FC_R1_C1", "FC_R1_C2", "FC_R2_C0", "FC_R2_C1", "FC_R2_C2"]
+        }
+      ],
+      "yaw": 90,
+      "pitch": 0,
+      "expect": {
+        "weights": {
+          "FC_R1_C2": 1
+        }
+      },
+      "note": "境界ちょうどは通常どおり（UE のテストは出力が 1 件以上あることだけを見る）"
+    },
+    {
+      "name": "edge_fade_half",
+      "source": "UE FacialCoreTests.cpp:EdgeFade",
+      "grid": {
+        "yawRange": 90,
+        "pitchRange": 45,
+        "cols": 3,
+        "rows": 3,
+        "edgeFade": 15
+      },
+      "layers": [
+        {
+          "name": "Neutral",
+          "enabled": true,
+          "emotionWeight": 0,
+          "morphs": ["FC_R0_C0", "FC_R0_C1", "FC_R0_C2", "FC_R1_C0", "FC_R1_C1", "FC_R1_C2", "FC_R2_C0", "FC_R2_C1", "FC_R2_C2"]
+        }
+      ],
+      "yaw": 97.5,
+      "pitch": 0,
+      "expect": {
+        "weights": {
+          "FC_R1_C2": 0.5
+        }
+      },
+      "note": "フェード幅 15 の半分（7.5°）で半減（UE のテストは合計重み 0.5 ± 0.01）"
+    },
+    {
+      "name": "edge_fade_beyond",
+      "source": "UE FacialCoreTests.cpp:EdgeFade",
+      "grid": {
+        "yawRange": 90,
+        "pitchRange": 45,
+        "cols": 3,
+        "rows": 3,
+        "edgeFade": 15
+      },
+      "layers": [
+        {
+          "name": "Neutral",
+          "enabled": true,
+          "emotionWeight": 0,
+          "morphs": ["FC_R0_C0", "FC_R0_C1", "FC_R0_C2", "FC_R1_C0", "FC_R1_C1", "FC_R1_C2", "FC_R2_C0", "FC_R2_C1", "FC_R2_C2"]
+        }
+      ],
+      "yaw": 110,
+      "pitch": 0,
+      "expect": {
+        "weights": {}
+      },
+      "note": "境界 + フェード幅を超えると出力 0 件"
+    },
+    {
+      "name": "unbaked_point_fail_soft",
+      "source": "UE FacialCoreTests.cpp:UnbakedPointFailSoft",
+      "grid": {
+        "yawRange": 90,
+        "pitchRange": 45,
+        "cols": 3,
+        "rows": 3,
+        "edgeFade": 15
+      },
+      "layers": [
+        {
+          "name": "Neutral",
+          "enabled": true,
+          "emotionWeight": 0,
+          "morphs": [null, "FC_R0_C1", "FC_R0_C2", "FC_R1_C0", "FC_R1_C1", "FC_R1_C2", "FC_R2_C0", "FC_R2_C1", "FC_R2_C2"]
+        }
+      ],
+      "yaw": -90,
+      "pitch": -45,
+      "expect": {
+        "weights": {}
+      },
+      "note": "焼いていない点（null）は 0 扱い。出力されない"
+    }
+  ]
+}

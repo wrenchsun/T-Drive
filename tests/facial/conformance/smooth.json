@@ -1,0 +1,710 @@
+{
+  "kind": "smooth",
+  "description": "SmoothWeights の時系列。initial = 最初の前回値。steps を順に適用し、各ステップの出力が次のステップの前回値になる。出力の並びは問わない（名前 → 重みで比べる）",
+  "cases": [
+    {
+      "name": "snap_is_immediate",
+      "source": "UE FacialCoreTests.cpp:SmoothWeights",
+      "speed": 10,
+      "initial": [
+        {
+          "name": "A",
+          "weight": 0
+        }
+      ],
+      "steps": [
+        {
+          "dt": 0.1,
+          "snap": true,
+          "target": [
+            {
+              "name": "A",
+              "weight": 1
+            }
+          ],
+          "expect": [
+            {
+              "name": "A",
+              "weight": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "speed_zero_is_immediate",
+      "source": "UE FacialCoreTests.cpp:SmoothWeights",
+      "speed": 0,
+      "initial": [
+        {
+          "name": "A",
+          "weight": 0
+        }
+      ],
+      "steps": [
+        {
+          "dt": 0.1,
+          "snap": false,
+          "target": [
+            {
+              "name": "A",
+              "weight": 1
+            }
+          ],
+          "expect": [
+            {
+              "name": "A",
+              "weight": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "interpolates_between",
+      "source": "UE FacialCoreTests.cpp:SmoothWeights",
+      "speed": 5,
+      "initial": [
+        {
+          "name": "A",
+          "weight": 0
+        }
+      ],
+      "steps": [
+        {
+          "dt": 0.1,
+          "snap": false,
+          "target": [
+            {
+              "name": "A",
+              "weight": 1
+            }
+          ],
+          "expect": [
+            {
+              "name": "A",
+              "weight": 0.5
+            }
+          ]
+        }
+      ],
+      "note": "UE のテストは 0 < 値 < 1 を見る。FInterpTo の厳密値は 0.5"
+    },
+    {
+      "name": "fade_out_continues",
+      "source": "UE FacialCoreTests.cpp:SmoothWeights",
+      "speed": 2,
+      "initial": [
+        {
+          "name": "A",
+          "weight": 0.5
+        }
+      ],
+      "steps": [
+        {
+          "dt": 0.1,
+          "snap": false,
+          "target": [],
+          "expect": [
+            {
+              "name": "A",
+              "weight": 0.4
+            }
+          ]
+        }
+      ],
+      "note": "UE のテストは 0 < 値 < 0.5 を見る。厳密値は 0.4"
+    },
+    {
+      "name": "series_ramp_up_from_empty",
+      "source": "python-port",
+      "speed": 10,
+      "initial": [],
+      "steps": [
+        {
+          "dt": 0.03333333333333333,
+          "snap": false,
+          "target": [
+            {
+              "name": "A",
+              "weight": 1
+            }
+          ],
+          "expect": [
+            {
+              "name": "A",
+              "weight": 0.333333333333
+            }
+          ]
+        },
+        {
+          "dt": 0.03333333333333333,
+          "snap": false,
+          "target": [
+            {
+              "name": "A",
+              "weight": 1
+            }
+          ],
+          "expect": [
+            {
+              "name": "A",
+              "weight": 0.555555555556
+            }
+          ]
+        },
+        {
+          "dt": 0.03333333333333333,
+          "snap": false,
+          "target": [
+            {
+              "name": "A",
+              "weight": 1
+            }
+          ],
+          "expect": [
+            {
+              "name": "A",
+              "weight": 0.703703703704
+            }
+          ]
+        },
+        {
+          "dt": 0.03333333333333333,
+          "snap": false,
+          "target": [
+            {
+              "name": "A",
+              "weight": 1
+            }
+          ],
+          "expect": [
+            {
+              "name": "A",
+              "weight": 0.802469135802
+            }
+          ]
+        },
+        {
+          "dt": 0.03333333333333333,
+          "snap": false,
+          "target": [
+            {
+              "name": "A",
+              "weight": 1
+            }
+          ],
+          "expect": [
+            {
+              "name": "A",
+              "weight": 0.868312757202
+            }
+          ]
+        },
+        {
+          "dt": 0.03333333333333333,
+          "snap": false,
+          "target": [
+            {
+              "name": "A",
+              "weight": 1
+            }
+          ],
+          "expect": [
+            {
+              "name": "A",
+              "weight": 0.912208504801
+            }
+          ]
+        }
+      ],
+      "note": "前回に無い名前は 0 から補間"
+    },
+    {
+      "name": "series_ramp_then_snap",
+      "source": "python-port",
+      "speed": 10,
+      "initial": [
+        {
+          "name": "A",
+          "weight": 0.2
+        }
+      ],
+      "steps": [
+        {
+          "dt": 0.05,
+          "snap": false,
+          "target": [
+            {
+              "name": "A",
+              "weight": 1
+            }
+          ],
+          "expect": [
+            {
+              "name": "A",
+              "weight": 0.6
+            }
+          ]
+        },
+        {
+          "dt": 0.05,
+          "snap": false,
+          "target": [
+            {
+              "name": "A",
+              "weight": 1
+            }
+          ],
+          "expect": [
+            {
+              "name": "A",
+              "weight": 0.8
+            }
+          ]
+        },
+        {
+          "dt": 0.05,
+          "snap": true,
+          "target": [
+            {
+              "name": "A",
+              "weight": 0
+            },
+            {
+              "name": "B",
+              "weight": 1
+            }
+          ],
+          "expect": [
+            {
+              "name": "A",
+              "weight": 0
+            },
+            {
+              "name": "B",
+              "weight": 1
+            }
+          ]
+        },
+        {
+          "dt": 0.05,
+          "snap": false,
+          "target": [
+            {
+              "name": "B",
+              "weight": 1
+            }
+          ],
+          "expect": [
+            {
+              "name": "B",
+              "weight": 1
+            }
+          ]
+        }
+      ],
+      "note": "snap のステップは目標へ即時。前回にだけある名前（A）は目標が 0 として残り、次のステップで消える"
+    },
+    {
+      "name": "series_fade_out_until_removed",
+      "source": "python-port",
+      "speed": 10,
+      "initial": [
+        {
+          "name": "A",
+          "weight": 0.5
+        }
+      ],
+      "steps": [
+        {
+          "dt": 0.05,
+          "snap": false,
+          "target": [],
+          "expect": [
+            {
+              "name": "A",
+              "weight": 0.25
+            }
+          ]
+        },
+        {
+          "dt": 0.05,
+          "snap": false,
+          "target": [],
+          "expect": [
+            {
+              "name": "A",
+              "weight": 0.125
+            }
+          ]
+        },
+        {
+          "dt": 0.05,
+          "snap": false,
+          "target": [],
+          "expect": [
+            {
+              "name": "A",
+              "weight": 0.0625
+            }
+          ]
+        },
+        {
+          "dt": 0.05,
+          "snap": false,
+          "target": [],
+          "expect": [
+            {
+              "name": "A",
+              "weight": 0.03125
+            }
+          ]
+        },
+        {
+          "dt": 0.05,
+          "snap": false,
+          "target": [],
+          "expect": [
+            {
+              "name": "A",
+              "weight": 0.015625
+            }
+          ]
+        },
+        {
+          "dt": 0.05,
+          "snap": false,
+          "target": [],
+          "expect": [
+            {
+              "name": "A",
+              "weight": 0.0078125
+            }
+          ]
+        },
+        {
+          "dt": 0.05,
+          "snap": false,
+          "target": [],
+          "expect": [
+            {
+              "name": "A",
+              "weight": 0.00390625
+            }
+          ]
+        },
+        {
+          "dt": 0.05,
+          "snap": false,
+          "target": [],
+          "expect": [
+            {
+              "name": "A",
+              "weight": 0.001953125
+            }
+          ]
+        },
+        {
+          "dt": 0.05,
+          "snap": false,
+          "target": [],
+          "expect": [
+            {
+              "name": "A",
+              "weight": 0.0009765625
+            }
+          ]
+        },
+        {
+          "dt": 0.05,
+          "snap": false,
+          "target": [],
+          "expect": [
+            {
+              "name": "A",
+              "weight": 0.00048828125
+            }
+          ]
+        },
+        {
+          "dt": 0.05,
+          "snap": false,
+          "target": [],
+          "expect": [
+            {
+              "name": "A",
+              "weight": 0.000244140625
+            }
+          ]
+        },
+        {
+          "dt": 0.05,
+          "snap": false,
+          "target": [],
+          "expect": [
+            {
+              "name": "A",
+              "weight": 0.000122070312
+            }
+          ]
+        },
+        {
+          "dt": 0.05,
+          "snap": false,
+          "target": [],
+          "expect": [
+            {
+              "name": "A",
+              "weight": 6.1035156e-05
+            }
+          ]
+        },
+        {
+          "dt": 0.05,
+          "snap": false,
+          "target": [],
+          "expect": []
+        },
+        {
+          "dt": 0.05,
+          "snap": false,
+          "target": [],
+          "expect": []
+        },
+        {
+          "dt": 0.05,
+          "snap": false,
+          "target": [],
+          "expect": []
+        }
+      ],
+      "note": "目標から消えた名前は 0 へ補間し、距離の 2 乗が 1e-8 未満で 0 に落ちた時点で出力から消える"
+    },
+    {
+      "name": "series_explicit_zero_target_stays_listed",
+      "source": "python-port",
+      "speed": 10,
+      "initial": [
+        {
+          "name": "A",
+          "weight": 0.5
+        }
+      ],
+      "steps": [
+        {
+          "dt": 0.05,
+          "snap": false,
+          "target": [
+            {
+              "name": "A",
+              "weight": 0
+            }
+          ],
+          "expect": [
+            {
+              "name": "A",
+              "weight": 0.25
+            }
+          ]
+        },
+        {
+          "dt": 0.05,
+          "snap": false,
+          "target": [
+            {
+              "name": "A",
+              "weight": 0
+            }
+          ],
+          "expect": [
+            {
+              "name": "A",
+              "weight": 0.125
+            }
+          ]
+        },
+        {
+          "dt": 0.05,
+          "snap": false,
+          "target": [
+            {
+              "name": "A",
+              "weight": 0
+            }
+          ],
+          "expect": [
+            {
+              "name": "A",
+              "weight": 0.0625
+            }
+          ]
+        }
+      ],
+      "note": "目標に 0 として載っている名前は 0 でも出力に残る"
+    },
+    {
+      "name": "series_two_names_cross_fade",
+      "source": "python-port",
+      "speed": 8,
+      "initial": [
+        {
+          "name": "A",
+          "weight": 1
+        }
+      ],
+      "steps": [
+        {
+          "dt": 0.016666666666666666,
+          "snap": false,
+          "target": [
+            {
+              "name": "A",
+              "weight": 0
+            },
+            {
+              "name": "B",
+              "weight": 1
+            }
+          ],
+          "expect": [
+            {
+              "name": "A",
+              "weight": 0.866666666667
+            },
+            {
+              "name": "B",
+              "weight": 0.133333333333
+            }
+          ]
+        },
+        {
+          "dt": 0.016666666666666666,
+          "snap": false,
+          "target": [
+            {
+              "name": "A",
+              "weight": 0
+            },
+            {
+              "name": "B",
+              "weight": 1
+            }
+          ],
+          "expect": [
+            {
+              "name": "A",
+              "weight": 0.751111111111
+            },
+            {
+              "name": "B",
+              "weight": 0.248888888889
+            }
+          ]
+        },
+        {
+          "dt": 0.016666666666666666,
+          "snap": false,
+          "target": [
+            {
+              "name": "A",
+              "weight": 0
+            },
+            {
+              "name": "B",
+              "weight": 1
+            }
+          ],
+          "expect": [
+            {
+              "name": "A",
+              "weight": 0.650962962963
+            },
+            {
+              "name": "B",
+              "weight": 0.349037037037
+            }
+          ]
+        },
+        {
+          "dt": 0.016666666666666666,
+          "snap": false,
+          "target": [
+            {
+              "name": "A",
+              "weight": 0
+            },
+            {
+              "name": "B",
+              "weight": 1
+            }
+          ],
+          "expect": [
+            {
+              "name": "A",
+              "weight": 0.564167901235
+            },
+            {
+              "name": "B",
+              "weight": 0.435832098765
+            }
+          ]
+        },
+        {
+          "dt": 0.016666666666666666,
+          "snap": false,
+          "target": [
+            {
+              "name": "A",
+              "weight": 0
+            },
+            {
+              "name": "B",
+              "weight": 1
+            }
+          ],
+          "expect": [
+            {
+              "name": "A",
+              "weight": 0.488945514403
+            },
+            {
+              "name": "B",
+              "weight": 0.511054485597
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "series_dt_large_clamps_factor",
+      "source": "python-port",
+      "speed": 10,
+      "initial": [
+        {
+          "name": "A",
+          "weight": 0
+        }
+      ],
+      "steps": [
+        {
+          "dt": 1,
+          "snap": false,
+          "target": [
+            {
+              "name": "A",
+              "weight": 0.8
+            }
+          ],
+          "expect": [
+            {
+              "name": "A",
+              "weight": 0.8
+            }
+          ]
+        }
+      ],
+      "note": "dt × speed が 1 を超えても 1 に丸め、目標に届く（行き過ぎない）"
+    }
+  ]
+}

@@ -1,0 +1,726 @@
+{
+  "kind": "convert",
+  "description": "座標系の変換。op = position / direction / quaternion / boneOffset / forwardAxis / mirrorAxis。from / to は meta と同じ {unit, upAxis, handedness}。軸の対応は maya/scripts/tdrive_facial/core/space.py の docstring",
+  "cases": [
+    {
+      "name": "maya_front_to_ue_forward",
+      "source": "python-port",
+      "op": "position",
+      "from": {
+        "unit": "cm",
+        "upAxis": "Y",
+        "handedness": "right"
+      },
+      "to": {
+        "unit": "cm",
+        "upAxis": "Z",
+        "handedness": "left"
+      },
+      "input": [0, 0, 100],
+      "expect": [100, 0, 0],
+      "tolerance": 1e-09,
+      "note": "Maya +Z（前）→ UE +X（前）"
+    },
+    {
+      "name": "maya_up_to_ue_up",
+      "source": "python-port",
+      "op": "position",
+      "from": {
+        "unit": "cm",
+        "upAxis": "Y",
+        "handedness": "right"
+      },
+      "to": {
+        "unit": "cm",
+        "upAxis": "Z",
+        "handedness": "left"
+      },
+      "input": [0, 100, 0],
+      "expect": [0, 0, 100],
+      "tolerance": 1e-09,
+      "note": "上は上へ"
+    },
+    {
+      "name": "maya_character_left_to_ue_left",
+      "source": "python-port",
+      "op": "position",
+      "from": {
+        "unit": "cm",
+        "upAxis": "Y",
+        "handedness": "right"
+      },
+      "to": {
+        "unit": "cm",
+        "upAxis": "Z",
+        "handedness": "left"
+      },
+      "input": [100, 0, 0],
+      "expect": [0, -100, 0],
+      "tolerance": 1e-09,
+      "note": "Maya +X（キャラクターの左）→ UE -Y（左）"
+    },
+    {
+      "name": "maya_generic_point_to_ue",
+      "source": "python-port",
+      "op": "position",
+      "from": {
+        "unit": "cm",
+        "upAxis": "Y",
+        "handedness": "right"
+      },
+      "to": {
+        "unit": "cm",
+        "upAxis": "Z",
+        "handedness": "left"
+      },
+      "input": [1.5, 160.25, -3.75],
+      "expect": [-3.75, -1.5, 160.25],
+      "tolerance": 1e-09
+    },
+    {
+      "name": "unity_meters_to_ue_cm",
+      "source": "python-port",
+      "op": "position",
+      "from": {
+        "unit": "m",
+        "upAxis": "Y",
+        "handedness": "left"
+      },
+      "to": {
+        "unit": "cm",
+        "upAxis": "Z",
+        "handedness": "left"
+      },
+      "input": [0.1, 1.5, 0.25],
+      "expect": [25, 10, 150],
+      "tolerance": 1e-09,
+      "note": "m → cm と軸の入れ替え"
+    },
+    {
+      "name": "unity_to_maya",
+      "source": "python-port",
+      "op": "position",
+      "from": {
+        "unit": "m",
+        "upAxis": "Y",
+        "handedness": "left"
+      },
+      "to": {
+        "unit": "cm",
+        "upAxis": "Y",
+        "handedness": "right"
+      },
+      "input": [0.1, 1.5, 0.25],
+      "expect": [-10, 150, 25],
+      "tolerance": 1e-09,
+      "note": "Unity → Maya は X の反転と m → cm"
+    },
+    {
+      "name": "ue_to_unity",
+      "source": "python-port",
+      "op": "position",
+      "from": {
+        "unit": "cm",
+        "upAxis": "Z",
+        "handedness": "left"
+      },
+      "to": {
+        "unit": "m",
+        "upAxis": "Y",
+        "handedness": "left"
+      },
+      "input": [100, -20, 150],
+      "expect": [-0.2, 1.5, 1],
+      "tolerance": 1e-09
+    },
+    {
+      "name": "ue_to_maya",
+      "source": "python-port",
+      "op": "position",
+      "from": {
+        "unit": "cm",
+        "upAxis": "Z",
+        "handedness": "left"
+      },
+      "to": {
+        "unit": "cm",
+        "upAxis": "Y",
+        "handedness": "right"
+      },
+      "input": [100, -20, 150],
+      "expect": [20, 150, 100],
+      "tolerance": 1e-09
+    },
+    {
+      "name": "maya_to_maya_is_identity",
+      "source": "python-port",
+      "op": "position",
+      "from": {
+        "unit": "cm",
+        "upAxis": "Y",
+        "handedness": "right"
+      },
+      "to": {
+        "unit": "cm",
+        "upAxis": "Y",
+        "handedness": "right"
+      },
+      "input": [1, 2, 3],
+      "expect": [1, 2, 3],
+      "tolerance": 1e-09
+    },
+    {
+      "name": "blender_style_to_ue",
+      "source": "python-port",
+      "op": "position",
+      "from": {
+        "unit": "m",
+        "upAxis": "Z",
+        "handedness": "right"
+      },
+      "to": {
+        "unit": "cm",
+        "upAxis": "Z",
+        "handedness": "left"
+      },
+      "input": [0.1, 0.5, 1.7],
+      "expect": [50, 10, 170],
+      "tolerance": 1e-09,
+      "note": "Z-up 右手（Blender 型）: 前 +Y → +X、右 +X → +Y"
+    },
+    {
+      "name": "direction_ignores_unit",
+      "source": "python-port",
+      "op": "direction",
+      "from": {
+        "unit": "m",
+        "upAxis": "Y",
+        "handedness": "left"
+      },
+      "to": {
+        "unit": "cm",
+        "upAxis": "Z",
+        "handedness": "left"
+      },
+      "input": [0, 0, 1],
+      "expect": [1, 0, 0],
+      "tolerance": 1e-09
+    },
+    {
+      "name": "quat_yaw_about_up_maya_to_ue",
+      "source": "python-port",
+      "op": "quaternion",
+      "from": {
+        "unit": "cm",
+        "upAxis": "Y",
+        "handedness": "right"
+      },
+      "to": {
+        "unit": "cm",
+        "upAxis": "Z",
+        "handedness": "left"
+      },
+      "input": [0, 0.258819045102521, 0, 0.965925826289068],
+      "expect": [0, 0, -0.258819045103, 0.965925826289],
+      "tolerance": 1e-09,
+      "note": "右手の Y 軸まわり +30° は、鏡映のあと左手 Z 軸まわり -30° になる"
+    },
+    {
+      "name": "quat_yaw_about_up_unity_to_ue",
+      "source": "python-port",
+      "op": "quaternion",
+      "from": {
+        "unit": "m",
+        "upAxis": "Y",
+        "handedness": "left"
+      },
+      "to": {
+        "unit": "cm",
+        "upAxis": "Z",
+        "handedness": "left"
+      },
+      "input": [0, 0.258819045102521, 0, 0.965925826289068],
+      "expect": [0, 0, 0.258819045103, 0.965925826289],
+      "tolerance": 1e-09,
+      "note": "Unity → UE は鏡映なし。Y 軸まわり +30° は Z 軸まわり +30°"
+    },
+    {
+      "name": "quat_arbitrary_maya_to_ue",
+      "source": "python-port",
+      "op": "quaternion",
+      "from": {
+        "unit": "cm",
+        "upAxis": "Y",
+        "handedness": "right"
+      },
+      "to": {
+        "unit": "cm",
+        "upAxis": "Z",
+        "handedness": "left"
+      },
+      "input": [0.1, 0.2, 0.3, 0.9273618495495703],
+      "expect": [-0.3, 0.1, -0.2, 0.92736184955],
+      "tolerance": 1e-09
+    },
+    {
+      "name": "quat_arbitrary_ue_to_unity",
+      "source": "python-port",
+      "op": "quaternion",
+      "from": {
+        "unit": "cm",
+        "upAxis": "Z",
+        "handedness": "left"
+      },
+      "to": {
+        "unit": "m",
+        "upAxis": "Y",
+        "handedness": "left"
+      },
+      "input": [0.1, 0.2, 0.3, 0.9273618495495703],
+      "expect": [0.2, 0.3, 0.1, 0.92736184955],
+      "tolerance": 1e-09
+    },
+    {
+      "name": "bone_offset_maya_to_ue",
+      "source": "python-port",
+      "op": "boneOffset",
+      "from": {
+        "unit": "cm",
+        "upAxis": "Y",
+        "handedness": "right"
+      },
+      "to": {
+        "unit": "cm",
+        "upAxis": "Z",
+        "handedness": "left"
+      },
+      "input": {
+        "t": [0.5, 1, -2],
+        "r": [0, 0.0871557427476582, 0, 0.9961946980917455],
+        "s": [1, 1.1, 1.2]
+      },
+      "expect": {
+        "t": [-2, -0.5, 1],
+        "r": [0, 0, -0.087155742748, 0.996194698092],
+        "s": [1.2, 1, 1.1]
+      },
+      "tolerance": 1e-09,
+      "note": "t は位置と同じ変換、r は鏡映で向きが反転、s は成分の入れ替えのみ（符号なし）"
+    },
+    {
+      "name": "bone_offset_unity_m_to_ue_cm",
+      "source": "python-port",
+      "op": "boneOffset",
+      "from": {
+        "unit": "m",
+        "upAxis": "Y",
+        "handedness": "left"
+      },
+      "to": {
+        "unit": "cm",
+        "upAxis": "Z",
+        "handedness": "left"
+      },
+      "input": {
+        "t": [0.005, 0.01, -0.02],
+        "r": [0, 0, 0, 1],
+        "s": [1, 1.1, 1.2]
+      },
+      "expect": {
+        "t": [-2, 0.5, 1],
+        "r": [0, 0, 0, 1],
+        "s": [1.2, 1, 1.1]
+      },
+      "tolerance": 1e-09
+    },
+    {
+      "name": "bone_offset_ue_to_maya",
+      "source": "python-port",
+      "op": "boneOffset",
+      "from": {
+        "unit": "cm",
+        "upAxis": "Z",
+        "handedness": "left"
+      },
+      "to": {
+        "unit": "cm",
+        "upAxis": "Y",
+        "handedness": "right"
+      },
+      "input": {
+        "t": [0, 0.05, -0.02],
+        "r": [0, 0, 0.0871557427476582, 0.9961946980917455],
+        "s": [1, 1, 1]
+      },
+      "expect": {
+        "t": [-0.05, -0.02, 0],
+        "r": [0, -0.087155742748, 0, 0.996194698092],
+        "s": [1, 1, 1]
+      },
+      "tolerance": 1e-09
+    },
+    {
+      "name": "forward_axis_Yr_+Z_to_Zl",
+      "source": "python-port",
+      "op": "forwardAxis",
+      "from": {
+        "unit": "cm",
+        "upAxis": "Y",
+        "handedness": "right"
+      },
+      "to": {
+        "unit": "cm",
+        "upAxis": "Z",
+        "handedness": "left"
+      },
+      "input": "+Z",
+      "expect": "+X",
+      "tolerance": 1e-09
+    },
+    {
+      "name": "forward_axis_Yr_-Z_to_Zl",
+      "source": "python-port",
+      "op": "forwardAxis",
+      "from": {
+        "unit": "cm",
+        "upAxis": "Y",
+        "handedness": "right"
+      },
+      "to": {
+        "unit": "cm",
+        "upAxis": "Z",
+        "handedness": "left"
+      },
+      "input": "-Z",
+      "expect": "-X",
+      "tolerance": 1e-09
+    },
+    {
+      "name": "forward_axis_Yr_+X_to_Zl",
+      "source": "python-port",
+      "op": "forwardAxis",
+      "from": {
+        "unit": "cm",
+        "upAxis": "Y",
+        "handedness": "right"
+      },
+      "to": {
+        "unit": "cm",
+        "upAxis": "Z",
+        "handedness": "left"
+      },
+      "input": "+X",
+      "expect": "-Y",
+      "tolerance": 1e-09
+    },
+    {
+      "name": "forward_axis_Yr_-X_to_Zl",
+      "source": "python-port",
+      "op": "forwardAxis",
+      "from": {
+        "unit": "cm",
+        "upAxis": "Y",
+        "handedness": "right"
+      },
+      "to": {
+        "unit": "cm",
+        "upAxis": "Z",
+        "handedness": "left"
+      },
+      "input": "-X",
+      "expect": "+Y",
+      "tolerance": 1e-09
+    },
+    {
+      "name": "forward_axis_Yl_+Z_to_Zl",
+      "source": "python-port",
+      "op": "forwardAxis",
+      "from": {
+        "unit": "m",
+        "upAxis": "Y",
+        "handedness": "left"
+      },
+      "to": {
+        "unit": "cm",
+        "upAxis": "Z",
+        "handedness": "left"
+      },
+      "input": "+Z",
+      "expect": "+X",
+      "tolerance": 1e-09
+    },
+    {
+      "name": "forward_axis_Yl_-Z_to_Zl",
+      "source": "python-port",
+      "op": "forwardAxis",
+      "from": {
+        "unit": "m",
+        "upAxis": "Y",
+        "handedness": "left"
+      },
+      "to": {
+        "unit": "cm",
+        "upAxis": "Z",
+        "handedness": "left"
+      },
+      "input": "-Z",
+      "expect": "-X",
+      "tolerance": 1e-09
+    },
+    {
+      "name": "forward_axis_Yl_+X_to_Zl",
+      "source": "python-port",
+      "op": "forwardAxis",
+      "from": {
+        "unit": "m",
+        "upAxis": "Y",
+        "handedness": "left"
+      },
+      "to": {
+        "unit": "cm",
+        "upAxis": "Z",
+        "handedness": "left"
+      },
+      "input": "+X",
+      "expect": "+Y",
+      "tolerance": 1e-09
+    },
+    {
+      "name": "forward_axis_Yl_-X_to_Zl",
+      "source": "python-port",
+      "op": "forwardAxis",
+      "from": {
+        "unit": "m",
+        "upAxis": "Y",
+        "handedness": "left"
+      },
+      "to": {
+        "unit": "cm",
+        "upAxis": "Z",
+        "handedness": "left"
+      },
+      "input": "-X",
+      "expect": "-Y",
+      "tolerance": 1e-09
+    },
+    {
+      "name": "forward_axis_Zl_+X_to_Yr",
+      "source": "python-port",
+      "op": "forwardAxis",
+      "from": {
+        "unit": "cm",
+        "upAxis": "Z",
+        "handedness": "left"
+      },
+      "to": {
+        "unit": "cm",
+        "upAxis": "Y",
+        "handedness": "right"
+      },
+      "input": "+X",
+      "expect": "+Z",
+      "tolerance": 1e-09
+    },
+    {
+      "name": "forward_axis_Zl_-X_to_Yr",
+      "source": "python-port",
+      "op": "forwardAxis",
+      "from": {
+        "unit": "cm",
+        "upAxis": "Z",
+        "handedness": "left"
+      },
+      "to": {
+        "unit": "cm",
+        "upAxis": "Y",
+        "handedness": "right"
+      },
+      "input": "-X",
+      "expect": "-Z",
+      "tolerance": 1e-09
+    },
+    {
+      "name": "forward_axis_Zl_+Y_to_Yr",
+      "source": "python-port",
+      "op": "forwardAxis",
+      "from": {
+        "unit": "cm",
+        "upAxis": "Z",
+        "handedness": "left"
+      },
+      "to": {
+        "unit": "cm",
+        "upAxis": "Y",
+        "handedness": "right"
+      },
+      "input": "+Y",
+      "expect": "-X",
+      "tolerance": 1e-09
+    },
+    {
+      "name": "forward_axis_Zl_-Y_to_Yr",
+      "source": "python-port",
+      "op": "forwardAxis",
+      "from": {
+        "unit": "cm",
+        "upAxis": "Z",
+        "handedness": "left"
+      },
+      "to": {
+        "unit": "cm",
+        "upAxis": "Y",
+        "handedness": "right"
+      },
+      "input": "-Y",
+      "expect": "+X",
+      "tolerance": 1e-09
+    },
+    {
+      "name": "forward_axis_Zl_+X_to_Yl",
+      "source": "python-port",
+      "op": "forwardAxis",
+      "from": {
+        "unit": "cm",
+        "upAxis": "Z",
+        "handedness": "left"
+      },
+      "to": {
+        "unit": "m",
+        "upAxis": "Y",
+        "handedness": "left"
+      },
+      "input": "+X",
+      "expect": "+Z",
+      "tolerance": 1e-09
+    },
+    {
+      "name": "forward_axis_Zl_-X_to_Yl",
+      "source": "python-port",
+      "op": "forwardAxis",
+      "from": {
+        "unit": "cm",
+        "upAxis": "Z",
+        "handedness": "left"
+      },
+      "to": {
+        "unit": "m",
+        "upAxis": "Y",
+        "handedness": "left"
+      },
+      "input": "-X",
+      "expect": "-Z",
+      "tolerance": 1e-09
+    },
+    {
+      "name": "forward_axis_Zl_+Y_to_Yl",
+      "source": "python-port",
+      "op": "forwardAxis",
+      "from": {
+        "unit": "cm",
+        "upAxis": "Z",
+        "handedness": "left"
+      },
+      "to": {
+        "unit": "m",
+        "upAxis": "Y",
+        "handedness": "left"
+      },
+      "input": "+Y",
+      "expect": "+X",
+      "tolerance": 1e-09
+    },
+    {
+      "name": "forward_axis_Zl_-Y_to_Yl",
+      "source": "python-port",
+      "op": "forwardAxis",
+      "from": {
+        "unit": "cm",
+        "upAxis": "Z",
+        "handedness": "left"
+      },
+      "to": {
+        "unit": "m",
+        "upAxis": "Y",
+        "handedness": "left"
+      },
+      "input": "-Y",
+      "expect": "-X",
+      "tolerance": 1e-09
+    },
+    {
+      "name": "mirror_axis_maya_X_to_ue",
+      "source": "python-port",
+      "op": "mirrorAxis",
+      "from": {
+        "unit": "cm",
+        "upAxis": "Y",
+        "handedness": "right"
+      },
+      "to": {
+        "unit": "cm",
+        "upAxis": "Z",
+        "handedness": "left"
+      },
+      "input": "X",
+      "expect": "Y",
+      "tolerance": 1e-09,
+      "note": "Maya の顔の左右 = X ⇔ UE の Y"
+    },
+    {
+      "name": "mirror_axis_maya_Y_to_ue",
+      "source": "python-port",
+      "op": "mirrorAxis",
+      "from": {
+        "unit": "cm",
+        "upAxis": "Y",
+        "handedness": "right"
+      },
+      "to": {
+        "unit": "cm",
+        "upAxis": "Z",
+        "handedness": "left"
+      },
+      "input": "Y",
+      "expect": "Z",
+      "tolerance": 1e-09,
+      "note": "Maya の顔の左右 = X ⇔ UE の Y"
+    },
+    {
+      "name": "mirror_axis_maya_Z_to_ue",
+      "source": "python-port",
+      "op": "mirrorAxis",
+      "from": {
+        "unit": "cm",
+        "upAxis": "Y",
+        "handedness": "right"
+      },
+      "to": {
+        "unit": "cm",
+        "upAxis": "Z",
+        "handedness": "left"
+      },
+      "input": "Z",
+      "expect": "X",
+      "tolerance": 1e-09,
+      "note": "Maya の顔の左右 = X ⇔ UE の Y"
+    },
+    {
+      "name": "mirror_axis_ue_Y_to_maya",
+      "source": "python-port",
+      "op": "mirrorAxis",
+      "from": {
+        "unit": "cm",
+        "upAxis": "Z",
+        "handedness": "left"
+      },
+      "to": {
+        "unit": "cm",
+        "upAxis": "Y",
+        "handedness": "right"
+      },
+      "input": "Y",
+      "expect": "X",
+      "tolerance": 1e-09
+    }
+  ]
+}

@@ -1,0 +1,270 @@
+{
+  "kind": "scalar",
+  "description": "単独の関数。fn = expressionScale(dampen, s) / distanceFade(distance, start, end) / finterpTo(current, target, dt, speed) / normalizeAxis(angle)",
+  "cases": [
+    {
+      "name": "dampen0_no_attenuation",
+      "source": "UE FacialCoreTests.cpp:ExpressionScale",
+      "fn": "expressionScale",
+      "args": [0, 1],
+      "expect": 1,
+      "tolerance": 1e-06
+    },
+    {
+      "name": "dampen1_s1_vanishes",
+      "source": "UE FacialCoreTests.cpp:ExpressionScale",
+      "fn": "expressionScale",
+      "args": [1, 1],
+      "expect": 0,
+      "tolerance": 1e-06
+    },
+    {
+      "name": "dampen_half_s1",
+      "source": "UE FacialCoreTests.cpp:ExpressionScale",
+      "fn": "expressionScale",
+      "args": [0.5, 1],
+      "expect": 0.5,
+      "tolerance": 1e-06
+    },
+    {
+      "name": "s_clamped_to_1",
+      "source": "UE FacialCoreTests.cpp:ExpressionScale",
+      "fn": "expressionScale",
+      "args": [0.5, 2],
+      "expect": 0.5,
+      "tolerance": 1e-06
+    },
+    {
+      "name": "s_clamped_to_0",
+      "source": "UE FacialCoreTests.cpp:ExpressionScale",
+      "fn": "expressionScale",
+      "args": [0.5, -1],
+      "expect": 1,
+      "tolerance": 1e-06
+    },
+    {
+      "name": "disabled_0_0",
+      "source": "UE FacialCoreTests.cpp:DistanceFade",
+      "fn": "distanceFade",
+      "args": [500, 0, 0],
+      "expect": 1,
+      "tolerance": 1e-06
+    },
+    {
+      "name": "within_start",
+      "source": "UE FacialCoreTests.cpp:DistanceFade",
+      "fn": "distanceFade",
+      "args": [50, 100, 200],
+      "expect": 1,
+      "tolerance": 1e-06
+    },
+    {
+      "name": "beyond_end",
+      "source": "UE FacialCoreTests.cpp:DistanceFade",
+      "fn": "distanceFade",
+      "args": [300, 100, 200],
+      "expect": 0,
+      "tolerance": 1e-06
+    },
+    {
+      "name": "linear_middle",
+      "source": "UE FacialCoreTests.cpp:DistanceFade",
+      "fn": "distanceFade",
+      "args": [150, 100, 200],
+      "expect": 0.5,
+      "tolerance": 1e-06
+    },
+    {
+      "name": "dampen_above_1_clamped",
+      "source": "python-port",
+      "fn": "expressionScale",
+      "args": [1.5, 0.4],
+      "expect": 0.6,
+      "tolerance": 1e-06
+    },
+    {
+      "name": "dampen_negative_clamped",
+      "source": "python-port",
+      "fn": "expressionScale",
+      "args": [-0.5, 0.7],
+      "expect": 1,
+      "tolerance": 1e-06
+    },
+    {
+      "name": "quarter_dampen",
+      "source": "python-port",
+      "fn": "expressionScale",
+      "args": [0.25, 0.4],
+      "expect": 0.9,
+      "tolerance": 1e-06
+    },
+    {
+      "name": "half_half",
+      "source": "python-port",
+      "fn": "expressionScale",
+      "args": [0.5, 0.5],
+      "expect": 0.75,
+      "tolerance": 1e-06
+    },
+    {
+      "name": "at_start",
+      "source": "python-port",
+      "fn": "distanceFade",
+      "args": [100, 100, 200],
+      "expect": 1,
+      "tolerance": 1e-06
+    },
+    {
+      "name": "at_end",
+      "source": "python-port",
+      "fn": "distanceFade",
+      "args": [200, 100, 200],
+      "expect": 0,
+      "tolerance": 1e-06
+    },
+    {
+      "name": "quarter",
+      "source": "python-port",
+      "fn": "distanceFade",
+      "args": [125, 100, 200],
+      "expect": 0.75,
+      "tolerance": 1e-06
+    },
+    {
+      "name": "end_equals_start_disabled",
+      "source": "python-port",
+      "fn": "distanceFade",
+      "args": [5, 10, 10],
+      "expect": 1,
+      "tolerance": 1e-06
+    },
+    {
+      "name": "end_before_start_disabled",
+      "source": "python-port",
+      "fn": "distanceFade",
+      "args": [5, 20, 10],
+      "expect": 1,
+      "tolerance": 1e-06
+    },
+    {
+      "name": "negative_distance",
+      "source": "python-port",
+      "fn": "distanceFade",
+      "args": [-5, 100, 200],
+      "expect": 1,
+      "tolerance": 1e-06
+    },
+    {
+      "name": "eighty_percent",
+      "source": "python-port",
+      "fn": "distanceFade",
+      "args": [180, 100, 200],
+      "expect": 0.2,
+      "tolerance": 1e-06
+    },
+    {
+      "name": "finterp_basic",
+      "source": "python-port",
+      "fn": "finterpTo",
+      "args": [0, 1, 0.1, 5],
+      "expect": 0.5,
+      "tolerance": 1e-06
+    },
+    {
+      "name": "finterp_factor_clamped_to_1",
+      "source": "python-port",
+      "fn": "finterpTo",
+      "args": [0, 1, 1, 5],
+      "expect": 1,
+      "tolerance": 1e-06
+    },
+    {
+      "name": "finterp_already_there",
+      "source": "python-port",
+      "fn": "finterpTo",
+      "args": [0.3, 0.3, 0.1, 5],
+      "expect": 0.3,
+      "tolerance": 1e-06
+    },
+    {
+      "name": "finterp_speed0_returns_target",
+      "source": "python-port",
+      "fn": "finterpTo",
+      "args": [0, 1, 0.1, 0],
+      "expect": 1,
+      "tolerance": 1e-06
+    },
+    {
+      "name": "finterp_within_small_distance_snaps",
+      "source": "python-port",
+      "fn": "finterpTo",
+      "args": [0, 0.0001, 0.1, 5],
+      "expect": 5e-05,
+      "tolerance": 1e-06
+    },
+    {
+      "name": "finterp_downwards",
+      "source": "python-port",
+      "fn": "finterpTo",
+      "args": [1, 0, 0.05, 10],
+      "expect": 0.5,
+      "tolerance": 1e-06
+    },
+    {
+      "name": "normalize_axis_190",
+      "source": "python-port",
+      "fn": "normalizeAxis",
+      "args": [190],
+      "expect": -170,
+      "tolerance": 1e-06
+    },
+    {
+      "name": "normalize_axis_-190",
+      "source": "python-port",
+      "fn": "normalizeAxis",
+      "args": [-190],
+      "expect": 170,
+      "tolerance": 1e-06
+    },
+    {
+      "name": "normalize_axis_180",
+      "source": "python-port",
+      "fn": "normalizeAxis",
+      "args": [180],
+      "expect": 180,
+      "tolerance": 1e-06
+    },
+    {
+      "name": "normalize_axis_-180",
+      "source": "python-port",
+      "fn": "normalizeAxis",
+      "args": [-180],
+      "expect": 180,
+      "tolerance": 1e-06
+    },
+    {
+      "name": "normalize_axis_540",
+      "source": "python-port",
+      "fn": "normalizeAxis",
+      "args": [540],
+      "expect": 180,
+      "tolerance": 1e-06
+    },
+    {
+      "name": "normalize_axis_0",
+      "source": "python-port",
+      "fn": "normalizeAxis",
+      "args": [0],
+      "expect": 0,
+      "tolerance": 1e-06
+    },
+    {
+      "name": "normalize_axis_359",
+      "source": "python-port",
+      "fn": "normalizeAxis",
+      "args": [359],
+      "expect": -1,
+      "tolerance": 1e-06
+    }
+  ]
+}
