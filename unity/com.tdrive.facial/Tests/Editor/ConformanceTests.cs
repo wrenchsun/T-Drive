@@ -35,6 +35,9 @@ namespace TDrive.Facial.Tests
         public static string Error { get { Load(); return _error; } }
         public static Dictionary<string, int> SkippedKinds { get { Load(); return _skipped; } }
 
+        // コンパイル時のこのファイルのパス（空や存在しない場合は呼び出し側で無視する）
+        static string ThisFilePath([System.Runtime.CompilerServices.CallerFilePath] string path = "") { return path; }
+
         static string FindDir()
         {
             string env = Environment.GetEnvironmentVariable(EnvVar);
@@ -44,6 +47,13 @@ namespace TDrive.Facial.Tests
                 return null;
             }
             var starts = new List<string>();
+            // このソースファイルの場所から上へたどる（別リポジトリの Unity プロジェクトにローカルパッケージとして入れた場合用）
+            try
+            {
+                string self = ThisFilePath();
+                if (!string.IsNullOrEmpty(self) && File.Exists(self)) starts.Add(Path.GetDirectoryName(self));
+            }
+            catch (Exception) { }
             try { starts.Add(TestContext.CurrentContext.TestDirectory); } catch (Exception) { }
             starts.Add(AppContext.BaseDirectory);
             starts.Add(System.IO.Directory.GetCurrentDirectory());
