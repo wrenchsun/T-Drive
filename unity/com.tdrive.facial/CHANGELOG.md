@@ -16,6 +16,8 @@
   - `exaggeration` カーブを含む `.fctrack` は、古い版のパッケージでは読めない
 
 ### 追加
+- F5-11: 補間の種類（`quality.interpolation` = bilinear / catmullRom、調整値「補間」）
+- F5-9: マテリアル出力が `_ToonFacialAngles` も書く（`writeToonAngles`。初期値オン）
 - F5-8: リップシンクの対応表（`.fcpose` の `lipSync`。音素 × 感情 → 口のシェイプ）。`Runner.SetLipSync` / `SetLipSyncByIndex` / `ClearLipSync`（音素の強さ・声量を渡す。追従 `follow` つき）、調整値「リップシンクの強さ」「追従」、インスペクターの状態とプレビュー、検証「口のシェイプがメッシュに無い」。口のシェイプは書く前の値へ戻す（無効化・プール返却・保存の前）。解析とのつなぎ `FacialULipSyncBridge`（uLipSync があるときだけコンパイルされる別アセンブリ `TDrive.Facial.ULipSync`）。`.fcpose` の取り込みの版は上げていない（`lipSync` が無ければ何もしない）
 - F5-7: 調整値「書き込む LOD の上限」（`maxLod`。0 = すべての LOD に書く = これまでどおり、N ≥ 1 = LOD N まで）。LOD は LODGroup から調べる。`Runner.EffectiveMaxLod` / `GetRendererLod`
 - F5-4: パース補正（距離 / 画角の軸のキー。`FC_<asset>_Persp_K{n}` を角度の補正に足す）。調整値「パース補正の強さ」、Timeline のクリップ「パース補正を使う」、`.fctrack` の固定カーブ `perspective`。`.fcpose` / `.fctrack` の取り込みの版を上げた（再取り込みされる）

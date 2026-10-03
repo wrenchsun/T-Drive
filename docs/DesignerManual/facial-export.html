@@ -133,6 +133,8 @@
 <tr><td>誇張（0〜1）</td><td>誇張用シェイプ（<code>FC_…_Ex</code>）の強さ。1 = 作った通り、0 = 誇張なし</td></tr>
 <tr><td>パース補正の強さ（0〜1）</td><td>広角で寄ったときの補正の強さ。0 = 補正なし、1 = 作った通り。Runner の「状態」に、今の距離（または画角）が出ます。軸が画角のキャラクターは、視点にカメラが無いと補正が掛かりません（インスペクターのプレビューの仮の視点など）</td></tr>
 <tr><td>書き込む LOD の上限</td><td>0 = すべての LOD に書く（初期値）。1 以上 = その LOD まで書き、それより粗い LOD には書きません（軽量化）。LODGroup に入っていないメッシュには常に書きます</td></tr>
+<tr><td>補間</td><td>双線形（標準）/ なめらか（Catmull-Rom）。Maya のセットアップタブの「補間」と同じ</td></tr>
+<tr><td>Toon の顔の角度連動へ渡す</td><td>マテリアル出力がオンのとき、Toon シェーダー用の値（<code>_ToonFacialAngles</code>）も書きます（初期値オン）</td></tr>
 </table>
 
 <h2>Unity でできないこと</h2>
@@ -144,7 +146,6 @@
 <h2 id="soon">準備中の機能</h2>
 <table>
 <tr><th>機能</th><th>状態</th></tr>
-<tr><td>補間の種類・Toon シェーダーとのつなぎ込み（角度に応じた線幅など）</td><td><span class="soon">準備中</span></td></tr>
 <tr><td>Maya のターンテーブル</td><td><span class="soon">準備中</span></td></tr>
 </table>
 <p>シェイプタブ・アニメから読み込む・他のデータからコピー・Timeline のトラック・デバッグ表示は、使えます（<a href="facial.html#now">今できること</a>）。</p>

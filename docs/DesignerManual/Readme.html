@@ -11,7 +11,7 @@
      機能を追加・変更したら同じコミットで該当ページを更新し、最終更新日と「今できること」の表を直すこと（CLAUDE.md）。 -->
 
 <h1>T-Drive デザイナーマニュアル</h1>
-<p class="lastupdate">最終更新日: 2026-10-03</p>
+<p class="lastupdate">最終更新日: 2026-10-04</p>
 
 <p>このマニュアルは、<strong>T-Drive Toon</strong>（Takeda-Driven Re: IDE Visual Environment、 Maya 2026 でセルルック＝アニメ調のキャラクターの見た目を作るツール）をデザイナーが使うためのガイドです。プログラムの知識は必要ありません。</p>
 
@@ -48,7 +48,7 @@
 <tr><td>眉・目を前髪の上に出す / リム / 髪ハイライト / ライト色の影響 / 遠いほど線を細く</td><td><span class="ok">使える</span></td><td><a href="look-params.html#p1">見た目のパラメータ</a></td></tr>
 <tr><td>輪郭線をスクリーンスペースで描く（部位ごとに背面押し出しと切り替え）</td><td><span class="ok">使える</span>（Unity は <span class="soon">準備中</span>）</td><td><a href="look-params.html#outline-screen-space">見た目のパラメータ</a></td></tr>
 <tr><td>透かし線（前髪に隠れた所だけ眉・目の外形の線を前髪の上に描く）</td><td><span class="ok">使える</span>（Unity は <span class="soon">準備中</span>）</td><td><a href="character.html#see-through">キャラクター設定</a></td></tr>
-<tr><td>顔の角度連動（顔の向きに合わせて輪郭線の太さと陰の境目を変える）</td><td>値と式は <span class="ok">使える</span>。FacialController からのつなぎ込みは <span class="soon">準備中</span>（Unity は <span class="soon">準備中</span>）</td><td><a href="look-params.html#facial-angle">見た目のパラメータ</a></td></tr>
+<tr><td>顔の角度連動（顔の向きに合わせて輪郭線の太さと陰の境目を変える）</td><td><span class="ok">使える</span>（FacialController のプレビューから角度が渡る。Unity 用の Toon シェーダーは <span class="soon">準備中</span>）</td><td><a href="look-params.html#facial-angle">見た目のパラメータ</a></td></tr>
 <tr><td>顔の法線（顔の影を単純にする）</td><td><span class="ok">使える</span></td><td><a href="parts.html#face-normal">部位の登録</a></td></tr>
 <tr><td>表現のレシピ（鼻・目のハイライト・インナーライン など）</td><td><span class="ok">使える</span></td><td><a href="recipes.html">表現のレシピ</a></td></tr>
 <tr><td>2 影・部位別の色補正・線の方向・MatCap</td><td><span class="ok">使える</span></td><td><a href="look-params.html#p1">見た目のパラメータ</a></td></tr>
@@ -65,7 +65,7 @@
 <tr><td>FacialController: シェイプタブ（この角度で彫る・左右に分ける・ミラー・別メッシュへ写す など）</td><td><span class="ok">使える</span>（スカルプトの操作感は確認中）</td><td><a href="facial-shapes.html">シェイプ</a></td></tr>
 <tr><td>FacialController: アニメから読み込む・土台の表情・他のデータからコピー</td><td><span class="ok">使える</span></td><td><a href="facial-pose.html#anim-import">ポーズ</a> / <a href="facial-grid.html#copy-from">グリッド</a></td></tr>
 <tr><td>FacialController: Unity の Timeline トラック・D-Drive のカットシーンでの使用・デバッグ表示</td><td><span class="ok">使える</span>（実際のカットシーンでの通し確認は確認中）</td><td><a href="facial-export.html#timeline">出力と Unity</a></td></tr>
-<tr><td>FacialController: 補間の種類・Toon シェーダーとのつなぎ込み など</td><td><span class="soon">準備中</span></td><td><a href="facial-export.html#soon">出力と Unity</a></td></tr>
+<tr><td>FacialController: 補間の種類（なめらか）・Toon マテリアルに顔の角度を渡す</td><td><span class="ok">使える</span>（見え方は <strong>確認中</strong>）</td><td><a href="facial-setup.html#quality">セットアップ</a></td></tr>
 </table>
 
 <h2>ページ一覧</h2>
