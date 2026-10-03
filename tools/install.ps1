@@ -123,7 +123,7 @@ if ($Project) {
     New-Item -ItemType Directory -Force -Path (Join-Path $Project "looks") | Out-Null
     Say "プロジェクト: $Project（$how）"
 } elseif ($Release) {
-    Say "注意: プロジェクトを決めていません。Maya の T-Drive Toon › プロジェクトを選ぶ… で選んでください"
+    Say "注意: プロジェクトを決めていません。Maya の T-Drive › プロジェクトを選ぶ… で選んでください"
 }
 
 # ---- 4. Maya モジュールの登録
@@ -145,6 +145,6 @@ Say ""
 Say "導入しました: T-Drive Toon $toolVersion" "Green"
 Say "  ツール本体: $repoRoot"
 Say "  モジュール: $modPath"
-Say "Maya $MayaVersion を起動（起動中なら再起動）すると、メニューに「T-Drive Toon」が出ます。"
-Say "更新は Maya の T-Drive Toon › 更新… から。このインストーラーをもう一度実行しても最新になります。"
+Say "Maya $MayaVersion を起動（起動中なら再起動）すると、メニューに「T-Drive」が出ます。"
+Say "更新は Maya の T-Drive › 更新… から。このインストーラーをもう一度実行しても最新になります。"
 if (-not $NoPause) { Read-Host "Enter キーで閉じます" | Out-Null }

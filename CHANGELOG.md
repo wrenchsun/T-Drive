@@ -6,7 +6,10 @@
 ## [Unreleased]
 
 ### 互換性
-- （リリース前に記入）
+- MINOR: Python の公開モジュール名は転送モジュールで維持（`tdrive_toon.lifecycle` / `project` / `updater` / `ui_update` / `mcp_bridge` は `tdrive` に移したが、同じモジュールを返すので既存の import はそのまま動く）。Look・パラメータ契約に変更なし
+
+### 変更
+- エディタを 2 段タブに（F0-1）: ウィンドウとドッキングの見出しは「T-Drive <版>」、1 段目のタブは Toon（これまでのエディタ）と FacialController（準備中）。メインメニューは「T-Drive Toon」から「T-Drive」に改名し、Toon 表示 ON/OFF はサブメニュー「Toon」へ。Toon の動作は変わらない
 
 ## [0.4.0] - 2026-09-30
 

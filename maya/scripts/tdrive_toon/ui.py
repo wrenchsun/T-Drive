@@ -2,6 +2,10 @@
 
 UI はセッション層（session.current()）の薄いラッパー。操作はすべてセッション API を呼び、
 表示はセッションの変更通知（listeners）で更新する。
+
+ウィンドウ（ドッキング・エラー表示・Ctrl+Z の振り分け）は殻（tdrive.shell）が持つ。ここは Toon タブの中身
+（ToonPanel）と、殻に載せるための ToonTool。`show()` / `restore()` / `close()` は互換のために残す
+（古いドッキングのレイアウトに保存された uiScript「from tdrive_toon import ui; ui.restore()」も動く）。
 """
 
 from __future__ import annotations
@@ -10,106 +14,52 @@ import re
 from pathlib import Path
 
 from maya import cmds
-from maya.app.general.mayaMixin import MayaQWidgetDockableMixin
-from PySide6 import QtCore, QtGui, QtWidgets
+from PySide6 import QtCore, QtWidgets
 
-from . import __version__, environment, lifecycle, look, preview, project, roles, session
+from tdrive import shell
+
+from . import environment, look, preview, project, roles, session
 from .ui_ab import ABTab
 from .ui_character import CharacterTab
 from .ui_features import FeaturesTab
 from .ui_look import LookTab
 from .ui_preview import PreviewTab
 
-WINDOW_NAME = "TDriveToonEditor"
 CHARACTER_ID = re.compile(r"^[a-z0-9_]+$")
-
-_window: "EditorWindow | None" = None
-
-
-CONTROL_NAME = f"{WINDOW_NAME}WorkspaceControl"
-# Maya がレイアウトを復元するとき（再起動後・ワークスペース切替時）に呼ぶスクリプト
-RESTORE_SCRIPT = "from tdrive_toon import ui; ui.restore()"
+TOOL_ID = "toon"
+# 旧エディタ（2 段タブになる前）の名前。他から参照されていた名前を残す
+WINDOW_NAME = "TDriveToonEditor"
+CONTROL_NAME = shell.CONTROL_NAME
+RESTORE_SCRIPT = "from tdrive_toon import ui; ui.restore()"  # 古いレイアウトに保存されている uiScript
 
 
-def show() -> "EditorWindow":
-    """エディタを開く。前回ドッキングした位置があればそこに開く。
-
-    × で閉じても枠（workspaceControl）は残す（retain）ので、次に開くと同じ位置に戻る。
-    Maya 再起動後は保存されたレイアウトから uiScript（RESTORE_SCRIPT）で中身が作り直される。
-    """
-    global _window
-    exists = cmds.workspaceControl(CONTROL_NAME, exists=True)
-    if exists and _window is None:
-        # 中身を失った枠（モジュール再読み込み後など）は作り直す。
-        # ※ workspaceControl -q -uiScript は設定済みでも None を返すので判定に使えない
-        cmds.deleteUI(CONTROL_NAME)
-        exists = False
-    if exists:
-        cmds.workspaceControl(CONTROL_NAME, edit=True, visible=True)
-        cmds.workspaceControl(CONTROL_NAME, edit=True, restore=True)
-        _update_dock_label()
-        _window.refresh()  # type: ignore[union-attr]
-        return _window  # type: ignore[return-value]
-    if _window is not None:
-        _window.detach()
-    _window = EditorWindow()
-    _window.show(dockable=True, floating=True, area="right", retain=True, uiScript=RESTORE_SCRIPT)
-    return _window
+def show() -> "shell.ShellWindow":
+    """殻（T-Drive ウィンドウ）を開いて Toon タブを前面にする。"""
+    return shell.show(TOOL_ID)
 
 
 def restore(control: str | None = None) -> None:
-    """workspaceControl の uiScript から呼ばれる。保存されたドッキング位置に中身を作り直す。"""
-    global _window
-    from maya import OpenMayaUI as omui
-    from shiboken6 import getCppPointer
-
-    from shiboken6 import wrapInstance
-
-    parent = control or omui.MQtUtil.getCurrentParent()
-    if _window is not None:
-        _window.detach()
-    ptr = omui.MQtUtil.findControl(parent) if isinstance(parent, str) else parent
-    # モジュール再読み込み後などで枠に古いエディタが残っていれば片付ける（二重表示を防ぐ）
-    holder = wrapInstance(int(ptr), QtWidgets.QWidget)
-    for old in holder.findChildren(QtWidgets.QWidget, WINDOW_NAME):
-        old.setParent(None)
-        old.deleteLater()
-    _window = EditorWindow()
-    omui.MQtUtil.addWidgetToMayaLayout(int(getCppPointer(_window)[0]), int(ptr))
-    _update_dock_label()
-
-
-def _update_dock_label() -> None:
-    """ドッキングの見出し（workspaceControl の label）を今の版にする。
-
-    見出しは枠を最初に作ったときに付き、リロード・再起動・更新では変わらない（v0.2.0 に上げても 0.1.0 のままだった）。
-    """
-    if cmds.workspaceControl(CONTROL_NAME, exists=True):
-        cmds.workspaceControl(CONTROL_NAME, edit=True, label=f"T-Drive Toon {__version__}")
+    """古い uiScript から呼ばれる。殻を作り直す（Toon タブ）。"""
+    shell.restore(control)
 
 
 def close() -> None:
-    """エディタを閉じる（ドッキング位置の記録も消す）。"""
-    global _window
-    if cmds.workspaceControl(CONTROL_NAME, exists=True):
-        cmds.deleteUI(CONTROL_NAME)
-    if _window is not None:
-        _window.detach()
-        _window = None
+    """ウィンドウを閉じる（ドッキング位置の記録も消す）。"""
+    shell.close()
 
 
 def _error(parent: QtWidgets.QWidget, exc: Exception) -> None:
     QtWidgets.QMessageBox.warning(parent, "T-Drive Toon", str(exc))
 
 
-# ============================================================================ ウィンドウ
+# ============================================================================ Toon パネル
 
 
-class EditorWindow(MayaQWidgetDockableMixin, QtWidgets.QWidget):
+class ToonPanel(QtWidgets.QWidget):
+    """Toon タブの中身: ヘッダー + 部位/ルック/キャラクター/機能/A/B/プレビュー。"""
+
     def __init__(self) -> None:
         super().__init__()
-        self.setObjectName(WINDOW_NAME)
-        self.setWindowTitle(f"T-Drive Toon {__version__}")
         self.session = session.current()
 
         layout = QtWidgets.QVBoxLayout(self)
@@ -119,24 +69,6 @@ class EditorWindow(MayaQWidgetDockableMixin, QtWidgets.QWidget):
         self.warning.setWordWrap(True)
         self.warning.setStyleSheet("color: #f0a040;")
         layout.addWidget(self.warning)
-        # ツール内のエラー（Qt の操作・描画のコールバック）。スクリプトエディタを見なくても気付けるようにする（lifecycle.py）
-        self.error_bar = QtWidgets.QWidget()
-        eh = QtWidgets.QHBoxLayout(self.error_bar)
-        eh.setContentsMargins(0, 0, 0, 0)
-        self.error_label = QtWidgets.QLabel()
-        self.error_label.setWordWrap(True)
-        self.error_label.setStyleSheet("color: #ff6060;")
-        eh.addWidget(self.error_label, 1)
-        close = QtWidgets.QToolButton()
-        close.setText("×")
-        close.setToolTip("表示を消す（内容はスクリプトエディタに残っています）")
-        close.clicked.connect(lambda: self.error_bar.setVisible(False))
-        eh.addWidget(close)
-        self.error_bar.setVisible(False)
-        layout.addWidget(self.error_bar)
-        self._error_count = 0
-        lifecycle.install_error_hook()
-        lifecycle.add_error_listener(self._on_tool_error)
 
         self.tabs = QtWidgets.QTabWidget()
         self.parts_tab = PartsTab(self.session)
@@ -156,12 +88,6 @@ class EditorWindow(MayaQWidgetDockableMixin, QtWidgets.QWidget):
         self._stale: set[QtWidgets.QWidget] = set()  # 表示していないタブは次に開いたときに更新する（部位タブの更新は ~0.1 秒）
         self.tabs.currentChanged.connect(self._refresh_current_if_stale)
 
-        # エディタ内 Undo（Look の値）。どのタブにフォーカスがあっても効く。Maya の Undo とは別
-        for key, fn in (("Ctrl+Z", self._undo), ("Ctrl+Y", self._redo), ("Ctrl+Shift+Z", self._redo)):
-            sc = QtGui.QShortcut(QtGui.QKeySequence(key), self)
-            sc.setContext(QtCore.Qt.WidgetWithChildrenShortcut)
-            sc.activated.connect(fn)
-
         self.session.listeners.append(self.refresh)
         self.refresh()
 
@@ -172,28 +98,6 @@ class EditorWindow(MayaQWidgetDockableMixin, QtWidgets.QWidget):
             pass  # 枠ごと破棄済み
         if self.refresh in self.session.listeners:
             self.session.listeners.remove(self.refresh)
-        lifecycle.remove_error_listener(self._on_tool_error)
-
-    def closeEvent(self, event) -> None:  # noqa: N802 (Qt)
-        self.detach()
-        super().closeEvent(event)
-
-    def _undo(self) -> None:
-        if not self.session.undo():
-            cmds.inViewMessage(amg="T-Drive: これ以上元に戻せません", pos="topCenter", fade=True)
-
-    def _redo(self) -> None:
-        if not self.session.redo():
-            cmds.inViewMessage(amg="T-Drive: やり直せる操作がありません", pos="topCenter", fade=True)
-
-    def _on_tool_error(self, summary: str, _detail: str) -> None:
-        try:
-            self._error_count += 1
-            more = f"（ほか {self._error_count - 1} 件）" if self._error_count > 1 else ""
-            self.error_label.setText(f"エラー: {summary}{more} — 詳細はスクリプトエディタ。報告してください")
-            self.error_bar.setVisible(True)
-        except RuntimeError:
-            lifecycle.remove_error_listener(self._on_tool_error)  # 画面が破棄済み
 
     def _refresh_current_if_stale(self, _index: int = 0) -> None:
         tab = self.tabs.currentWidget()
@@ -218,6 +122,49 @@ class EditorWindow(MayaQWidgetDockableMixin, QtWidgets.QWidget):
         problems = environment.parity_problems()
         self.warning.setText("Unity とのパリティ: " + " / ".join(problems) if problems else "")
         self.warning.setVisible(bool(problems))
+
+
+class ToonTool:
+    """殻（tdrive.shell）に載せる Toon ツール（tdrive.tool.Tool）。"""
+
+    id = TOOL_ID
+    label = "Toon"
+
+    def __init__(self) -> None:
+        self._panel: ToonPanel | None = None
+
+    def build_widget(self) -> QtWidgets.QWidget:
+        self._panel = ToonPanel()
+        return self._panel
+
+    def on_scene_opened(self) -> None:
+        session.on_scene_opened()
+
+    def on_scene_saved(self) -> None:
+        session.on_scene_saved()
+
+    def undo(self) -> bool:
+        return session.current().undo()
+
+    def redo(self) -> bool:
+        return session.current().redo()
+
+    def refresh(self) -> None:
+        if self._panel is not None:
+            try:
+                self._panel.refresh()
+            except RuntimeError:
+                self._panel = None  # 枠ごと破棄済み
+
+    def undo_message(self) -> str:
+        return "T-Drive: これ以上元に戻せません"
+
+    def redo_message(self) -> str:
+        return "T-Drive: やり直せる操作がありません"
+
+
+def make_tool() -> ToonTool:
+    return ToonTool()
 
 
 def _placeholder(text: str) -> QtWidgets.QWidget:
@@ -261,7 +208,7 @@ class HeaderBar(QtWidgets.QWidget):
     def refresh(self) -> None:
         lk = self.session.look
         where = "開発用（ツール本体）" if project.is_tool_repo() else project.root().as_posix()
-        self.label.setToolTip(f"プロジェクト: {project.root().as_posix()}（T-Drive Toon › プロジェクトを選ぶ… で変更）")
+        self.label.setToolTip(f"プロジェクト: {project.root().as_posix()}（T-Drive › プロジェクトを選ぶ… で変更）")
         if lk is None:
             self.label.setText(f"プロジェクト: {where}\nLook: （未作成）— 新規 か 開く から始めてください")
         else:

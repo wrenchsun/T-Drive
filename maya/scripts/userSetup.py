@@ -1,4 +1,4 @@
-"""T-Drive Toon モジュールの Maya 起動時処理（画面ありの Maya だけ）。
+"""T-Drive（殻 tdrive・Toon tdrive_toon）の Maya 起動時処理（画面ありの Maya だけ）。
 
 起動の最初（シーンを開く前）に行うもの — 遅らせると、起動と同時に開いたシーンでテクスチャ（$TDRIVE_PROJECT/…）が
 読めずに真っ黒になり、Look も自動で開かない（2026-09-29 の不具合）:
@@ -7,7 +7,7 @@
 
 画面の準備ができてから行うもの（executeDeferred）:
 - MCP 用の commandPort を localhost:7001 で開く（環境変数 TDRIVE_MCP_PORT=0 で無効化）
-- メインメニュー「T-Drive Toon」、更新の確認
+- メインメニュー「T-Drive」、更新の確認
 - 起動と同時にシーンが開いていたら、Look を開いてテクスチャを読み込み直す
 
 mayapy / バッチ（Unity 出力の別プロセス・スモークテスト）では何もしない。
@@ -27,14 +27,15 @@ def _tdrive_early():
 
 
 def _tdrive_startup():
-    from tdrive_toon import mcp_bridge, menu, session
+    from tdrive import mcp_bridge, menu
+    from tdrive_toon import session
 
     mcp_bridge.open_from_env()
     menu.install()
     if cmds.file(query=True, sceneName=True) and session.current().look is None:
         session.on_scene_opened()  # scriptJob より先にシーンが開いていた場合
     try:
-        from tdrive_toon import ui_update
+        from tdrive import ui_update
 
         ui_update.startup_check()  # 更新後の確認待ちの案内・1 日 1 回の更新の確認（docs/13 §3）
     except Exception as exc:  # noqa: BLE001  起動を止めない

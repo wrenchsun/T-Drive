@@ -4,7 +4,11 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-UI_FILES = sorted((ROOT / "maya/scripts/tdrive_toon").glob("ui*.py"))
+SCRIPTS = ROOT / "maya/scripts"
+# 検査の対象: Toon・殻（tdrive）・FacialController（tdrive_facial。Maya 非依存の core は別のテストが見る）
+UI_FILES = sorted(
+    [*(SCRIPTS / "tdrive_toon").glob("ui*.py"), *(SCRIPTS / "tdrive").glob("*.py"), *(SCRIPTS / "tdrive_facial").glob("*.py")]
+)
 
 
 def test_clicked_lambda_without_required_arg_with_defaults():
@@ -34,7 +38,12 @@ def test_line_radius_is_float():
 # ---------------------------------------------------------------- Maya に登録するもの・Maya から呼ばれるもの（lifecycle.py）
 import ast  # noqa: E402
 
-TOOL_FILES = sorted((ROOT / "maya/scripts/tdrive_toon").glob("*.py"))
+TOOL_FILES = sorted(
+    f
+    for pkg in ("tdrive_toon", "tdrive", "tdrive_facial")
+    for f in (SCRIPTS / pkg).glob("*.py")
+    if not (f.parent.name == "tdrive_toon" and f.read_text(encoding="utf-8").lstrip().startswith('"""転送モジュール'))
+)  # 転送モジュールは本体（tdrive/）を検査する
 # Maya に Python のオブジェクト・関数を渡して保持させる API（リロードで解放されると落ちる / 古いコードが動き続ける）
 MAYA_REGISTRATION = re.compile(
     r"registerOverride\(|\.addCallback\(|registerCommand\(|registerNode\(|MUiMessage|MEventMessage|MSceneMessage|MDGMessage|MNodeMessage"
@@ -49,6 +58,21 @@ def test_maya_registrations_have_reload_cleanup():
         if f.name != "lifecycle.py" and MAYA_REGISTRATION.search(src) and "lifecycle.on_reload(" not in src:
             bad.append(f.name)
     assert not bad, f"Maya に登録しているのに lifecycle.on_reload で後片付けを登録していない: {bad}"
+
+
+def test_forwarding_modules_share_the_moved_module():
+    """tdrive_toon の lifecycle / project / updater / ui_update / mcp_bridge は tdrive へ移った。状態を 1 つにするため、転送モジュールは
+    コピーでなく同じモジュールオブジェクトを返す（sys.modules を差し替える）。"""
+    for name in ("lifecycle", "project", "updater", "ui_update", "mcp_bridge"):
+        src = (SCRIPTS / "tdrive_toon" / f"{name}.py").read_text(encoding="utf-8")
+        assert f"from tdrive import {name} as _module" in src and "sys.modules[__name__] = _module" in src, name
+        assert (SCRIPTS / "tdrive" / f"{name}.py").exists(), name
+
+
+def test_reload_handles_all_packages():
+    """リロードは tdrive_toon だけでなく tdrive（殻）・tdrive_facial のモジュールも捨てて読み直す。"""
+    src = (ROOT / "maya/mcp_scripts/reload_tdrive.py").read_text(encoding="utf-8")
+    assert '"tdrive_toon", "tdrive", "tdrive_facial"' in src
 
 
 def test_reload_runs_cleanups_before_dropping_modules():

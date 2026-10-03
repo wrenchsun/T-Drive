@@ -22,4 +22,4 @@ TDRIVE_PROJECT=$($repoRoot.Replace('\', '/'))
 [System.IO.File]::WriteAllText($modPath, $content, (New-Object System.Text.UTF8Encoding($false)))
 Write-Host "Installed: $modPath"
 Write-Host "  -> $moduleRoot"
-Write-Host "Maya $MayaVersion を再起動すると 'T-Drive Toon' メニューと commandPort :7001 が有効になります。"
+Write-Host "Maya $MayaVersion を再起動すると 'T-Drive' メニューと commandPort :7001 が有効になります。"

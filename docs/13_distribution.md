@@ -35,7 +35,7 @@ PowerShell で:
 ```
 1. $env:GIT_LFS_SKIP_SMUDGE = "1"; git clone https://github.com/wrenchsun/T-Drive.git "$env:LOCALAPPDATA\TDriveToon\T-Drive"
 2. powershell -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\TDriveToon\T-Drive\tools\install.ps1"
-3. Maya を起動 → T-Drive Toon › プロジェクトを選ぶ…
+3. Maya を起動 → T-Drive › プロジェクトを選ぶ…
 ```
 
 （1 の `GIT_LFS_SKIP_SMUDGE` はテスト素体など大きなファイル（約 50MB）を取らないため。ツールには不要）
@@ -73,7 +73,7 @@ PowerShell で:
 2. デザイナーの GitHub アカウントに `wrenchsun/T-Drive` の読み取り権限を付ける
 3. `Install-TDriveToon.bat` を渡し、[マニュアル「はじめに」](DesignerManual/setup.html) を案内する
 
-## 3. 更新（Maya のメニュー **T-Drive Toon › 更新…**）
+## 3. 更新（Maya のメニュー **T-Drive › 更新…**）
 
 D-Drive の更新ウィンドウと同じ構成。
 
@@ -88,7 +88,7 @@ D-Drive の更新ウィンドウと同じ構成。
 
 - 導入が開発用（ブランチ上・ローカルの変更あり）のときは更新ボタンを無効にし、「git で更新してください」と表示する
 - ツール本体の checkout にローカルの変更があるときは更新しない（デザイナーが触らない前提。変更の一覧を表示）
-- **起動時の確認**（D-Drive には無い、追加）: 1 日 1 回、裏で `git ls-remote` し、新しい版があればビューポートに「更新があります（T-Drive Toon › 更新…）」を出す。
+- **起動時の確認**（D-Drive には無い、追加）: 1 日 1 回、裏で `git ls-remote` し、新しい版があればビューポートに「更新があります（T-Drive › 更新…）」を出す。
   認証の入力画面は出さない（`GIT_TERMINAL_PROMPT=0`・`GCM_INTERACTIVE=never`、失敗は黙って次回）。更新ウィンドウで無効にできる
 - 起動時、プロジェクトの「最後に適用した版」が今の版より古ければ「更新後の確認がまだです」を出す（D-Drive の `DD-SETUP-UPDATE-PENDING` 相当）
 

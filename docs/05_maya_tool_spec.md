@@ -5,7 +5,7 @@
 | 項目 | 仕様 |
 |---|---|
 | 配布形態 | Maya モジュール（`tools/install_maya_module.ps1` が `Documents/maya/modules/TDriveToon.mod` を生成し、リポジトリの `maya/` を指す） |
-| 起動時処理 | `userSetup.py`: メインメニュー「T-Drive Toon」追加、MCP 用 commandPort `:7001` を開く（`TDRIVE_MCP_PORT=0` で無効） |
+| 起動時処理 | `userSetup.py`: メインメニュー「T-Drive」追加（F0-1 で「T-Drive Toon」から改名）、MCP 用 commandPort `:7001` を開く（`TDRIVE_MCP_PORT=0` で無効） |
 | エディタ | メニュー「T-Drive Toon > エディタ」。ドッキング可能な 1 ウィンドウ、タブ 4 つ（部位 / ルック / A/B / プレビュー） |
 | 前提 | VP2 レンダリングエンジン = **DirectX 11**、カラーマネジメント ON・ビュー変換 = Un-tone-mapped (sRGB)。違う場合は起動時に警告し、ビュー変換はワンクリックで合わせる（[09](09_render_parity.md) §2） |
 
@@ -20,7 +20,7 @@
 └──────┴──────┴──────┴────────────────────────────────────────┘
 ```
 
-- **2026-10-03 追加（F0-1 で実装）**: ウィンドウは「T-Drive」になり、1 段目のタブで **Toon / FacialController** を切り替える。上の図は Toon タブの中身（[14](14_facial_controller_spec.md) §5.1、[15](15_facial_controller_design.md) §2.1）
+- **2026-10-03 実装（F0-1）**: ウィンドウ（ドッキングの見出し）は「T-Drive <版>」になり、1 段目のタブで **Toon / FacialController** を切り替える（殻 `tdrive.shell.ShellWindow`。FacialController は準備中の表示）。上の図は Toon タブの中身（`tdrive_toon.ui.ToonPanel`）。メニューは「T-Drive」で、共通の項目（エディタ・プロジェクトを選ぶ…・ツールをリロード・マニュアルを開く・更新…・MCP ポート）はトップ、Toon だけの項目（Toon 表示 ON/OFF）はサブメニュー「Toon」。エラーの表示バーと Ctrl+Z / Ctrl+Y の振り分け（今開いているツールへ）は殻が持つ（[14](14_facial_controller_spec.md) §5.1、[15](15_facial_controller_design.md) §2.1）
 - ヘッダーは常時表示。**Toon ⇔ 元の見た目** の切替はワンクリック（R-4）
 - 未保存の変更がある状態でシーンを閉じる・Look を開き直すときは確認ダイアログ
 

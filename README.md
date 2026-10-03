@@ -26,7 +26,7 @@ git lfs install
 powershell -ExecutionPolicy Bypass -File tools/install_maya_module.ps1
 ```
 
-Maya 2026 を起動すると「T-Drive Toon」メニューと MCP 用 commandPort（localhost:7001）が有効になる。
+Maya 2026 を起動すると「T-Drive」メニューと MCP 用 commandPort（localhost:7001）が有効になる。
 Claude Code からの Maya 操作は [docs/07_maya_mcp_setup.md](docs/07_maya_mcp_setup.md)。
 
 ## テスト

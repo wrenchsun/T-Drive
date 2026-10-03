@@ -9,7 +9,7 @@
 <body>
 <nav class="breadcrumb"><a href="Readme.html">トップ</a> › はじめに（導入）</nav>
 <h1>はじめに（導入）</h1>
-<p class="lastupdate">最終更新日: 2026-09-28</p>
+<p class="lastupdate">最終更新日: 2026-10-03</p>
 
 <h2>初回だけ必要な設定</h2>
 
@@ -21,7 +21,7 @@
 <li><span class="path">Install-TDriveToon.bat</span> を<strong>作業する Maya のプロジェクトフォルダ</strong>（<span class="path">workspace.mel</span> がある所）に置く</li>
 <li>ダブルクリックする。初回は GitHub のログイン画面が出ることがあります</li>
 <li>「導入しました: T-Drive Toon 0.1.0」と出たら Enter で閉じる</li>
-<li>Maya を起動する（起動中なら再起動）。上部のメニューに <strong>T-Drive Toon</strong> が出れば完了</li>
+<li>Maya を起動する（起動中なら再起動）。上部のメニューに <strong>T-Drive</strong> が出れば完了</li>
 </ol>
 <figure>
 <pre><code>=== T-Drive Toon の導入 ===
@@ -70,21 +70,21 @@
 </table>
 <ul>
 <li>今のプロジェクトはエディタの上部に表示されます</li>
-<li>変えるときは <strong>T-Drive Toon › プロジェクトを選ぶ…</strong></li>
+<li>変えるときは <strong>T-Drive › プロジェクトを選ぶ…</strong></li>
 <li>テクスチャはプロジェクトフォルダの中に置くと、どの PC でも同じシーンが開けます（パスがプロジェクト基準で保存されます）</li>
 </ul>
 
 <h2>毎回の起動</h2>
 <ol>
-<li>Maya 2026 を起動すると、上部のメニューに <strong>「T-Drive Toon」</strong> が追加されます</li>
-<li><strong>T-Drive Toon › エディタ</strong> でエディタが開きます</li>
+<li>Maya 2026 を起動すると、上部のメニューに <strong>「T-Drive」</strong> が追加されます</li>
+<li><strong>T-Drive › エディタ</strong> でエディタが開きます。ウィンドウ上部の 1 段目のタブは <strong>Toon</strong>（見た目を作る。これまでのエディタ）と <strong>FacialController</strong>（<span class="soon">準備中</span>）です。普段は Toon のまま使います</li>
 </ol>
 
 <h3 id="dock">エディタのドッキング</h3>
 <p>エディタは Maya の他のパネルと同じようにドッキングできます。</p>
 <ul>
-<li>ウィンドウ上部のタブ（「T-Drive Toon …」）をドラッグして、Channel Box / Attribute Editor の横やビューポートの端に重ねる</li>
-<li>× で閉じても位置は覚えています。メニュー <strong>T-Drive Toon › エディタ</strong> で同じ場所に開きます</li>
+<li>ウィンドウ上部のタブ（「T-Drive 0.4.0」のように版が付きます）をドラッグして、Channel Box / Attribute Editor の横やビューポートの端に重ねる</li>
+<li>× で閉じても位置は覚えています。メニュー <strong>T-Drive › エディタ</strong> で同じ場所に開きます</li>
 <li>Maya を再起動しても、ドッキングしていた場所に復元されます（<strong>再起動後の復元は確認中</strong>。うまく戻らない場合はメニューから開き直してください）</li>
 </ul>
 
@@ -97,12 +97,12 @@
 ユニティちゃんは<strong>確認用の素体</strong>です。ゲーム（MS2026）では使いません。ツールは特定のモデルに依存しない作りなので、本番のキャラクターでも同じ手順で使えます。
 </div>
 
-<h2>メニュー「T-Drive Toon」</h2>
+<h2>メニュー「T-Drive」</h2>
 <table>
 <tr><th>項目</th><th>内容</th></tr>
 <tr><td>エディタ</td><td>エディタを開く</td></tr>
 <tr><td>プロジェクトを選ぶ…</td><td>Look・出力を置くフォルダを選ぶ（<a href="#project">プロジェクト</a>）</td></tr>
-<tr><td>Toon 表示 ON/OFF</td><td>Toon 表示と元の見た目を切り替える（エディタの「表示」と同じ）</td></tr>
+<tr><td>Toon › Toon 表示 ON/OFF</td><td>Toon 表示と元の見た目を切り替える（エディタの「表示」と同じ）</td></tr>
 <tr><td>マニュアルを開く</td><td>このマニュアルをブラウザで開く</td></tr>
 <tr><td>更新…</td><td>新しい版の確認・更新・前の版に戻す（<a href="update.html">更新のしかた</a>）</td></tr>
 <tr><td>ツールをリロード</td><td>ツールを最新の状態に読み込み直す（ツールが更新されたとき）。<strong>保存していない Look の変更・元に戻す履歴・ライトの向き・エディタの位置はそのまま</strong>です</td></tr>

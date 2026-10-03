@@ -1,46 +1,10 @@
-"""Maya MCP (GG_MayaMCP) との接続口となる commandPort を管理する。
+"""転送モジュール: `tdrive.mcp_bridge` に移った（F0-1）。既存の import（tdrive_toon.mcp_bridge）を保つため、同じモジュールオブジェクトを返す。
 
-ポート名は ":<port>" 形式（ホスト省略）にしてループバックのみで待ち受ける。
+モジュールの状態（登録した後片付け・キャッシュなど）を 1 つだけにするため、コピーでなく sys.modules を差し替える。
 """
 
-from __future__ import annotations
+import sys
 
-import os
+from tdrive import mcp_bridge as _module
 
-from maya import cmds
-
-DEFAULT_PORT = 7001
-
-
-def _port_name(port: int) -> str:
-    return f":{port}"
-
-
-def is_open(port: int = DEFAULT_PORT) -> bool:
-    return _port_name(port) in (cmds.commandPort(query=True, listPorts=True) or [])
-
-
-def open_port(port: int = DEFAULT_PORT) -> None:
-    if is_open(port):
-        return
-    cmds.commandPort(
-        name=_port_name(port),
-        sourceType="python",
-        echoOutput=True,
-        noreturn=False,
-        bufferSize=16384,
-    )
-    print(f"[T-Drive] Maya MCP commandPort opened on localhost:{port}")
-
-
-def close_port(port: int = DEFAULT_PORT) -> None:
-    if is_open(port):
-        cmds.commandPort(name=_port_name(port), close=True)
-        print(f"[T-Drive] Maya MCP commandPort closed ({port})")
-
-
-def open_from_env() -> None:
-    """TDRIVE_MCP_PORT（既定 7001、0 で無効）に従ってポートを開く。"""
-    port = int(os.environ.get("TDRIVE_MCP_PORT", DEFAULT_PORT))
-    if port:
-        open_port(port)
+sys.modules[__name__] = _module
