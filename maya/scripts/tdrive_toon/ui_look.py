@@ -33,7 +33,7 @@ GROUP_LABELS = {
     "Textures": "テクスチャ（差し替え）",
     "Common": "共通", "Shadow": "影", "Mask": "マスク", "Tint": "固定色", "Outline": "線",
     "Light": "ライト", "Depth": "手前に出す（眉・目を髪の上に）", "Rim": "リム", "Hair": "髪ハイライト",
-    "Color": "色補正", "MatCap": "MatCap（簡易反射）", "FaceShadow": "顔影マップ（SDF）",
+    "Color": "色補正", "MatCap": "MatCap（簡易反射）", "FaceShadow": "顔影マップ（SDF）", "FacialAngle": "顔の角度連動",
 }
 
 
@@ -46,6 +46,15 @@ TEXTURE_PLACEHOLDER = {
     "_ToonHairHighlightMap": "なし（ハイライトなし）",
     "_ToonMatCapMap": "なし（反射なし）",
     "_ToonFaceShadowMap": "なし（キャラクタータブの「マスクから生成」で作る）",
+}
+
+# パラメータごとの説明（ラベルのツールチップに足す）
+PARAM_HELP = {
+    "_ToonFacialAngle": "顔の向きに合わせて線の太さと陰の境目を変える。向きは FacialController のプレビュー（Maya）か "
+                        "Runner のマテリアル出力（Unity）が渡す。それが無いときは、オンにしても何も変わらない",
+    "_ToonFacialLineWidthSide": "真横を向いたときの線の太さ（倍）。正面は 1 倍で、横に向くほどこの値へ近づく。1 = 変えない",
+    "_ToonFacialLineWidthVertical": "真上・真下を向いたときの線の太さ（倍）。1 = 変えない",
+    "_ToonFacialShadeOffsetSide": "真横を向いたときの陰の境目のずらし。プラスで陰が広がり、マイナスで狭まる。0 = 変えない",
 }
 
 
@@ -380,7 +389,7 @@ class ParamRow:
 
     # ---------------------------------------------------------- 値の表示
     def show_value(self, value, mixed: bool, overridden: bool) -> None:
-        notes = [self.key, "部位内で値が異なる（操作すると揃う）" if mixed else "", "バリアントで上書き中" if overridden else ""]
+        notes = [self.key, PARAM_HELP.get(self.key, ""), "部位内で値が異なる（操作すると揃う）" if mixed else "", "バリアントで上書き中" if overridden else ""]
         self.label.setToolTip(" / ".join(n for n in notes if n))
         self.label.setStyleSheet("color: #f0c060; font-weight: bold;" if overridden else "")
         self.base_btn.setVisible(overridden and self.visible)

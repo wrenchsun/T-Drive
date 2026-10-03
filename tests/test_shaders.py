@@ -52,6 +52,7 @@ def test_core_compiles_standalone(tmp_path):
         "  col.xy += Toon_FaceShadowUV(c.xy, float3(-1,0,0), normalize(n)) * 0.001;\n"
         "  col *= 1.0 - 0.5 * Toon_LineSeeThroughPair(c, c.wzyx, c.yxwz, 0.05, 2u);\n"
         "  col *= 1.0 - 0.5 * Toon_LineSilhouettePart(c, c.wzyx);\n"
+        "  col *= Toon_FacialLineWidthFactor(float4(0.5, -0.5, 1, 0), 2.0, 0.5) + Toon_FacialShadeThresholdOffset(c, 0.2);\n"
         "  return float4(Toon_Tonemap(col, TOON_TONEMAP_NEUTRAL), 1);\n"
         "}\n",
         encoding="utf-8",
@@ -72,6 +73,9 @@ def test_fx_uniforms_match_contract():
     declared = set(re.findall(r"^(?:float4|float|Texture2D|bool|int|float3)\s+(\w+)", fx, re.M))
     missing = {p.maya for p in params.SPECIFIC_PARAMS} - declared
     assert not missing, f".fx に無いパラメータ: {missing}"
+    # 実行時の入力（Look に保存しない値）は Maya ではスカラーに分けて受ける
+    runtime = {a for names in params.MAYA_RUNTIME_ATTRS.values() for a in names}
+    assert runtime <= declared, f".fx に無い実行時の入力: {runtime - declared}"
 
 
 def test_fx_has_common_texture_uniforms():

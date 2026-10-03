@@ -108,7 +108,24 @@ SPECIFIC_PARAMS: tuple[Param, ...] = (
     # --- SDF 顔影マップ T-21（顔の向きはキャラクター単位 characterSettings.faceShadow） ---
     Param("_ToonFaceShadowMap", TEXTURE, None, "FaceShadow", "顔影マップ（SDF、R）"),
     Param("_ToonFaceShadowWeight", FLOAT, 0.0, "FaceShadow", "顔影マップの効かせ具合", 0.0, 1.0),
+    # --- 顔の角度連動 F5-9（角度は FacialController が実行時に渡す。下の RUNTIME_PARAMS） ---
+    Param("_ToonFacialAngle", FLOAT, 0.0, "FacialAngle", "顔の角度に合わせて線と陰を変える", 0.0, 1.0, toggle=True),
+    Param("_ToonFacialLineWidthSide", FLOAT, 1.0, "FacialAngle", "真横を向いたときの線幅（倍）", 0.0, 4.0),
+    Param("_ToonFacialLineWidthVertical", FLOAT, 1.0, "FacialAngle", "真上・真下を向いたときの線幅（倍）", 0.0, 4.0),
+    Param("_ToonFacialShadeOffsetSide", FLOAT, 0.0, "FacialAngle", "真横を向いたときの陰の境目のずらし", -1.0, 1.0),
 )
+
+# 実行時に別の仕組みが毎フレーム書く値。Look には保存せず（デザイナーは編集しない）、D-Drive MaterialData の Specific にも出さない。
+# Maya: FacialController のプレビューの仕掛けがシェーダーノードの同名アトリビュートへつなぐ / Unity: Runner が MaterialPropertyBlock に書く
+# 値 = (yaw, pitch を −1〜1 に正規化, 全体の強さ, 0)。(0,0,0,0) = 変化なし。.fx の uniform 名は先頭の "_" を除いたもの
+RUNTIME_PARAMS: dict[str, list[float]] = {
+    "_ToonFacialAngles": [0.0, 0.0, 0.0, 0.0],
+}
+# Maya のシェーダーノードでは Vector4 を 3 つの単精度アトリビュートに分けて受ける（float4 は dx11Shader で複合アトリビュートの形が
+# 環境に依存するため。つなぎ先が確実なスカラーにする）。(yaw, pitch, 強さ) = _ToonFacialAngles の x, y, z（w は 0 固定）
+MAYA_RUNTIME_ATTRS: dict[str, tuple[str, ...]] = {
+    "_ToonFacialAngles": ("ToonFacialYaw", "ToonFacialPitch", "ToonFacialStrength"),
+}
 
 # 名前だけ先に確定しているパラメータ（docs/03 §7.3）。追加時にここから SPECIFIC_PARAMS へ移す
 RESERVED_NAMES: tuple[str, ...] = ()

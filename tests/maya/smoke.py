@@ -442,6 +442,18 @@ def run() -> None:
     s.set_value("eye", "_ToonOutlineScreenSpace", 0.0)
     check("輪郭線のスクリーンスペース: オフに戻すと表が空", screen_line._params["silhouette"] is None)
     s.set_feature("outlineScreenSpace", False)
+    # 顔の角度連動（F5-9）: オフは効果なし・オンで値が効く。角度（実行時の入力）は Look に入らない
+    s.set_value("eye", "_ToonFacialLineWidthSide", 2.0)
+    off_ok = s.look["materials"][s.materials_of("eye")[0]]["specific"].get("_ToonFacialLineWidthSide") == 2.0
+    s.set_feature("facialAngle", True)
+    s.set_value("eye", "_ToonFacialAngle", 1.0)
+    on_vals = look.resolve(s.look)[s.materials_of("eye")[0]]["specific"]
+    check("顔の角度連動: オンで値が解決される・角度は Look に入らない",
+          off_ok and on_vals["_ToonFacialAngle"] == 1.0 and on_vals["_ToonFacialLineWidthSide"] == 2.0
+          and "_ToonFacialAngles" not in json.dumps(s.look))
+    s.set_value("eye", "_ToonFacialAngle", 0.0)
+    s.set_value("eye", "_ToonFacialLineWidthSide", 1.0)
+    s.set_feature("facialAngle", False)
     preview.delete_all()
     check("接地影: delete_all で消える", not contact_shadow.exists())
     s.show(s.shown)

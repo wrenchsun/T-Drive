@@ -250,6 +250,10 @@ Maya の uniform 名は先頭の `_` を除いた名前。定義の実体は `ma
 | `_ToonCastShadow` | Float | 1.0 | 0/1 | セルフシャドウを落とす（P2） | T-43 |
 | `_ToonSeeThroughOutline` | Float | 0 | 0/1 | 髪と重なる所は輪郭線だけ（透かし線。オンなら手前に出さない）（P2） | T-44 |
 | `_ToonOutlineScreenSpace` | Float | 0 | 0/1 | 輪郭線をスクリーンスペースで描く（背面押し出しの代わり。線幅・線色は同じ `_ToonOutline*`）（P2） | T-42 |
+| `_ToonFacialAngle` | Float | 0 | 0/1 | 顔の角度に合わせて線と陰を変える（顔の角度連動。角度は FacialController が渡す。[14](14_facial_controller_spec.md) §6.6）（P2） | F5-9 |
+| `_ToonFacialLineWidthSide` | Float | 1 | 0〜4 | 真横を向いたときの輪郭線の幅の倍率（1 = 変えない） | F5-9 |
+| `_ToonFacialLineWidthVertical` | Float | 1 | 0〜4 | 真上・真下を向いたときの輪郭線の幅の倍率（1 = 変えない） | F5-9 |
+| `_ToonFacialShadeOffsetSide` | Float | 0 | −1〜1 | 真横を向いたときの陰の境目のずらし（プラスで陰が広がる。0 = 変えない） | F5-9 |
 | `_ToonMaskMap` | Texture | white | | 頂点カラーに乗算する Toon マスク | T-19 |
 | `_ToonTintColor` | Color | (1, 0.6, 0.6, 1) | | 固定色（乗算） | T-08 |
 | `_ToonTintStrength` | Float | 0 | 0–1 | 固定色の強さ | T-08 |

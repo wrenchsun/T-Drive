@@ -397,7 +397,8 @@ T-Drive の Toon シェーダーに、顔の角度に応じて線幅と陰を変
 
 - 式（`shaders/ToonCore.hlsl` の 1 か所）: `k_y = |yaw| × 強さ`、`k_p = |pitch| × 強さ`。線幅 ×= `lerp(1, Side, k_y) × lerp(1, Vertical, k_p)`。陰の境目 += `ShadeOffsetSide × k_y`
 - パラメータ契約（`params.py`）への追加 = MINOR。D-Drive では MaterialData の Specific に入る（`_Toon` 接頭辞）
-- Maya: FacialController のプレビューの仕掛けに、正規化した角度の出力を足し、顔のメッシュの Toon マテリアルの `_ToonFacialAngles` へつなぐ（「マテリアル連携」がオンのとき）。プレビューが無いときは (0,0,0,0) = 変化なし
+- Maya: FacialController のプレビューの仕掛けに、正規化した角度の出力を足し、顔のメッシュの Toon マテリアルへつなぐ（「マテリアル連携」がオンのとき）。プレビューが無いときは 0 = 変化なし。Maya のシェーダーノードでは、つなぎ先は 3 つの数値 `ToonFacialYaw` / `ToonFacialPitch` / `ToonFacialStrength`（シェーダーの中で 1 つにまとめる）
+- 実装で決めたこと（2026-10-04）: `_ToonFacialAngles` は実行時に書かれる値で、Look にも MaterialData にも保存しない（契約の表 [03](03_shader_spec.md) §7.2 には載せない）。線幅の連動は**背面押し出しの輪郭線だけ**（スクリーンスペースの輪郭線は対象外。線の太さを部位ごとに整数で渡しているため。必要になったら別チケット）。陰のずらしは本体の 2 階調の境目だけ（2 影・SDF 顔影・セルフシャドウには掛けない）
 
 ## 7. TimeLine 連携（D-Drive）
 

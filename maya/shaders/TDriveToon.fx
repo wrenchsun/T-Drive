@@ -77,6 +77,18 @@ bool ToonHairHighlightMapEnabled < string UIGroup = "Hair"; int UIOrder = 56; > 
 float4 ToonHairHighlightColor < string UIGroup = "Hair"; string UIWidget = "ColorPicker"; int UIOrder = 57; > = {1.0, 1.0, 0.95, 1.0};
 float ToonHairHighlightShift < string UIGroup = "Hair"; float UIMin = -0.5; float UIMax = 0.5; int UIOrder = 58; > = 0.0;
 
+// ---- 顔の角度連動（F5-9。既定値・機能オフでは従来と同じ見た目）
+float ToonFacialAngle < string UIGroup = "FacialAngle"; float UIMin = 0.0; float UIMax = 1.0; int UIOrder = 80; > = 0.0;
+float ToonFacialLineWidthSide < string UIGroup = "FacialAngle"; float UIMin = 0.0; float UIMax = 4.0; int UIOrder = 81; > = 1.0;
+float ToonFacialLineWidthVertical < string UIGroup = "FacialAngle"; float UIMin = 0.0; float UIMax = 4.0; int UIOrder = 82; > = 1.0;
+float ToonFacialShadeOffsetSide < string UIGroup = "FacialAngle"; float UIMin = -1.0; float UIMax = 1.0; int UIOrder = 83; > = 0.0;
+// 実行時の入力（Look には保存しない）。FacialController のプレビューの仕掛けがつなぐ。Unity の _ToonFacialAngles = (yaw, pitch, 強さ, 0)
+// yaw / pitch は −1〜1 に正規化した値。Maya ではつなぎ先が確実なスカラー 3 つで受け、本体で float4 にまとめる
+float ToonFacialYaw < string UIGroup = "FacialAngle"; string UIName = "Facial Yaw (runtime, -1..1)"; int UIOrder = 84; > = 0.0;
+float ToonFacialPitch < string UIGroup = "FacialAngle"; string UIName = "Facial Pitch (runtime, -1..1)"; int UIOrder = 85; > = 0.0;
+float ToonFacialStrength < string UIGroup = "FacialAngle"; string UIName = "Facial Strength (runtime, 0..1)"; int UIOrder = 86; > = 0.0;
+float4 FacialAngles() { return float4(ToonFacialYaw, ToonFacialPitch, ToonFacialStrength, 0.0); }
+
 // ---- P2（既定値では従来と同じ見た目）
 float4 ToonShade2Color < string UIGroup = "Shadow"; string UIWidget = "ColorPicker"; int UIOrder = 14; > = {0.6, 0.52, 0.72, 1.0};
 float ToonShade2Threshold < string UIGroup = "Shadow"; float UIMin = 0.0; float UIMax = 1.0; int UIOrder = 15; > = 0.25;
@@ -246,7 +258,10 @@ float4 ShadeMain(VSOut i, bool frontFace)
         N = Toon_NormalFromMap(NormalMap.Sample(SamLinearWrap, i.uv), NormalScale, N, normalize(i.tangentWS.xyz), i.tangentWS.w);
     float3 L = normalize(PreviewLightDir);
     float4 mask = Toon_CombineMask(i.vertexMask, MaskMapSample(i.uv));
-    float lit = Toon_LitFactor(N, L, mask, ToonShadeThreshold, ToonShadeFeather, ToonShadowStrength);
+    float shadeThreshold = ToonShadeThreshold;
+    if (ToonFacialAngle > 0.5)
+        shadeThreshold += Toon_FacialShadeThresholdOffset(FacialAngles(), ToonFacialShadeOffsetSide);  // 真横で陰の境目をずらす（F5-9）
+    float lit = Toon_LitFactor(N, L, mask, shadeThreshold, ToonShadeFeather, ToonShadowStrength);
     if (ToonFaceShadowMapEnabled && ToonFaceShadowWeight > 0.0)
     {
         float value = ToonFaceShadowMap.Sample(SamLinearWrap, Toon_FaceShadowUV(i.uv, PreviewFaceRight, L)).r;
@@ -332,6 +347,8 @@ VSOut VS_Outline(VSIn v)
     float distM = length(CameraPosWS() - posWS) / PreviewUnitScale;
     float width = ToonOutlineWidth * Toon_OutlineDistanceFactor(distM, ToonOutlineRefDistance, ToonOutlineDistanceScale)
                 * Toon_OutlineDirectionFactor(normalWS, normalize(PreviewLightDir), ToonOutlineShadowSide, ToonOutlineBottom);
+    if (ToonFacialAngle > 0.5)
+        width *= Toon_FacialLineWidthFactor(FacialAngles(), ToonFacialLineWidthSide, ToonFacialLineWidthVertical);  // 顔の角度で線幅（F5-9）
     clip.xy += Toon_OutlineClipOffset(nClip, width, mask, clip.w, gViewportPixelSize);
     o.positionCS = clip;
     o.positionWS = posWS;

@@ -62,6 +62,8 @@ FEATURES: tuple[Feature, ...] = (
     Feature("depthOffset", "手前に出す", ("T-09",), ("_ToonDepthOffset",)),
     Feature("depthCompression", "奥行き圧縮", ("T-22",), ("_ToonDepthCompressWeight",), ("depthCompression",), (SH, CO)),
     Feature("faceShadowSdf", "SDF 顔影マップ", ("T-21",), ("_ToonFaceShadowMap", "_ToonFaceShadowWeight"), ("faceShadow",), (SH, CO)),
+    Feature("facialAngle", "顔の角度連動（線と陰）", ("F5-9",),
+            ("_ToonFacialAngle", "_ToonFacialLineWidthSide", "_ToonFacialLineWidthVertical", "_ToonFacialShadeOffsetSide")),
     Feature("lightStabilize", "ライトの安定化", ("T-17",), (), ("light",), (CO,)),
     Feature("stencil", "髪越し表示（ステンシル）", ("T-24",), (), ("stencil",), (SH, CO), "none"),
     Feature("innerLine", "画面上のインナーライン", ("T-23",), (), ("innerLine",), (RF,)),

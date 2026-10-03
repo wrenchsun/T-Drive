@@ -251,6 +251,26 @@ float3 Toon_Emission(float3 color, float3 emissionMap, float3 emissionColor, flo
     return color + emissionMap * emissionColor * intensity;
 }
 
+// ------------------------------------------------------------------ 顔の角度連動（F5-9、docs/14 §6.6）
+// angles = (yaw, pitch を −1〜1 に正規化, 全体の強さ, 0)。戻り値 = (k_y, k_p): 横向き・縦向きの効き具合 0..1
+float2 Toon_FacialK(float4 angles)
+{
+    return saturate(float2(abs(angles.x), abs(angles.y)) * angles.z);
+}
+
+// 輪郭線の幅に掛ける倍率（真横で side 倍、真上 / 真下で vertical 倍）。angles が 0 か side = vertical = 1 なら 1
+float Toon_FacialLineWidthFactor(float4 angles, float side, float vertical)
+{
+    float2 k = Toon_FacialK(angles);
+    return lerp(1.0, side, k.x) * lerp(1.0, vertical, k.y);
+}
+
+// 本体の影の境界（_ToonShadeThreshold）に足すずれ。offset = 0 か angles が 0 なら 0
+float Toon_FacialShadeThresholdOffset(float4 angles, float offsetSide)
+{
+    return offsetSide * Toon_FacialK(angles).x;
+}
+
 // ------------------------------------------------------------------ 画面上の線（T-23 / T-42、docs/03 §10）
 #define TOON_LINE_CREASE_DEG 60.0
 #define TOON_LINE_DEPTH_REL 0.03
