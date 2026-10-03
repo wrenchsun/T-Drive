@@ -462,7 +462,6 @@ class FacialPanel(QtWidgets.QWidget):
         self.session = session_mod.current()
         self._detached = False
         self._generation = self.session.generation
-        self._unsubscribe_ctx = None  # 今の Presenter の通知の購読を外す関数
 
         layout = QtWidgets.QVBoxLayout(self)
         self.header = HeaderBar(self.session)
@@ -486,7 +485,7 @@ class FacialPanel(QtWidgets.QWidget):
         self.tabs.currentChanged.connect(lambda *_: self._refresh_current_if_stale())
 
         self.session.listeners.append(self._on_session_changed)
-        self._bind_ctx()
+        self.session.state_listeners.append(self._on_state_changed)  # 軽い通知（編集状態・選択・ポーズの値）はヘッダーだけ更新する
         self.refresh()
 
     # -------------------------------------------------------------- タブ
@@ -527,28 +526,23 @@ class FacialPanel(QtWidgets.QWidget):
             if self._on_session_changed in self.session.listeners:
                 self.session.listeners.remove(self._on_session_changed)
 
-    def _bind_ctx(self) -> None:
-        """今の Presenter の通知（点の選択など）を購読する。セッションの通知は出ない変化でも、ヘッダーの編集の表示を追従させる。"""
-        if self._unsubscribe_ctx is not None:
-            self._unsubscribe_ctx()
-            self._unsubscribe_ctx = None
-        if self.session.presenters is not None:
-            self._unsubscribe_ctx = self.session.presenters.ctx.subscribe(self._on_ctx_event)
-
-    def _on_ctx_event(self, _event: str) -> None:
+    def _on_state_changed(self) -> None:
+        """セッションの軽い通知（`state_listeners`）: 編集状態の出入り・点の選択・ポーズの値の変化。ヘッダーと警告だけを更新する
+        （スライダーのドラッグ中にタブを作り直さない）。"""
         try:
             self.header.refresh()
+            self.warning.setText(self._warning_text())
+            self.warning.setVisible(bool(self.warning.text()))
         except RuntimeError:
-            if self._unsubscribe_ctx is not None:
-                self._unsubscribe_ctx()
-                self._unsubscribe_ctx = None
+            # 枠ごと破棄済み: 通知の購読を外す
+            if self._on_state_changed in self.session.state_listeners:
+                self.session.state_listeners.remove(self._on_state_changed)
 
     def refresh(self) -> None:
         s = self.session
         has = s.presenters is not None
         if s.generation != self._generation:
-            self._bind_ctx()  # データを作り直した（新規 / 開く / 閉じる）: 全タブの見た目を付け直す
-            self._generation = s.generation
+            self._generation = s.generation  # データを作り直した（新規 / 開く / 閉じる）: 全タブの見た目を付け直す
             for slot in self.slots.values():
                 slot.stale = True
                 fn = getattr(slot.content, "rebind", None)
@@ -595,9 +589,8 @@ class FacialPanel(QtWidgets.QWidget):
         self._detached = True
         if self._on_session_changed in self.session.listeners:
             self.session.listeners.remove(self._on_session_changed)
-        if self._unsubscribe_ctx is not None:
-            self._unsubscribe_ctx()
-            self._unsubscribe_ctx = None
+        if self._on_state_changed in self.session.state_listeners:
+            self.session.state_listeners.remove(self._on_state_changed)
         for slot in self.slots.values():
             slot.detach()
         try:

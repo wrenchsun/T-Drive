@@ -55,6 +55,7 @@ class BakeReport:
     missing_curves: list[str] = field(default_factory=list)  # シーンに無くて飛ばしたシェイプ名
     missing_bones: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)  # 自動でしたことのお知らせ（Neutral の焼き直しに伴う感情レイヤーの焼き直し・プレビューの作り直し）
     meshes: list[str] = field(default_factory=list)
 
     @property

@@ -254,8 +254,10 @@ def run() -> None:
     s.pose.set_curve("bs.mouth_open", 0.5)
     s.save_point()
     rep2 = s.bake_point(1, 3, layer=0)
-    check("bake_point: Neutral だけだと感情レイヤーの焼き直しを促す警告", any("感情レイヤー" in w for w in rep2.warnings), f"{rep2.warnings}")
-    check("bake_point: 1 点だけ置き換える", rep2.replaced == [naming.morph_name("mini", "Neutral", 1, 3)] and not rep2.created, f"{rep2.replaced} {rep2.created}")
+    # 変更（意図した挙動変更）: 以前は「感情レイヤーも焼き直してください」の警告だけだった。今は感情レイヤーの同じ位置の点も自動で焼き直し、notes に書く
+    check("bake_point: Neutral の点を焼くと感情レイヤーの同じ位置の点も自動で焼き直す（notes に書く）", any("感情レイヤー" in w for w in rep2.notes), f"{rep2.notes} {rep2.warnings}")
+    check("bake_point: Neutral の 1 点 + 感情レイヤーの同じ位置の 1 点を置き換える（新規なし）",
+          rep2.replaced == [naming.morph_name("mini", "Neutral", 1, 3), naming.morph_name("mini", "Anger", 1, 3)] and not rep2.created, f"{rep2.replaced} {rep2.created}")
     s.begin_edit()
     s.select_point(1, 3)
     s.pose.set_curve("bs.mouth_open", 0.6)
@@ -443,10 +445,320 @@ def run() -> None:
     shutil.rmtree(tmp, ignore_errors=True)
 
 
+def run_integration() -> None:
+    """統合の追加分: 通知・強さを測るシェイプ・reset_bone・変更のある点だけベイク・cancel 1 回・プレビュー・T-20 の取り込み。"""
+    import json
+
+    from maya import cmds
+
+    import facial_fixture
+    from tdrive import project
+    from tdrive_facial import bake as bakemod
+    from tdrive_facial import preview_rig as pr
+    from tdrive_facial import scene
+    from tdrive_facial import session as S
+    from tdrive_facial.core import autofill, fcpose_io, naming
+    from tdrive_facial.core.presenters import CONFIRM_CANCEL
+
+    tmp = Path(tempfile.mkdtemp(prefix="tdrive_fint_"))
+    project.set_root(tmp)
+    ids = facial_fixture.build_mini_head()
+    face = scene.resolve_mesh("mini_face")
+    s = S.current()
+    doc0 = facial_fixture.make_doc()
+    doc_path = tmp / "mini.fcpose.json"
+    fcpose_io.save(doc0, doc_path)
+    s.open(doc_path)
+    s.add_to_working_set(curves=["bs.mouth_open", "bs.smile_L", "bs.smile_R", "bs.brow_up"], bones=["eye_L", "eye_R"])
+    s.set_mirror(bone_axis="X", suffix_l="_L", suffix_r="_R")
+    main_calls: list[int] = []
+    state_calls: list[int] = []
+    s.listeners.append(lambda: main_calls.append(1))
+    s.state_listeners.append(lambda: state_calls.append(1))
+
+    def counts() -> tuple[int, int]:
+        return len(main_calls), len(state_calls)
+
+    # ------------------------------------------------------------ 状態の通知（state_listeners）
+    c0 = counts()
+    s.begin_edit()
+    check("通知: begin_edit で state_listeners が呼ばれる（listeners は呼ばれない）", counts()[1] > c0[1] and counts()[0] == c0[0], f"{c0} {counts()}")
+    c0 = counts()
+    s.select_point(1, 2)
+    check("通知: select_point で state_listeners が呼ばれる", counts()[1] > c0[1])
+    c0 = counts()
+    for i in range(20):  # スライダーのドラッグ相当
+        s.set_curve("bs.mouth_open", 0.1 + i * 0.01)
+    c1 = counts()
+    check("通知: set_curve（ドラッグ）は state_listeners だけ・listeners（重い更新）は呼ばない", c1[1] - c0[1] >= 20 and c1[0] == c0[0], f"{c0} {c1}")
+    c0 = counts()
+    from tdrive_facial.core.model import BoneOffset
+
+    t_base = cmds.getAttr("eye_L.translate")[0]
+    s.set_bone("eye_L", BoneOffset(t=(0.0, 0.3, 0.0)))
+    check("通知: set_bone", counts()[1] > c0[1])
+    check("set_bone: eye_L がポーズに入る", "eye_L" in s.pose.bones)
+    c0 = counts()
+    r = s.reset_bone("eye_L")
+    check("reset_bone: 1 本だけ戻る（項目が取り除かれる。恒等のずれは残らない）・state 通知", r.ok and "eye_L" not in s.pose.bones and counts()[1] > c0[1], f"{list(s.pose.bones)}")
+    check("reset_bone: シーンのジョイントも基準の位置へ戻る", all(abs(a - b) < 1e-6 for a, b in zip(cmds.getAttr("eye_L.translate")[0], t_base)), f"{cmds.getAttr('eye_L.translate')[0]} {t_base}")
+    s.set_bone("eye_L", BoneOffset(t=(0.0, 0.3, 0.0)))
+    s.set_bone("eye_R", BoneOffset(t=(0.0, 0.2, 0.0)))
+    s.reset_bone("eye_L")
+    check("reset_bone: 他のボーンは残る", "eye_R" in s.pose.bones and "eye_L" not in s.pose.bones)
+    c0 = counts()
+    s.zero_pose()
+    s.mirror_pose()
+    s.reload_pose()
+    check("通知: zero / mirror / reload", counts()[1] - c0[1] >= 3)
+    c0 = counts()
+    s.add_layer("Anger")
+    r = s.set_active_layer(1)
+    check("通知: set_active_layer", counts()[1] > c0[1] and r.status == "selected")
+    s.set_active_layer(0)
+    s.delete_layer(2)  # Anger
+    c0 = counts()
+    s.validate()
+    check("通知: validate", counts()[1] > c0[1])
+    c0 = counts()
+    s.end_edit()
+    check("通知: end_edit", counts()[1] > c0[1] and not s.editing)
+
+    # ------------------------------------------------------------ 強さを測るシェイプ
+    n_undo = len(s._undo)
+    r = s.set_intensity_curves(["bs.mouth_open", "bs.mouth_open", "bs.smile_L"])
+    check("set_intensity_curves: 重複を除いて保存・Undo に 1 回積む・dirty", r.ok and s.doc.intensity_curves == ["bs.mouth_open", "bs.smile_L"] and len(s._undo) == n_undo + 1 and s.dirty)
+    s.undo()
+    check("set_intensity_curves: Undo で戻る", s.doc.intensity_curves == [])
+    s.redo()
+    n_undo = len(s._undo)
+    s.set_intensity_curves(["bs.mouth_open", "bs.smile_L"])
+    check("set_intensity_curves: 同じ値は Undo に積まない", len(s._undo) == n_undo)
+    s.set_intensity_curves([])
+
+    # ------------------------------------------------------------ select_point の cancel は 1 回の呼び出しで足りる
+    s.begin_edit()
+    s.select_point(1, 2)
+    s.set_curve("bs.brow_up", 0.35)
+    r = s.select_point(1, 0, choice=CONFIRM_CANCEL)
+    check("cancel 1 回: 先に確認を呼ばなくても cancelled・選択も編集中の値も変わらない", r.status == "cancelled" and s.ctx.selection == (1, 2) and abs(s.pose.curves.get("bs.brow_up", 0) - 0.35) < 1e-9, f"{r.status} {s.ctx.selection}")
+    s.add_layer("Joy2")
+    r = s.set_active_layer(2, choice=CONFIRM_CANCEL)
+    check("cancel 1 回: set_active_layer も", r.status == "cancelled" and s.ctx.active_layer == 0)
+    s.delete_layer(2)
+    s.reload_pose()
+    r = s.select_point(1, 0, choice=CONFIRM_CANCEL)
+    check("cancel: 未保存の編集が無ければ普通に選ぶ", r.status == "selected" and s.ctx.selection == (1, 0))
+    s.end_edit()
+
+    # ------------------------------------------------------------ 変更のある点だけベイク
+    check("bake_stale: 何も焼いていないときは全点が対象（Neutral 4 + Joy 2）", len(s.stale_points()) == 6, f"{s.stale_points()}")
+    rep = s.bake_stale()
+    check("bake_stale: 全点を焼く", len(rep.created) == 6 and not s.stale_points(), f"{rep.summary()}")
+    rep = s.bake_stale()
+    check("bake_stale: 対象が無ければ何も焼かず、notes で伝える", not rep.created and not rep.replaced and any("ありません" in n for n in rep.notes), f"{rep.notes}")
+    s.begin_edit()
+    s.select_point(1, 2)
+    s.set_curve("bs.mouth_open", 0.9)
+    s.save_point()
+    s.end_edit()
+    check("bake_stale: Neutral を変えると stale は Neutral の 1 点（感情レイヤーは検出されない = 既知の制約）", s.stale_points() == [(0, 1, 2)], f"{s.stale_points()}")
+    rep = s.bake_stale()
+    nn, jn = naming.morph_name("mini", "Neutral", 1, 2), naming.morph_name("mini", "Joy", 1, 2)
+    check("bake_stale: Neutral の点 + 感情レイヤーの同じ位置の点だけ焼き直す（ほかの点は触らない）", rep.replaced == [nn, jn] and not rep.created, f"{rep.replaced}")
+    check("bake_stale: 感情の焼き直しを notes に書く", any("感情レイヤー" in n and "Joy" in n for n in rep.notes), f"{rep.notes}")
+    s.begin_edit()
+    s.select_point(2, 2)
+    s.set_curve("bs.smile_R", 0.5)
+    s.save_point()
+    s.end_edit()
+    check("bake_stale: 未ベイクの新しい点が対象", s.stale_points() == [(0, 2, 2)])
+    rep = s.bake_stale()
+    check("bake_stale: 新しい点だけ作る・終わると stale が 0", rep.created == [naming.morph_name("mini", "Neutral", 2, 2)] and not rep.replaced and s.stale_points() == [], f"{rep.created} {rep.replaced}")
+    # bake_point / bake_layer の自動焼き直し
+    rep = s.bake_point(1, 2, layer=0)
+    check("bake_point(Neutral): 感情レイヤーの同じ位置も自動で焼き直す", rep.replaced == [nn, jn] and any("感情レイヤー" in n for n in rep.notes), f"{rep.replaced} {rep.notes}")
+    rep = s.bake_layer(0)
+    check("bake_layer(Neutral): Neutral の全点 + 感情レイヤーの同じ位置の点", len(rep.replaced) == 5 + 2 and jn in rep.replaced, f"{rep.replaced}")
+    rep = s.bake_layer(1)
+    check("bake_layer(感情): 感情レイヤーだけ（Neutral は足さない）", all("_Joy_" in n for n in rep.replaced) and not rep.notes, f"{rep.replaced} {rep.notes}")
+
+    # ------------------------------------------------------------ プレビュー
+    cam = cmds.camera(name="pvc")[0]
+    s.camera_to_point(1, 1, cam)
+    check("preview: 無いときは state none・exists False・rig None", s.preview_state() == "none" and not s.preview_exists() and s.preview_rig_node() is None and not s.preview_is_stale())
+    rep = s.preview_build(cam)
+    asset = "mini"
+    rig = s.preview_rig_node()
+    check("preview_build: rig ができる・state live・ターゲット 7 本・警告なし", rig == "tdFacialPreview_mini" and s.preview_state() == "live" and rep.targets == 7 and not rep.warnings, f"{rig} {s.preview_state()} {rep}")
+    check("preview_camera: 今のカメラ", s.preview_camera() == cmds.ls(cam, long=True)[0])
+    cams = s.model_cameras()
+    check("model_cameras: パネルが無ければ persp", cams == ["persp"], f"{cams}")
+    s.camera_to_point(1, 2, cam)
+    w = s.preview_weights()
+    check("preview: カメラを点 (1,2) へ動かすとその点の Neutral = 1", abs(w[nn] - 1.0) < 1e-4 and sum(v for k, v in w.items() if k != nn and "_Joy_" not in k) < 1e-4, f"{w}")
+    s.camera_to_point(1, 0, cam)
+    w = s.preview_weights()
+    check("preview: カメラを動かすと重みが変わる（(1,0) = 1・(1,2) = 0）", abs(w[naming.morph_name('mini', 'Neutral', 1, 0)] - 1.0) < 1e-4 and abs(w[nn]) < 1e-4)
+    s.camera_to_point(1, 2, cam)
+    s.preview_set_enabled(False)
+    w = s.preview_weights()
+    check("preview: 補正なし（A/B）で重みがすべて 0", not s.preview_is_enabled() and max(abs(v) for v in w.values()) < 1e-9)
+    s.preview_set_enabled(True)
+    check("preview: 補正あり（A/B）で戻る", abs(s.preview_weights()[nn] - 1.0) < 1e-4)
+    s.preview_set_attr("alpha", 0.5)
+    check("preview: 強さ（alpha）0.5 で半分", abs(s.preview_weights()[nn] - 0.5) < 1e-4)
+    s.preview_set_attr("alpha", 1.0)
+    s.preview_set_attr("emotion_Joy", 1.0)
+    w = s.preview_weights()
+    check("preview: 感情（Joy = 1）で Joy の点の重みが出る", abs(w[jn] - 1.0) < 1e-4 and abs(w[nn] - 1.0) < 1e-4, f"{w[jn]} {w[nn]}")
+    s.preview_set_attr("emotion_Joy", 0.0)
+    s.preview_set_attr("useManual", True)
+    s.preview_set_attr("manualYaw", 0.0)
+    s.preview_set_attr("manualPitch", 0.0)
+    st = s.preview_status()
+    check("preview_status: 手動角度・出力角度・感情の一覧", st.use_manual and abs(st.out_yaw) < 1e-3 and [e[0] for e in st.emotions] == ["Joy"] and st.state == "live" and st.camera == cam, f"{st}")
+    s.preview_set_attr("useManual", False)
+    try:
+        s.preview_set_attr("nonsense", 1)
+        bad = False
+    except S.FacialSessionError:
+        bad = True
+    check("preview_set_attr: 知らないアトリビュートは失敗", bad)
+    # 編集状態との共存
+    s.camera_to_point(1, 2, cam)
+    s.begin_edit()
+    s.select_point(1, 2)
+    wz = s.preview_weights()
+    check("共存: 編集中はプレビューの重みが止まる（基準姿勢のポーズが当たる。FC_* は 0）", max(abs(v) for v in wz.values()) < 1e-9 and s.editing, f"{max(wz.values())}")
+    check("共存: 編集中の preview_status.editing", s.preview_status().editing)
+    s.end_edit()
+    check("共存: 編集を終えるとプレビューが再開する", abs(s.preview_weights()[nn] - 1.0) < 1e-4)
+    # 編集中に作り直し → 保留 → 編集を終えると作り直す
+    s.begin_edit()
+    s.select_point(1, 2)
+    r = s.resize(5, 3)
+    check("共存: 編集中に格子を変えると作り直しは保留（stale）", r.ok and s.preview_is_stale() and s._preview_pending and s.editing)
+    s.end_edit()
+    check("共存: 編集を終えると自動で作り直す（stale でなくなる）", not s.preview_is_stale() and s.preview_state() == "live" and not s._preview_pending)
+    # rig のキーは作り直しで残る
+    cmds.setKeyframe(f"{rig}.emotion_Joy", time=1, value=0.2)
+    cmds.setKeyframe(f"{rig}.emotion_Joy", time=10, value=1.0)
+    s.set_edge_fade(10)
+    rep = s.bake_all()
+    check("自動の作り直し: ベイクのあとに rig が作り直される（notes）・キーが残る", any("プレビューを作り直しました" in n for n in rep.notes) or not s.preview_is_stale(), f"{rep.notes}")
+    check("自動の作り直し: rig の感情のキーが残る・live", (cmds.keyframe(f"{rig}.emotion_Joy", query=True, keyframeCount=True) or 0) == 2 and s.preview_state() == "live")
+    st = s.preview_status()
+    check("preview_status: キーが打ってある感情は keyed", st.emotions and st.emotions[0][3])
+    try:
+        s.preview_set_attr("emotion_Joy", 0.5)
+        bad = False
+    except S.FacialSessionError:
+        bad = True
+    check("preview_set_attr: キーが打ってあるアトリビュートは変えられない", bad)
+    cmds.cutKey(rig, attribute="emotion_Joy", clear=True)
+    # 外でベイクすると stale → 作り直し
+    s.begin_edit()
+    s.end_edit()
+    s.set_target(extra_meshes=[])  # 何も変わらない（Undo に積まれない）
+    bakemod.bake(s.doc)  # session を通さない（自動の作り直しが走らない）
+    s.refresh_scene()
+    s.set_grid(cols=3)  # 格子を戻す → 自動の作り直し
+    check("格子を変えて・ベイクし直すと自動で作り直される", s.preview_state() == "live")
+    s.bake_all()
+    # 強制的に stale: セッションを通さず FC_ を 1 つ消す
+    scene.delete_targets(scene.blend_shapes(face)[0], [nn])
+    check("stale: セッションを通さずシェイプが消えると is_stale", s.preview_is_stale() and s.preview_state() == "stale")
+    rep = s.preview_build()
+    check("preview_build（作り直し）: 同じカメラのまま・live に戻る", s.preview_state() == "live" and s.preview_camera() == cmds.ls(cam, long=True)[0] and not rep.warnings)
+    s.bake_all()
+    # キーに焼く
+    s.camera_to_point(1, 2, cam)
+    res = s.preview_bake_to_keys(1, 5, 1)
+    check("preview_bake_to_keys: state keys・FC_* にキー", s.preview_state() == "keys" and len(res["frames"]) == 5 and nn in res["keyed"], f"{s.preview_state()} {res['keyed']}")
+    s.set_edge_fade(20)
+    check("キーに焼いたあと: 自動の作り直しは式を戻さない", s.preview_state() == "keys")
+    rep = s.preview_build()
+    check("キーが残っていると作り直しは警告（他から接続されていて配線しない）", rep.warnings and s.preview_warnings, f"{rep.warnings}")
+    n = s.preview_clear_keys()
+    fc_anim = [c for c in cmds.ls(type="animCurve") if cmds.listConnections(c + ".output", plugs=True) and any(".weight[" in p for p in cmds.listConnections(c + ".output", plugs=True))]
+    check("preview_clear_keys: FC_* のキーが消える・weight は 0", n > 0 and not fc_anim, f"{n} {fc_anim}")
+    rep = s.preview_build()
+    check("キーを消して作り直すと警告なし・live", not rep.warnings and s.preview_state() == "live" and not s.preview_warnings, f"{rep.warnings}")
+    check("preview_delete: rig が消える・FC_* の重みは 0", s.preview_delete() and not s.preview_exists() and all(abs(cmds.getAttr(c.plug)) < 1e-9 for c in scene.list_curves(face, include_fc=True) if naming.is_fc_name(c.alias)))
+    check("preview_delete: 無ければ False", s.preview_delete() is False)
+
+    # ------------------------------------------------------------ T-20
+    node = "tdViewCorrection_mini_face"
+    targets = []
+    for key in ("front", "threeQuarter", "side"):
+        d = cmds.duplicate(face, name=f"mini_face_vc_{key}")[0]
+        cmds.delete(d, constructionHistory=True)
+        if cmds.listRelatives(d, parent=True):
+            d = cmds.parent(d, world=True)[0]
+        cmds.move(0, 0.4 * (len(targets) + 1), 0, f"{d}.vtx[0:10]", relative=True)
+        cmds.setAttr(f"{d}.visibility", 0)
+        targets.append(d)
+    cmds.blendShape(*targets, face, name=node, frontOfChain=True)
+    bs_before = {a: i for a, i in scene.target_indices(node).items()}
+    look = {"characterSettings": {"viewCorrection": {"mesh": "mini_face", "front": "mini_face_vc_front", "threeQuarter": "mini_face_vc_threeQuarter", "side": "mini_face_vc_side"}}}
+    look_copy = json.loads(json.dumps(look))
+    s.refresh_scene()
+    try:
+        s.import_t20(None)
+        nolook = False
+    except S.NoLookError:
+        nolook = True
+    check("import_t20: 開いている Toon の Look が無ければ NoLookError（look.json を選ぶ）", nolook)
+    s.clear_layer()
+    s.begin_edit()
+    s.select_point(1, 2)
+    s.set_curve("bs.mouth_open", 0.8)
+    s.save_point()
+    s.end_edit()  # (1,2) にキーがある（3 列の格子では Yaw 90° の列）
+    n_undo = len(s._undo)
+    r = s.import_t20(look)
+    pts = s.doc.layers[0].points
+    check("import_t20: Yaw 0 の列 (R1 C1) に正面のキー（ポーズ = {curve: 1.0}）", (1, 1) in pts and pts[(1, 1)].is_key and pts[(1, 1)].pose.curves == {f"{node}.mini_face_vc_front": 1.0}, f"{r.message}")
+    check("import_t20: 3 列の格子では 45° の列が無いので 3/4 は飛ばす（理由と、Yaw 範囲 90°・列数 5 の案内）", any("3/4" in x and "その角度の列がありません" in x for x in r.skipped) and "列数 5" in r.message, r.message)
+    check("import_t20: 既にキーがある点（横 → R1 C2）は上書きしない", any("R1 C2" in x for x in r.existing) and "bs.mouth_open" in pts[(1, 2)].pose.curves, f"{r.existing}")
+    check("import_t20: 使ったシェイプが作業セットに入る・Undo は 1 回", f"{node}.mini_face_vc_front" in s.doc.working_set.curves and len(s._undo) == n_undo + 1)
+    check("import_t20: 結果の文に 自動生成 / T-20 のプレビューをオフ の案内", "自動生成" in r.message and "viewCorrection" in r.message)
+    s.undo()
+    check("import_t20: Undo で戻る", (1, 1) not in s.doc.layers[0].points and (1, 2) in s.doc.layers[0].points)
+    s.set_grid(cols=5)
+    s.clear_layer()
+    r = s.import_t20(look)
+    pts = s.doc.layers[0].points
+    got = {(d["key"], d["row"], d["col"], d["yaw"]) for d in r.imported}
+    check("import_t20: 5 列の格子で Yaw 0 / 45 / 90° の 3 点（R1 C2 / C3 / C4）", r.ok and got == {("front", 1, 2, 0.0), ("threeQuarter", 1, 3, 45.0), ("side", 1, 4, 90.0)} and not r.skipped, f"{got} {r.message}")
+    check("import_t20: T-20 のデータ（blendShape のターゲット）と Look は変わらない", {a: i for a, i in scene.target_indices(node).items()} == bs_before and look == look_copy)
+    lp = tmp / "look.json"
+    lp.write_text(json.dumps(look), encoding="utf-8")
+    s.clear_layer()
+    r = s.import_t20(lp)
+    check("import_t20: look.json のパスからも取り込める", r.ok and len(r.imported) == 3)
+    look2 = {"characterSettings": {"viewCorrection": {"mesh": "mini_face", "front": "no_such_target", "threeQuarter": "", "side": "mini_face_vc_side"}}}
+    s.clear_layer()
+    r = s.import_t20(look2)
+    check("import_t20: シーンに無いシェイプ・未登録は飛ばして理由を出す", len(r.imported) == 1 and any("no_such_target" in x for x in r.skipped) and any("登録されていません" in x for x in r.skipped), r.message)
+    r = s.import_t20({"characterSettings": {"viewCorrection": {"mesh": "", "front": "", "threeQuarter": "", "side": ""}}})
+    n_undo = len(s._undo)
+    check("import_t20: viewCorrection が空なら ok=False・文書は変えない", not r.ok and r.code == "no_t20" and len(s._undo) == n_undo)
+    s.clear_layer()
+    s.import_t20(look)
+    r = s.generate()
+    check("T-20 のキーから自動生成できる（左側が埋まる）", r.ok and len(s.doc.layers[0].points) > 3)
+    # 後片付け
+    s.close()
+    shutil.rmtree(tmp, ignore_errors=True)
+
+
 if __name__ == "__main__":
     maya.standalone.initialize(name="python")
     try:
         run()
+        run_integration()
     except Exception:
         RESULTS.append(("例外", False, traceback.format_exc()))
     finally:

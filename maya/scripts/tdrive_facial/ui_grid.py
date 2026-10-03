@@ -45,6 +45,7 @@ from .core.presenters import (
     GridView,
 )
 from .session import FacialSessionError
+from .ui_preview import PreviewGroup
 
 POLL_MS = 100  # カメラの角度を読む間隔（約 10 回 / 秒）
 ANGLE_EPS = 0.01  # これ未満の角度の違いは「変わっていない」とみなす（度）
@@ -368,7 +369,18 @@ class GridTab(QtWidgets.QWidget):
         self._tracking = False
         self._detached = False
 
-        v = QtWidgets.QVBoxLayout(self)
+        # 縦に長いのでスクロールできるようにする（プレビューの箱が下に付く）
+        outer = QtWidgets.QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        scroll = QtWidgets.QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        body = QtWidgets.QWidget()
+        scroll.setWidget(body)
+        outer.addWidget(scroll)
+        self.scroll = scroll
+        v = QtWidgets.QVBoxLayout(body)
         self.title = QtWidgets.QLabel()
         v.addWidget(self.title)
 
@@ -380,6 +392,9 @@ class GridTab(QtWidgets.QWidget):
         row.addStretch(1)
         self.camera_label = QtWidgets.QLabel()
         self.camera_label.setToolTip("今のビューのカメラが、顔から見て Yaw / Pitch どの角度にいるか。カメラを回すと赤い点が追従します")
+        v.addLayout(row)
+        row = QtWidgets.QHBoxLayout()  # カメラの角度は 2 行目（スクロールバーがあっても右端で切れない）
+        row.addStretch(1)
         row.addWidget(self.camera_label)
         v.addLayout(row)
 
@@ -428,7 +443,17 @@ class GridTab(QtWidgets.QWidget):
         self.btn_bake_layer = QtWidgets.QPushButton("ベイク（このレイヤー）")
         self.btn_bake_layer.setToolTip("今のレイヤーの点だけ焼きます")
         self.btn_bake_layer.clicked.connect(self.on_bake_layer)
-        for w in (self.btn_bake_all, self.btn_bake_point, self.btn_bake_layer):
+        self.btn_bake_stale = QtWidgets.QPushButton("ベイク（変更のある点）")
+        self.btn_bake_stale.setToolTip(
+            "未ベイク・ベイク後に変更・シェイプが消えた点だけ焼きます（速い）。Neutral の点を焼くときは、感情レイヤーの同じ位置の点も一緒に焼き直します"
+        )
+        self.btn_bake_stale.clicked.connect(self.on_bake_stale)
+        for w in (self.btn_bake_stale, self.btn_bake_all):
+            row.addWidget(w)
+        row.addStretch(1)
+        g.addLayout(row)
+        row = QtWidgets.QHBoxLayout()
+        for w in (self.btn_bake_point, self.btn_bake_layer):
             row.addWidget(w)
         row.addStretch(1)
         g.addLayout(row)
@@ -438,6 +463,9 @@ class GridTab(QtWidgets.QWidget):
         self.report.setPlaceholderText("ベイクの結果がここに出ます")
         g.addWidget(self.report)
         v.addWidget(box)
+
+        self.preview = PreviewGroup(session)
+        v.addWidget(self.preview)
 
         self.status = QtWidgets.QLabel()
         self.status.setWordWrap(True)
@@ -455,6 +483,7 @@ class GridTab(QtWidgets.QWidget):
         self._pending = False
 
         session.listeners.append(self._on_session_changed)
+        session.state_listeners.append(self.preview.on_state)  # 編集状態・プレビューの変化（軽い通知）
         _live_tabs.add(self)
         self.refresh()
 
@@ -552,6 +581,7 @@ class GridTab(QtWidgets.QWidget):
         self._poll_camera(force=True)
         self.canvas.updateGeometry()
         self.canvas.update()
+        self.preview.refresh()
 
     def _sync_controls(self) -> None:
         doc = self.has_doc()
@@ -563,7 +593,7 @@ class GridTab(QtWidgets.QWidget):
             self.summary_label.setText("")
             for b in (
                 self.btn_generate, self.btn_unkey, self.btn_clear, self.btn_clear_layer,
-                self.btn_bake_all, self.btn_bake_point, self.btn_bake_layer,
+                self.btn_bake_all, self.btn_bake_point, self.btn_bake_layer, self.btn_bake_stale,
             ):
                 b.setEnabled(False)
             return
@@ -583,6 +613,7 @@ class GridTab(QtWidgets.QWidget):
         can_bake = bool(d.asset) and d.target is not None and bool(d.target.mesh)
         self.btn_bake_all.setEnabled(can_bake)
         self.btn_bake_layer.setEnabled(can_bake)
+        self.btn_bake_stale.setEnabled(can_bake)
         self.btn_bake_point.setEnabled(can_bake and pa[ACTION_BAKE_POINT])
 
     # ------------------------------------------------------------------ カメラの追従
@@ -609,6 +640,7 @@ class GridTab(QtWidgets.QWidget):
             self.timer.stop()
             return
         self._poll_camera()
+        self.preview.tick()
 
     def _poll_camera(self, force: bool = False) -> None:
         """カメラの角度を読み、変わっていれば赤い点とラベルだけ更新する。"""
@@ -761,6 +793,9 @@ class GridTab(QtWidgets.QWidget):
     def on_bake_all(self) -> None:
         self._bake("全部", lambda s: s.bake_all())
 
+    def on_bake_stale(self, *_checked) -> None:
+        self._bake("変更のある点", lambda s: s.bake_stale())
+
     def on_bake_point(self) -> None:
         sel = self.session.ctx.selection if self.has_doc() else None
         if sel is None:
@@ -796,6 +831,8 @@ class GridTab(QtWidgets.QWidget):
     def report_text(report) -> str:
         """BakeReport を、デザイナー向けの文章にする。"""
         lines = [report.summary()]
+        for n in report.notes:
+            lines.append(n)
         if report.empty:
             lines.append(f"差分が残らなかった点（空のシェイプ）: {len(report.empty)} 個")
         if report.missing_curves:
@@ -865,4 +902,7 @@ class GridTab(QtWidgets.QWidget):
         self._unsub = []
         if self._on_session_changed in self.session.listeners:
             self.session.listeners.remove(self._on_session_changed)
+        if self.preview.on_state in self.session.state_listeners:
+            self.session.state_listeners.remove(self.preview.on_state)
+        self.preview.detach()
         _live_tabs.discard(self)

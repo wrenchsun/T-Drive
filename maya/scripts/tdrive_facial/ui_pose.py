@@ -31,7 +31,6 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from tdrive import lifecycle, project
 
 from . import scene as scene_mod
-from .core.model import BoneOffset
 from .core.presenters import BoneRow, CurveRow, PoseView
 from .session import FacialSessionError
 
@@ -250,6 +249,8 @@ lifecycle.on_reload(_detach_all)
 class PoseTab(QtWidgets.QWidget):
     """ポーズタブ。`refresh()` で全部描き直し、`detach()` で通知の購読をやめる。"""
 
+    _CAPTURE_TIP = "Maya のシェイプエディタ・チャンネルボックス・回転 / 移動ツールで動かした値を、編集中のポーズへ取り込みます。取り込んだあと「保存」で点に書きます"
+
     def __init__(self, session) -> None:
         super().__init__()
         self.session = session
@@ -320,9 +321,7 @@ class PoseTab(QtWidgets.QWidget):
         box = QtWidgets.QGroupBox("Maya で動かした値を取り込む")
         g = QtWidgets.QHBoxLayout(box)
         self.btn_capture = QtWidgets.QPushButton("シーンから取り込む")
-        self.btn_capture.setToolTip(
-            "Maya のシェイプエディタ・チャンネルボックス・回転 / 移動ツールで動かした値を、編集中のポーズへ取り込みます。取り込んだあと「保存」で点に書きます"
-        )
+        self.btn_capture.setToolTip(self._CAPTURE_TIP)
         self.btn_capture.clicked.connect(self.on_capture)
         self.cb_capture_ws = QtWidgets.QCheckBox("作業セットだけ")
         self.cb_capture_ws.setChecked(True)
@@ -365,8 +364,8 @@ class PoseTab(QtWidgets.QWidget):
         self.bone_filter.textChanged.connect(self.on_bone_filter)
         r.addWidget(self.bone_filter, 1)
         bv.addLayout(r)
-        r = QtWidgets.QHBoxLayout()
-        self.btn_select_bone = QtWidgets.QPushButton("選択中のジョイントを Maya で選ぶ")
+        r = QtWidgets.QGridLayout()  # 狭いパネル（480 px）でも横にはみ出さないよう 2 段に積む
+        self.btn_select_bone = QtWidgets.QPushButton("選んだボーンを Maya で選択")
         self.btn_select_bone.setToolTip(
             "左の丸で選んだボーンを Maya で選択します。Maya の移動 / 回転ツールで動かしたら、上の「シーンから取り込む」を押してください"
         )
@@ -376,9 +375,11 @@ class PoseTab(QtWidgets.QWidget):
         self.btn_reset_bones = QtWidgets.QPushButton("ボーンを全部戻す")
         self.btn_reset_bones.setToolTip("ボーンのずれを全部元へ戻します（シェイプは触りません）")
         self.btn_reset_bones.clicked.connect(self.on_reset_bones)
-        for w in (self.btn_select_bone, self.btn_reset_bone, self.btn_reset_bones):
-            r.addWidget(w)
-        r.addStretch(1)
+        r.addWidget(self.btn_select_bone, 0, 0, 1, 2)
+        r.addWidget(self.btn_reset_bone, 1, 0)
+        r.addWidget(self.btn_reset_bones, 1, 1)
+        r.setColumnStretch(0, 1)
+        r.setColumnStretch(1, 1)
         bv.addLayout(r)
         self.bone_note = QtWidgets.QLabel()
         self.bone_note.setStyleSheet(OK_STYLE)
@@ -403,6 +404,7 @@ class PoseTab(QtWidgets.QWidget):
         self._flush_timer.timeout.connect(self._flush_now)
 
         session.listeners.append(self._on_session_changed)
+        session.state_listeners.append(self._on_state_changed)  # 編集状態の出入り（listeners は呼ばれない）で、案内文とボタンを追従させる
         _live_tabs.add(self)
         self.refresh()
 
@@ -421,6 +423,33 @@ class PoseTab(QtWidgets.QWidget):
             self.refresh()
         except RuntimeError:
             self.detach()
+
+    def _on_state_changed(self) -> None:
+        """セッションの軽い通知（編集状態・選択・ポーズの値）。行は作り直さず、案内文と「シーンから取り込む」の有効無効だけを更新する。"""
+        if self._detached:
+            return
+        try:
+            self._sync_edit_state()
+        except RuntimeError:
+            self.detach()
+
+    def _sync_edit_state(self) -> None:
+        if not self.has_doc():
+            return
+        sel = self.session.ctx.selection
+        self._sync_note(sel)
+        # 取り込みは編集状態（基準姿勢）でだけできる
+        self.btn_capture.setEnabled(sel is not None and self.session.editing)
+        self.btn_capture.setToolTip(
+            self._CAPTURE_TIP if self.session.editing else "編集状態（ヘッダーの「編集」か、グリッドで点をクリック）のときだけ使えます。" + self._CAPTURE_TIP
+        )
+
+    def _sync_note(self, selection) -> None:
+        if selection is not None and not self.session.editing:
+            self.note.setText("今はシーンにこのポーズが当たっていません。スライダーを動かすと、シーンを基準姿勢にして当て直します。")
+        else:
+            self.note.setText("")
+        self.note.setVisible(bool(self.note.text()))
 
     def _on_pose_event(self, _event: str = "") -> None:
         """Presenter の変化（点の選択・編集中の値・ドキュメント）。自分で値を動かしている最中は何もしない。"""
@@ -472,7 +501,7 @@ class PoseTab(QtWidgets.QWidget):
         self.header.setText("FacialController のデータが開かれていません（セットアップタブで新規作成するか、開いてください）")
         self.note.setText("")
         self.body.setEnabled(False)
-        for b in (self.btn_save, self.btn_reload, self.btn_zero, self.btn_mirror, self.btn_export, self.btn_import):
+        for b in (self.btn_save, self.btn_reload, self.btn_zero, self.btn_mirror, self.btn_export, self.btn_import, self.btn_capture):
             b.setEnabled(False)
         self._curve_sig = self._bone_sig = None
         _clear_layout(self.curve_grid)
@@ -490,11 +519,7 @@ class PoseTab(QtWidgets.QWidget):
 
     def _sync_header(self, view: PoseView) -> None:
         self.header.setText(self._header_html(view.selection, view.layer, view.dirty))
-        if view.selection is not None and not self.session.editing:
-            self.note.setText("今はシーンにこのポーズが当たっていません。スライダーを動かすと、シーンを基準姿勢にして当て直します。")
-        else:
-            self.note.setText("")
-        self.note.setVisible(bool(self.note.text()))
+        self._sync_note(view.selection)
 
     def _sync_controls(self, view: PoseView) -> None:
         ed = view.can_edit
@@ -505,6 +530,7 @@ class PoseTab(QtWidgets.QWidget):
         self.btn_mirror.setEnabled(view.can_mirror)
         self.btn_export.setEnabled(ed)
         self.btn_import.setEnabled(ed)
+        self._sync_edit_state()
         self.cb_working.blockSignals(True)
         self.cb_working.setChecked(view.working_set_only)
         self.cb_working.blockSignals(False)
@@ -652,7 +678,7 @@ class PoseTab(QtWidgets.QWidget):
     def reset_bone(self, name: str) -> None:
         self._driving = True
         try:
-            res = self._run("ボーンを戻す", lambda: self.session.set_bone(name, BoneOffset()))
+            res = self._run("ボーンを戻す", lambda: self.session.reset_bone(name))
             if res is not None and res.ok:
                 self._run("シーンへ当てる", self._ensure_applied)
         finally:
@@ -808,4 +834,6 @@ class PoseTab(QtWidgets.QWidget):
         self._unsub = []
         if self._on_session_changed in self.session.listeners:
             self.session.listeners.remove(self._on_session_changed)
+        if self._on_state_changed in self.session.state_listeners:
+            self.session.state_listeners.remove(self._on_state_changed)
         _live_tabs.discard(self)

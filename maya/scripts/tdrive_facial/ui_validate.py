@@ -73,11 +73,21 @@ class ValidateTab(QtWidgets.QWidget):
         self.remove_btn = QtWidgets.QPushButton("無い参照を削除")
         self.remove_btn.setToolTip("モデルに無いシェイプ・ボーンへの参照をデータから消す（大小文字だけの違いは改名で直すので残す）")
         self.remove_btn.clicked.connect(lambda *_: self.on_remove())
+        row.addWidget(self.rename_btn)
+        row.addWidget(self.remove_btn)
+        row.addStretch(1)
+        v.addLayout(row)
+        row = QtWidgets.QHBoxLayout()
+        self.rebake_stale_btn = QtWidgets.QPushButton("変更のある点だけベイク")
+        self.rebake_stale_btn.setToolTip(
+            "未ベイク・ベイク後に変更・シェイプが消えた点だけを焼き直す（速い）。Neutral の点を焼くときは、感情レイヤーの同じ位置の点も一緒に焼き直します。"
+            "編集状態は先に抜けます"
+        )
+        self.rebake_stale_btn.clicked.connect(lambda *_: self.on_rebake_stale())
         self.rebake_btn = QtWidgets.QPushButton("全部ベイクし直す")
         self.rebake_btn.setToolTip("全レイヤー・全点を焼き直す（未ベイク・変更ありの解消）。編集状態は先に抜けます")
         self.rebake_btn.clicked.connect(lambda *_: self.on_rebake())
-        row.addWidget(self.rename_btn)
-        row.addWidget(self.remove_btn)
+        row.addWidget(self.rebake_stale_btn)
         row.addWidget(self.rebake_btn)
         row.addStretch(1)
         v.addLayout(row)
@@ -226,6 +236,15 @@ class ValidateTab(QtWidgets.QWidget):
         self.refresh()
         self.show_status(f"{res.message}。検証し直しました（残り {self.session.validation.view().total} 件）")
 
+    @staticmethod
+    def _bake_text(rep) -> str:
+        text = rep.summary()
+        if rep.notes:
+            text += "。" + " / ".join(rep.notes)
+        if rep.warnings:
+            text += "。注意: " + " / ".join(rep.warnings)
+        return text
+
     def on_rebake(self) -> None:
         if not self.ask_confirm("全レイヤー・全点をベイクし直します。時間がかかることがあります。よろしいですか？", "ベイク"):
             return
@@ -234,7 +253,16 @@ class ValidateTab(QtWidgets.QWidget):
             return
         self._call(self.session.validate)
         self.refresh()
-        self.show_status(rep.summary() + ("。注意: " + " / ".join(rep.warnings) if rep.warnings else ""))
+        self.show_status(self._bake_text(rep))
+
+    def on_rebake_stale(self) -> None:
+        """未ベイク・変更あり・シェイプが消えた点だけを焼く（確認なし。Maya の Undo 1 回で戻る）。"""
+        rep = self._call(self.session.bake_stale)
+        if rep is None:
+            return
+        self._call(self.session.validate)
+        self.refresh()
+        self.show_status(self._bake_text(rep))
 
     def on_double_click(self, item: QtWidgets.QTreeWidgetItem) -> None:
         issue = self._issue_of_item.get(id(item))

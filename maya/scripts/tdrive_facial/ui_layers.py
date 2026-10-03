@@ -14,7 +14,6 @@ from PySide6 import QtCore, QtWidgets
 from tdrive import lifecycle
 
 from .core.presenters import (
-    CONFIRM_CANCEL,
     EMOTION_PRESETS,
     SELECT_CANCELLED,
     SELECT_NEEDS_CONFIRM,
@@ -216,7 +215,6 @@ class LayersTab(QtWidgets.QWidget):
         self.table.resizeColumnToContents(COL_POINTS)
 
     def _fill_intensity(self, doc) -> None:
-        has_cmd = getattr(self.session, "set_intensity_curves", None) is not None
         avail = list(doc.working_set.curves)
         names = avail + [n for n in doc.intensity_curves if n not in avail]
         self.intensity_list.clear()
@@ -229,11 +227,11 @@ class LayersTab(QtWidgets.QWidget):
                 it.setForeground(QtCore.Qt.gray)
                 it.setToolTip("作業セットにありません")
             self.intensity_list.addItem(it)
-        self.intensity_list.setEnabled(has_cmd)
+        self.intensity_list.setEnabled(bool(names))
         if not avail and not names:
             self.intensity_note.setText("セットアップタブの作業セットでシェイプを選ぶと、ここから選べます")
-        elif not has_cmd:
-            self.intensity_note.setText("（準備中: この設定を保存する操作がまだセッションにありません）")
+        elif not doc.intensity_curves:
+            self.intensity_note.setText("チェックが無いときは、作業セットのシェイプ全部の最大値で補正を弱めます")
         else:
             self.intensity_note.setText("")
 
@@ -278,10 +276,7 @@ class LayersTab(QtWidgets.QWidget):
                 choice = self.ask_switch_choice(
                     f"「{names[s.ctx.active_layer]}」に未保存のポーズ編集があります。\n「{names[index]}」へ切り替える前に保存しますか？"
                 )
-                if choice == CONFIRM_CANCEL:
-                    r = s.set_active_layer(index, choice=CONFIRM_CANCEL)
-                else:
-                    r = s.set_active_layer(index, choice=choice)
+                r = s.set_active_layer(index, choice=choice)  # cancel も 1 回の呼び出しで足りる
         except Exception as exc:  # noqa: BLE001
             self.show_status(str(exc), error=True)
             lifecycle.report_error("レイヤーの切り替えでエラー", traceback.format_exc())
@@ -390,15 +385,12 @@ class LayersTab(QtWidgets.QWidget):
     def on_intensity_changed(self, _item: Optional[QtWidgets.QListWidgetItem] = None) -> None:
         if self._updating:
             return
-        fn = getattr(self.session, "set_intensity_curves", None)
-        if fn is None:
-            return
         names = [
             self.intensity_list.item(i).data(QtCore.Qt.UserRole)
             for i in range(self.intensity_list.count())
             if self.intensity_list.item(i).checkState() == QtCore.Qt.Checked
         ]
-        self._run(fn, names)
+        self._run(self.session.set_intensity_curves, names)
 
     def detach(self) -> None:
         pass

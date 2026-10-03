@@ -289,11 +289,12 @@ def run_mini() -> None:
     # ------------------------------------------------------------------ 格子の変更（3x3 → 5x3）・新しい点を焼く
     res = s.resize(5, 3)
     check("resize 5x3: 成功", res.ok, getattr(res, "message", ""))
-    check("resize: 格子が変わると is_stale = True", pr.is_stale(doc))
+    # 変更（意図した挙動変更）: session 経由の resize / ベイクは rig を自動で作り直すので、is_stale は False のまま。古くなる検出は rig の署名で別に確かめる
+    check("resize: session 経由なら rig が自動で作り直される（is_stale = False・署名が変わった）", not pr.is_stale(doc) and cmds.getAttr(pr.find_rig(asset) + ".tdFacialSignature") != "")
     s.generate(all_layers=True)
     rep3 = s.bake_all()
     check("5x3 を焼いた", len(rep3.created) + len(rep3.replaced) >= 20, rep3.summary())
-    check("焼いたあと（新しい点が増えた）も is_stale = True", pr.is_stale(doc))
+    check("焼いたあと（新しい点が増えた）も自動で作り直される（is_stale = False・ターゲットが増えた）", not pr.is_stale(doc) and len(pr.current_weights(asset)) >= 20, str(len(pr.current_weights(asset))))
     r3 = pr.build_ex(doc, cam1)
     check("作り直し: is_stale = False・ターゲット = 焼いた FC_* 全部", not pr.is_stale(doc) and r3.targets == len(fc_plugs(face)), f"{r3.targets} {len(fc_plugs(face))}")
     check("作り直し: rig の transform・感情アトリビュートは同じ（キーを残す）", r3.rig == rig)

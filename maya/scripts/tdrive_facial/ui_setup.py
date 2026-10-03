@@ -12,9 +12,10 @@ from typing import Optional
 from maya import cmds
 from PySide6 import QtCore, QtWidgets
 
-from tdrive import lifecycle
+from tdrive import lifecycle, project
 
 from . import scene as scene_mod
+from .session import NoLookError
 from .core import profile as profile_mod
 from .core.model import FILL_MODES, MIRROR_AXES
 from .ui import DIM_STYLE, NO_PROFILE, WARN_STYLE, ask_yes_no, mesh_choices, profile_names
@@ -92,6 +93,7 @@ class SetupTab(QtWidgets.QWidget):
         self._build_mirror()
         self._build_autogen()
         self._build_profile()
+        self._build_t20()
         self._build_working_set()
         self.form.addStretch(1)
         self.refresh()
@@ -268,6 +270,22 @@ class SetupTab(QtWidgets.QWidget):
         self.profile_missing.setWordWrap(True)
         self.profile_missing.setStyleSheet(DIM_STYLE)
         f.addRow(self.profile_missing)
+
+    def _build_t20(self) -> None:
+        box = QtWidgets.QGroupBox("Toon のカメラ角度補正（T-20）")
+        v = QtWidgets.QVBoxLayout(box)
+        hint = QtWidgets.QLabel(
+            "Toon のキャラクタータブで作った補正シェイプ（正面 / 3/4 / 横）を、Neutral レイヤーの Pitch 0・Yaw 0 / 45 / 90° の列のキーにします。"
+            "T-20 のデータと Look は変えません。左側（Yaw −）は取り込んだあとに「自動生成」で埋めてください。"
+        )
+        hint.setWordWrap(True)
+        hint.setStyleSheet(DIM_STYLE)
+        v.addWidget(hint)
+        self.t20_btn = QtWidgets.QPushButton("カメラ角度補正（T-20）から取り込む…")
+        self.t20_btn.setToolTip("開いている Toon の Look から読みます。開いていなければ look.json を選びます")
+        self.t20_btn.clicked.connect(lambda *_: self.on_t20_import())
+        v.addWidget(self.t20_btn)
+        self.form.addWidget(box)
 
     def _build_working_set(self) -> None:
         box = QtWidgets.QGroupBox("作業セット（ポーズタブに出すシェイプとボーン）")
@@ -641,6 +659,37 @@ class SetupTab(QtWidgets.QWidget):
             self.show_status("プロファイルを選んでください", error=True)
             return
         self._run(self.session.apply_profile, name, self.profile_overwrite.isChecked())
+
+    # ---- T-20 の取り込み
+    def ask_look_path(self) -> str:
+        """Toon の Look が開かれていないとき、look.json を聞く（テストが差し替える。キャンセルは ""）。"""
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self, "Toon の Look（look.json）を選ぶ", str(project.root() / "looks"), "Look (*.json)"
+        )
+        return path
+
+    def ask_overwrite_keys(self, text: str) -> bool:
+        return ask_yes_no(self, "既にキーがある点があります:\n" + text + "\n\nT-20 のポーズで上書きしますか？")
+
+    def on_t20_import(self) -> None:
+        if self.session.doc is None:
+            return
+        source = None  # None = 今開いている Toon の Look
+        try:
+            try:
+                res = self.session.import_t20(None)
+            except NoLookError:
+                source = self.ask_look_path()
+                if not source:
+                    self.show_status("取り込みを取りやめました")
+                    return
+                res = self.session.import_t20(source)
+            if res.existing and self.ask_overwrite_keys("、".join(res.existing)):
+                res = self.session.import_t20(source, overwrite=True)
+        except Exception as exc:  # noqa: BLE001  メッセージはそのまま見せる
+            self.show_status(str(exc), error=True)
+            return
+        self.show_status(res.message, error=not res.ok)
 
     # ---- 作業セット
     def on_ws_item_changed(self, kind: str, item: QtWidgets.QListWidgetItem) -> None:

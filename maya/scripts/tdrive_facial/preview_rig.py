@@ -515,6 +515,12 @@ def build(doc: Document, camera: Optional[str] = None) -> str:
     return build_ex(doc, camera).rig
 
 
+def has_expression(asset: str) -> bool:
+    """rig があり、プレビューの式が生きている（キーに焼いたあとは False）か。"""
+    rig = find_rig(asset)
+    return rig is not None and any(cmds.nodeType(n) == "expression" for n in _helper_nodes(rig))
+
+
 def is_stale(doc: Document) -> bool:
     """作ったあとで格子・レイヤー・存在する FC_* のターゲット・基準ボーン・表情での弱めの設定が変わった（= 作り直しが要る）か。
     rig が無ければ False。rig はあるが式が無い（キーに焼いたあと）なら True。"""
