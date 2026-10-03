@@ -71,7 +71,7 @@ namespace TDrive.Facial.Editor
 
             // --- 対象メッシュ・基準ボーン ---
             int targetCount = 0;
-            var meshShapes = new HashSet<string>(StringComparer.Ordinal);   // 対象メッシュにあるすべてのシェイプ名
+            var meshShapes = new HashSet<string>(StringComparer.Ordinal);   // 対象メッシュにあるすべてのシェイプ名（ノード名の接頭辞つき・なしの両方）
             var fcShapes = new List<string>();                              // そのうち FC_ で始まるもの（重複なし）
             if (renderers != null)
                 for (int i = 0; i < renderers.Count; i++)
@@ -83,8 +83,12 @@ namespace TDrive.Facial.Editor
                     if (m == null) continue;
                     for (int k = 0; k < m.blendShapeCount; k++)
                     {
+                        // FBX 取り込み後は "<ノード名>.<ターゲット名>"（例 bs.FC_x）。完全な名前と、"." のあとの切り口の両方で引けるようにする
                         string n = m.GetBlendShapeName(k);
-                        if (meshShapes.Add(n) && FacialNaming.IsFcName(n)) fcShapes.Add(n);
+                        bool isNew = meshShapes.Add(n);
+                        for (int d = n.IndexOf('.'); d >= 0 && d + 1 < n.Length; d = n.IndexOf('.', d + 1)) meshShapes.Add(n.Substring(d + 1));
+                        string bare;
+                        if (isNew && FacialNaming.TryGetBareFcName(n, out bare) && !fcShapes.Contains(bare)) fcShapes.Add(bare);
                     }
                 }
             if (targetCount == 0)

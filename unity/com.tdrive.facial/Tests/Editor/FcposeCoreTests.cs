@@ -218,5 +218,34 @@ namespace TDrive.Facial.Tests
             Assert.IsFalse(FacialNaming.TryParse("FC_shizuku_Joy", "shizuku", out p));
             Assert.IsFalse(FacialNaming.TryParse("FC_Joy_R1_C1", null, out p), "asset と layer が区切れない");
         }
+
+        [Test]
+        public void ShapeNameMatchesAcceptsBareAndNodePrefixedNames()
+        {
+            Assert.IsTrue(FacialNaming.ShapeNameMatches("FC_a_Neutral_R0_C0", "FC_a_Neutral_R0_C0"));
+            Assert.IsTrue(FacialNaming.ShapeNameMatches("bs.FC_a_Neutral_R0_C0", "FC_a_Neutral_R0_C0"));
+            Assert.IsTrue(FacialNaming.ShapeNameMatches("bs.eye_close_L", "bs.eye_close_L"));
+            Assert.IsTrue(FacialNaming.ShapeNameMatches("node.bs.eye_close_L", "bs.eye_close_L"));
+            Assert.IsFalse(FacialNaming.ShapeNameMatches("bsFC_a_Neutral_R0_C0", "FC_a_Neutral_R0_C0"), "区切りの . が要る");
+            Assert.IsFalse(FacialNaming.ShapeNameMatches("bs.FC_a_Neutral_R0_C01", "FC_a_Neutral_R0_C0"));
+            Assert.IsFalse(FacialNaming.ShapeNameMatches("FC_a_Neutral_R0_C0", "bs.FC_a_Neutral_R0_C0"));
+            Assert.IsFalse(FacialNaming.ShapeNameMatches("bs.fc_a", "FC_a"), "大文字小文字を区別する");
+            Assert.IsFalse(FacialNaming.ShapeNameMatches(null, "x"));
+            Assert.IsFalse(FacialNaming.ShapeNameMatches("x", ""));
+        }
+
+        [Test]
+        public void TryGetBareFcNameStripsNodePrefix()
+        {
+            string b;
+            Assert.IsTrue(FacialNaming.TryGetBareFcName("FC_a_Joy_R1_C1", out b));
+            Assert.AreEqual("FC_a_Joy_R1_C1", b);
+            Assert.IsTrue(FacialNaming.TryGetBareFcName("bs.FC_a_Joy_R1_C1", out b));
+            Assert.AreEqual("FC_a_Joy_R1_C1", b);
+            Assert.IsFalse(FacialNaming.TryGetBareFcName("bs.jaw_open", out b));
+            Assert.IsFalse(FacialNaming.TryGetBareFcName("", out b));
+            Assert.IsTrue(FacialNaming.HasFcPrefix("bs.FC_a_Joy_R1_C1", "FC_a_"));
+            Assert.IsFalse(FacialNaming.HasFcPrefix("bs.FC_b_Joy_R1_C1", "FC_a_"));
+        }
     }
 }

@@ -549,6 +549,8 @@ namespace TDrive.Facial
             _rawEmo = new double[d.layers.Length];
 
             // 名前 → 書き込み先。FC_ で始まるものだけ（元のシェイプには触らない）
+            var shapeIndex = new FacialShapeIndex[_targets.Count];
+            for (int t = 0; t < _targets.Count; t++) shapeIndex[t] = new FacialShapeIndex(_targetMeshes[t]);
             var seen = new HashSet<string>(StringComparer.Ordinal);
             var rs = new List<SkinnedMeshRenderer>(_targets.Count);
             var ix = new List<int>(_targets.Count);
@@ -563,8 +565,7 @@ namespace TDrive.Facial
                     rs.Clear(); ix.Clear();
                     for (int t = 0; t < _targets.Count; t++)
                     {
-                        Mesh mesh = _targetMeshes[t];
-                        int idx = mesh != null ? mesh.GetBlendShapeIndex(nm) : -1;
+                        int idx = shapeIndex[t].Find(nm);
                         if (idx >= 0) { rs.Add(_targets[t]); ix.Add(idx); }
                     }
                     if (rs.Count == 0) { _missing.Add(nm); continue; }
@@ -592,8 +593,7 @@ namespace TDrive.Facial
                     if (string.IsNullOrEmpty(nm)) continue;
                     for (int t = 0; t < _targets.Count; t++)
                     {
-                        Mesh mesh = _targetMeshes[t];
-                        int idx = mesh != null ? mesh.GetBlendShapeIndex(nm) : -1;
+                        int idx = shapeIndex[t].Find(nm);
                         if (idx >= 0) { ir.Add(_targets[t]); ii.Add(idx); break; }
                     }
                 }
@@ -604,12 +604,7 @@ namespace TDrive.Facial
 
         static bool HasShapeWithPrefix(SkinnedMeshRenderer r, string prefix)
         {
-            Mesh m = r != null ? r.sharedMesh : null;
-            if (m == null) return false;
-            int n = m.blendShapeCount;
-            for (int i = 0; i < n; i++)
-                if (m.GetBlendShapeName(i).StartsWith(prefix, StringComparison.Ordinal)) return true;
-            return false;
+            return r != null && FacialShapeIndex.HasFcShapeWithPrefix(r.sharedMesh, prefix);
         }
     }
 }

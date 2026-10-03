@@ -1,0 +1,619 @@
+{
+  "format": "FacialCorrection",
+  "version": 1,
+  "meta": {
+    "unit": "cm",
+    "upAxis": "Y",
+    "handedness": "right",
+    "source": "T-Drive Maya"
+  },
+  "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 5,
+    "rows": 3,
+    "baseBone": "bone_head",
+    "forwardAxis": "+Z",
+    "centerOffset": [0, 0, 0],
+    "edgeFade": 15
+  },
+  "policy": {
+    "expressionDampen": 0.5,
+    "interpSpeed": 10,
+    "snapAngle": 45,
+    "fade": [0, 0],
+    "globalAlpha": 1
+  },
+  "layers": [
+    {
+      "name": "Neutral",
+      "emotionCurve": "",
+      "enabled": true,
+      "points": [
+        {
+          "row": 0,
+          "col": 0,
+          "isKey": false,
+          "curves": {
+            "bs.brow_down": 0.07485604606525911,
+            "bs.eye_wide": 0.04990403071017275,
+            "bs.jaw_open": 0.009731285988483683,
+            "bs.mouth_left": 0.27639155470249516,
+            "bs.mouth_smile_L": 0.00748560460652591,
+            "bs.brow_innerUp": 0.01497120921305182,
+            "bs.mouth_smile_R": 0.03742802303262956
+          },
+          "bones": {
+            "bone_eye_L": {
+              "t": [0, 0, 0],
+              "r": [0, -0.04656730145023391, 0, 0.9989151547732386],
+              "s": [1, 1, 1]
+            },
+            "bone_eye_R": {
+              "t": [0, 0, 0],
+              "r": [0, -0.04656730145023391, 0, 0.9989151547732386],
+              "s": [1, 1, 1]
+            }
+          }
+        },
+        {
+          "row": 0,
+          "col": 1,
+          "isKey": false,
+          "curves": {
+            "bs.brow_down": 0.15700668995322956,
+            "bs.eye_wide": 0.10467112663548638,
+            "bs.jaw_open": 0.0068344088567876375,
+            "bs.mouth_left": 0.15564797821324966,
+            "bs.mouth_smile_L": 0.006038718844354983,
+            "bs.brow_innerUp": 0.00923568764430762,
+            "bs.mouth_smile_R": 0.01570066899532295
+          },
+          "bones": {
+            "bone_eye_L": {
+              "t": [0, 0, 0],
+              "r": [0, -0.031063584885045844, 0, 0.999517410400684],
+              "s": [1, 1, 1]
+            },
+            "bone_eye_R": {
+              "t": [0, 0, 0],
+              "r": [0, -0.031063584885045844, 0, 0.999517410400684],
+              "s": [1, 1, 1]
+            }
+          }
+        },
+        {
+          "row": 0,
+          "col": 2,
+          "isKey": true,
+          "curves": {
+            "bs.brow_down": 0.3,
+            "bs.eye_wide": 0.2
+          },
+          "bones": {}
+        },
+        {
+          "row": 0,
+          "col": 3,
+          "isKey": false,
+          "curves": {
+            "bs.brow_down": 0.15700668995322956,
+            "bs.eye_wide": 0.10467112663548638,
+            "bs.jaw_open": 0.0068344088567876375,
+            "bs.mouth_left": 0.15564797821324963,
+            "bs.mouth_smile_L": 0.01570066899532295,
+            "bs.brow_innerUp": 0.00923568764430762,
+            "bs.mouth_smile_R": 0.006038718844354983
+          },
+          "bones": {
+            "bone_eye_L": {
+              "t": [0, 0, 0],
+              "r": [0, 0.03106358488504583, 0, 0.999517410400684],
+              "s": [1, 1, 1]
+            },
+            "bone_eye_R": {
+              "t": [0, 0, 0],
+              "r": [0, 0.03106358488504583, 0, 0.999517410400684],
+              "s": [1, 1, 1]
+            }
+          }
+        },
+        {
+          "row": 0,
+          "col": 4,
+          "isKey": false,
+          "curves": {
+            "bs.brow_down": 0.07485604606525911,
+            "bs.eye_wide": 0.04990403071017275,
+            "bs.jaw_open": 0.009731285988483683,
+            "bs.mouth_left": 0.27639155470249516,
+            "bs.mouth_smile_L": 0.03742802303262956,
+            "bs.brow_innerUp": 0.01497120921305182,
+            "bs.mouth_smile_R": 0.00748560460652591
+          },
+          "bones": {
+            "bone_eye_L": {
+              "t": [0, 0, 0],
+              "r": [0, 0.046567301450233904, 0, 0.9989151547732386],
+              "s": [1, 1, 1]
+            },
+            "bone_eye_R": {
+              "t": [0, 0, 0],
+              "r": [0, 0.046567301450233904, 0, 0.9989151547732386],
+              "s": [1, 1, 1]
+            }
+          }
+        },
+        {
+          "row": 1,
+          "col": 0,
+          "isKey": false,
+          "curves": {
+            "bs.mouth_left": 0.6,
+            "bs.mouth_smile_R": 0.15
+          },
+          "bones": {
+            "bone_eye_R": {
+              "t": [0, 0, 0],
+              "r": [0, -0.06975647374412532, 0, 0.9975640502598244],
+              "s": [1, 1, 1]
+            },
+            "bone_eye_L": {
+              "t": [0, 0, 0],
+              "r": [0, -0.06975647374412532, 0, 0.9975640502598244],
+              "s": [1, 1, 1]
+            }
+          }
+        },
+        {
+          "row": 1,
+          "col": 1,
+          "isKey": false,
+          "curves": {
+            "bs.mouth_left": 0.35
+          },
+          "bones": {}
+        },
+        {
+          "row": 1,
+          "col": 2,
+          "isKey": true,
+          "curves": {
+            "bs.jaw_open": 0.03
+          },
+          "bones": {}
+        },
+        {
+          "row": 1,
+          "col": 3,
+          "isKey": true,
+          "curves": {
+            "bs.mouth_left": 0.35
+          },
+          "bones": {}
+        },
+        {
+          "row": 1,
+          "col": 4,
+          "isKey": true,
+          "curves": {
+            "bs.mouth_left": 0.6,
+            "bs.mouth_smile_L": 0.15
+          },
+          "bones": {
+            "bone_eye_L": {
+              "t": [0, 0, 0],
+              "r": [0, 0.0697564737441253, 0, 0.9975640502598242],
+              "s": [1, 1, 1]
+            },
+            "bone_eye_R": {
+              "t": [0, 0, 0],
+              "r": [0, 0.0697564737441253, 0, 0.9975640502598242],
+              "s": [1, 1, 1]
+            }
+          }
+        },
+        {
+          "row": 2,
+          "col": 0,
+          "isKey": false,
+          "curves": {
+            "bs.brow_down": 0.01497120921305182,
+            "bs.eye_wide": 0.009980806142034547,
+            "bs.jaw_open": 0.033685220729366604,
+            "bs.mouth_left": 0.27639155470249516,
+            "bs.mouth_smile_L": 0.00748560460652591,
+            "bs.brow_innerUp": 0.07485604606525911,
+            "bs.mouth_smile_R": 0.03742802303262956
+          },
+          "bones": {
+            "bone_eye_L": {
+              "t": [0, 0, 0],
+              "r": [0, -0.04656730145023391, 0, 0.9989151547732386],
+              "s": [1, 1, 1]
+            },
+            "bone_eye_R": {
+              "t": [0, 0, 0],
+              "r": [0, -0.04656730145023391, 0, 0.9989151547732386],
+              "s": [1, 1, 1]
+            }
+          }
+        },
+        {
+          "row": 2,
+          "col": 1,
+          "isKey": false,
+          "curves": {
+            "bs.brow_down": 0.00923568764430762,
+            "bs.eye_wide": 0.006157125096205081,
+            "bs.jaw_open": 0.06594280978035641,
+            "bs.mouth_left": 0.15564797821324966,
+            "bs.mouth_smile_L": 0.006038718844354983,
+            "bs.brow_innerUp": 0.15700668995322956,
+            "bs.mouth_smile_R": 0.01570066899532295
+          },
+          "bones": {
+            "bone_eye_L": {
+              "t": [0, 0, 0],
+              "r": [0, -0.031063584885045844, 0, 0.999517410400684],
+              "s": [1, 1, 1]
+            },
+            "bone_eye_R": {
+              "t": [0, 0, 0],
+              "r": [0, -0.031063584885045844, 0, 0.999517410400684],
+              "s": [1, 1, 1]
+            }
+          }
+        },
+        {
+          "row": 2,
+          "col": 2,
+          "isKey": true,
+          "curves": {
+            "bs.jaw_open": 0.12,
+            "bs.brow_innerUp": 0.3
+          },
+          "bones": {}
+        },
+        {
+          "row": 2,
+          "col": 3,
+          "isKey": false,
+          "curves": {
+            "bs.brow_down": 0.00923568764430762,
+            "bs.eye_wide": 0.006157125096205081,
+            "bs.jaw_open": 0.06594280978035641,
+            "bs.mouth_left": 0.15564797821324963,
+            "bs.mouth_smile_L": 0.01570066899532295,
+            "bs.brow_innerUp": 0.15700668995322956,
+            "bs.mouth_smile_R": 0.006038718844354983
+          },
+          "bones": {
+            "bone_eye_L": {
+              "t": [0, 0, 0],
+              "r": [0, 0.03106358488504583, 0, 0.999517410400684],
+              "s": [1, 1, 1]
+            },
+            "bone_eye_R": {
+              "t": [0, 0, 0],
+              "r": [0, 0.03106358488504583, 0, 0.999517410400684],
+              "s": [1, 1, 1]
+            }
+          }
+        },
+        {
+          "row": 2,
+          "col": 4,
+          "isKey": false,
+          "curves": {
+            "bs.brow_down": 0.01497120921305182,
+            "bs.eye_wide": 0.009980806142034547,
+            "bs.jaw_open": 0.033685220729366604,
+            "bs.mouth_left": 0.27639155470249516,
+            "bs.mouth_smile_L": 0.03742802303262956,
+            "bs.brow_innerUp": 0.07485604606525911,
+            "bs.mouth_smile_R": 0.00748560460652591
+          },
+          "bones": {
+            "bone_eye_L": {
+              "t": [0, 0, 0],
+              "r": [0, 0.046567301450233904, 0, 0.9989151547732386],
+              "s": [1, 1, 1]
+            },
+            "bone_eye_R": {
+              "t": [0, 0, 0],
+              "r": [0, 0.046567301450233904, 0, 0.9989151547732386],
+              "s": [1, 1, 1]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Joy",
+      "emotionCurve": "emo_joy",
+      "enabled": true,
+      "points": [
+        {
+          "row": 0,
+          "col": 0,
+          "isKey": false,
+          "curves": {
+            "bs.mouth_smile_L": 0.22352941176470584,
+            "bs.mouth_smile_R": 0.4117647058823529,
+            "bs.eye_happy_L": 0.18235294117647055,
+            "bs.eye_happy_R": 0.3235294117647059
+          },
+          "bones": {}
+        },
+        {
+          "row": 0,
+          "col": 1,
+          "isKey": false,
+          "curves": {
+            "bs.mouth_smile_L": 0.31612903225806455,
+            "bs.mouth_smile_R": 0.4193548387096774,
+            "bs.eye_happy_L": 0.25806451612903225,
+            "bs.eye_happy_R": 0.3354838709677419
+          },
+          "bones": {}
+        },
+        {
+          "row": 0,
+          "col": 2,
+          "isKey": false,
+          "curves": {
+            "bs.mouth_smile_L": 0.39999999999999997,
+            "bs.mouth_smile_R": 0.39999999999999997,
+            "bs.eye_happy_L": 0.32499999999999996,
+            "bs.eye_happy_R": 0.32499999999999996
+          },
+          "bones": {}
+        },
+        {
+          "row": 0,
+          "col": 3,
+          "isKey": false,
+          "curves": {
+            "bs.mouth_smile_L": 0.4193548387096774,
+            "bs.mouth_smile_R": 0.31612903225806455,
+            "bs.eye_happy_L": 0.3354838709677419,
+            "bs.eye_happy_R": 0.25806451612903225
+          },
+          "bones": {}
+        },
+        {
+          "row": 0,
+          "col": 4,
+          "isKey": false,
+          "curves": {
+            "bs.mouth_smile_L": 0.4117647058823529,
+            "bs.mouth_smile_R": 0.22352941176470584,
+            "bs.eye_happy_L": 0.32352941176470584,
+            "bs.eye_happy_R": 0.18235294117647055
+          },
+          "bones": {}
+        },
+        {
+          "row": 1,
+          "col": 0,
+          "isKey": false,
+          "curves": {
+            "bs.mouth_smile_R": 0.4,
+            "bs.eye_happy_R": 0.3
+          },
+          "bones": {}
+        },
+        {
+          "row": 1,
+          "col": 1,
+          "isKey": false,
+          "curves": {
+            "bs.mouth_smile_L": 0.30526315789473685,
+            "bs.mouth_smile_R": 0.4736842105263158,
+            "bs.eye_happy_L": 0.25263157894736843,
+            "bs.eye_happy_R": 0.3789473684210526
+          },
+          "bones": {}
+        },
+        {
+          "row": 1,
+          "col": 2,
+          "isKey": true,
+          "curves": {
+            "bs.mouth_smile_L": 0.6,
+            "bs.mouth_smile_R": 0.6,
+            "bs.eye_happy_L": 0.5,
+            "bs.eye_happy_R": 0.5
+          },
+          "bones": {}
+        },
+        {
+          "row": 1,
+          "col": 3,
+          "isKey": false,
+          "curves": {
+            "bs.mouth_smile_L": 0.4736842105263158,
+            "bs.mouth_smile_R": 0.30526315789473685,
+            "bs.eye_happy_L": 0.3789473684210526,
+            "bs.eye_happy_R": 0.25263157894736843
+          },
+          "bones": {}
+        },
+        {
+          "row": 1,
+          "col": 4,
+          "isKey": true,
+          "curves": {
+            "bs.mouth_smile_L": 0.4,
+            "bs.eye_happy_L": 0.3
+          },
+          "bones": {}
+        },
+        {
+          "row": 2,
+          "col": 0,
+          "isKey": false,
+          "curves": {
+            "bs.mouth_smile_L": 0.22352941176470584,
+            "bs.mouth_smile_R": 0.4117647058823529,
+            "bs.eye_happy_L": 0.18235294117647055,
+            "bs.eye_happy_R": 0.3235294117647059
+          },
+          "bones": {}
+        },
+        {
+          "row": 2,
+          "col": 1,
+          "isKey": false,
+          "curves": {
+            "bs.mouth_smile_L": 0.31612903225806455,
+            "bs.mouth_smile_R": 0.4193548387096774,
+            "bs.eye_happy_L": 0.25806451612903225,
+            "bs.eye_happy_R": 0.3354838709677419
+          },
+          "bones": {}
+        },
+        {
+          "row": 2,
+          "col": 2,
+          "isKey": false,
+          "curves": {
+            "bs.mouth_smile_L": 0.39999999999999997,
+            "bs.mouth_smile_R": 0.39999999999999997,
+            "bs.eye_happy_L": 0.32499999999999996,
+            "bs.eye_happy_R": 0.32499999999999996
+          },
+          "bones": {}
+        },
+        {
+          "row": 2,
+          "col": 3,
+          "isKey": false,
+          "curves": {
+            "bs.mouth_smile_L": 0.4193548387096774,
+            "bs.mouth_smile_R": 0.31612903225806455,
+            "bs.eye_happy_L": 0.3354838709677419,
+            "bs.eye_happy_R": 0.25806451612903225
+          },
+          "bones": {}
+        },
+        {
+          "row": 2,
+          "col": 4,
+          "isKey": false,
+          "curves": {
+            "bs.mouth_smile_L": 0.4117647058823529,
+            "bs.mouth_smile_R": 0.22352941176470584,
+            "bs.eye_happy_L": 0.32352941176470584,
+            "bs.eye_happy_R": 0.18235294117647055
+          },
+          "bones": {}
+        }
+      ]
+    }
+  ],
+  "workingSet": {
+    "curves": [],
+    "bones": []
+  },
+  "mirror": {
+    "enabled": true,
+    "suffixL": "_L",
+    "suffixR": "_R",
+    "exclude": [],
+    "boneAxis": "X"
+  },
+  "autogen": {
+    "mode": "IDW",
+    "idwPower": 2
+  },
+  "exclude": {
+    "curves": [],
+    "bones": []
+  },
+  "intensityCurves": [],
+  "profile": "shizuku",
+  "asset": "shizuku",
+  "target": {
+    "mesh": "mdl_face02",
+    "extraMeshes": []
+  },
+  "limits": {
+    "bs.lipSync_a": [0, 1],
+    "bs.lipSync_i": [0, 1],
+    "bs.lipSync_u": [0, 1],
+    "bs.lipSync_e": [0, 1],
+    "bs.lipSync_o": [0, 1],
+    "bs.LookingUp": [0, 1],
+    "bs.LookingDown": [0, 1],
+    "bs.look_left": [0, 1],
+    "bs.look_right": [0, 1],
+    "bs.look_up": [0, 1],
+    "bs.look_down": [0, 1],
+    "bs.look_cross": [0, 1],
+    "bs.look_shrinkWide": [0, 1],
+    "bs.look_shrinkHeight": [0, 1],
+    "bs.specular_up": [0, 1],
+    "bs.specular_down": [0, 1],
+    "bs.specular_big": [0, 1],
+    "bs.specular_shrink": [0, 1],
+    "bs.specular_shiitake": [0, 1],
+    "bs.specular_heart": [0, 1],
+    "bs.eye_close_R": [0, 1],
+    "bs.eye_close_L": [0, 1],
+    "bs.eye_happy_R": [0, 1],
+    "bs.eye_happy_L": [0, 1],
+    "bs.eye_lidUp_R": [0, 1],
+    "bs.eye_libUp_L": [0, 1],
+    "bs.eye_wide": [0, 1],
+    "bs.eye_jito": [0, 1],
+    "bs.eye_pupilShrink": [0, 1],
+    "bs.eye_guruguru": [0, 1],
+    "bs.eye_zetubou": [0, 1],
+    "bs.eye_kuma": [0, 1],
+    "bs.brow_happy": [0, 1],
+    "bs.brow_innerUp": [0, 1],
+    "bs.brow_outerUp_R": [0, 1],
+    "bs.brow_outerUp_L": [0, 1],
+    "bs.brow_down_R": [0, 1],
+    "bs.brow_down_L": [0, 1],
+    "bs.brow_down": [0, 1],
+    "bs.jaw_open": [0, 1],
+    "bs.jaw_forwerd": [0, 1],
+    "bs.jaw_left": [0, 1],
+    "bs.jaw_right": [0, 1],
+    "bs.mouth_i": [0, 1],
+    "bs.mouth_neko": [0, 1],
+    "bs.mouth_funnel": [0, 1],
+    "bs.mouth_pucker": [0, 1],
+    "bs.mouth_down": [0, 1],
+    "bs.mouth_up": [0, 1],
+    "bs.mouth_left": [0, 1],
+    "bs.mouth_right": [0, 1],
+    "bs.mouth_smile_L": [0, 1],
+    "bs.mouth_smile_R": [0, 1],
+    "bs.mouth_frown_L": [0, 1],
+    "bs.mouth_frown_R": [0, 1],
+    "bs.mouth_dimple_L": [0, 1],
+    "bs.mouth_dimple_R": [0, 1],
+    "bs.mouth_rollUpper": [0, 1],
+    "bs.mouth_rollLower": [0, 1],
+    "bs.mouth_shrugUpper": [0, 1],
+    "bs.mouth_shrugLower": [0, 1],
+    "bs.mouth_upperUp_L": [0, 1],
+    "bs.mouth_upperUp_R": [0, 1],
+    "bs.mouth_lowerDown_L": [0, 1],
+    "bs.mouth_lowerDown_R": [0, 1],
+    "bs.mouth_close": [0, 1],
+    "bs.mouth_tongueOut": [0, 1],
+    "bs.cheek_puff": [0, 1],
+    "bs.cheek_red": [0, 1],
+    "bs.cheek_redNose": [0, 1],
+    "bs.other_tears": [0, 1],
+    "bs.other_ase_forehead": [0, 1],
+    "bs.other_ase_cheek": [0, 1],
+    "bs.other_ase_jaw": [0, 1],
+    "bs.other_aozame": [0, 1]
+  }
+}

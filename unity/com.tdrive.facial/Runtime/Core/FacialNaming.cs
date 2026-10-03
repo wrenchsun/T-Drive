@@ -48,6 +48,42 @@ namespace TDrive.Facial.Core
             return name != null && name.StartsWith(FcPrefix, System.StringComparison.Ordinal);
         }
 
+        // ------------------------------------------------------------ FBX 取り込み後の名前（"<blendShape ノード名>.<ターゲット名>"）
+        // Maya から FBX を出すと、Unity のシェイプ名は "bs.FC_shizuku_Neutral_R0_C0" のようにノード名が前に付く。
+        // データ（.fcpose）の名前は付かない形（"FC_..."）と付いた形（"bs.eye_close_L"）が混ざるので、照合は
+        // 「完全一致 → 末尾が "." + 名前」の順で行う。
+
+        /// <summary>メッシュのシェイプ名 actual が、探している名前 wanted と同じものか（完全一致、または actual が "&lt;何か&gt;." + wanted）。</summary>
+        public static bool ShapeNameMatches(string actual, string wanted)
+        {
+            if (actual == null || string.IsNullOrEmpty(wanted)) return false;
+            if (string.Equals(actual, wanted, System.StringComparison.Ordinal)) return true;
+            int dl = actual.Length - wanted.Length - 1;
+            return dl >= 0 && actual[dl] == '.' && string.CompareOrdinal(actual, dl + 1, wanted, 0, wanted.Length) == 0;
+        }
+
+        /// <summary>
+        /// メッシュのシェイプ名から、ノード名の接頭辞を除いた FC_ の名前を取り出す。"FC_x" → "FC_x"、"bs.FC_x" → "FC_x"。
+        /// FC_ のシェイプでなければ false。
+        /// </summary>
+        public static bool TryGetBareFcName(string shapeName, out string bare)
+        {
+            bare = null;
+            if (string.IsNullOrEmpty(shapeName)) return false;
+            if (IsFcName(shapeName)) { bare = shapeName; return true; }
+            int i = shapeName.IndexOf("." + FcPrefix, System.StringComparison.Ordinal);
+            if (i < 0) return false;
+            bare = shapeName.Substring(i + 1);
+            return true;
+        }
+
+        /// <summary>メッシュのシェイプ名が、この頭（"FC_&lt;asset&gt;_" など）で始まる FC_ のシェイプか（ノード名の接頭辞つきも可）。</summary>
+        public static bool HasFcPrefix(string shapeName, string prefix)
+        {
+            string bare;
+            return TryGetBareFcName(shapeName, out bare) && bare.StartsWith(prefix, System.StringComparison.Ordinal);
+        }
+
         /// <summary>
         /// "FC_*" の名前を分解する。規則に合わなければ false。
         /// asset を渡すと "FC_&lt;asset&gt;_" で始まるものだけを対象にし、残りを layer として扱う。

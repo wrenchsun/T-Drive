@@ -24,8 +24,12 @@ namespace TDrive.Facial.Tests
 
         static GameObject Hidden(string name) { return EditorUtility.CreateGameObjectWithHideFlags(name, HideFlags.HideAndDontSave); }
 
-        public FacialTestRig(bool includeMissing = false)
+        /// <summary>FC_ シェイプ名の前に付けるノード名の接頭辞（FBX 取り込み後の "bs." を再現する。空 = 付けない）。</summary>
+        readonly string _fcPrefix;
+
+        public FacialTestRig(bool includeMissing = false, string fcPrefix = "")
         {
+            _fcPrefix = fcPrefix ?? "";
             mesh = new Mesh { name = "RigMesh" };
             mesh.vertices = new[] { Vector3.zero, Vector3.right, Vector3.up };
             mesh.triangles = new[] { 0, 1, 2 };
@@ -71,12 +75,13 @@ namespace TDrive.Facial.Tests
 
         public void AddShape(string name)
         {
+            if (FacialNaming.IsFcName(name)) name = _fcPrefix + name;
             mesh.AddBlendShapeFrame(name, 100f, new[] { Vector3.up * 0.01f, Vector3.zero, Vector3.zero }, new Vector3[3], new Vector3[3]);
         }
 
         public float W(string name)
         {
-            int i = mesh.GetBlendShapeIndex(name);
+            int i = new FacialShapeIndex(mesh).Find(name);
             Assert.GreaterOrEqual(i, 0, "メッシュにシェイプが無い: " + name);
             return smr.GetBlendShapeWeight(i);
         }
@@ -86,7 +91,7 @@ namespace TDrive.Facial.Tests
         {
             float s = 0f;
             for (int i = 0; i < mesh.blendShapeCount; i++)
-                if (mesh.GetBlendShapeName(i).StartsWith("FC_", StringComparison.Ordinal)) s += Mathf.Abs(smr.GetBlendShapeWeight(i));
+                if (FacialNaming.HasFcPrefix(mesh.GetBlendShapeName(i), "FC_")) s += Mathf.Abs(smr.GetBlendShapeWeight(i));
             return s;
         }
 

@@ -121,6 +121,7 @@ UE 版が書き出す形（v2 §3.5、実装は UE 版 `FacialPoseJson.cpp`）:
 | パース補正（R-34） | `FC_<asset>_Persp_K{n}` | 画角 / 距離のキーごと |
 
 - **`FC_` で始まるシェイプだけ**を作り直す・消す。モデルに元からあるシェイプ（`bs.*`）には触らない（CLAUDE.md「元を破壊しない」）
+- **Unity でのシェイプ名**: FBX を Unity に取り込むと、シェイプ名は `<blendShape ノード名>.<ターゲット名>` になる（shizuku の実物で確認: `bs.FC_shizuku_Neutral_R0_C0`）。Unity 側は「完全一致 → `.` + 名前で終わるもの」の順で探す（ランタイム・検証・格子ビューア共通）
 - 焼いた点と名前の対応は `.fcpose.json` には書かない（名前は規則から決まる。Unity は名前でシェイプを探し、無ければその点を飛ばす = フェイルソフト）
 
 ### 4.4 命名規則プロファイル（`.fcprofile.json`、R-15）
@@ -421,3 +422,4 @@ Unity 側のブリッジが、D-Drive の作った `.playable` に `FacialCorrec
 | Q3 | Unity パッケージを Toon と分けるか | 分ける（`com.tdrive.facial`。Toon なしでも使える） |
 | Q4 | UE 版へ追加キー（§4.2）と `forwardAxis` の `±Z` を戻すか | 当面 T-Drive だけ。UE 版は読み取り専用で触らない |
 | Q5 | リップシンク（R-18）の範囲 | 対応表まで。優先度は最後 |
+| Q6 | Unity の Blend Shape Normals の設定（shizuku の FBX は Unity の既定 = Calculate で取り込まれる） | 推奨は Import として検証で知らせるだけ（自動では変えない）。見た目を比べてから決める |
