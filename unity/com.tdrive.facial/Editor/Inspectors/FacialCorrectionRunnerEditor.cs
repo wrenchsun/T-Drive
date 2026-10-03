@@ -57,6 +57,7 @@ namespace TDrive.Facial.Editor
                 DrawMaterial(r);
                 DrawValidation(r);
             }
+            DrawDDriveHint(r);
             DrawButtons(r);
         }
 
@@ -290,6 +291,20 @@ namespace TDrive.Facial.Editor
         }
 
         // ---------------------------------------------------------------- ボタン
+
+        // D-Drive のあるプロジェクトだけ: モデルの Prefab にブリッジ部品（スポーン / 返却の通知）を付けるよう案内する。自動では付けない。
+        // ブリッジは別アセンブリ（D-Drive 側）にあるので、名前で探す（D-Drive が無ければ型が無い = 何も出さない）
+        const string BridgeTypeName = "TDrive.Facial.DDrive.FacialModelInstanceBridge, TDrive.Facial.DDrive";
+
+        static void DrawDDriveHint(FacialCorrectionRunner r)
+        {
+            System.Type bridge = System.Type.GetType(BridgeTypeName, false);
+            if (bridge == null || r.GetComponent(bridge) != null) return;
+            EditorGUILayout.Space();
+            EditorGUILayout.HelpBox("D-Drive のプールで使うモデルなら「Facial Model Instance Bridge」を付けると、スポーン・返却のたびに補正が正しくリセットされます（Prefab に付けておく）。", MessageType.Info);
+            if (GUILayout.Button(new GUIContent("ブリッジ部品を追加", "同じ GameObject に Facial Model Instance Bridge を追加する（元に戻せます）")))
+                Undo.AddComponent(r.gameObject, bridge);
+        }
 
         void DrawButtons(FacialCorrectionRunner r)
         {

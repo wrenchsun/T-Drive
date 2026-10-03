@@ -1,5 +1,7 @@
 // D-Drive ブリッジ: カットシーン 1 つ分の検査（純粋な関数。D-Drive のレジストリ・アセットに触れない）。
 // IValidator（Editor 側の FacialCutsceneValidator）がこれを呼ぶ。モデルの解決はデリゲートで外から渡す。
+//   バインドの解決（001）は 3 通り: ① Bindings にこのトラック名があり Target=SameAsTrack（推奨。参照先をたどる）
+//   ② Bindings にこのトラック名がある（その Target をそのまま使う）③ Bindings に無く、トラック名が '<役名>_Facial' の規則に合う（同じ役名のアニメーショントラックのバインドを使う）
 //   TD-FACIAL-001 バインドが解決できない / 002 クリップの感情レイヤー名がデータに無い / 004 モデルに Runner が無い / 005 Runner にデータが無い
 //   （003 = ポーズ参照の欠損は Editor 側。SerializedObject が要るため）
 using System;
@@ -58,29 +60,57 @@ namespace TDrive.Facial.DDrive
         static void CheckTrack(List<FacialCutsceneIssue> issues, TimelineAsset timeline, FacialCorrectionTrack track,
             IReadOnlyList<CutsceneBinding> bindings, Func<CutsceneBinding, FacialModelLookup> resolveModel)
         {
-            string role;
-            bool hasRole = FacialDDriveBinding.TryGetRole(track.name, out role);
-            bool hasOwn, hasRoleBinding = false;
-            CutsceneBinding own = Find(bindings, track.name, out hasOwn);
-            CutsceneBinding roleBinding = default(CutsceneBinding);
-            AnimationTrack roleTrack = hasRole ? FacialDDriveBinding.FindRoleAnimationTrack(timeline, role) : null;
-            if (hasRole) roleBinding = Find(bindings, role, out hasRoleBinding);
-
             // --- バインドが解決できるか ---
-            if (!hasOwn && roleTrack == null)
+            // ① 自分の名前の Bindings がある（SameAsTrack なら参照先まで）② 無ければ役名の規則（'<役名>_Facial' → 同じ役名のアニメーショントラックの Bindings）
+            bool hasOwn;
+            CutsceneBinding own = Find(bindings, track.name, out hasOwn);
+            CutsceneBinding effective = own;
+            bool haveEffective = false;
+
+            if (hasOwn)
             {
-                Add(issues, FacialCutsceneSeverity.Warning, CodeUnbound, track.name,
-                    "トラック '" + track.name + "' のバインドを解決できません。Bindings にこのトラック名を足すか、トラック名を '<役名>_Facial' にして同じ役名のアニメーショントラックを置いてください（このトラックは何もしません）");
+                if (own.Target == CutsceneBindTarget.SameAsTrack)
+                {
+                    string problem = FollowSameAsTrack(timeline, bindings, own, out effective);
+                    if (problem != null)
+                    {
+                        Add(issues, FacialCutsceneSeverity.Warning, CodeUnbound, track.name,
+                            "トラック '" + track.name + "' は Target=SameAsTrack ですが" + problem + "（このトラックは何もしません）");
+                        return;
+                    }
+                }
+                haveEffective = true;
             }
-            else if (!hasOwn && !hasRoleBinding)
+            else
             {
-                Add(issues, FacialCutsceneSeverity.Warning, CodeUnbound, track.name,
-                    "トラック '" + track.name + "' は同じ役名のアニメーショントラック '" + role + "' のバインド先を使いますが、Bindings に '" + role + "' がありません（このトラックは何もしません）");
+                string role;
+                bool hasRole = FacialDDriveBinding.TryGetRole(track.name, out role);
+                AnimationTrack roleTrack = hasRole ? FacialDDriveBinding.FindRoleAnimationTrack(timeline, role) : null;
+                if (roleTrack == null)
+                {
+                    Add(issues, FacialCutsceneSeverity.Warning, CodeUnbound, track.name,
+                        "トラック '" + track.name + "' のバインドを解決できません。Bindings にこのトラック名を足して Target を SameAsTrack・SourceTrackName を同じキャラクターのアニメーショントラック名にするのがおすすめです（または、トラック名を '<役名>_Facial' にして同じ役名のアニメーショントラックを置いてください）。このトラックは何もしません");
+                }
+                else
+                {
+                    bool hasRoleBinding;
+                    CutsceneBinding roleBinding = Find(bindings, role, out hasRoleBinding);
+                    if (!hasRoleBinding)
+                    {
+                        Add(issues, FacialCutsceneSeverity.Warning, CodeUnbound, track.name,
+                            "トラック '" + track.name + "' は同じ役名のアニメーショントラック '" + role + "' のバインド先を使いますが、Bindings に '" + role + "' がありません（このトラックは何もしません）");
+                    }
+                    else
+                    {
+                        effective = roleBinding;
+                        haveEffective = true;
+                    }
+                }
             }
 
             // --- モデルが静的に分かるとき: Runner とレイヤー名 ---
-            if (resolveModel == null || (!hasOwn && !hasRoleBinding)) return;
-            FacialModelLookup lookup = resolveModel(hasOwn ? own : roleBinding);
+            if (resolveModel == null || !haveEffective) return;
+            FacialModelLookup lookup = resolveModel(effective);
             if (!lookup.Resolvable) return;
             if (lookup.Runner == null)
             {
@@ -98,16 +128,66 @@ namespace TDrive.Facial.DDrive
             foreach (TimelineClip clip in track.GetClips())
             {
                 var asset = clip.asset as FacialCorrectionClip;
-                if (asset == null || asset.template == null || asset.template.emotions == null) continue;
-                FacialEmotionEntry[] emo = asset.template.emotions;
-                for (int i = 0; i < emo.Length; i++)
+                if (asset == null) continue;
+                if (asset.template != null && asset.template.emotions != null)
                 {
-                    string layer = emo[i].layer;
-                    if (string.IsNullOrEmpty(layer) || HasLayer(data, layer)) continue;
-                    Add(issues, FacialCutsceneSeverity.Warning, CodeUnknownLayer, track.name,
-                        "トラック '" + track.name + "' のクリップ '" + clip.displayName + "' の感情レイヤー '" + layer + "' が、モデルの補正データ（" + data.name + "）にありません（その重みは無視されます）");
+                    FacialEmotionEntry[] emo = asset.template.emotions;
+                    for (int i = 0; i < emo.Length; i++)
+                    {
+                        string layer = emo[i].layer;
+                        if (string.IsNullOrEmpty(layer) || HasLayer(data, layer)) continue;
+                        Add(issues, FacialCutsceneSeverity.Warning, CodeUnknownLayer, track.name,
+                            "トラック '" + track.name + "' のクリップ '" + clip.displayName + "' の感情レイヤー '" + layer + "' が、モデルの補正データ（" + data.name + "）にありません（その重みは無視されます）");
+                    }
+                }
+                // Maya の演出カーブ（.fctrack）の感情レイヤー
+                if (asset.track != null && asset.track.emotions != null)
+                {
+                    FacialEmotionCurve[] curves = asset.track.emotions;
+                    for (int i = 0; i < curves.Length; i++)
+                    {
+                        string layer = curves[i] != null ? curves[i].layer : null;
+                        if (string.IsNullOrEmpty(layer) || HasLayer(data, layer)) continue;
+                        Add(issues, FacialCutsceneSeverity.Warning, CodeUnknownLayer, track.name,
+                            "トラック '" + track.name + "' のクリップ '" + clip.displayName + "' の演出カーブ（" + asset.track.name + "）の感情レイヤー '" + layer + "' が、モデルの補正データ（" + data.name + "）にありません（その重みは無視されます）");
+                    }
                 }
             }
+        }
+
+        /// <summary>
+        /// SameAsTrack の参照をたどって、最後（SameAsTrack でない）の Binding を返す。問題があれば説明文（先頭に空白なし）、無ければ null。
+        /// D-Drive の CutsceneManager.ResolveSameAsTrack と同じ規則（自己参照・循環・参照先なし）に、参照先のトラックが Timeline にあるかの確認を足す。
+        /// </summary>
+        public static string FollowSameAsTrack(TimelineAsset timeline, IReadOnlyList<CutsceneBinding> bindings, CutsceneBinding start, out CutsceneBinding terminal)
+        {
+            terminal = start;
+            CutsceneBinding cur = start;
+            int count = bindings != null ? bindings.Count : 0;
+            for (int depth = 0; depth <= count; depth++)
+            {
+                string src = cur.SourceTrackName;
+                if (string.IsNullOrEmpty(src)) return "、SourceTrackName が空です";
+                bool found;
+                CutsceneBinding next = Find(bindings, src, out found);
+                if (!found) return "、SourceTrackName '" + src + "' に一致する Binding がありません";
+                if (string.Equals(next.TrackName, cur.TrackName, StringComparison.Ordinal)) return "、SourceTrackName '" + src + "' が自分自身を指しています";
+                if (next.Target != CutsceneBindTarget.SameAsTrack)
+                {
+                    if (timeline != null && !HasTrack(timeline, src)) return "、参照先 '" + src + "' に対応するトラックが Timeline にありません";
+                    terminal = next;
+                    return null;
+                }
+                cur = next;
+            }
+            return "、SourceTrackName の参照が循環しています";
+        }
+
+        static bool HasTrack(TimelineAsset timeline, string name)
+        {
+            foreach (TrackAsset t in timeline.GetOutputTracks())
+                if (t != null && string.Equals(t.name, name, StringComparison.Ordinal)) return true;
+            return false;
         }
 
         static CutsceneBinding Find(IReadOnlyList<CutsceneBinding> bindings, string trackName, out bool found)

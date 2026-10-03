@@ -1,0 +1,16 @@
+{
+  "name": "TDrive.Facial.DDrive.Tests.Support",
+  "rootNamespace": "TDrive.Facial.Tests.DDrive",
+  "references": ["DDrive.Foundation"],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": ["UNITY_INCLUDE_TESTS", "TDRIVE_FACIAL_DDRIVE"],
+  "versionDefines": [
+    { "name": "com.ddrive.core", "expression": "1.0.0", "define": "TDRIVE_FACIAL_DDRIVE" }
+  ],
+  "noEngineReferences": false
+}

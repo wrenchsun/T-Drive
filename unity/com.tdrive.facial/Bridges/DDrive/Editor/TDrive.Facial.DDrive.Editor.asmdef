@@ -1,7 +1,7 @@
 {
   "name": "TDrive.Facial.DDrive.Editor",
   "rootNamespace": "TDrive.Facial.DDrive.Editor",
-  "references": ["TDrive.Facial.Core", "TDrive.Facial.Runtime", "TDrive.Facial.Editor", "TDrive.Facial.Timeline", "TDrive.Facial.DDrive", "DDrive.Foundation", "DDrive.Runtime", "DDrive.Editor", "Unity.Timeline"],
+  "references": ["TDrive.Facial.Core", "TDrive.Facial.Runtime", "TDrive.Facial.Editor", "TDrive.Facial.Timeline", "TDrive.Facial.Timeline.Editor", "TDrive.Facial.DDrive", "DDrive.Foundation", "DDrive.Runtime", "DDrive.Editor", "Unity.Timeline"],
   "includePlatforms": ["Editor"],
   "excludePlatforms": [],
   "allowUnsafeCode": false,

@@ -61,5 +61,74 @@ namespace TDrive.Facial.Timeline
 
         /// <summary>解決した視点（実行時にクリップが入れる。保存されない）。</summary>
         [NonSerialized] public Transform resolvedViewer;
+
+        /// <summary>曲線で動かすときの .fctrack（クリップが入れる。保存されない）。null = 定数のみ。</summary>
+        [NonSerialized] public FacialTrackAsset track;
+
+        // 実効値（Mixer が読む。UpdateEffective が毎フレーム作る）。曲線が無ければ上の定数と同じ
+        [NonSerialized] public bool effUseAlpha;
+        [NonSerialized] public float effAlpha;
+        [NonSerialized] public FacialEmotionEntry[] effEmotions;
+        [NonSerialized] public bool effFixAngles;
+        [NonSerialized] public float effYaw;
+        [NonSerialized] public float effPitch;
+        [NonSerialized] FacialEmotionEntry[] _emoBuffer;
+
+        /// <summary>
+        /// 実効値を作る。time = クリップの中の時刻（秒。クリップの「開始位置」を含む = .fctrack の秒と同じ）。
+        /// 曲線は「手で入れた値が無い項目」にだけ効く: 強さは「強さを使う」がオフのとき、角度は「角度を固定する」がオフのとき、
+        /// 感情は同じレイヤー名を手で書いていないレイヤーだけ。手で入れた値は曲線を上書きする。
+        /// </summary>
+        public void UpdateEffective(double time)
+        {
+            effUseAlpha = useAlpha; effAlpha = alpha;
+            effFixAngles = fixAngles; effYaw = yaw; effPitch = pitch;
+            effEmotions = emotions;
+            FacialTrackAsset a = track;
+            if (a == null) return;
+            float t = (float)time;
+
+            if (!useAlpha && a.HasAlpha)
+            {
+                effUseAlpha = true;
+                effAlpha = Mathf.Clamp01(FacialTrackAsset.Sample(a.alpha, t, 1f));
+            }
+
+            // 角度: useManual > 0.5 のあいだ固定（角度のカーブが無ければ 0）
+            if (!fixAngles && a.HasUseManual && FacialTrackAsset.Sample(a.useManual, t, 0f) > 0.5f)
+            {
+                effFixAngles = true;
+                effYaw = FacialTrackAsset.Sample(a.manualYaw, t, 0f);
+                effPitch = FacialTrackAsset.Sample(a.manualPitch, t, 0f);
+            }
+
+            if (a.HasEmotions)
+            {
+                FacialEmotionEntry[] hand = emotions ?? new FacialEmotionEntry[0];
+                int extra = 0;
+                for (int h = 0; h < hand.Length; h++) if (!HasCurve(a, hand[h].layer)) extra++;
+                int total = a.emotions.Length + extra;
+                if (_emoBuffer == null || _emoBuffer.Length != total) _emoBuffer = new FacialEmotionEntry[total];
+                int n = 0;
+                for (int c = 0; c < a.emotions.Length; c++)
+                {
+                    FacialEmotionCurve curve = a.emotions[c];
+                    float w = Mathf.Max(0f, FacialTrackAsset.Sample(curve.keys, t, 0f));
+                    for (int h = 0; h < hand.Length; h++)
+                        if (string.Equals(hand[h].layer, curve.layer, StringComparison.Ordinal)) w = hand[h].weight; // 手で書いたレイヤーが優先
+                    _emoBuffer[n++] = new FacialEmotionEntry { layer = curve.layer, weight = w };
+                }
+                for (int h = 0; h < hand.Length; h++)
+                    if (!HasCurve(a, hand[h].layer)) _emoBuffer[n++] = hand[h];
+                effEmotions = _emoBuffer;
+            }
+        }
+
+        static bool HasCurve(FacialTrackAsset a, string layer)
+        {
+            for (int i = 0; i < a.emotions.Length; i++)
+                if (string.Equals(a.emotions[i].layer, layer, StringComparison.Ordinal)) return true;
+            return false;
+        }
     }
 }

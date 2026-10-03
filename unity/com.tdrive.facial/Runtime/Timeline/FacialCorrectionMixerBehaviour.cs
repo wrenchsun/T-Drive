@@ -1,6 +1,7 @@
 // トラックの Mixer。重なったクリップを重みでブレンドし、Runner へ PushOverride で渡す（ブレンドシェイプは直接書かない）。
 //  - 強さ: 重みつきで 1（= 変えない）へ寄せる / 感情: レイヤー名 → Runner のレイヤー番号の重み付き加算
 //  - 角度の固定: 固定するクリップの重みの合計 = 手動の割合（manualAngleBlend）。足りない分はライブの角度
+//  - 曲線（.fctrack）: クリップの track があれば、各クリップの中の時刻で読んだ値（UpdateEffective）をブレンドに使う。手で入れた値が優先
 //  - 視点・コマ打ち: いちばん重みの大きいクリップ / カット補正: 重みの合計が最大のポーズ
 //  - 再生中: 渡すだけ（Runner の LateUpdate が評価）。編集時（Timeline ウィンドウのスクラブ）: LateUpdate が来ないので EvaluateNow を自分で呼ぶ
 //  - プレビューを抜けたら ResetWeights で FC_ とカット補正を元へ戻す（編集時のみ。再生中は Runner が次の LateUpdate で戻す）
@@ -50,6 +51,11 @@ namespace TDrive.Facial.Timeline
         FacialFrameOverride Blend(Playable playable, int count, float total, FacialCorrectionRunner runner)
         {
             var ov = new FacialFrameOverride();
+            for (int i = 0; i < count; i++)
+            {
+                FacialCorrectionBehaviour eb = Behaviour(playable, i);
+                if (eb != null && playable.GetInputWeight(i) > 0f) eb.UpdateEffective(playable.GetInput(i).GetTime()); // .fctrack の曲線を読む
+            }
             float norm = total > 1f ? 1f / total : 1f; // 重なりで 1 を超えたら正規化
             float covered = Mathf.Min(1f, total);       // クリップが覆っている割合（残りは「クリップなし」= 変えない）
 
@@ -62,7 +68,7 @@ namespace TDrive.Facial.Timeline
                 float w = playable.GetInputWeight(i);
                 if (b == null || w <= 0f) continue;
                 w *= norm;
-                if (b.useAlpha) { anyAlpha = true; alphaSum += w * Mathf.Clamp01(b.alpha); }
+                if (b.effUseAlpha) { anyAlpha = true; alphaSum += w * Mathf.Clamp01(b.effAlpha); }
                 else alphaSum += w;
             }
             if (anyAlpha)
@@ -80,7 +86,7 @@ namespace TDrive.Facial.Timeline
                 for (int i = 0; i < count && !anyEmo; i++)
                 {
                     FacialCorrectionBehaviour b = Behaviour(playable, i);
-                    if (b != null && playable.GetInputWeight(i) > 0f && b.emotions != null && b.emotions.Length > 0) anyEmo = true;
+                    if (b != null && playable.GetInputWeight(i) > 0f && b.effEmotions != null && b.effEmotions.Length > 0) anyEmo = true;
                 }
                 if (anyEmo)
                 {
@@ -91,14 +97,14 @@ namespace TDrive.Facial.Timeline
                     {
                         FacialCorrectionBehaviour b = Behaviour(playable, i);
                         float w = playable.GetInputWeight(i);
-                        if (b == null || w <= 0f || b.emotions == null) continue;
+                        if (b == null || w <= 0f || b.effEmotions == null) continue;
                         w *= norm;
-                        for (int e = 0; e < b.emotions.Length; e++)
+                        for (int e = 0; e < b.effEmotions.Length; e++)
                         {
-                            int li = LayerIndex(data, b.emotions[e].layer);
+                            int li = LayerIndex(data, b.effEmotions[e].layer);
                             if (li <= 0) continue; // 0 番（Neutral）と未知の名前は無視
                             float baseValue = baseW != null && li < baseW.Length ? baseW[li] : 0f;
-                            _emo[li] += w * (Mathf.Max(0f, b.emotions[e].weight) - baseValue);
+                            _emo[li] += w * (Mathf.Max(0f, b.effEmotions[e].weight) - baseValue);
                         }
                     }
                     ov.emotionWeights = _emo;
@@ -114,12 +120,12 @@ namespace TDrive.Facial.Timeline
             {
                 FacialCorrectionBehaviour b = Behaviour(playable, i);
                 float w = playable.GetInputWeight(i);
-                if (b == null || w <= 0f || !b.fixAngles) continue;
+                if (b == null || w <= 0f || !b.effFixAngles) continue;
                 w *= norm;
-                if (!haveRef) { refYaw = b.yaw; haveRef = true; }
+                if (!haveRef) { refYaw = b.effYaw; haveRef = true; }
                 amount += w;
-                yawDelta += w * Mathf.DeltaAngle(refYaw, b.yaw); // ±180 をまたぐ角度でも正しく混ぜる
-                pitchSum += w * b.pitch;
+                yawDelta += w * Mathf.DeltaAngle(refYaw, b.effYaw); // ±180 をまたぐ角度でも正しく混ぜる
+                pitchSum += w * b.effPitch;
             }
             if (haveRef && amount > 1e-5f)
             {

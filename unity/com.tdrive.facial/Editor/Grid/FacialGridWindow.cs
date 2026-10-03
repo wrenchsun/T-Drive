@@ -1,4 +1,4 @@
-// 格子ビューア（メニュー: T-Drive/Facial/グリッド）。選択中の Runner（または FacialCorrectionData）の格子を Maya のグリッドタブと同じ向きで表示する。
+// 格子ビューア（メニュー: Tools/T-Drive/Facial/グリッド）。選択中の Runner（または FacialCorrectionData）の格子を Maya のグリッドタブと同じ向きで表示する。
 //  上 = +Pitch / 左 = -Yaw。色: 緑 = キー / 水色 = 自動生成 / 灰 = 無し / 赤い枠 = FC_ シェイプがメッシュに無い。赤い点 = 今のプレビューの角度。
 //  点をクリック → Scene ビューのカメラをその角度へ動かしてプレビューを始める（Runner があるとき）。
 // 幾何・角度の計算はすべて FacialGridMath（テスト済み）。ここは描画と入力だけ。
@@ -17,7 +17,7 @@ namespace TDrive.Facial.Editor
         static readonly Color MissingColor = new Color(0.90f, 0.25f, 0.20f);
         static readonly Color LiveColor = new Color(1f, 0.15f, 0.15f);
 
-        [MenuItem("T-Drive/Facial/グリッド")]
+        [MenuItem("Tools/T-Drive/Facial/グリッド")]
         public static void OpenFromMenu() { Open(null); }
 
         /// <summary>窓を開く。runner を渡すとその Runner を対象にして固定する。</summary>

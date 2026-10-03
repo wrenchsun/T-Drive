@@ -17,6 +17,15 @@ namespace TDrive.Facial.Timeline
 
             EditorGUILayout.HelpBox("重なったクリップは重みでブレンドされます。クリップが無い間は、Runner の設定どおりの通常の補正です。", MessageType.None);
 
+            SerializedProperty tr = serializedObject.FindProperty("track");
+            if (tr != null)
+            {
+                Section("Maya の演出カーブ（.fctrack）");
+                EditorGUILayout.PropertyField(tr, new GUIContent("演出カーブ", "Maya のショットで打った強さ・感情の重み・角度の固定のカーブ（.fctrack）。クリップの時間に合わせて動く。下で手で入れた値は曲線より優先される。空なら使わない"));
+                if (tr.objectReferenceValue != null)
+                    EditorGUILayout.HelpBox("曲線は、下の「強さを使う」「角度を固定する」がオフの項目と、手で書いていない感情レイヤーに効きます。手で入れた値は曲線を上書きします。", MessageType.None);
+            }
+
             Section("強さ");
             Toggle(t, "useAlpha", "強さを使う", "オンのとき、下の「強さ」で補正全体を弱める / 切る");
             using (new EditorGUI.DisabledScope(!t.FindPropertyRelative("useAlpha").boolValue))
