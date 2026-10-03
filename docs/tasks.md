@@ -157,10 +157,10 @@ FacialController（カメラ角度に応じた顔の補正。UE 版からの移�
 | # | チケット | 技術 | 日数 | 依存 | 受け入れ条件 | 状態 |
 |---|---|---|---|---|---|---|
 | S-1 | shizuku の取り込み手順: `tools/setup_sample_shizuku.py`（`shizuku.fbx` とテクスチャをプロジェクトフォルダの `assets/shizuku/` へ写し、Maya シーンを作る。元のマテリアル・シェーダーは使わず lambert + テクスチャだけ）+ .gitignore | — | 1 | — | 手順 1 回でシーンが開き、メッシュ 7・ジョイント 219・`mdl_face02` のシェイプ 77 個がある。リポジトリにモデルのファイルが入らない | ✅ `tools/setup_sample_shizuku.py`（実機で実行済み: メッシュ 7・ジョイント 219・顔 77 / 体 14 シェイプ。2 回目は写し 0 件）。テクスチャは `$TDRIVE_PROJECT/assets/shizuku/textures/…` |
-| S-2 | shizuku の Look（`looks/shizuku/look.json`）: 部位登録（face / hair / eye / skin / cloth …）・ロール・テクスチャ（`_d` 色 / `_n` 法線。`_m` の扱いを決める）。UnityChan と同じ Toon シェーダー | — | 1.5 | S-1 | Toon 表示で破綻なく表示でき、Unity 出力が検証を通る | ✅ `tools/setup_sample_shizuku_look.py` → `looks/shizuku/look.json`（7 部位: skin / faceOption / hair / wear01〜03 / watchLcd。色 + 法線マップ）。Toon 表示・解除・Unity 出力を裏の Maya で確認（見た目は未確認）。**顔の肌は体と同じマテリアル `mat_body01` のため「顔」ロールにできない**（S-5）。`_m` マスク・腕時計の液晶は未割り当て |
+| S-2 | shizuku の Look（`looks/shizuku/look.json`）: 部位登録（face / hair / eye / skin / cloth …）・ロール・テクスチャ（`_d` 色 / `_n` 法線。`_m` の扱いを決める）。UnityChan と同じ Toon シェーダー | — | 1.5 | S-1 | Toon 表示で破綻なく表示でき、Unity 出力が検証を通る | ✅ `tools/setup_sample_shizuku_look.py` → `looks/shizuku/look.json`（7 部位: skin / faceOption / hair / wear01〜03 / watchLcd。色 + 法線マップ）。Toon 表示・解除・Unity 出力を裏の Maya で確認（見た目は未確認）。顔の肌は体と同じマテリアル `mat_body01` のため「顔」ロールにできないが、フェイシャル用のサンプルなのでそのままにする。`_m` マスク・腕時計の液晶は未割り当て |
 | S-3 | テスト・文書の切り替え: スモークは合成モデルを主に、shizuku は「あるときだけ」。CLAUDE.md の「UnityChan はテスト素体」を更新。マニュアルの画像は規約確認後に差し替え（Q2） | — | 2 | S-2 | UnityChan が無くてもテストが通る。CLAUDE.md・マニュアルの記述が実態と一致 | ⬜ |
 | S-4 | 体のアニメーション（`Animations/Base/*.fbx`）を Maya に読み込む手順（参照 / 取り込み）と確認用のシーン | — | 0.5 | S-1 | 待機・歩きを再生しながら Toon と FacialController のプレビューを確認できる | ⬜ |
-| S-5 | 顔の肌を別の部位にする: 顔メッシュ（`mdl_face02`）の肌の面に、体とは別のマテリアルを割り当てる手順（取り込みスクリプトで `mat_face01` を作って割り当て直す。元の FBX は変えない）→ Look で「顔」ロールに。あわせて自動登録のロール推定を直す（`body` を服と判定する・`wear` を判定できない） | — | 1 | S-2 | 顔だけ影を弱くする・顔の法線・顔影マップが使える。自動登録で skin / cloth が正しく付く | ⬜ |
+| S-5 | 顔の肌を別の部位にする: 顔メッシュ（`mdl_face02`）の肌の面に、体とは別のマテリアルを割り当てる手順（取り込みスクリプトで `mat_face01` を作って割り当て直す。元の FBX は変えない）→ Look で「顔」ロールに。あわせて自動登録のロール推定を直す（`body` を服と判定する・`wear` を判定できない） | — | 1 | S-2 | 顔だけ影を弱くする・顔の法線・顔影マップが使える。自動登録で skin / cloth が正しく付く | — 見送り（2026-10-03: このモデルはフェイシャル用のサンプルなので、マテリアルの重複は無視してよい） |
 
 ## Phase F0: FacialController 基盤（殻 + Maya 非依存のコア）
 
@@ -278,7 +278,7 @@ A 系の詳細仕様は Phase 3 完了時に起こす。
 | R | Maya ツールの配布・導入・更新 | 6 |
 | U | T-Drive for Unity パッケージ | 39 |
 | A | アニメーション | 22 |
-| S | サンプルモデルの移行（shizuku） | 6 |
+| S | サンプルモデルの移行（shizuku） | 5 |
 | F0 | FacialController 基盤（殻 + コア） | 11.5 |
 | F1 | FacialController Maya の最小の一周 | 22 |
 | F2 | Maya ならではのシェイプ作成支援 | 15 |
