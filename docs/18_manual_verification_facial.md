@@ -37,7 +37,7 @@ FacialController（[14](14_facial_controller_spec.md)）と、それに伴う変
 | B-4 | Shape Editor で顔（ノード `bs`）のシェイプを動かす | `eye_close_L` などが動く | ❌ 未確認 | [ ] | |
 | B-5 | T-Drive › エディタ › Toon | `looks/shizuku/look.json` が自動で開き、部位が 7 つ（skin / faceOption / hair / wear01〜03 / watchLcd） | ✅（裏の Maya） | [ ] | |
 | B-6 | Toon 表示にする | 破綻なくセルルックで表示される（顔の肌は体と同じ部位。フェイシャル用のサンプルなのでそのままでよい） | ❌ 未確認（見た目） | [ ] | 見た目: |
-| B-7 | 体のアニメーション（`assets/shizuku/animations/anim_idle.fbx` など）を読み込む | 待機モーションが再生できる | ❌ 未実装（S-4） | [ ] | |
+| B-7 | `mayapy tools/load_sample_shizuku_anim.py anim_idle walk_forward` → できた `assets/shizuku/shizuku_anim_anim_idle.mb` を Maya で開いて再生 | 待機モーションが再生できる。元の `shizuku.mb` は変わらない | ✅（23 本すべて読み込み・ジョイント数不変。見た目は未確認） | [ ] | |
 
 ## C. FacialController — パネル・セットアップ（F1-1 / F1-9）
 
@@ -105,7 +105,9 @@ FacialController（[14](14_facial_controller_spec.md)）と、それに伴う変
 | E-1 | 横顔の点で「この角度で彫る」→ 口元を彫る → ベイク | 横顔のときだけ彫った形が出る。`fcs_*` は Unity 出力に入らない | — | [ ] | 彫りやすさ: |
 | E-2 | 左右一体のシェイプを「左右に分ける」 | `_L` / `_R` ができ、両方上げると元の形。中央のつなぎ目が自然 | — | [ ] | |
 | E-3 | `_L` を直して「ミラー」 | `_R` が更新される。対称でない頂点があれば表示される | — | [ ] | |
-| E-4 | Unity の `.anim`（`face_happy01.anim`）から読み込む | その表情がポーズ / 土台の表情として入る | — | [ ] | |
+| E-4 | ポーズタブ ›「アニメから読み込む…」› Unity の .anim（`assets/shizuku/facial_anims/face_happy01.anim`、時刻 0） | その表情のシェイプがスライダーに入る。モデルに無い名前は一覧で知らされる。保存するまで点のデータは変わらない | ✅（shizuku で 10 シェイプ一致） | [ ] | |
+| E-4b | ポーズタブ ›「土台の表情」› 選ぶ…（同じ .anim）→ 点を切り替える → 外す | 表情がシーンにだけ当たり、その状態で補正を確認できる。「シーンから取り込む」に土台の表情は入らない。点を切り替えても残り、外す / 編集を終えると消える | ✅ | [ ] | 見え方: |
+| E-4c | グリッドタブ ›「他のデータからコピー…」（別の `.fcpose.json`、全レイヤー / 作業セットだけ / キーだけ） | ポーズがコピーされる（格子の大きさが違っても角度で補間）。Ctrl+Z で戻る | ✅ | [ ] | |
 | E-5 | 「キーに焼く」 | プレビューの仕組みを外しても同じ見た目で再生される | — | [ ] | |
 
 ## F. Unity（FU）

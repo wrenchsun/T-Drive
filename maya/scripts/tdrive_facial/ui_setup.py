@@ -18,12 +18,13 @@ from . import scene as scene_mod
 from .session import NoLookError
 from .core import profile as profile_mod
 from .core.model import FILL_MODES, MIRROR_AXES
+from .ui_grid import YAW_PLUS_HELP
 from .ui import DIM_STYLE, NO_PROFILE, WARN_STYLE, ask_yes_no, mesh_choices, profile_names
 
 MESH_MISSING = "（シーンに見つかりません）"
 FORWARD_CHOICES = ("+X", "-X", "+Z", "-Z")  # Maya は Y-up なので上下は選べない
 FILL_LABELS = {"IDW": "IDW（まわりのキーをなめらかに混ぜる）", "NearestKey": "最近傍（いちばん近いキーをそのまま使う）"}
-CURVE_TIP = "シェイプ（blendShape のターゲット）。ビューポートでの強調表示は今後対応予定（TODO）"
+CURVE_TIP = "シェイプ（blendShape のターゲット）。シェイプを選んだときのビューポートでの強調表示は準備中です"
 BONE_TIP = "クリックすると Maya でこのジョイントを選びます"
 
 
@@ -175,9 +176,9 @@ class SetupTab(QtWidgets.QWidget):
         self.rows = _int_spin(1, 64)
         self.yaw = _spin(1.0, 360.0, 5.0, 1, "°")
         self.pitch = _spin(1.0, 180.0, 5.0, 1, "°")
-        self.cols.setToolTip("横（Yaw）方向の点の数")
+        self.cols.setToolTip("横（Yaw）方向の点の数。" + YAW_PLUS_HELP)
         self.rows.setToolTip("縦（Pitch）方向の点の数")
-        self.yaw.setToolTip("左右の角度の範囲（全体の幅）")
+        self.yaw.setToolTip("左右の角度の範囲（全体の幅）。" + YAW_PLUS_HELP)
         self.pitch.setToolTip("上下の角度の範囲（全体の幅）")
         row = QtWidgets.QHBoxLayout()
         row.addWidget(QtWidgets.QLabel("列"))
@@ -711,7 +712,7 @@ class SetupTab(QtWidgets.QWidget):
         self._run(self.session.add_to_working_set if on else self.session.remove_from_working_set, **kw)
 
     def on_ws_current_changed(self, kind: str, item: Optional[QtWidgets.QListWidgetItem]) -> None:
-        """ボーンを選ぶと、そのジョイントを Maya で選ぶ（いちばん安全な強調）。シェイプはまだ強調しない（TODO）。"""
+        """ボーンを選ぶと、そのジョイントを Maya で選ぶ（いちばん安全な強調）。シェイプの強調表示は準備中。"""
         if self._updating or item is None or kind != "bone":
             return
         name = item.data(QtCore.Qt.UserRole)

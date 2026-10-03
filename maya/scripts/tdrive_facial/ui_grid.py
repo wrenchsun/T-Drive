@@ -20,8 +20,9 @@ from typing import Callable, Optional
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from tdrive import lifecycle
+from tdrive import lifecycle, project
 
+from . import anim_import
 from .core.presenters import (
     ACTION_BAKE_POINT,
     ACTION_CAMERA_TO_POINT,
@@ -63,8 +64,12 @@ MARKER_COLOR = QtGui.QColor("#ff3b30")  # 今のカメラ（赤）
 OK_STYLE = "color: #9aa6b8;"
 ERR_STYLE = "color: #ff8a80;"
 
+# Yaw の向きの言い方（セットアップ・ポーズ・プレビューのヒントもこれに合わせる。Unity の格子ウィンドウは「左 = −Yaw（カメラが右）」で同じ意味）
+YAW_PLUS_HELP = "+Yaw = キャラクターの左側から見る（カメラがキャラクターの左）"
+YAW_MINUS_HELP = "−Yaw = キャラクターの右側から見る（カメラがキャラクターの右）"
+
 AXIS_HELP = (
-    "横 = Yaw（左の端 = −、中央 = 正面、右の端 = +。+ はキャラクターの左側から見る）\n"
+    "横 = Yaw（左の端 = −Yaw、中央 = 正面、右の端 = +Yaw）。" + YAW_PLUS_HELP + "、" + YAW_MINUS_HELP + "\n"
     "縦 = Pitch（上 = +で見下ろす、下 = −であおる、水平 = 0°）"
 )
 
@@ -336,6 +341,81 @@ class GridCanvas(QtWidgets.QWidget):
 
 
 # ---------------------------------------------------------------------------
+# 他のデータからコピーのダイアログ
+# ---------------------------------------------------------------------------
+
+
+class CopyFromDialog(QtWidgets.QDialog):
+    """「他のデータからコピー…」: コピー元のファイル（.fcpose.json）と、コピーの範囲（全レイヤー / 作業セットだけ / キーだけ）を聞く。"""
+
+    def __init__(self, parent: QtWidgets.QWidget, start_dir: str) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("他のデータからコピー")
+        self.setMinimumWidth(400)
+        self.start_dir = start_dir
+        v = QtWidgets.QVBoxLayout(self)
+        v.addWidget(QtWidgets.QLabel("別の FacialController のデータ（.fcpose.json）から、ポーズをこのデータへコピーします。格子の大きさが違っても、角度で補間し直します"))
+        row = QtWidgets.QHBoxLayout()
+        self.path_edit = QtWidgets.QLineEdit()
+        self.path_edit.setPlaceholderText("コピー元のデータ（.fcpose.json）")
+        self.btn_choose = QtWidgets.QPushButton("選ぶ…")
+        self.btn_choose.clicked.connect(lambda *_: self.on_choose())
+        row.addWidget(self.path_edit, 1)
+        row.addWidget(self.btn_choose)
+        v.addLayout(row)
+        self.cb_all = QtWidgets.QCheckBox("全レイヤー")
+        self.cb_all.setToolTip("名前が同じレイヤー同士でコピーします（このデータに無いレイヤーは作ります）。切ると、今のレイヤーだけ")
+        self.cb_ws = QtWidgets.QCheckBox("作業セットだけ")
+        self.cb_ws.setToolTip("このデータの作業セット（セットアップタブで選ぶ）のシェイプ・ボーンだけをコピーします。作業セットが空なら全部")
+        self.cb_keys = QtWidgets.QCheckBox("キーだけ")
+        self.cb_keys.setChecked(True)
+        self.cb_keys.setToolTip("コピー元のキー（緑の点）だけを使います。切ると、コピー元の自動生成の点も使います")
+        for cb in (self.cb_all, self.cb_ws, self.cb_keys):
+            v.addWidget(cb)
+        note = QtWidgets.QLabel("コピーした点は自動生成の点になります（このデータにあったキーも上書きします）。「元に戻す」で戻せます")
+        note.setWordWrap(True)
+        note.setStyleSheet(OK_STYLE)
+        v.addWidget(note)
+        self.buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+        self.buttons.button(QtWidgets.QDialogButtonBox.Ok).setText("コピーする")
+        self.buttons.button(QtWidgets.QDialogButtonBox.Cancel).setText("キャンセル")
+        self.buttons.accepted.connect(self.accept)
+        self.buttons.rejected.connect(self.reject)
+        v.addWidget(self.buttons)
+        self.path_edit.textChanged.connect(lambda *_: self._sync())
+        self._sync()
+
+    def choose_path(self, start_dir: str) -> str:
+        """コピー元のファイルを聞く（キャンセルは ""）。"""
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "コピー元のデータを選ぶ", start_dir, "FacialController のデータ (*.fcpose.json *.json)")
+        return path
+
+    def on_choose(self) -> None:
+        path = self.choose_path(self.start_dir)
+        if path:
+            self.path_edit.setText(path)
+
+    def _sync(self) -> None:
+        self.buttons.button(QtWidgets.QDialogButtonBox.Ok).setEnabled(bool(self.path_edit.text().strip()))
+
+    def set_path(self, path: str) -> None:
+        self.path_edit.setText(path)
+
+    def flags(self) -> list[str]:
+        out = []
+        if self.cb_all.isChecked():
+            out.append("all_layers")
+        if self.cb_ws.isChecked():
+            out.append("working_set_only")
+        if self.cb_keys.isChecked():
+            out.append("keys_only")
+        return out
+
+    def options(self) -> dict:
+        return {"path": self.path_edit.text().strip(), "flags": self.flags()}
+
+
+# ---------------------------------------------------------------------------
 # タブ
 # ---------------------------------------------------------------------------
 
@@ -391,7 +471,7 @@ class GridTab(QtWidgets.QWidget):
         row.addWidget(self.move_camera)
         row.addStretch(1)
         self.camera_label = QtWidgets.QLabel()
-        self.camera_label.setToolTip("今のビューのカメラが、顔から見て Yaw / Pitch どの角度にいるか。カメラを回すと赤い点が追従します")
+        self.camera_label.setToolTip("今のビューのカメラが、顔から見て Yaw / Pitch どの角度にいるか。カメラを回すと赤い点が追従します。" + YAW_PLUS_HELP)
         v.addLayout(row)
         row = QtWidgets.QHBoxLayout()  # カメラの角度は 2 行目（スクロールバーがあっても右端で切れない）
         row.addStretch(1)
@@ -426,6 +506,13 @@ class GridTab(QtWidgets.QWidget):
         self.btn_clear_layer.clicked.connect(self.on_clear_layer)
         for w in (self.btn_generate, self.all_layers, self.btn_unkey, self.btn_clear, self.btn_clear_layer):
             row.addWidget(w)
+        row.addStretch(1)
+        g.addLayout(row)
+        row = QtWidgets.QHBoxLayout()
+        self.btn_copy_from = QtWidgets.QPushButton("他のデータからコピー…")
+        self.btn_copy_from.setToolTip("別の FacialController のデータ（.fcpose.json）から、ポーズをこのデータへコピーします（全レイヤー・作業セットだけ・キーだけを選べます）")
+        self.btn_copy_from.clicked.connect(lambda *_: self.on_copy_from())
+        row.addWidget(self.btn_copy_from)
         row.addStretch(1)
         g.addLayout(row)
         v.addWidget(box)
@@ -592,7 +679,7 @@ class GridTab(QtWidgets.QWidget):
             self.title.setText("データが開かれていません")
             self.summary_label.setText("")
             for b in (
-                self.btn_generate, self.btn_unkey, self.btn_clear, self.btn_clear_layer,
+                self.btn_generate, self.btn_unkey, self.btn_clear, self.btn_clear_layer, self.btn_copy_from,
                 self.btn_bake_all, self.btn_bake_point, self.btn_bake_layer, self.btn_bake_stale,
             ):
                 b.setEnabled(False)
@@ -610,6 +697,7 @@ class GridTab(QtWidgets.QWidget):
         self.btn_unkey.setEnabled(ta[ACTION_UNKEY])
         self.btn_clear.setEnabled(ta[ACTION_CLEAR])
         self.btn_clear_layer.setEnabled(ta["clear_layer"])
+        self.btn_copy_from.setEnabled(True)
         can_bake = bool(d.asset) and d.target is not None and bool(d.target.mesh)
         self.btn_bake_all.setEnabled(can_bake)
         self.btn_bake_layer.setEnabled(can_bake)
@@ -788,6 +876,30 @@ class GridTab(QtWidgets.QWidget):
             self.set_status("取りやめました")
             return
         self._show_result(self._run("レイヤーのクリア", lambda: self.session.clear_layer()))
+
+    # ------------------------------------------------------------------ 他のデータからコピー
+    def copy_start_dir(self) -> str:
+        return str(project.root())
+
+    def make_copy_dialog(self) -> CopyFromDialog:
+        return CopyFromDialog(self, self.copy_start_dir())
+
+    def run_dialog(self, dialog: QtWidgets.QDialog) -> bool:
+        """ダイアログを出して、OK なら True（テストで差し替える）。"""
+        return dialog.exec() == QtWidgets.QDialog.Accepted
+
+    def on_copy_from(self) -> None:
+        if not self.has_doc():
+            return
+        dlg = self.make_copy_dialog()
+        if not self.run_dialog(dlg):
+            return
+        o = dlg.options()
+        res = self._run("他のデータからコピー", lambda: anim_import.copy_from_file(self.session, o["path"], o["flags"]))
+        if res is None:
+            return
+        self.set_status(res.message, error=not res.ok)
+        self.refresh()
 
     # ------------------------------------------------------------------ ベイク（ベイクだけをする）
     def on_bake_all(self) -> None:

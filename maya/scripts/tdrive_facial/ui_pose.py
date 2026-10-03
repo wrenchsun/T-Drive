@@ -30,9 +30,11 @@ from PySide6 import QtCore, QtGui, QtWidgets
 
 from tdrive import lifecycle, project
 
+from . import anim_import
 from . import scene as scene_mod
 from .core.presenters import BoneRow, CurveRow, PoseView
 from .session import FacialSessionError
+from .ui import ask_yes_no
 
 MAX_BONE_ROWS = 60  # 作業セットで絞っていないとき、ボーンの行はこれだけまで（残りは絞り込みで探す）
 OK_STYLE = "color: #9aa6b8;"
@@ -229,6 +231,173 @@ class _BoneRowWidgets:
 
 
 # ---------------------------------------------------------------------------
+# ダイアログ（アニメから読み込む / 土台の表情）。ファイルの選択は `choose_path` を差し替えられる
+# ---------------------------------------------------------------------------
+
+ANIM_FILTER = "Unity のアニメ (*.anim)"
+
+
+class _PathRow(QtWidgets.QWidget):
+    """ファイルの欄 + 選ぶボタン。ダイアログの `choose_path` を差し替えると、テストでファイルダイアログを出さずに答えられる。"""
+
+    def __init__(self, dialog: QtWidgets.QDialog, start_dir: str) -> None:
+        super().__init__()
+        self.dialog = dialog
+        self.start_dir = start_dir
+        lay = QtWidgets.QHBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        self.edit = QtWidgets.QLineEdit()
+        self.edit.setPlaceholderText("Unity の .anim ファイル")
+        self.btn = QtWidgets.QPushButton("選ぶ…")
+        self.btn.clicked.connect(lambda *_: self.on_choose())
+        lay.addWidget(self.edit, 1)
+        lay.addWidget(self.btn)
+
+    def on_choose(self) -> None:
+        path = self.dialog.choose_path(self.start_dir)
+        if path:
+            self.edit.setText(path)
+
+
+class AnimImportDialog(QtWidgets.QDialog):
+    """「アニメから読み込む…」: 読み込み元（今のフレーム / Unity の .anim）と、読み方の指定を聞く。`options()` が答え。"""
+
+    def __init__(self, parent: QtWidgets.QWidget, start_dir: str, working_set_only: bool = True) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("アニメから読み込む")
+        self.setMinimumWidth(380)
+        v = QtWidgets.QVBoxLayout(self)
+        v.addWidget(QtWidgets.QLabel("アニメの値を、編集中のポーズへ読み込みます（保存するまでデータは変わりません）"))
+
+        self.rb_frame = QtWidgets.QRadioButton("今のフレーム（Maya のシーンのアニメ）")
+        self.rb_frame.setToolTip("シーンのブレンドシェイプとジョイントについているアニメの、今のタイムラインのフレームの値を読みます")
+        self.rb_file = QtWidgets.QRadioButton("Unity の .anim ファイル")
+        self.rb_file.setToolTip("Unity のアニメーションクリップ。ブレンドシェイプのカーブと、ボーンのカーブ（目など）を読みます")
+        self.rb_frame.setChecked(True)
+        self.source_group = QtWidgets.QButtonGroup(self)  # 同じ親の丸ボタンは全部排他になるので、組ごとにグループを分ける
+        self.source_group.addButton(self.rb_frame)
+        self.source_group.addButton(self.rb_file)
+        self.path_row = _PathRow(self, start_dir)
+        self.time = QtWidgets.QDoubleSpinBox()
+        self.time.setRange(0.0, 100000.0)
+        self.time.setDecimals(3)
+        self.time.setSingleStep(0.1)
+        self.time.setSuffix(" 秒")
+        self.time.setToolTip("クリップのこの時刻の値を読みます（1 フレームだけのクリップは 0 のまま）")
+        v.addWidget(self.rb_frame)
+        v.addWidget(self.rb_file)
+        v.addWidget(self.path_row)
+        row = QtWidgets.QHBoxLayout()
+        row.addWidget(QtWidgets.QLabel("時刻"))
+        row.addWidget(self.time)
+        row.addStretch(1)
+        v.addLayout(row)
+
+        self.cb_ws = QtWidgets.QCheckBox("作業セットだけ")
+        self.cb_ws.setChecked(working_set_only)
+        self.cb_ws.setToolTip("作業セット（セットアップタブで選ぶ）のシェイプ・ボーンだけを読みます。作業セットが空なら全部")
+        self.cb_bones = QtWidgets.QCheckBox("ボーンも読む")
+        self.cb_bones.setChecked(True)
+        self.cb_bones.setToolTip("ボーン（目など）の動きも、基準の姿勢からのずれとして読みます。切るとシェイプだけ")
+        self.rb_replace = QtWidgets.QRadioButton("置き換え")
+        self.rb_replace.setToolTip("編集中の値をいったん捨てて、アニメの値にします")
+        self.rb_add = QtWidgets.QRadioButton("足す")
+        self.rb_add.setToolTip("アニメが動かしているものだけを上書きし、ほかの編集中の値は残します")
+        self.rb_replace.setChecked(True)
+        self.mode_group = QtWidgets.QButtonGroup(self)
+        self.mode_group.addButton(self.rb_replace)
+        self.mode_group.addButton(self.rb_add)
+        v.addWidget(self.cb_ws)
+        v.addWidget(self.cb_bones)
+        row = QtWidgets.QHBoxLayout()
+        row.addWidget(self.rb_replace)
+        row.addWidget(self.rb_add)
+        row.addStretch(1)
+        v.addLayout(row)
+
+        self.buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+        self.buttons.button(QtWidgets.QDialogButtonBox.Ok).setText("読み込む")
+        self.buttons.button(QtWidgets.QDialogButtonBox.Cancel).setText("キャンセル")
+        self.buttons.accepted.connect(self.accept)
+        self.buttons.rejected.connect(self.reject)
+        v.addWidget(self.buttons)
+        self.rb_frame.toggled.connect(lambda *_: self._sync())
+        self.path_row.edit.textChanged.connect(lambda *_: self._sync())
+        self._sync()
+
+    def choose_path(self, start_dir: str) -> str:
+        """.anim ファイルを聞く（キャンセルは ""）。"""
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Unity のアニメを選ぶ", start_dir, ANIM_FILTER)
+        return path
+
+    def _sync(self) -> None:
+        file_mode = self.rb_file.isChecked()
+        self.path_row.setEnabled(file_mode)
+        self.time.setEnabled(file_mode)
+        ok = self.buttons.button(QtWidgets.QDialogButtonBox.Ok)
+        ok.setEnabled(not file_mode or bool(self.path_row.edit.text().strip()))
+
+    def set_path(self, path: str) -> None:
+        """ファイルを指定する（ファイルのほうの選択に切り替える）。"""
+        self.rb_file.setChecked(True)
+        self.path_row.edit.setText(path)
+
+    def options(self) -> dict:
+        return {
+            "source": "file" if self.rb_file.isChecked() else "frame",
+            "path": self.path_row.edit.text().strip(),
+            "time": float(self.time.value()),
+            "working_set_only": self.cb_ws.isChecked(),
+            "include_bones": self.cb_bones.isChecked(),
+            "replace": self.rb_replace.isChecked(),
+        }
+
+
+class BaseExpressionDialog(QtWidgets.QDialog):
+    """「土台の表情 選ぶ…」: Unity の .anim と、その時刻を聞く。"""
+
+    def __init__(self, parent: QtWidgets.QWidget, start_dir: str) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("土台の表情を選ぶ")
+        self.setMinimumWidth(380)
+        v = QtWidgets.QVBoxLayout(self)
+        v.addWidget(QtWidgets.QLabel("表情のアニメ（Unity の .anim）の値を、シーンへ下敷きとして当てます。編集中のポーズには入りません"))
+        self.path_row = _PathRow(self, start_dir)
+        self.time = QtWidgets.QDoubleSpinBox()
+        self.time.setRange(0.0, 100000.0)
+        self.time.setDecimals(3)
+        self.time.setSingleStep(0.1)
+        self.time.setSuffix(" 秒")
+        v.addWidget(self.path_row)
+        row = QtWidgets.QHBoxLayout()
+        row.addWidget(QtWidgets.QLabel("時刻"))
+        row.addWidget(self.time)
+        row.addStretch(1)
+        v.addLayout(row)
+        self.buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+        self.buttons.button(QtWidgets.QDialogButtonBox.Ok).setText("当てる")
+        self.buttons.button(QtWidgets.QDialogButtonBox.Cancel).setText("キャンセル")
+        self.buttons.accepted.connect(self.accept)
+        self.buttons.rejected.connect(self.reject)
+        v.addWidget(self.buttons)
+        self.path_row.edit.textChanged.connect(lambda *_: self._sync())
+        self._sync()
+
+    def choose_path(self, start_dir: str) -> str:
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "土台の表情にするアニメを選ぶ", start_dir, ANIM_FILTER)
+        return path
+
+    def _sync(self) -> None:
+        self.buttons.button(QtWidgets.QDialogButtonBox.Ok).setEnabled(bool(self.path_row.edit.text().strip()))
+
+    def set_path(self, path: str) -> None:
+        self.path_row.edit.setText(path)
+
+    def options(self) -> dict:
+        return {"path": self.path_row.edit.text().strip(), "time": float(self.time.value())}
+
+
+# ---------------------------------------------------------------------------
 # タブ
 # ---------------------------------------------------------------------------
 
@@ -249,6 +418,7 @@ lifecycle.on_reload(_detach_all)
 class PoseTab(QtWidgets.QWidget):
     """ポーズタブ。`refresh()` で全部描き直し、`detach()` で通知の購読をやめる。"""
 
+    _BASE_TIP = "表情のアニメ（Unity の .anim）の値をシーンへ下敷きとして当て、その表情のときのポーズを確かめます。編集中のポーズには入りません。シェイプだけで、編集を終えると外れます"
     _CAPTURE_TIP = "Maya のシェイプエディタ・チャンネルボックス・回転 / 移動ツールで動かした値を、編集中のポーズへ取り込みます。取り込んだあと「保存」で点に書きます"
 
     def __init__(self, session) -> None:
@@ -329,6 +499,36 @@ class PoseTab(QtWidgets.QWidget):
         g.addWidget(self.btn_capture)
         g.addWidget(self.cb_capture_ws)
         g.addStretch(1)
+        bl.addWidget(box)
+
+        # アニメから読み込む（今のフレーム / Unity の .anim）+ 土台の表情
+        box = QtWidgets.QGroupBox("アニメから読み込む")
+        av = QtWidgets.QVBoxLayout(box)
+        row = QtWidgets.QHBoxLayout()
+        self.btn_anim = QtWidgets.QPushButton("アニメから読み込む…")
+        self.btn_anim.setToolTip("Maya のシーンのアニメの今のフレーム、または Unity の .anim の値を、編集中のポーズへ読み込みます（保存するまでデータは変わりません）")
+        self.btn_anim.clicked.connect(lambda *_: self.on_anim_import())
+        row.addWidget(self.btn_anim)
+        row.addStretch(1)
+        av.addLayout(row)
+        row = QtWidgets.QHBoxLayout()
+        row.addWidget(QtWidgets.QLabel("土台の表情"))
+        self.base_label = QtWidgets.QLabel("なし")
+        self.base_label.setStyleSheet(OK_STYLE)
+        self.btn_base_pick = QtWidgets.QPushButton("選ぶ…")
+        self.btn_base_pick.setToolTip(self._BASE_TIP)
+        self.btn_base_pick.clicked.connect(lambda *_: self.on_base_pick())
+        self.btn_base_clear = QtWidgets.QPushButton("外す")
+        self.btn_base_clear.setToolTip("土台の表情を外します（編集中のポーズだけがシーンに残ります）")
+        self.btn_base_clear.clicked.connect(lambda *_: self.on_base_clear())
+        row.addWidget(self.base_label, 1)
+        row.addWidget(self.btn_base_pick)
+        row.addWidget(self.btn_base_clear)
+        av.addLayout(row)
+        self.base_note = QtWidgets.QLabel("土台の表情はシーンだけに当てる確認用の下敷きです。ポーズには入らず、編集を終えると外れます")
+        self.base_note.setWordWrap(True)
+        self.base_note.setStyleSheet(OK_STYLE)
+        av.addWidget(self.base_note)
         bl.addWidget(box)
 
         # シェイプ
@@ -440,6 +640,9 @@ class PoseTab(QtWidgets.QWidget):
         self._sync_note(sel)
         # 取り込みは編集状態（基準姿勢）でだけできる
         self.btn_capture.setEnabled(sel is not None and self.session.editing)
+        base = anim_import.base_expression_name(self.session)
+        self.base_label.setText(f"「{base}」" if base else "なし")
+        self.btn_base_clear.setEnabled(bool(base))
         self.btn_capture.setToolTip(
             self._CAPTURE_TIP if self.session.editing else "編集状態（ヘッダーの「編集」か、グリッドで点をクリック）のときだけ使えます。" + self._CAPTURE_TIP
         )
@@ -501,7 +704,7 @@ class PoseTab(QtWidgets.QWidget):
         self.header.setText("FacialController のデータが開かれていません（セットアップタブで新規作成するか、開いてください）")
         self.note.setText("")
         self.body.setEnabled(False)
-        for b in (self.btn_save, self.btn_reload, self.btn_zero, self.btn_mirror, self.btn_export, self.btn_import, self.btn_capture):
+        for b in (self.btn_save, self.btn_reload, self.btn_zero, self.btn_mirror, self.btn_export, self.btn_import, self.btn_capture, self.btn_anim, self.btn_base_pick, self.btn_base_clear):
             b.setEnabled(False)
         self._curve_sig = self._bone_sig = None
         _clear_layout(self.curve_grid)
@@ -530,6 +733,8 @@ class PoseTab(QtWidgets.QWidget):
         self.btn_mirror.setEnabled(view.can_mirror)
         self.btn_export.setEnabled(ed)
         self.btn_import.setEnabled(ed)
+        self.btn_anim.setEnabled(ed)
+        self.btn_base_pick.setEnabled(ed)
         self._sync_edit_state()
         self.cb_working.blockSignals(True)
         self.cb_working.setChecked(view.working_set_only)
@@ -759,13 +964,16 @@ class PoseTab(QtWidgets.QWidget):
 
     def on_capture(self) -> None:
         wso = self.cb_capture_ws.isChecked()
-        rep = self._run("取り込み", lambda: self.session.capture_from_scene(working_set_only=wso))
-        if rep is None:
+        res = self._run("取り込み", lambda: anim_import.capture_from_scene(self.session, working_set_only=wso))
+        if res is None:
             return
+        rep = res.report
         if not rep.ok:
             self.set_status(rep.message, error=True)
             return
         text = f"取り込みました: シェイプ {rep.curves_set} 本・ボーン {rep.bones_set} 本" + ("" if rep.changed else "（変化なし）")
+        if res.base_ignored:
+            text += f"。土台の表情のシェイプ {len(res.base_ignored)} 本は取り込みませんでした"
         if rep.ignored:
             text += f"。作業セットの外なので取り込まなかった名前 {len(rep.ignored)} 個"
         if rep.unknown:
@@ -773,6 +981,84 @@ class PoseTab(QtWidgets.QWidget):
         if rep.clamped:
             text += f"。可動域で丸めたシェイプ {len(rep.clamped)} 本"
         self.set_status(text + "。保存すると点に書かれます")
+        self.refresh()
+
+    # --- アニメから読み込む / 土台の表情（ダイアログは差し替えられる）---
+    def anim_start_dir(self) -> str:
+        return str(Path(project.root()))
+
+    def make_anim_dialog(self) -> AnimImportDialog:
+        return AnimImportDialog(self, self.anim_start_dir(), working_set_only=self.cb_capture_ws.isChecked())
+
+    def make_base_dialog(self) -> BaseExpressionDialog:
+        return BaseExpressionDialog(self, self.anim_start_dir())
+
+    def run_dialog(self, dialog: QtWidgets.QDialog) -> bool:
+        """ダイアログを出して、OK なら True（テストで差し替える）。"""
+        return dialog.exec() == QtWidgets.QDialog.Accepted
+
+    def ask_confirm(self, text: str) -> bool:
+        return ask_yes_no(self, text)
+
+    def on_anim_import(self) -> None:
+        if not self.has_doc():
+            return
+        dlg = self.make_anim_dialog()
+        if not self.run_dialog(dlg):
+            return
+        o = dlg.options()
+        if o["replace"] and self.session.pose.dirty and not self.ask_confirm(
+            "編集中のポーズ（まだ保存していません）を、アニメの値で置き換えます。よろしいですか？"
+        ):
+            self.set_status("読み込みを取りやめました")
+            return
+        if o["source"] == "file":
+            rep = self._run(
+                "アニメの読み込み",
+                lambda: anim_import.pose_from_unity_anim(
+                    self.session, o["path"], time=o["time"], working_set_only=o["working_set_only"],
+                    include_bones=o["include_bones"], replace=o["replace"],
+                ),
+            )
+        else:
+            rep = self._run(
+                "アニメの読み込み",
+                lambda: anim_import.pose_from_current_frame(
+                    self.session, working_set_only=o["working_set_only"], include_bones=o["include_bones"], replace=o["replace"]
+                ),
+            )
+        if rep is None:
+            return
+        self.set_status(rep.message, error=not rep.ok)
+        tips = []
+        if rep.unmatched_curves:
+            tips.append("このモデルに無いシェイプ: " + "、".join(rep.unmatched_curves))
+        if rep.unmatched_bones:
+            tips.append("このモデルに無いボーン: " + "、".join(rep.unmatched_bones))
+        self.status.setToolTip("\n".join(tips))
+        self.refresh()
+
+    def on_base_pick(self) -> None:
+        if not self.has_doc():
+            return
+        dlg = self.make_base_dialog()
+        if not self.run_dialog(dlg):
+            return
+        o = dlg.options()
+        res = self._run("土台の表情", lambda: anim_import.set_base_expression(self.session, o["path"], time=o["time"]))
+        if res is None:
+            return
+        self.set_status(res.message, error=not res.ok)
+        self.status.setToolTip(("このモデルに無いシェイプ: " + "、".join(res.unmatched)) if res.unmatched else "")
+        self._sync_edit_state()
+        self.refresh()
+
+    def on_base_clear(self) -> None:
+        if not self.has_doc():
+            return
+        if self._run("土台の表情を外す", lambda: anim_import.clear_base_expression(self.session)):
+            self.set_status("土台の表情を外しました")
+        self._sync_edit_state()
         self.refresh()
 
     # --- 書き出し / 読み込み（ファイルの選択は差し替えられる）---
@@ -829,6 +1115,10 @@ class PoseTab(QtWidgets.QWidget):
         """通知の購読をやめる（パネルを閉じる・リロードの前）。二重に呼んでも安全。"""
         self._detached = True
         self._flush_timer.stop()
+        try:
+            anim_import.clear_base_expression(self.session)  # 土台の表情はパネルを閉じるときに外す
+        except Exception:  # noqa: BLE001  後片付けで落とさない
+            pass
         for fn in self._unsub:
             fn()
         self._unsub = []
