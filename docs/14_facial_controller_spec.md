@@ -402,6 +402,7 @@ Unity 側のブリッジが、D-Drive の作った `.playable` に `FacialCorrec
 - **シェイプの名前**: `.fcpose.json` の `curves` のキーは **`<blendShape ノード名>.<ターゲット名>`**（例 `bs.eye_close_L`）。UE・Unity（FBX 取り込み後のシェイプ名）と同じ表記で、Maya ではそのままアトリビュートのパス（ノード `bs` のターゲット `eye_close_L`）になる
 - **取り込み時の注意**（S-1 で確認）: FBX を取り込むと、ターゲットごとの非表示メッシュが最上位に 98 個できる（blendShape につながっているので消さない）。メッシュを数える・一覧する処理は表示中のものだけを対象にする
 - 取り込み手順: `mayapy tools/setup_sample_shizuku.py`（モデル・テクスチャ・アニメーションを `assets/shizuku/` へ写し、`shizuku.mb` と `setup_report.json` を作る。何度実行してもよい）
+- **Toon の Look**（S-2）: `looks/shizuku/look.json`。部位は skin（`mat_body01` = 体と顔の肌）/ faceOption（口の中・舌・眉など）/ hair / wear01〜03 / watchLcd。顔の肌が体と同じマテリアルなので、顔だけの調整（顔ロール）には肌のマテリアルを分ける必要がある（S-5）。頂点カラーは無い（Toon マスクは初期化から）。UV は `map1`（`mdl_wear01` だけ `uvSet` もある）。`_m` のマスクは中身が不明なので使っていない
 - UnityChan（`assets/unitychan/`、`looks/unitychan/`）は当面残す（既存のテスト・マニュアルの画像が参照している）。置き換えは Phase S のチケットで段階的に行う
 
 ## 12. 決めること（要確認）

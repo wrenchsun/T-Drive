@@ -1,0 +1,787 @@
+{
+  "character": "shizuku",
+  "characterSettings": {
+    "contactShadow": {
+      "enabled": false,
+      "radius": 0.25,
+      "strength": 0.5
+    },
+    "depthCompression": 0.0,
+    "expressions": {},
+    "faceShadow": {
+      "forward": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "right": [
+        -1.0,
+        0.0,
+        0.0
+      ]
+    },
+    "innerLine": {
+      "color": [
+        0.2,
+        0.15,
+        0.15,
+        1.0
+      ],
+      "enabled": false,
+      "parts": [],
+      "width": 1.0
+    },
+    "light": {
+      "hysteresisDeg": 3.0,
+      "smoothing": 0.15
+    },
+    "screenOutline": {
+      "color": [
+        0.2,
+        0.15,
+        0.15,
+        1.0
+      ],
+      "enabled": false,
+      "width": 2.0
+    },
+    "seeThroughOutline": {
+      "color": [
+        0.25,
+        0.15,
+        0.15,
+        1.0
+      ],
+      "maxDistance": 0.1,
+      "occluders": [],
+      "width": 1.5
+    },
+    "stencil": {
+      "enabled": false
+    },
+    "viewCorrection": {
+      "front": "",
+      "mesh": "",
+      "side": "",
+      "threeQuarter": ""
+    }
+  },
+  "features": {
+    "colorCorrect": false,
+    "contactShadow": false,
+    "depthCompression": false,
+    "depthOffset": false,
+    "emission": false,
+    "expressions": false,
+    "faceShadowSdf": false,
+    "hairHighlight": false,
+    "innerLine": false,
+    "lightColorInfluence": false,
+    "lightStabilize": false,
+    "maskMap": false,
+    "matCap": false,
+    "normalMap": true,
+    "outline": true,
+    "outlineDirection": false,
+    "outlineDistance": false,
+    "outlineScreenSpace": false,
+    "outlineSmoothNormal": true,
+    "rim": false,
+    "screenOutline": false,
+    "seeThroughOutline": false,
+    "selfShadow": false,
+    "shade": true,
+    "shade2": false,
+    "stencil": false,
+    "tint": true,
+    "vertexMask": true,
+    "viewCorrection": false
+  },
+  "lookVersion": "0.1.0",
+  "materials": {
+    "lambert2": {
+      "common": {
+        "albedo": null,
+        "albedoTint": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "blend": "Opaque",
+        "cutoff": 0.5,
+        "doubleSided": false,
+        "emission": null,
+        "emissionColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "emissionIntensity": 0.0,
+        "normal": null,
+        "normalScale": 1.0
+      },
+      "renderQueueOffset": 0,
+      "shader": "MS2026/Toon",
+      "specific": {
+        "_ToonBrightness": 1.0,
+        "_ToonCastShadow": 1.0,
+        "_ToonDepthCompressWeight": 0.0,
+        "_ToonDepthOffset": 0.0,
+        "_ToonFaceShadowWeight": 0.0,
+        "_ToonHairHighlightColor": [
+          1.0,
+          1.0,
+          0.95,
+          1.0
+        ],
+        "_ToonHairHighlightShift": 0.0,
+        "_ToonLightColorInfluence": 1.0,
+        "_ToonMatCapStrength": 0.0,
+        "_ToonOutlineBaseMix": 0.5,
+        "_ToonOutlineBottom": 1.0,
+        "_ToonOutlineColor": [
+          0.28,
+          0.2,
+          0.2,
+          1.0
+        ],
+        "_ToonOutlineDistanceScale": 0.0,
+        "_ToonOutlineRefDistance": 2.0,
+        "_ToonOutlineScreenSpace": 0.0,
+        "_ToonOutlineShadowSide": 1.0,
+        "_ToonOutlineSmoothNormal": 1.0,
+        "_ToonOutlineWidth": 0.8,
+        "_ToonReceiveShadow": 1.0,
+        "_ToonRimColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_ToonRimPower": 4.0,
+        "_ToonRimStrength": 0.0,
+        "_ToonSaturation": 1.0,
+        "_ToonSeeThroughOutline": 0.0,
+        "_ToonShade2Color": [
+          0.6,
+          0.52,
+          0.72,
+          1.0
+        ],
+        "_ToonShade2Strength": 0.0,
+        "_ToonShade2Threshold": 0.25,
+        "_ToonShadeColor": [
+          0.78,
+          0.72,
+          0.86,
+          1.0
+        ],
+        "_ToonShadeFeather": 0.02,
+        "_ToonShadeThreshold": 0.5,
+        "_ToonShadowStrength": 1.0,
+        "_ToonTintColor": [
+          1.0,
+          0.6,
+          0.6,
+          1.0
+        ],
+        "_ToonTintStrength": 0.0
+      }
+    },
+    "mat_body01": {
+      "common": {
+        "albedo": "assets/shizuku/textures/body01_d.png",
+        "albedoTint": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "blend": "Opaque",
+        "cutoff": 0.5,
+        "doubleSided": false,
+        "emission": null,
+        "emissionColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "emissionIntensity": 0.0,
+        "normal": "assets/shizuku/textures/body01_n.png",
+        "normalScale": 1.0
+      },
+      "renderQueueOffset": 0,
+      "shader": "MS2026/Toon",
+      "specific": {
+        "_ToonBrightness": 1.0,
+        "_ToonCastShadow": 1.0,
+        "_ToonDepthCompressWeight": 0.0,
+        "_ToonDepthOffset": 0.0,
+        "_ToonFaceShadowWeight": 0.0,
+        "_ToonHairHighlightColor": [
+          1.0,
+          1.0,
+          0.95,
+          1.0
+        ],
+        "_ToonHairHighlightShift": 0.0,
+        "_ToonLightColorInfluence": 1.0,
+        "_ToonMatCapStrength": 0.0,
+        "_ToonOutlineBaseMix": 0.5,
+        "_ToonOutlineBottom": 1.0,
+        "_ToonOutlineColor": [
+          0.28,
+          0.2,
+          0.2,
+          1.0
+        ],
+        "_ToonOutlineDistanceScale": 0.0,
+        "_ToonOutlineRefDistance": 2.0,
+        "_ToonOutlineScreenSpace": 0.0,
+        "_ToonOutlineShadowSide": 1.0,
+        "_ToonOutlineSmoothNormal": 1.0,
+        "_ToonOutlineWidth": 0.9,
+        "_ToonReceiveShadow": 1.0,
+        "_ToonRimColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_ToonRimPower": 4.0,
+        "_ToonRimStrength": 0.0,
+        "_ToonSaturation": 1.0,
+        "_ToonSeeThroughOutline": 0.0,
+        "_ToonShade2Color": [
+          0.6,
+          0.52,
+          0.72,
+          1.0
+        ],
+        "_ToonShade2Strength": 0.0,
+        "_ToonShade2Threshold": 0.25,
+        "_ToonShadeColor": [
+          0.93,
+          0.72,
+          0.72,
+          1.0
+        ],
+        "_ToonShadeFeather": 0.02,
+        "_ToonShadeThreshold": 0.5,
+        "_ToonShadowStrength": 1.0,
+        "_ToonTintColor": [
+          1.0,
+          0.6,
+          0.6,
+          1.0
+        ],
+        "_ToonTintStrength": 0.0
+      }
+    },
+    "mat_faceOption1": {
+      "common": {
+        "albedo": "assets/shizuku/textures/faceOption_d.png",
+        "albedoTint": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "blend": "Opaque",
+        "cutoff": 0.5,
+        "doubleSided": false,
+        "emission": null,
+        "emissionColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "emissionIntensity": 0.0,
+        "normal": null,
+        "normalScale": 1.0
+      },
+      "renderQueueOffset": 0,
+      "shader": "MS2026/Toon",
+      "specific": {
+        "_ToonBrightness": 1.0,
+        "_ToonCastShadow": 1.0,
+        "_ToonDepthCompressWeight": 0.0,
+        "_ToonDepthOffset": 0.0,
+        "_ToonFaceShadowWeight": 0.0,
+        "_ToonHairHighlightColor": [
+          1.0,
+          1.0,
+          0.95,
+          1.0
+        ],
+        "_ToonHairHighlightShift": 0.0,
+        "_ToonLightColorInfluence": 1.0,
+        "_ToonMatCapStrength": 0.0,
+        "_ToonOutlineBaseMix": 0.5,
+        "_ToonOutlineBottom": 1.0,
+        "_ToonOutlineColor": [
+          0.28,
+          0.2,
+          0.2,
+          1.0
+        ],
+        "_ToonOutlineDistanceScale": 0.0,
+        "_ToonOutlineRefDistance": 2.0,
+        "_ToonOutlineScreenSpace": 0.0,
+        "_ToonOutlineShadowSide": 1.0,
+        "_ToonOutlineSmoothNormal": 1.0,
+        "_ToonOutlineWidth": 0.4,
+        "_ToonReceiveShadow": 1.0,
+        "_ToonRimColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_ToonRimPower": 4.0,
+        "_ToonRimStrength": 0.0,
+        "_ToonSaturation": 1.0,
+        "_ToonSeeThroughOutline": 0.0,
+        "_ToonShade2Color": [
+          0.6,
+          0.52,
+          0.72,
+          1.0
+        ],
+        "_ToonShade2Strength": 0.0,
+        "_ToonShade2Threshold": 0.25,
+        "_ToonShadeColor": [
+          0.78,
+          0.72,
+          0.86,
+          1.0
+        ],
+        "_ToonShadeFeather": 0.02,
+        "_ToonShadeThreshold": 0.5,
+        "_ToonShadowStrength": 0.2,
+        "_ToonTintColor": [
+          1.0,
+          0.6,
+          0.6,
+          1.0
+        ],
+        "_ToonTintStrength": 0.0
+      }
+    },
+    "mat_hair01": {
+      "common": {
+        "albedo": "assets/shizuku/textures/hair01_d.png",
+        "albedoTint": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "blend": "Opaque",
+        "cutoff": 0.5,
+        "doubleSided": false,
+        "emission": null,
+        "emissionColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "emissionIntensity": 0.0,
+        "normal": null,
+        "normalScale": 1.0
+      },
+      "renderQueueOffset": 10,
+      "shader": "MS2026/Toon",
+      "specific": {
+        "_ToonBrightness": 1.0,
+        "_ToonCastShadow": 1.0,
+        "_ToonDepthCompressWeight": 0.0,
+        "_ToonDepthOffset": 0.0,
+        "_ToonFaceShadowWeight": 0.0,
+        "_ToonHairHighlightColor": [
+          1.0,
+          1.0,
+          0.95,
+          1.0
+        ],
+        "_ToonHairHighlightShift": 0.0,
+        "_ToonLightColorInfluence": 1.0,
+        "_ToonMatCapStrength": 0.0,
+        "_ToonOutlineBaseMix": 0.5,
+        "_ToonOutlineBottom": 1.0,
+        "_ToonOutlineColor": [
+          0.28,
+          0.2,
+          0.2,
+          1.0
+        ],
+        "_ToonOutlineDistanceScale": 0.0,
+        "_ToonOutlineRefDistance": 2.0,
+        "_ToonOutlineScreenSpace": 0.0,
+        "_ToonOutlineShadowSide": 1.0,
+        "_ToonOutlineSmoothNormal": 1.0,
+        "_ToonOutlineWidth": 1.3,
+        "_ToonReceiveShadow": 1.0,
+        "_ToonRimColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_ToonRimPower": 4.0,
+        "_ToonRimStrength": 0.0,
+        "_ToonSaturation": 1.0,
+        "_ToonSeeThroughOutline": 0.0,
+        "_ToonShade2Color": [
+          0.6,
+          0.52,
+          0.72,
+          1.0
+        ],
+        "_ToonShade2Strength": 0.0,
+        "_ToonShade2Threshold": 0.25,
+        "_ToonShadeColor": [
+          0.78,
+          0.72,
+          0.86,
+          1.0
+        ],
+        "_ToonShadeFeather": 0.02,
+        "_ToonShadeThreshold": 0.5,
+        "_ToonShadowStrength": 1.0,
+        "_ToonTintColor": [
+          1.0,
+          0.6,
+          0.6,
+          1.0
+        ],
+        "_ToonTintStrength": 0.0
+      }
+    },
+    "mat_wear01": {
+      "common": {
+        "albedo": "assets/shizuku/textures/wear01_d.png",
+        "albedoTint": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "blend": "Opaque",
+        "cutoff": 0.5,
+        "doubleSided": false,
+        "emission": null,
+        "emissionColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "emissionIntensity": 0.0,
+        "normal": "assets/shizuku/textures/wear01_n.png",
+        "normalScale": 1.0
+      },
+      "renderQueueOffset": 0,
+      "shader": "MS2026/Toon",
+      "specific": {
+        "_ToonBrightness": 1.0,
+        "_ToonCastShadow": 1.0,
+        "_ToonDepthCompressWeight": 0.0,
+        "_ToonDepthOffset": 0.0,
+        "_ToonFaceShadowWeight": 0.0,
+        "_ToonHairHighlightColor": [
+          1.0,
+          1.0,
+          0.95,
+          1.0
+        ],
+        "_ToonHairHighlightShift": 0.0,
+        "_ToonLightColorInfluence": 1.0,
+        "_ToonMatCapStrength": 0.0,
+        "_ToonOutlineBaseMix": 0.5,
+        "_ToonOutlineBottom": 1.0,
+        "_ToonOutlineColor": [
+          0.28,
+          0.2,
+          0.2,
+          1.0
+        ],
+        "_ToonOutlineDistanceScale": 0.0,
+        "_ToonOutlineRefDistance": 2.0,
+        "_ToonOutlineScreenSpace": 0.0,
+        "_ToonOutlineShadowSide": 1.0,
+        "_ToonOutlineSmoothNormal": 1.0,
+        "_ToonOutlineWidth": 1.0,
+        "_ToonReceiveShadow": 1.0,
+        "_ToonRimColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_ToonRimPower": 4.0,
+        "_ToonRimStrength": 0.0,
+        "_ToonSaturation": 1.0,
+        "_ToonSeeThroughOutline": 0.0,
+        "_ToonShade2Color": [
+          0.6,
+          0.52,
+          0.72,
+          1.0
+        ],
+        "_ToonShade2Strength": 0.0,
+        "_ToonShade2Threshold": 0.25,
+        "_ToonShadeColor": [
+          0.78,
+          0.72,
+          0.86,
+          1.0
+        ],
+        "_ToonShadeFeather": 0.02,
+        "_ToonShadeThreshold": 0.5,
+        "_ToonShadowStrength": 1.0,
+        "_ToonTintColor": [
+          1.0,
+          0.6,
+          0.6,
+          1.0
+        ],
+        "_ToonTintStrength": 0.0
+      }
+    },
+    "mat_wear02": {
+      "common": {
+        "albedo": "assets/shizuku/textures/wear02_d.png",
+        "albedoTint": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "blend": "Opaque",
+        "cutoff": 0.5,
+        "doubleSided": false,
+        "emission": null,
+        "emissionColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "emissionIntensity": 0.0,
+        "normal": "assets/shizuku/textures/wear02_n.png",
+        "normalScale": 1.0
+      },
+      "renderQueueOffset": 0,
+      "shader": "MS2026/Toon",
+      "specific": {
+        "_ToonBrightness": 1.0,
+        "_ToonCastShadow": 1.0,
+        "_ToonDepthCompressWeight": 0.0,
+        "_ToonDepthOffset": 0.0,
+        "_ToonFaceShadowWeight": 0.0,
+        "_ToonHairHighlightColor": [
+          1.0,
+          1.0,
+          0.95,
+          1.0
+        ],
+        "_ToonHairHighlightShift": 0.0,
+        "_ToonLightColorInfluence": 1.0,
+        "_ToonMatCapStrength": 0.0,
+        "_ToonOutlineBaseMix": 0.5,
+        "_ToonOutlineBottom": 1.0,
+        "_ToonOutlineColor": [
+          0.28,
+          0.2,
+          0.2,
+          1.0
+        ],
+        "_ToonOutlineDistanceScale": 0.0,
+        "_ToonOutlineRefDistance": 2.0,
+        "_ToonOutlineScreenSpace": 0.0,
+        "_ToonOutlineShadowSide": 1.0,
+        "_ToonOutlineSmoothNormal": 1.0,
+        "_ToonOutlineWidth": 1.0,
+        "_ToonReceiveShadow": 1.0,
+        "_ToonRimColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_ToonRimPower": 4.0,
+        "_ToonRimStrength": 0.0,
+        "_ToonSaturation": 1.0,
+        "_ToonSeeThroughOutline": 0.0,
+        "_ToonShade2Color": [
+          0.6,
+          0.52,
+          0.72,
+          1.0
+        ],
+        "_ToonShade2Strength": 0.0,
+        "_ToonShade2Threshold": 0.25,
+        "_ToonShadeColor": [
+          0.78,
+          0.72,
+          0.86,
+          1.0
+        ],
+        "_ToonShadeFeather": 0.02,
+        "_ToonShadeThreshold": 0.5,
+        "_ToonShadowStrength": 1.0,
+        "_ToonTintColor": [
+          1.0,
+          0.6,
+          0.6,
+          1.0
+        ],
+        "_ToonTintStrength": 0.0
+      }
+    },
+    "mat_wear03": {
+      "common": {
+        "albedo": "assets/shizuku/textures/wear03_d.png",
+        "albedoTint": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "blend": "Opaque",
+        "cutoff": 0.5,
+        "doubleSided": false,
+        "emission": null,
+        "emissionColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "emissionIntensity": 0.0,
+        "normal": "assets/shizuku/textures/wear03_n.png",
+        "normalScale": 1.0
+      },
+      "renderQueueOffset": 0,
+      "shader": "MS2026/Toon",
+      "specific": {
+        "_ToonBrightness": 1.0,
+        "_ToonCastShadow": 1.0,
+        "_ToonDepthCompressWeight": 0.0,
+        "_ToonDepthOffset": 0.0,
+        "_ToonFaceShadowWeight": 0.0,
+        "_ToonHairHighlightColor": [
+          1.0,
+          1.0,
+          0.95,
+          1.0
+        ],
+        "_ToonHairHighlightShift": 0.0,
+        "_ToonLightColorInfluence": 1.0,
+        "_ToonMatCapStrength": 0.0,
+        "_ToonOutlineBaseMix": 0.5,
+        "_ToonOutlineBottom": 1.0,
+        "_ToonOutlineColor": [
+          0.28,
+          0.2,
+          0.2,
+          1.0
+        ],
+        "_ToonOutlineDistanceScale": 0.0,
+        "_ToonOutlineRefDistance": 2.0,
+        "_ToonOutlineScreenSpace": 0.0,
+        "_ToonOutlineShadowSide": 1.0,
+        "_ToonOutlineSmoothNormal": 1.0,
+        "_ToonOutlineWidth": 1.0,
+        "_ToonReceiveShadow": 1.0,
+        "_ToonRimColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_ToonRimPower": 4.0,
+        "_ToonRimStrength": 0.0,
+        "_ToonSaturation": 1.0,
+        "_ToonSeeThroughOutline": 0.0,
+        "_ToonShade2Color": [
+          0.6,
+          0.52,
+          0.72,
+          1.0
+        ],
+        "_ToonShade2Strength": 0.0,
+        "_ToonShade2Threshold": 0.25,
+        "_ToonShadeColor": [
+          0.78,
+          0.72,
+          0.86,
+          1.0
+        ],
+        "_ToonShadeFeather": 0.02,
+        "_ToonShadeThreshold": 0.5,
+        "_ToonShadowStrength": 1.0,
+        "_ToonTintColor": [
+          1.0,
+          0.6,
+          0.6,
+          1.0
+        ],
+        "_ToonTintStrength": 0.0
+      }
+    }
+  },
+  "model": "assets/shizuku/shizuku.mb",
+  "parts": {
+    "faceOption": {
+      "materials": [
+        "mat_faceOption1"
+      ],
+      "role": "mouth"
+    },
+    "hair": {
+      "materials": [
+        "mat_hair01"
+      ],
+      "role": "hair"
+    },
+    "skin": {
+      "materials": [
+        "mat_body01"
+      ],
+      "role": "skin"
+    },
+    "watchLcd": {
+      "materials": [
+        "lambert2"
+      ],
+      "role": "accessory"
+    },
+    "wear01": {
+      "materials": [
+        "mat_wear01"
+      ],
+      "role": "cloth"
+    },
+    "wear02": {
+      "materials": [
+        "mat_wear02"
+      ],
+      "role": "cloth"
+    },
+    "wear03": {
+      "materials": [
+        "mat_wear03"
+      ],
+      "role": "cloth"
+    }
+  },
+  "schemaVersion": 1,
+  "variants": {}
+}
