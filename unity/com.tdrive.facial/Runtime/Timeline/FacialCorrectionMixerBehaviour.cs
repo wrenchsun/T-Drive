@@ -106,6 +106,24 @@ namespace TDrive.Facial.Timeline
                 ov.exaggeration = exSum + (1f - covered);
             }
 
+            // パース補正: 誇張と同じ（「パース補正を使う」のクリップの値を重みで混ぜる。使わないクリップ・クリップのない分は 1）
+            float pcSum = 0f;
+            bool anyPc = false;
+            for (int i = 0; i < count; i++)
+            {
+                FacialCorrectionBehaviour b = Behaviour(playable, i);
+                float w = playable.GetInputWeight(i);
+                if (b == null || w <= 0f) continue;
+                w *= norm;
+                if (b.effUsePerspective) { anyPc = true; pcSum += w * Mathf.Clamp01(b.effPerspective); }
+                else pcSum += w;
+            }
+            if (anyPc)
+            {
+                ov.hasPerspective = true;
+                ov.perspective = pcSum + (1f - covered);
+            }
+
             // 感情の重み: Runner の値を土台に、書いてあるレイヤーだけを重みで寄せる
             FacialCorrectionData data = runner.data;
             int layers = data != null && data.layers != null ? data.layers.Length : 0;

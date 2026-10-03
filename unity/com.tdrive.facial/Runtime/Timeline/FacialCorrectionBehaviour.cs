@@ -66,6 +66,13 @@ namespace TDrive.Facial.Timeline
         [Tooltip("誇張の強さ（0〜1）。1 = 作った通り、0 = 誇張なし（重みを 1 までに収める）")]
         [Range(0f, 1f)] public float exaggeration = 1f;
 
+        [Header("パース補正")]
+        [Tooltip("オンのとき、このクリップの間だけパース補正の強さを下の値にする（.fctrack にパース補正のカーブがあっても、こちらが優先）。オフなら .fctrack のカーブに従う（カーブが無ければ変えない）")]
+        public bool usePerspective;
+
+        [Tooltip("パース補正の強さ（0〜1）。1 = 作った通り、0 = 補正なし")]
+        [Range(0f, 1f)] public float perspective = 1f;
+
         /// <summary>解決した視点（実行時にクリップが入れる。保存されない）。</summary>
         [NonSerialized] public Transform resolvedViewer;
 
@@ -78,6 +85,8 @@ namespace TDrive.Facial.Timeline
         [NonSerialized] public FacialEmotionEntry[] effEmotions;
         [NonSerialized] public bool effUseExaggeration;
         [NonSerialized] public float effExaggeration;
+        [NonSerialized] public bool effUsePerspective;
+        [NonSerialized] public float effPerspective;
         [NonSerialized] public bool effFixAngles;
         [NonSerialized] public float effYaw;
         [NonSerialized] public float effPitch;
@@ -92,6 +101,7 @@ namespace TDrive.Facial.Timeline
         {
             effUseAlpha = useAlpha; effAlpha = alpha;
             effUseExaggeration = useExaggeration; effExaggeration = exaggeration;
+            effUsePerspective = usePerspective; effPerspective = perspective;
             effFixAngles = fixAngles; effYaw = yaw; effPitch = pitch;
             effEmotions = emotions;
             FacialTrackAsset a = track;
@@ -109,6 +119,13 @@ namespace TDrive.Facial.Timeline
             {
                 effUseExaggeration = true;
                 effExaggeration = Mathf.Clamp01(FacialTrackAsset.Sample(a.exaggeration, t, 1f));
+            }
+
+            // パース補正: 「パース補正を使う」がオフのとき .fctrack の perspective（0〜1）を使う（カーブが無ければ従来どおり変えない）
+            if (!usePerspective && a.HasPerspective)
+            {
+                effUsePerspective = true;
+                effPerspective = Mathf.Clamp01(FacialTrackAsset.Sample(a.perspective, t, 1f));
             }
 
             // 角度: useManual > 0.5 のあいだ固定（角度のカーブが無ければ 0）

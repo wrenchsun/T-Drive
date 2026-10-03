@@ -14,7 +14,7 @@ from tdrive_facial.core.model import BoneOffset
 CONF = Path(__file__).parent / "conformance"
 WEIGHT_TOL = 1e-4
 F5_SOURCE = "python-port (F5; UE 未実装)"
-F5_FILES = ("evaluate_sharpness.json", "evaluate_exaggeration.json", "layer_distance.json", "step.json")
+F5_FILES = ("evaluate_sharpness.json", "evaluate_exaggeration.json", "layer_distance.json", "step.json", "perspective.json")
 
 UE_TESTS = {
     "ExactGridPoint", "BilinearCenter", "EmotionBlend", "ZeroWeightSkip", "EdgeFade", "UnbakedPointFailSoft",
@@ -49,7 +49,7 @@ def test_every_file_has_kind_description_and_cases():
         assert {"kind", "description", "cases"} <= set(data), fname
         assert isinstance(data["cases"], list) and data["cases"], fname
         kinds.add(data["kind"])
-    assert kinds == {"evaluate", "view_angles", "scalar", "smooth", "convert", "autofill", "presenter", "step"}
+    assert kinds == {"evaluate", "view_angles", "scalar", "smooth", "convert", "autofill", "presenter", "step", "perspective"}
 
 
 def test_case_names_are_unique_per_file_and_sources_are_marked():
@@ -170,6 +170,21 @@ def test_step(c):
         evaluate, accum = ev.step_gate(accum, st["dt"], c["stepFps"], st.get("force", False))
         assert evaluate == st["expect"]["evaluate"], i
         assert accum == pytest.approx(st["expect"]["accum"], abs=1e-8), i
+
+
+# --- perspective（パース補正。F5-4）---
+
+
+@pytest.mark.parametrize("c", cases_of("perspective"))
+def test_perspective(c):
+    x = math.nan if c["x"] is None else c["x"]
+    base = ev.perspective_weights(c["values"], x)
+    scale = ev.clamp(c.get("strength", 1.0), 0.0, 1.0) * c.get("alpha", 1.0)
+    got = [w * scale for w in base]
+    expect = c["expect"]["weights"]
+    assert len(got) == len(expect)
+    for a, b in zip(got, expect):
+        assert a == pytest.approx(b, abs=WEIGHT_TOL)
 
 
 def test_f5_files_are_marked_and_present():

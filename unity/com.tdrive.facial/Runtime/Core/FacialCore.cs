@@ -193,6 +193,36 @@ namespace TDrive.Facial.Core
         }
 
         /// <summary>
+        /// パース補正のキーの重み（R-34。Python 版 evaluate.perspective_weights と同じ）。values = キーの value（並んでいなくてよい）、
+        /// x = 軸の値、output = 長さ count 以上の配列（先頭 count 個に values と同じ順で書く）。割り当てなし。
+        /// 昇順に並べたとき x を挟む 2 つを直線で混ぜる。範囲の外は端のキーが 1。キー 0 個は何も書かない。1 個は 1。x が NaN は全部 0。
+        /// 同じ value のキーは添字が小さいほうだけが重みを受け取る。value が有限でないキーは常に 0。
+        /// </summary>
+        public static void PerspectiveWeights(IReadOnlyList<double> values, int count, double x, double[] output)
+        {
+            for (int i = 0; i < count; i++) output[i] = 0.0;
+            if (count <= 0 || double.IsNaN(x)) return;
+            int lo = -1, hi = -1, first = -1;
+            for (int i = 0; i < count; i++)
+            {
+                double v = values[i];
+                if (double.IsNaN(v) || double.IsInfinity(v)) continue;
+                bool dup = false;
+                for (int j = 0; j < i; j++) if (values[j] == v) { dup = true; break; }
+                if (dup) continue; // 同じ value は若い添字だけ
+                if (first < 0 || v < values[first]) first = i;
+                if (v <= x) { if (lo < 0 || v > values[lo]) lo = i; }
+                else { if (hi < 0 || v < values[hi]) hi = i; }
+            }
+            if (first < 0) return;
+            if (lo < 0) { output[first] = 1.0; return; } // いちばん小さいキーより下
+            if (hi < 0) { output[lo] = 1.0; return; }    // いちばん大きいキー以上
+            double t = (x - values[lo]) / (values[hi] - values[lo]);
+            output[lo] = 1.0 - t;
+            output[hi] = t;
+        }
+
+        /// <summary>
         /// コマ打ちの判定（R-33）。accum は前回の評価からの経過時間。accum += dt。stepFps &lt;= 0 は (true, 0)。
         /// force（最初のフレーム・カット）か accum が 1/stepFps に届いたら評価する。
         /// </summary>

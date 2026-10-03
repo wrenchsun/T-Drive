@@ -216,10 +216,25 @@
         },
         "perspective": {
           "type": "object",
-          "description": "T-Drive 追加（R-34）。keys の形は F5-4 で決める",
+          "description": "T-Drive 追加（R-34。docs/14 §5.8b）。1 本の軸（distance = 視点と格子の中心の距離 / fov = 縦の画角）に並んだキー。配列の順番がシェイプの番号（FC_<asset>_Persp_K{n}）",
           "properties": {
             "enabled": { "type": "boolean" },
-            "keys": { "type": "array" }
+            "axis": { "enum": ["distance", "fov"], "description": "既定 distance。値の単位は distance = ドキュメントの単位（cm）、fov = 度" },
+            "strength": { "type": "number", "minimum": 0, "maximum": 1, "description": "全体の強さ。既定 1" },
+            "keys": {
+              "type": "array",
+              "maxItems": 8,
+              "items": {
+                "type": "object",
+                "required": ["value"],
+                "properties": {
+                  "value": { "type": "number", "description": "軸の値。distance は 0 より大きい、fov は (0, 180)。同じ値のキーは不可" },
+                  "curves": { "type": "object", "additionalProperties": { "type": "number" }, "description": "シェイプ名 → 重み。基準の姿勢に足すポーズ。空 = 補正なしのキー（シェイプは作らない）" },
+                  "bones": { "type": "object", "description": "ボーン名 → { t, r, s }（点のポーズと同じ形）" }
+                },
+                "additionalProperties": true
+              }
+            }
           },
           "additionalProperties": true
         },

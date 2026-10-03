@@ -122,6 +122,17 @@ namespace TDrive.Facial.Editor
                             "データにあるシェイプ '" + nm + "' がメッシュにありません（その点の補正は飛ばされます。FBX を出し直してください）", nm, null);
                 }
             }
+            // パース補正のシェイプ（使う設定のときだけ。ポーズが空のキーは名前なし）。無ければ角度の補正のシェイプと同じ警告
+            FacialPerspectiveKeyData[] pkeys = data.perspective.keys;
+            if (data.perspective.enabled && pkeys != null)
+                for (int i = 0; i < pkeys.Length; i++)
+                {
+                    string nm = pkeys[i].morphName;
+                    if (string.IsNullOrEmpty(nm) || !FacialNaming.IsFcName(nm) || !expectedShapes.Add(nm)) continue;
+                    if (targetCount > 0 && !meshShapes.Contains(nm))
+                        Add(issues, FacialIssueSeverity.Warning, FacialIssueKind.MissingShape,
+                            "データにあるパース補正のシェイプ '" + nm + "' がメッシュにありません（そのキーの補正は飛ばされます。FBX を出し直してください）", nm, null);
+                }
             string assetPrefix = string.IsNullOrEmpty(data.assetName) ? FacialNaming.FcPrefix : FacialNaming.AssetPrefix(data.assetName);
             for (int i = 0; i < fcShapes.Count; i++)
             {

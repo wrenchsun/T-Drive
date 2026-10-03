@@ -1,0 +1,503 @@
+{
+ "kind": "perspective",
+ "description": "パース補正のキーの重み（R-34、F5-4）。perspective_weights(values, x) × clamp(strength, 0, 1) × alpha。x が null のときは NaN。values は並んでいなくてよく、戻りは入力と同じ順。同じ value は添字が小さいほうだけが重みを受け取る。Python 版で作成（UE 版には無い）",
+ "cases": [
+  {
+   "name": "sorted_between",
+   "source": "python-port (F5; UE 未実装)",
+   "values": [
+    30,
+    50,
+    80
+   ],
+   "x": 40,
+   "expect": {
+    "weights": [
+     0.5,
+     0.5,
+     0
+    ]
+   }
+  },
+  {
+   "name": "sorted_between_upper",
+   "source": "python-port (F5; UE 未実装)",
+   "values": [
+    30,
+    50,
+    80
+   ],
+   "x": 65,
+   "expect": {
+    "weights": [
+     0,
+     0.5,
+     0.5
+    ]
+   }
+  },
+  {
+   "name": "sorted_quarter",
+   "source": "python-port (F5; UE 未実装)",
+   "values": [
+    30,
+    50,
+    80
+   ],
+   "x": 35,
+   "expect": {
+    "weights": [
+     0.75,
+     0.25,
+     0
+    ]
+   }
+  },
+  {
+   "name": "sorted_exactly_first",
+   "source": "python-port (F5; UE 未実装)",
+   "values": [
+    30,
+    50,
+    80
+   ],
+   "x": 30,
+   "expect": {
+    "weights": [
+     1,
+     0,
+     0
+    ]
+   }
+  },
+  {
+   "name": "sorted_exactly_middle",
+   "source": "python-port (F5; UE 未実装)",
+   "values": [
+    30,
+    50,
+    80
+   ],
+   "x": 50,
+   "expect": {
+    "weights": [
+     0,
+     1,
+     0
+    ]
+   }
+  },
+  {
+   "name": "sorted_exactly_last",
+   "source": "python-port (F5; UE 未実装)",
+   "values": [
+    30,
+    50,
+    80
+   ],
+   "x": 80,
+   "expect": {
+    "weights": [
+     0,
+     0,
+     1
+    ]
+   }
+  },
+  {
+   "name": "below_range",
+   "source": "python-port (F5; UE 未実装)",
+   "values": [
+    30,
+    50,
+    80
+   ],
+   "x": 10,
+   "note": "いちばん小さいキーより下は端のキーが 1",
+   "expect": {
+    "weights": [
+     1,
+     0,
+     0
+    ]
+   }
+  },
+  {
+   "name": "above_range",
+   "source": "python-port (F5; UE 未実装)",
+   "values": [
+    30,
+    50,
+    80
+   ],
+   "x": 200,
+   "note": "いちばん大きいキーより上は端のキーが 1",
+   "expect": {
+    "weights": [
+     0,
+     0,
+     1
+    ]
+   }
+  },
+  {
+   "name": "fractional_x",
+   "source": "python-port (F5; UE 未実装)",
+   "values": [
+    30,
+    50
+   ],
+   "x": 33.3,
+   "expect": {
+    "weights": [
+     0.835,
+     0.165
+    ]
+   }
+  },
+  {
+   "name": "unsorted_between",
+   "source": "python-port (F5; UE 未実装)",
+   "values": [
+    80,
+    30,
+    50
+   ],
+   "x": 65,
+   "note": "並んでいなくてよい。戻りは入力の順",
+   "expect": {
+    "weights": [
+     0.5,
+     0,
+     0.5
+    ]
+   }
+  },
+  {
+   "name": "unsorted_quarter",
+   "source": "python-port (F5; UE 未実装)",
+   "values": [
+    80,
+    30,
+    50
+   ],
+   "x": 35,
+   "expect": {
+    "weights": [
+     0,
+     0.75,
+     0.25
+    ]
+   }
+  },
+  {
+   "name": "unsorted_below",
+   "source": "python-port (F5; UE 未実装)",
+   "values": [
+    80,
+    30,
+    50
+   ],
+   "x": 0.5,
+   "expect": {
+    "weights": [
+     0,
+     1,
+     0
+    ]
+   }
+  },
+  {
+   "name": "unsorted_above",
+   "source": "python-port (F5; UE 未実装)",
+   "values": [
+    80,
+    30,
+    50
+   ],
+   "x": 1000,
+   "expect": {
+    "weights": [
+     1,
+     0,
+     0
+    ]
+   }
+  },
+  {
+   "name": "single_key_far",
+   "source": "python-port (F5; UE 未実装)",
+   "values": [
+    30
+   ],
+   "x": 500,
+   "note": "キー 1 個は常に 1",
+   "expect": {
+    "weights": [
+     1
+    ]
+   }
+  },
+  {
+   "name": "single_key_near",
+   "source": "python-port (F5; UE 未実装)",
+   "values": [
+    30
+   ],
+   "x": 1,
+   "expect": {
+    "weights": [
+     1
+    ]
+   }
+  },
+  {
+   "name": "single_key_nan",
+   "source": "python-port (F5; UE 未実装)",
+   "values": [
+    30
+   ],
+   "x": null,
+   "note": "x が NaN（JSON では null）なら 1 個でも 0",
+   "expect": {
+    "weights": [
+     0
+    ]
+   }
+  },
+  {
+   "name": "no_keys",
+   "source": "python-port (F5; UE 未実装)",
+   "values": [],
+   "x": 40,
+   "expect": {
+    "weights": []
+   }
+  },
+  {
+   "name": "nan_x",
+   "source": "python-port (F5; UE 未実装)",
+   "values": [
+    30,
+    50,
+    80
+   ],
+   "x": null,
+   "note": "x が NaN（null）→ 全部 0",
+   "expect": {
+    "weights": [
+     0,
+     0,
+     0
+    ]
+   }
+  },
+  {
+   "name": "duplicate_at_value",
+   "source": "python-port (F5; UE 未実装)",
+   "values": [
+    30,
+    50,
+    50,
+    80
+   ],
+   "x": 50,
+   "note": "同じ value は添字が小さいほうだけが重みを受け取る",
+   "expect": {
+    "weights": [
+     0,
+     1,
+     0,
+     0
+    ]
+   }
+  },
+  {
+   "name": "duplicate_between_lower",
+   "source": "python-port (F5; UE 未実装)",
+   "values": [
+    30,
+    50,
+    50,
+    80
+   ],
+   "x": 40,
+   "expect": {
+    "weights": [
+     0.5,
+     0.5,
+     0,
+     0
+    ]
+   }
+  },
+  {
+   "name": "duplicate_between_upper",
+   "source": "python-port (F5; UE 未実装)",
+   "values": [
+    30,
+    50,
+    50,
+    80
+   ],
+   "x": 65,
+   "expect": {
+    "weights": [
+     0,
+     0.5,
+     0,
+     0.5
+    ]
+   }
+  },
+  {
+   "name": "duplicate_reversed",
+   "source": "python-port (F5; UE 未実装)",
+   "values": [
+    50,
+    30,
+    50
+   ],
+   "x": 100,
+   "expect": {
+    "weights": [
+     1,
+     0,
+     0
+    ]
+   }
+  },
+  {
+   "name": "duplicate_all_same_below",
+   "source": "python-port (F5; UE 未実装)",
+   "values": [
+    50,
+    50
+   ],
+   "x": 10,
+   "expect": {
+    "weights": [
+     1,
+     0
+    ]
+   }
+  },
+  {
+   "name": "duplicate_all_same_above",
+   "source": "python-port (F5; UE 未実装)",
+   "values": [
+    50,
+    50
+   ],
+   "x": 999,
+   "expect": {
+    "weights": [
+     1,
+     0
+    ]
+   }
+  },
+  {
+   "name": "strength_and_alpha",
+   "source": "python-port (F5; UE 未実装)",
+   "values": [
+    30,
+    50
+   ],
+   "x": 40,
+   "strength": 0.5,
+   "alpha": 0.8,
+   "note": "重み × 強さ × 全体の係数 = 0.5 × 0.5 × 0.8",
+   "expect": {
+    "weights": [
+     0.2,
+     0.2
+    ]
+   }
+  },
+  {
+   "name": "strength_clamped_to_one",
+   "source": "python-port (F5; UE 未実装)",
+   "values": [
+    30,
+    50
+   ],
+   "x": 30,
+   "strength": 2,
+   "alpha": 0.5,
+   "note": "強さは 0〜1 に丸める",
+   "expect": {
+    "weights": [
+     0.5,
+     0
+    ]
+   }
+  },
+  {
+   "name": "strength_zero",
+   "source": "python-port (F5; UE 未実装)",
+   "values": [
+    30,
+    50
+   ],
+   "x": 40,
+   "strength": 0,
+   "expect": {
+    "weights": [
+     0,
+     0
+    ]
+   }
+  },
+  {
+   "name": "alpha_zero",
+   "source": "python-port (F5; UE 未実装)",
+   "values": [
+    30,
+    50
+   ],
+   "x": 40,
+   "alpha": 0,
+   "expect": {
+    "weights": [
+     0,
+     0
+    ]
+   }
+  },
+  {
+   "name": "strength_negative_clamped",
+   "source": "python-port (F5; UE 未実装)",
+   "values": [
+    30,
+    50
+   ],
+   "x": 40,
+   "strength": -1,
+   "expect": {
+    "weights": [
+     0,
+     0
+    ]
+   }
+  },
+  {
+   "name": "fov_axis_values",
+   "source": "python-port (F5; UE 未実装)",
+   "values": [
+    20,
+    40,
+    60
+   ],
+   "x": 50,
+   "note": "軸が画角でも計算は同じ（値の単位だけが違う）",
+   "expect": {
+    "weights": [
+     0,
+     0.5,
+     0.5
+    ]
+   }
+  }
+ ]
+}

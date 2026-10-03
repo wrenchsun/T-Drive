@@ -9,6 +9,7 @@ Python（`core/evaluate.py`）と C#（`FacialCore`）が同じファイルを�
 | `evaluate_exaggeration.json` | `evaluate`（`exaggeration`・`exMorphs` 付き） | 誇張シェイプ `_Ex`（R-37） |
 | `layer_distance.json` | `scalar`（`fn: layerWeightFromDistance`） | 距離でレイヤーの重みを決める（R-35） |
 | `step.json` | `step`（新） | コマ打ちの判定（R-33） |
+| `perspective.json` | `perspective`（新） | パース補正のキーの重み（R-34） |
 
 ## evaluate への追加キー
 
@@ -35,3 +36,15 @@ Python（`core/evaluate.py`）と C#（`FacialCore`）が同じファイルを�
 - `step_gate(accum, dt, step_fps, force)`: `accum += dt`。`step_fps <= 0` は `(true, 0)`。`force`（最初のフレーム・カット）か
   `accum + 1e-9 >= 1/step_fps` なら評価する。評価したときの新しい `accum` は `accum % period`（周期ぴったりの誤差で `period - 1e-9` 以内に残ったら 0）。評価しないときは `accum` のまま
 - 比べるもの: `evaluate`（完全一致）、`accum`（許容 1e-8）
+
+## kind: perspective（`perspective_weights`）
+
+```jsonc
+{ "name": "…", "source": "…", "values": [80, 30, 50], "x": 65, "strength": 1, "alpha": 1,
+  "expect": { "weights": [0.5, 0, 0.5] } }
+```
+
+- `values` = キーの value（並んでいなくてよい）。`x` = 軸の値（`null` = NaN）。`strength`（省略 = 1、0〜1 に丸める）、`alpha`（省略 = 1）
+- 期待値 = `perspective_weights(values, x)` × `clamp(strength)` × `alpha`。戻りは `values` と同じ順
+- `perspective_weights`: 重複を除いた value を昇順に並べ、x を挟む 2 つを直線で混ぜる。端の外は端のキーが 1。キー 0 個 → `[]`、
+  1 個 → `[1]`、x が NaN → 全部 0。同じ value のキーは添字が小さいほうだけが重みを受け取る（残りは 0）。有限でない value のキーは常に 0

@@ -1,4 +1,4 @@
-"""画面の状態（Presenter 4 種）。Qt にも Maya にも依存しない状態機械（docs/15 §3.4、R-01 R-04 R-11）。
+"""画面の状態（Presenter 5 種）。Qt にも Maya にも依存しない状態機械（docs/15 §3.4、R-01 R-04 R-11）。
 
 ウィジェット（PySide の薄いビュー）は「描く + 入力を渡す」だけにする。ここが持つのは UE 版の
 `SFacialGridPanel` / `SFacialPosePanel` / `SFacialLayerPanel` / `SFacialWorkingSetPanel`（の絞り込み）と、
@@ -39,10 +39,14 @@ from . import validate as V
 from .evaluate import KINDA_SMALL_NUMBER, GridShape, compute_grid_cell, point_angles
 from .model import (
     MAX_LAYERS,
+    MAX_PERSPECTIVE_KEYS,
+    PERSPECTIVE_AXES,
     BoneOffset,
     Document,
     GridPoint,
     Layer,
+    Perspective,
+    PerspectiveKey,
     PoseDocument,
     SourcePose,
 )
@@ -1804,6 +1808,339 @@ class LayerPresenter(Observable):
 
 
 # ---------------------------------------------------------------------------
+# Presenter: パース補正（R-34。docs/14 §5.8b）
+# ---------------------------------------------------------------------------
+
+PERSPECTIVE_AXIS_LABEL = {"distance": "距離（cm）", "fov": "画角（度）"}
+PERSPECTIVE_BAKE_TEXT = {
+    BAKE_NONE: "ポーズなし（シェイプは作りません）",
+    BAKE_UNKNOWN: "ベイクの状態は不明",
+    BAKE_UNBAKED: "未ベイク",
+    BAKE_CHANGED: "ベイク後に変更あり（再ベイクしてください）",
+    BAKE_BAKED: "ベイク済み",
+}
+PERSPECTIVE_REMOVE_NOTE = (
+    "キーを削除すると、後ろのキーの番号（シェイプ FC_<アセット>_Persp_K{n} の n）が 1 つずつ詰まります。"
+    "詰まった分と、いちばん後ろのシェイプは古いままになるので、削除したあとは再ベイクしてください"
+)
+
+
+@dataclass
+class PerspectiveKeyRow:
+    index: int  # 配列の番号 = シェイプの番号 K{n} の n（0 始まり。表示は +1 でもよい）
+    value: float
+    shape: str  # このキーのシェイプ名（asset が空・ポーズが空なら ""）
+    has_pose: bool  # curves か bones がある（無いキー = 「補正なし」の範囲を作る）
+    curves: int
+    bones: int
+    bake: str  # BAKE_*
+    bake_text: str
+    weight_hint: str  # このキーの値の範囲の説明（一覧の補助）。値が正しくないときは ""
+    valid: bool  # 値が軸に合っていて、同じ値のキーが先にない
+    tooltip: str
+
+
+@dataclass
+class PerspectiveView:
+    present: bool  # doc.perspective がある
+    enabled: bool
+    axis: str
+    axis_label: str
+    value_unit: str  # "cm" | "度"
+    strength: float
+    keys: list[PerspectiveKeyRow]
+    count: int
+    limit: int
+    can_add: bool
+    suggested_value: float  # 「キーを足す」の初期値の提案
+    remove_note: str
+    summary: str
+
+
+@dataclass
+class PerspectiveResult(CommandResult):
+    index: Optional[int] = None
+
+
+class PerspectivePresenter(Observable):
+    """パース補正の設定（使う / 軸 / 強さ）とキー（値・ポーズ）の編集。どれも「1 回の呼び出し = 1 つの確定した変更」で、
+    失敗は Document を変えない（Undo は他の Presenter と同じ、呼び出し側のスナップショット方式）。
+    キーの番号 = シェイプ番号なので、削除は本当の削除（後ろのキーの番号が詰まる）。詰まったあとの古いシェイプは
+    validate が「ベイク後に変更」「孤立」として報告し、再ベイクで直る。"""
+
+    def __init__(self, ctx: EditContext) -> None:
+        super().__init__()
+        self.ctx = ctx
+        ctx.subscribe(self._on_ctx)
+
+    def _on_ctx(self, event: str) -> None:
+        if event in ("document", "bake", "scene"):
+            self._emit("perspective")
+
+    @property
+    def doc(self) -> Document:
+        return self.ctx.doc
+
+    def _ensure(self) -> Perspective:
+        if self.doc.perspective is None:
+            self.doc.perspective = Perspective()
+        return self.doc.perspective
+
+    @property
+    def axis(self) -> str:
+        p = self.doc.perspective
+        return p.axis if p is not None else "distance"
+
+    def _range(self, index: int) -> Optional[PerspectiveResult]:
+        p = self.doc.perspective
+        if p is None or not 0 <= index < len(p.keys):
+            return _fail("range", "パース補正のキーが範囲外です", PerspectiveResult)
+        return None
+
+    def check_value(self, value, ignore_index: Optional[int] = None) -> PerspectiveResult:
+        """キーの値の検査（有限の数・軸に合う範囲・ほかのキーと重ならない）。ok なら index は None。"""
+        axis = self.axis
+        try:
+            v = float(value)
+        except (TypeError, ValueError):
+            return _fail("value", "値は数で入力してください", PerspectiveResult)
+        if not V.perspective_value_ok(axis, v):
+            msg = "画角は 0 より大きく 180 より小さい度にしてください" if axis == "fov" else "距離は 0 より大きい数（cm）にしてください"
+            return _fail("value", msg, PerspectiveResult)
+        p = self.doc.perspective
+        for i, k in enumerate(p.keys if p is not None else ()):
+            if i != ignore_index and k.value == v:
+                return _fail("duplicate", f"値 {v:g} のキーがすでにあります（同じ値のキーは使えません）", PerspectiveResult, index=i)
+        return PerspectiveResult()
+
+    def suggest_value(self) -> float:
+        """「キーを足す」の初期値の提案（今のキーと重ならない値）。距離 = 30 cm から 50 cm ずつ、画角 = 30° から 15° ずつ。"""
+        p = self.doc.perspective
+        used = {k.value for k in p.keys} if p is not None else set()
+        step, v = (15.0, 30.0) if self.axis == "fov" else (50.0, 30.0)
+        while v in used:
+            v += step
+        return v
+
+    # --- 設定 ---
+
+    def set_enabled(self, enabled: bool) -> PerspectiveResult:
+        with self.ctx.edit():
+            self._ensure().enabled = bool(enabled)
+        return PerspectiveResult()
+
+    def set_axis(self, axis: str) -> PerspectiveResult:
+        """軸を変える（distance / fov）。キーの値の数字はそのまま残る（単位が変わるので、値を見直す）。"""
+        if axis not in PERSPECTIVE_AXES:
+            return _fail("axis", f"軸は {' / '.join(PERSPECTIVE_AXES)} のどちらかです", PerspectiveResult)
+        if axis == self.axis and self.doc.perspective is not None:
+            return PerspectiveResult(code="unchanged")
+        with self.ctx.edit():
+            self._ensure().axis = axis
+        p = self.doc.perspective
+        msg = f"軸を「{PERSPECTIVE_AXIS_LABEL[axis]}」にしました。キーの値の数字はそのままなので、値を見直してください" if p.keys else ""
+        if any(not V.perspective_value_ok(axis, k.value) for k in p.keys):
+            msg += "（軸に合わない値のキーがあります）"
+        return PerspectiveResult(message=msg)
+
+    def set_strength(self, strength: float) -> PerspectiveResult:
+        """パース補正の強さ（0〜1）。範囲外は失敗。"""
+        try:
+            s = float(strength)
+        except (TypeError, ValueError):
+            return _fail("strength", "強さは数で入力してください", PerspectiveResult)
+        if not (math.isfinite(s) and 0.0 <= s <= 1.0):
+            return _fail("strength", "強さは 0〜1 にしてください", PerspectiveResult)
+        with self.ctx.edit():
+            self._ensure().strength = s
+        return PerspectiveResult()
+
+    # --- キー ---
+
+    @property
+    def can_add(self) -> bool:
+        p = self.doc.perspective
+        return (len(p.keys) if p is not None else 0) < MAX_PERSPECTIVE_KEYS
+
+    def add_key(self, value: float, pose: Optional[SourcePose] = None) -> PerspectiveResult:
+        """キーを足す（配列の最後。番号 = 今のキーの数。ポーズは空か、渡したポーズの複製）。最大 8 個。"""
+        if not self.can_add:
+            return _fail("limit", f"パース補正のキーは最大 {MAX_PERSPECTIVE_KEYS} 個です", PerspectiveResult)
+        chk = self.check_value(value)
+        if not chk.ok:
+            return chk
+        key = PerspectiveKey(value=float(value))
+        if pose is not None:
+            t = trim_pose(pose)
+            key.curves, key.bones = t.curves, t.bones
+        with self.ctx.edit():
+            self._ensure().keys.append(key)
+        return PerspectiveResult(index=len(self.doc.perspective.keys) - 1, message=f"パース補正のキー（値 {key.value:g}）を足しました")
+
+    def set_value(self, index: int, value: float) -> PerspectiveResult:
+        """キーの値を変える（番号・ポーズは変わらない = 焼き直し不要）。"""
+        bad = self._range(index)
+        if bad:
+            return bad
+        chk = self.check_value(value, ignore_index=index)
+        if not chk.ok:
+            if chk.index is None:
+                chk.index = index
+            return chk
+        key = self.doc.perspective.keys[index]
+        if key.value == float(value):
+            return PerspectiveResult(code="unchanged", index=index)
+        with self.ctx.edit():
+            key.value = float(value)
+        return PerspectiveResult(index=index)
+
+    def remove_key(self, index: int) -> PerspectiveResult:
+        """キーを本当に削除する。後ろのキーの番号が 1 つ詰まるので、それらのベイク済みシェイプは古くなる
+        （validate が「ベイク後に変更」で報告。いちばん後ろの番号のシェイプは孤立になり stale_morphs に入る）。再ベイクで直る。"""
+        bad = self._range(index)
+        if bad:
+            return bad
+        p = self.doc.perspective
+        n_before = len(p.keys)
+        value = p.keys[index].value
+        last = naming.perspective_name(self.doc.asset or "", n_before - 1) if self.doc.asset else ""
+        known = _known_morphs(self.ctx)
+        stale = [last] if last and known is not None and last in known else []
+        with self.ctx.edit():
+            del p.keys[index]
+        later = n_before - 1 - index
+        msg = f"パース補正のキー（値 {value:g}）を削除しました"
+        if later > 0:
+            msg += f"。後ろの {later} 個のキーの番号が詰まったので、再ベイクしてください"
+        return PerspectiveResult(index=index, message=msg, stale_morphs=stale)
+
+    # --- キーのポーズ ---
+
+    def key_pose(self, index: int) -> SourcePose:
+        """キーのポーズの複製（編集用）。範囲外は空のポーズ。"""
+        p = self.doc.perspective
+        if p is None or not 0 <= index < len(p.keys):
+            return SourcePose()
+        k = p.keys[index]
+        return SourcePose(curves=dict(k.curves), bones=copy.deepcopy(k.bones))
+
+    def set_key_pose(self, index: int, pose: SourcePose) -> PerspectiveResult:
+        """キーのポーズを置き換える（ほぼ 0 のシェイプ・恒等のボーンは捨てる）。変わらなければ code="unchanged"（Document は変えない）。
+        ベイク済みなら「ベイク後に変更」になる。"""
+        bad = self._range(index)
+        if bad:
+            return bad
+        key = self.doc.perspective.keys[index]
+        t = trim_pose(pose)
+        if poses_equal(key.pose, t):
+            return PerspectiveResult(code="unchanged", index=index)
+        with self.ctx.edit():
+            key.curves, key.bones = t.curves, t.bones
+        return PerspectiveResult(index=index)
+
+    def clear_key_pose(self, index: int) -> PerspectiveResult:
+        """キーのポーズを空にする（「補正なし」のキーにする。シェイプは要らなくなり、焼いたものは孤立 → 再ベイクで掃除）。"""
+        return self.set_key_pose(index, SourcePose())
+
+    # --- 表示 ---
+
+    def bake_status(self, index: int) -> str:
+        """キーのベイクの状態（BAKE_*）。空のキーは BAKE_NONE、bake_state / asset が無ければ BAKE_UNKNOWN。"""
+        p = self.doc.perspective
+        if p is None or not 0 <= index < len(p.keys) or p.keys[index].is_empty():
+            return BAKE_NONE
+        ctx = self.ctx
+        bs = ctx.bake_state
+        if bs is None or not self.doc.asset:
+            return BAKE_UNKNOWN
+        morph = naming.perspective_name(self.doc.asset, index)
+        targets = ctx.scene.targets if ctx.scene is not None else None
+        h = bs.get(morph)
+        if h is None or (targets is not None and morph not in set(targets)):
+            return BAKE_UNBAKED
+        if h != V.perspective_key_hash(p.keys[index]):
+            return BAKE_CHANGED
+        be = ctx.bake_exclude
+        if be and be.get(morph, V.exclude_signature(self.doc)) != V.exclude_signature(self.doc):
+            return BAKE_CHANGED
+        return BAKE_BAKED
+
+    def _hint(self, index: int) -> str:
+        p = self.doc.perspective
+        vals = [k.value for k in p.keys]
+        v = vals[index]
+        if not V.perspective_value_ok(p.axis, v):
+            return ""
+        if any(vals[j] == v for j in range(index)):
+            return "同じ値のキーが先にあり、このキーは使われません"
+        unit = "°" if p.axis == "fov" else " cm"
+        ok = sorted({x for x in vals if V.perspective_value_ok(p.axis, x)})
+        if len(ok) == 1:
+            return "いつもこのキーのポーズ"
+        pos = ok.index(v)
+        lo = f"{ok[pos - 1]:g}{unit}" if pos > 0 else None
+        hi = f"{ok[pos + 1]:g}{unit}" if pos < len(ok) - 1 else None
+        if lo is None:
+            return f"{v:g}{unit} より小さい範囲はこのキーのまま、{hi} に向けて次のキーと混ざる"
+        if hi is None:
+            return f"{v:g}{unit} より大きい範囲はこのキーのまま、{lo} に向けて前のキーと混ざる"
+        return f"{lo} と {hi} の間で、前後のキーと混ざる"
+
+    def view(self) -> PerspectiveView:
+        p = self.doc.perspective
+        axis = p.axis if p is not None else "distance"
+        rows: list[PerspectiveKeyRow] = []
+        asset = self.doc.asset or ""
+        seen: set[float] = set()
+        for i, k in enumerate(p.keys if p is not None else ()):
+            ok = V.perspective_value_ok(axis, k.value) and k.value not in seen
+            seen.add(k.value)
+            bake = self.bake_status(i)
+            has_pose = not k.is_empty()
+            tip = (
+                f"キー {i + 1}（シェイプ番号 K{i}）。値は軸の値、ポーズは基準の姿勢に足す形です。"
+                + ("ポーズが空のキーは「補正なし」の範囲を作ります（シェイプは作りません）。" if not has_pose else "")
+                + "削除すると後ろのキーの番号が詰まるので、再ベイクが要ります。"
+            )
+            rows.append(
+                PerspectiveKeyRow(
+                    index=i,
+                    value=k.value,
+                    shape=naming.perspective_name(asset, i) if asset and has_pose else "",
+                    has_pose=has_pose,
+                    curves=len(k.curves),
+                    bones=len(k.bones),
+                    bake=bake,
+                    bake_text=PERSPECTIVE_BAKE_TEXT[bake],
+                    weight_hint=self._hint(i),
+                    valid=ok,
+                    tooltip=tip,
+                )
+            )
+        n = len(rows)
+        enabled = bool(p.enabled) if p is not None else False
+        if n == 0:
+            summary = "キーがありません（パース補正は何もしません）"
+        else:
+            summary = f"キー {n} / {MAX_PERSPECTIVE_KEYS}" + ("" if enabled else "（使わない設定です）")
+        return PerspectiveView(
+            present=p is not None,
+            enabled=enabled,
+            axis=axis,
+            axis_label=PERSPECTIVE_AXIS_LABEL.get(axis, axis),
+            value_unit="度" if axis == "fov" else "cm",
+            strength=p.strength if p is not None else 1.0,
+            keys=rows,
+            count=n,
+            limit=MAX_PERSPECTIVE_KEYS,
+            can_add=self.can_add,
+            suggested_value=self.suggest_value(),
+            remove_note=PERSPECTIVE_REMOVE_NOTE,
+            summary=summary,
+        )
+
+
+# ---------------------------------------------------------------------------
 # Presenter 4: 検証
 # ---------------------------------------------------------------------------
 
@@ -2077,6 +2414,7 @@ class PresenterSet:
         self.grid = GridPresenter(self.ctx)
         self.layers = LayerPresenter(self.ctx)
         self.validation = ValidationPresenter(self.ctx)
+        self.perspective = PerspectivePresenter(self.ctx)
 
 
 __all__: Sequence[str] = (
@@ -2088,6 +2426,10 @@ __all__: Sequence[str] = (
     "PosePresenter",
     "LayerPresenter",
     "ValidationPresenter",
+    "PerspectivePresenter",
+    "PerspectiveView",
+    "PerspectiveKeyRow",
+    "PerspectiveResult",
     "CommandResult",
     "GenerateResult",
     "ResizeResult",

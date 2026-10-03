@@ -120,6 +120,15 @@ namespace TDrive.Facial
                 sb.Append("  Step ").Append(r.LastStepFps.ToString("F1")).Append("fps ").Append(r.StepHolding ? "[HOLD]" : "[EVAL]").Append('\n');
             if (r.LastSharpness != 1f || r.LastExaggeration < 0.9999f)
                 sb.Append("  Sharp ").Append(r.LastSharpness.ToString("F2")).Append("  Exag ").Append(r.LastExaggeration.ToString("F2")).Append('\n');
+            if (r.PerspectiveActive)
+            {
+                sb.Append("  Persp ").Append(r.data.perspective.axis == FacialPerspectiveAxis.Fov ? "fov " : "dist ");
+                if (float.IsNaN(r.LastPerspectiveAxisValue)) sb.Append("n/a");
+                else sb.Append(r.LastPerspectiveAxisValue.ToString("F2")).Append(r.data.perspective.axis == FacialPerspectiveAxis.Fov ? "deg" : "m");
+                sb.Append("  Str ").Append(r.LastPerspectiveStrength.ToString("F2")).Append("  W");
+                for (int k = 0; k < r.PerspectiveKeyCount; k++) sb.Append(k == 0 ? " " : "/").Append(r.GetPerspectiveKeyWeight(k).ToString("F2"));
+                sb.Append('\n');
+            }
             sb.Append("  Viewer ").Append(r.LastViewerSource.ToString());
             if (r.LastViewer != null) sb.Append(" (").Append(r.LastViewer.name).Append(')');
             else if (r.LastViewerSource == FacialViewerSource.Fallback) sb.Append(" (provider)");

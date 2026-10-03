@@ -85,6 +85,8 @@ namespace TDrive.Facial.Editor
                 hasExaggeration = true,
             };
 
+            data.perspective = BuildPerspective(doc, asset, cv, warn);
+
             // レイヤー: 作った点だけシェイプ名を持つ（名前は規則から決まる）。格子の外の点は使わない
             int cols = Math.Max(0, doc.Grid.Cols), rows = Math.Max(0, doc.Grid.Rows);
             var layers = new FacialLayerData[doc.Layers.Count];
@@ -147,6 +149,36 @@ namespace TDrive.Facial.Editor
             data.source = SourceInfo(doc.Meta, doc.Version, doc.Profile, doc.Grid.ForwardAxis, doc.Grid.CenterOffset,
                 doc.Policy.FadeStart, doc.Policy.FadeEnd);
             return data;
+        }
+
+        // パース補正: 距離の値は meta の長さの単位 → m（距離フェード・距離のレイヤーと同じ変換）。画角（度）はそのまま。
+        // シェイプ名は配列の番号 n から FC_<asset>_Persp_K{n}。ポーズが空のキーは名前なし（値だけが重みの境目になる）
+        static FacialPerspectiveData BuildPerspective(FcDocument doc, string asset, SpaceConverter cv, Action<string> warn)
+        {
+            FcPerspective src = doc.Perspective;
+            if (src == null) return new FacialPerspectiveData { enabled = false, strength = 1f, keys = new FacialPerspectiveKeyData[0] };
+            var axis = FacialPerspectiveAxis.Distance;
+            if (string.Equals(src.Axis, FcPerspective.AxisFov, StringComparison.Ordinal)) axis = FacialPerspectiveAxis.Fov;
+            else if (!string.Equals(src.Axis, FcPerspective.AxisDistance, StringComparison.Ordinal) && warn != null)
+                warn("perspective.axis '" + src.Axis + "' は未知なので distance として扱います");
+            double scale = axis == FacialPerspectiveAxis.Distance ? cv.Scale : 1.0;
+            var keys = new FacialPerspectiveKeyData[src.Keys.Count];
+            for (int i = 0; i < keys.Length; i++)
+            {
+                FcPerspectiveKey k = src.Keys[i];
+                keys[i] = new FacialPerspectiveKeyData
+                {
+                    value = (float)(k.Value * scale),
+                    morphName = k.IsEmpty ? "" : FacialNaming.PerspectiveName(asset, i),
+                };
+            }
+            return new FacialPerspectiveData
+            {
+                enabled = src.Enabled,
+                axis = axis,
+                strength = (float)FacialCore.Clamp(src.Strength, 0.0, 1.0),
+                keys = keys,
+            };
         }
 
         /// <summary>JSON 文字列 → FacialPoseAsset（FacialCorrection だと例外）。</summary>

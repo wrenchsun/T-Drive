@@ -16,6 +16,7 @@
   - `exaggeration` カーブを含む `.fctrack` は、古い版のパッケージでは読めない
 
 ### 追加
+- F5-4: パース補正（距離 / 画角の軸のキー。`FC_<asset>_Persp_K{n}` を角度の補正に足す）。調整値「パース補正の強さ」、Timeline のクリップ「パース補正を使う」、`.fctrack` の固定カーブ `perspective`。`.fcpose` / `.fctrack` の取り込みの版を上げた（再取り込みされる）
 - FU-0: パッケージ雛形（asmdef・README）
 - FU-1: `TDrive.Facial.Core`（FacialCore / FacialSpace）と共通テストデータの EditMode テスト
 - E-2 / E-3 / U-3: 持ち主ごとの持続する上書き `SetOverride` / `ClearOverride` / `ClearAllOverrides`（`PushOverride` は互換で残る）。Timeline の Mixer は持続させ、クリップの無い区間・グラフ終了・無効化で消す

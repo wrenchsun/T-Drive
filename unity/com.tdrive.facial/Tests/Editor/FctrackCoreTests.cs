@@ -98,6 +98,18 @@ namespace TDrive.Facial.Tests
             "\"curves\":{\"exaggeration\":[[0.0,1.0],[1.0,0.25]]}}";
 
         [Test]
+        public void PerspectiveIsAnOptionalFixedCurve()
+        {
+            const string json = "{\"format\":\"FacialTrack\",\"version\":1,\"shot\":\"S010\",\"model\":\"shizuku\",\"frameRate\":30,\"range\":[0,60]," +
+                "\"curves\":{\"perspective\":[[0.0,0.0],[1.0,1.0]]}}";
+            FcTrack t = FctrackReader.Read(json);
+            Assert.AreEqual(2, t.Curves[FctrackReader.PerspectiveCurve].Count);
+            Assert.AreEqual("perspective", FctrackReader.PerspectiveCurve);
+            Assert.Contains("perspective", FctrackReader.FixedCurves);
+            Assert.IsFalse(FctrackReader.Read(Good).Curves.ContainsKey("perspective"));
+        }
+
+        [Test]
         public void ExaggerationIsAnOptionalFixedCurve()
         {
             FcTrack t = FctrackReader.Read(WithExaggeration);

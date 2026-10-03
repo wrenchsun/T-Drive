@@ -144,6 +144,14 @@ namespace TDrive.Facial.Editor
                 EditorGUILayout.LabelField("コマ打ち", r.LastStepFps.ToString("0.##") + " fps" + (r.StepHolding ? "（このフレームは保持）" : "（このフレームは更新）"));
             if (r.LastExaggeration < 0.9999f)
                 EditorGUILayout.LabelField("誇張", r.LastExaggeration.ToString("0.##"));
+            if (r.PerspectiveActive)
+            {
+                bool fov = r.data.perspective.axis == FacialPerspectiveAxis.Fov;
+                float v = r.LastPerspectiveAxisValue;
+                string axisText = float.IsNaN(v) ? "（視点または画角が分からないため補正なし）" : (fov ? v.ToString("0.#") + " 度" : v.ToString("0.###") + " m");
+                EditorGUILayout.LabelField(fov ? "パース補正の軸（画角）" : "パース補正の軸（距離）", axisText);
+                EditorGUILayout.LabelField("パース補正の強さ", r.LastPerspectiveStrength.ToString("0.##"));
+            }
             if (r.ActiveWeightCount > 0)
             {
                 _foldWeights = EditorGUILayout.Foldout(_foldWeights, "今の重み（0〜100）", true);

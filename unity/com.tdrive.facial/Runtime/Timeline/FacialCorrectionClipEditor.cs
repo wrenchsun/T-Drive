@@ -59,6 +59,11 @@ namespace TDrive.Facial.Timeline
             using (new EditorGUI.DisabledScope(!t.FindPropertyRelative("useExaggeration").boolValue))
                 Field(t, "exaggeration", "誇張（0〜1）", "1 = 作った通り、0 = 誇張なし。_Ex の無いキャラクターでは変化なし。重なったクリップは重みで混ざる");
 
+            Section("パース補正");
+            Toggle(t, "usePerspective", "パース補正を使う", "オンのとき、このクリップの間だけパース補正の強さを下の値にする。オフのときは .fctrack のパース補正のカーブに従う（無ければ変えない）");
+            using (new EditorGUI.DisabledScope(!t.FindPropertyRelative("usePerspective").boolValue))
+                Field(t, "perspective", "パース補正の強さ（0〜1）", "1 = 作った通り、0 = 補正なし。パース補正を使っていないキャラクターでは変化なし。重なったクリップは重みで混ざる");
+
             serializedObject.ApplyModifiedProperties();
         }
 

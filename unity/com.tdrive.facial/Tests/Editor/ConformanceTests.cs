@@ -15,7 +15,7 @@ namespace TDrive.Facial.Tests
     public static class ConformanceData
     {
         public const string EnvVar = "TDRIVE_CONFORMANCE_DIR";
-        static readonly string[] KnownKinds = { "evaluate", "view_angles", "scalar", "smooth", "convert", "step" };
+        static readonly string[] KnownKinds = { "evaluate", "view_angles", "scalar", "smooth", "convert", "step", "perspective" };
         // Python 版だけが使う kind（C# には対応する実装が無い）。ここに無い kind は失敗にする（新しい kind の取りこぼしを防ぐ）
         static readonly string[] PythonOnlyKinds = { "autofill", "presenter" };
 
@@ -315,6 +315,27 @@ namespace TDrive.Facial.Tests
             }
         }
 
+        // --- perspective（パース補正。F5-4）---
+
+        [TestCaseSource(typeof(ConformanceData), "Of", new object[] { "perspective" })]
+        public void Perspective(ConformanceData.Case c)
+        {
+            RequireDir(c);
+            Obj d = c.Data;
+            List<object> vl = A(d["values"]);
+            var values = new double[vl.Count];
+            for (int i = 0; i < values.Length; i++) values[i] = Num(vl[i]);
+            object xo;
+            double x = d.TryGetValue("x", out xo) && xo != null ? Num(xo) : double.NaN; // null = NaN
+            var got = new double[values.Length];
+            FacialCore.PerspectiveWeights(values, values.Length, x, got);
+            double scale = FacialCore.Clamp(NumOr(d, "strength", 1.0), 0.0, 1.0) * NumOr(d, "alpha", 1.0);
+            List<object> expect = A(O(d["expect"])["weights"]);
+            Assert.AreEqual(expect.Count, got.Length, c.ToString());
+            for (int i = 0; i < got.Length; i++)
+                Assert.That(got[i] * scale, Is.EqualTo(Num(expect[i])).Within(1e-4), c + " [" + i + "]");
+        }
+
         // --- smooth ---
 
         static List<MorphWeight> Weights(object list)
@@ -410,7 +431,7 @@ namespace TDrive.Facial.Tests
         {
             Assert.That(ConformanceData.Error, Is.Null);
             TestContext.Out.WriteLine("conformance dir: " + ConformanceData.Directory);
-            foreach (string k in new[] { "evaluate", "view_angles", "scalar", "smooth", "convert", "step" })
+            foreach (string k in new[] { "evaluate", "view_angles", "scalar", "smooth", "convert", "step", "perspective" })
             {
                 TestContext.Out.WriteLine("kind " + k + ": " + ConformanceData.Count(k) + " cases");
                 Assert.That(ConformanceData.Count(k), Is.GreaterThan(0), k);

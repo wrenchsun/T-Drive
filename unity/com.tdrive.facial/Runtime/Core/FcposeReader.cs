@@ -214,6 +214,39 @@ namespace TDrive.Facial.Core
             return layer;
         }
 
+        static FcPerspective ReadPerspective(Dictionary<string, object> d, Action<string> warn)
+        {
+            var p = new FcPerspective
+            {
+                Enabled = B(d, "enabled", false),
+                Axis = Str(d, "axis", FcPerspective.AxisDistance),
+                Strength = F(d, "strength", 1.0),
+            };
+            object kv;
+            var keys = d.TryGetValue("keys", out kv) ? kv as List<object> : null;
+            if (keys == null) return p;
+            for (int i = 0; i < keys.Count; i++)
+            {
+                var kd = keys[i] as Dictionary<string, object>;
+                if (kd == null)
+                {
+                    if (warn != null) warn("オブジェクトでないパース補正のキーを読み飛ばしました");
+                    continue;
+                }
+                object vv;
+                if (!(kd.TryGetValue("value", out vv) && IsNum(vv)))
+                {
+                    if (warn != null) warn("value が数でないパース補正のキーを読み飛ばしました");
+                    continue;
+                }
+                object curves, bones;
+                kd.TryGetValue("curves", out curves);
+                kd.TryGetValue("bones", out bones);
+                p.Keys.Add(new FcPerspectiveKey { Value = (double)vv, Pose = ReadPose(curves, bones) });
+            }
+            return p;
+        }
+
         static FcDocument ReadDocument(Dictionary<string, object> d, Action<string> warn)
         {
             var doc = new FcDocument();
@@ -299,6 +332,8 @@ namespace TDrive.Facial.Core
                     Exaggeration = F(q, "exaggeration", def.Exaggeration),
                 };
             }
+            Dictionary<string, object> ps = Obj(d, "perspective");
+            if (ps != null) doc.Perspective = ReadPerspective(ps, warn);
             Dictionary<string, object> lw = Obj(d, "layerWeights");
             if (lw != null)
                 foreach (KeyValuePair<string, object> kv in lw)

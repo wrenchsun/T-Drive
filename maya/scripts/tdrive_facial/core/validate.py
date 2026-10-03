@@ -24,7 +24,17 @@ from typing import Collection, Iterable, Mapping, Optional, Sequence
 
 from . import naming
 from . import space
-from .model import FILL_MODES, FORWARD_AXES, MAX_LAYERS, MIRROR_AXES, Document, SourcePose
+from .model import (
+    FILL_MODES,
+    FORWARD_AXES,
+    MAX_LAYERS,
+    MAX_PERSPECTIVE_KEYS,
+    MIRROR_AXES,
+    PERSPECTIVE_AXES,
+    Document,
+    PerspectiveKey,
+    SourcePose,
+)
 from .profile import (
     DEFAULT_LIMIT,
     NamingProfile,
@@ -68,6 +78,7 @@ class Issue:
     name: str = ""
     suggestion: str = ""
     candidates: tuple[str, ...] = ()
+    key: Optional[int] = None  # パース補正のキーの番号（キーの問題のとき。シェイプ名の K{n} の n）
 
 
 @dataclass
@@ -132,6 +143,12 @@ def pose_hash(pose: SourcePose) -> str:
         bones.append((name, t, r, s))
     payload = repr((curves, bones)).encode("utf-8")
     return hashlib.sha1(payload).hexdigest()
+
+
+def perspective_key_hash(key: PerspectiveKey) -> str:
+    """パース補正のキー 1 個の「ベイク時のポーズ」の指紋（`pose_hash` と同じ規則。value は含めない = 値を変えても焼き直し不要）。
+    bake_state の `FC_<asset>_Persp_K{n}` → この値を記録し、validate が今のキーと比べる。"""
+    return pose_hash(key.pose)
 
 
 # ---------------------------------------------------------------------------
@@ -277,6 +294,7 @@ def validate(
     _check_grid(doc, scene, add)
     _check_layers(doc, add)
     _check_layer_weights(doc, add)
+    _check_perspective(doc, add)
 
     # --- 参照（シェイプ・ボーン）---
     curve_refs, bone_refs = _collect_refs(doc)
@@ -311,6 +329,8 @@ def validate(
     # --- ベイク・ターゲット ---
     if asset:
         _check_bake(doc, scene, bake_state, add, bake_exclude)
+        if bake_state is not None:
+            _check_perspective_bake(doc, scene, bake_state, add, bake_exclude)
         _check_targets(doc, scene, add)
     return issues
 
@@ -556,6 +576,73 @@ def _check_layers(doc: Document, add) -> None:
         )
 
 
+def _iter_perspective(doc: Document):
+    """(キーの番号, キー)。パース補正が無ければ空。"""
+    if doc.perspective is not None:
+        yield from enumerate(doc.perspective.keys)
+
+
+def _key_label(k: int, key: PerspectiveKey) -> str:
+    return f"パース補正のキー {k + 1}（値 {_fmt(key.value)}）"
+
+
+def perspective_value_ok(axis: str, value: float) -> bool:
+    """キーの value が軸に合っているか。distance は 0 より大きい有限の数、fov は (0, 180) の度。"""
+    if not (isinstance(value, (int, float)) and math.isfinite(value)):
+        return False
+    return 0.0 < value < 180.0 if axis == "fov" else value > 0.0
+
+
+def _check_perspective(doc: Document, add) -> None:
+    """パース補正（R-34）の構造: 軸・強さ・キーの数と値・同じ値のキー。"""
+    p = doc.perspective
+    if p is None:
+        return
+    if p.axis not in PERSPECTIVE_AXES:
+        add(
+            Issue(
+                "perspective_axis_invalid",
+                SEVERITY_ERROR,
+                f"パース補正の軸「{p.axis}」は使えません（{' / '.join(PERSPECTIVE_AXES)}）",
+                name=p.axis,
+                suggestion="distance",
+            )
+        )
+    if not (isinstance(p.strength, (int, float)) and math.isfinite(p.strength) and 0.0 <= p.strength <= 1.0):
+        add(Issue("perspective_strength_invalid", SEVERITY_WARNING, f"パース補正の強さ {_fmt(p.strength)} が範囲外です（0〜1。範囲に丸めて使います）"))
+    if len(p.keys) > MAX_PERSPECTIVE_KEYS:
+        add(
+            Issue(
+                "perspective_key_count_exceeded",
+                SEVERITY_ERROR,
+                f"パース補正のキーが {len(p.keys)} 個あります（最大 {MAX_PERSPECTIVE_KEYS}）",
+            )
+        )
+    seen: dict[float, int] = {}
+    for k, key in enumerate(p.keys):
+        if not perspective_value_ok(p.axis, key.value):
+            if not (isinstance(key.value, (int, float)) and math.isfinite(key.value)):
+                why = "有限の数ではありません"
+            elif p.axis == "fov":
+                why = "画角は 0 より大きく 180 より小さい度にしてください"
+            else:
+                why = "距離は 0 より大きい数にしてください"
+            add(Issue("perspective_key_value_invalid", SEVERITY_ERROR, f"{_key_label(k, key)} の値が正しくありません（{why}）", key=k))
+            continue
+        if key.value in seen:
+            add(
+                Issue(
+                    "perspective_key_duplicate",
+                    SEVERITY_ERROR,
+                    f"パース補正のキー {k + 1} は、キー {seen[key.value] + 1} と同じ値（{_fmt(key.value)}）です。"
+                    "同じ値のキーは使えません（若い番号のキーだけが効きます）",
+                    key=k,
+                )
+            )
+        else:
+            seen[key.value] = k
+
+
 # --- 参照 ---
 
 _Loc = Optional[tuple[int, tuple[int, int]]]  # (layer index, (row, col))。作業セットなど点以外は None
@@ -595,6 +682,11 @@ def _collect_refs(doc: Document) -> tuple[dict[str, list[_Loc]], dict[str, list[
             curves.setdefault(n, []).append((li, rc))
         for n in pt.pose.bones:
             bones.setdefault(n, []).append((li, rc))
+    for _k, key in _iter_perspective(doc):
+        for n in key.curves:
+            curves.setdefault(n, []).append(None)
+        for n in key.bones:
+            bones.setdefault(n, []).append(None)
     for n in doc.working_set.curves:
         curves.setdefault(n, []).append(None)
     for n in doc.intensity_curves:
@@ -759,6 +851,21 @@ def _check_limits(doc: Document, profile: Optional[NamingProfile], add) -> None:
                 )
 
 
+    for k, key in _iter_perspective(doc):
+        for name, w in key.curves.items():
+            lo, hi = effective_limit(doc, profile, name)
+            if w < lo - _LIMIT_TOL or w > hi + _LIMIT_TOL:
+                add(
+                    Issue(
+                        "limit_exceeded",
+                        SEVERITY_WARNING,
+                        f"{_key_label(k, key)} の {name} = {_fmt(w)} が可動域 [{_fmt(lo)}, {_fmt(hi)}] の外です",
+                        name=name,
+                        key=k,
+                    )
+                )
+
+
 def _check_excluded(doc: Document, add) -> None:
     """UE 版（R-17）: 補正除外パターンに一致するのにポーズへ保存されている（ベイクで無視される）。"""
     found: dict[tuple[str, str], tuple[int, tuple[int, int]]] = {}
@@ -769,6 +876,29 @@ def _check_excluded(doc: Document, add) -> None:
         for n in pt.pose.bones:
             if is_mirror_excluded(n, doc.exclude.bones):
                 found.setdefault((KIND_BONE, n), (li, rc))
+    for k, key in _iter_perspective(doc):
+        for n, w in key.curves.items():
+            if abs(w) > 1e-6 and is_mirror_excluded(n, doc.exclude.curves):
+                add(
+                    Issue(
+                        "excluded_in_pose",
+                        SEVERITY_INFO,
+                        f"補正除外パターンに一致するシェイプ「{n}」が{_key_label(k, key)}に含まれています（ベイク時に無視されます）",
+                        name=n,
+                        key=k,
+                    )
+                )
+        for n in key.bones:
+            if is_mirror_excluded(n, doc.exclude.bones):
+                add(
+                    Issue(
+                        "excluded_in_pose",
+                        SEVERITY_INFO,
+                        f"補正除外パターンに一致するボーン「{n}」が{_key_label(k, key)}に含まれています（ベイク時に無視されます）",
+                        name=n,
+                        key=k,
+                    )
+                )
     for (kind, n), (li, rc) in found.items():
         label = "シェイプ" if kind == KIND_CURVE else "ボーン"
         add(
@@ -852,6 +982,55 @@ def _check_bake(doc: Document, scene: SceneInfo, bake_state: Optional[Mapping[st
                 )
 
 
+def perspective_bake_keys(doc: Document) -> list[int]:
+    """ベイクの対象になるパース補正のキーの番号（空でないキー。空のキーはシェイプを作らない）。"""
+    return [k for k, key in _iter_perspective(doc) if not key.is_empty()]
+
+
+def _check_perspective_bake(doc: Document, scene: SceneInfo, bake_state: Mapping[str, str], add, bake_exclude: Optional[Mapping[str, str]]) -> None:
+    """パース補正のキーの未ベイク / ベイク後に変更（点と同じ判定。キーの番号 = シェイプの番号）。"""
+    if doc.perspective is None:
+        return
+    cur_sig = exclude_signature(doc) if bake_exclude else ""
+    targets = set(scene.targets) if scene.targets is not None else None
+    for k in perspective_bake_keys(doc):
+        key = doc.perspective.keys[k]
+        morph = naming.perspective_name(doc.asset or "", k)
+        base = dict(name=morph, key=k)
+        if morph not in bake_state:
+            add(Issue("perspective_key_unbaked", SEVERITY_INFO, f"未ベイクの{_key_label(k, key)}", **base))
+            continue
+        if targets is not None and morph not in targets:
+            add(
+                Issue(
+                    "baked_morph_missing",
+                    SEVERITY_WARNING,
+                    f"ベイク済みのはずの {morph} がモデルにありません（再インポートで消えた可能性。再ベイクしてください）",
+                    **base,
+                )
+            )
+            continue
+        if bake_state[morph] != perspective_key_hash(key):
+            add(
+                Issue(
+                    "perspective_key_changed",
+                    SEVERITY_WARNING,
+                    f"ベイク後に変更された{_key_label(k, key)}（再ベイクしてください。キーを削除したあとは、後ろのキーの番号が詰まるので再ベイクが要ります）",
+                    **base,
+                )
+            )
+            continue
+        if bake_exclude and bake_exclude.get(morph, cur_sig) != cur_sig:
+            add(
+                Issue(
+                    "perspective_key_changed",
+                    SEVERITY_WARNING,
+                    f"補正から除外するものを変えたあと、焼き直していません: {_key_label(k, key)}（再ベイクしてください）",
+                    **base,
+                )
+            )
+
+
 def _check_targets(doc: Document, scene: SceneInfo, add) -> None:
     if scene.targets is None:
         return
@@ -859,6 +1038,7 @@ def _check_targets(doc: Document, scene: SceneInfo, add) -> None:
     live = {(layer.name, rc[0], rc[1]) for _li, layer, rc, _pt in _bake_candidates(doc)}
     live_ex = {(layer.name, rc[0], rc[1]) for li, layer, rc, _pt in _bake_candidates(doc) if needs_extreme(doc, li, rc)}
     n_persp = len(doc.perspective.keys) if doc.perspective is not None else 0
+    persp_live = set(perspective_bake_keys(doc))
     layer_names = [layer.name for layer in doc.layers]
     for t in sorted(scene.targets):
         verdict, p = naming.owner_of(t, asset, layer_names)
@@ -879,6 +1059,8 @@ def _check_targets(doc: Document, scene: SceneInfo, add) -> None:
         elif p.kind == naming.KIND_PERSP:
             if (p.index or 0) >= n_persp:
                 orphan, why = True, "対応するパース補正のキーがありません"
+            elif (p.index or 0) not in persp_live:
+                orphan, why = True, "そのパース補正のキーが空です（シェイプは要りません）"
         if orphan:
             add(
                 Issue(
@@ -1051,6 +1233,15 @@ def rename_report(doc: Document, mapping: Mapping[str, str], kind: str) -> Renam
             rep.bone_replacements += n
         rep.collisions += c
 
+    for _k, key in _iter_perspective(doc):  # パース補正のキーのポーズも同じ
+        if kind == KIND_CURVE:
+            key.curves, n, c = _rename_dict(key.curves, mp)
+            rep.curve_replacements += n
+        else:
+            key.bones, n, c = _rename_dict(key.bones, mp)
+            rep.bone_replacements += n
+        rep.collisions += c
+
     ws = doc.working_set
     if kind == KIND_CURVE:
         ws.curves, n = _rename_list(ws.curves, mp)
@@ -1106,6 +1297,11 @@ def remove_missing_references(doc: Document, scene_info: SceneInfo, include_case
             for n in dead:
                 del pt.pose.curves[n]
             removed += len(dead)
+        for _k, key in _iter_perspective(doc):
+            dead = [n for n in key.curves if gone(n, avail, pool)]
+            for n in dead:
+                del key.curves[n]
+            removed += len(dead)
         for attr_owner, attr in ((doc.working_set, "curves"), (doc, "intensity_curves")):
             cur = getattr(attr_owner, attr)
             keep = [n for n in cur if not gone(n, avail, pool)]
@@ -1118,6 +1314,11 @@ def remove_missing_references(doc: Document, scene_info: SceneInfo, include_case
             dead = [n for n in pt.pose.bones if gone(n, avail, pool)]
             for n in dead:
                 del pt.pose.bones[n]
+            removed += len(dead)
+        for _k, key in _iter_perspective(doc):
+            dead = [n for n in key.bones if gone(n, avail, pool)]
+            for n in dead:
+                del key.bones[n]
             removed += len(dead)
         keep = [n for n in doc.working_set.bones if not gone(n, avail, pool)]
         removed += len(doc.working_set.bones) - len(keep)
@@ -1132,6 +1333,9 @@ __all__: Sequence[str] = (
     "RenameReport",
     "validate",
     "pose_hash",
+    "perspective_key_hash",
+    "perspective_bake_keys",
+    "perspective_value_ok",
     "exclude_signature",
     "normalize_exclude",
     "suggest_names",

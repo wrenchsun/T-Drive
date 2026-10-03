@@ -175,10 +175,35 @@ class Quality:
     extra: dict[str, Any] = field(default_factory=dict)
 
 
+PERSPECTIVE_AXES = ("distance", "fov")  # 軸: distance = 視点と格子の中心の距離（文書の単位）/ fov = 視点の縦の画角（度）
+MAX_PERSPECTIVE_KEYS = 8
+
+
+@dataclass
+class PerspectiveKey:
+    """パース補正のキー 1 個。value = 軸の値、curves / bones = 基準姿勢に足すポーズ（空 = 補正なしのキー）。
+    配列の順番がシェイプの番号（`FC_<asset>_Persp_K{n}`）。"""
+
+    value: float = 0.0
+    curves: dict[str, float] = field(default_factory=dict)
+    bones: dict[str, BoneOffset] = field(default_factory=dict)
+    extra: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def pose(self) -> SourcePose:
+        """ポーズとして見る（curves / bones は同じ辞書を共有する。pose_hash・検査用）。"""
+        return SourcePose(curves=self.curves, bones=self.bones)
+
+    def is_empty(self) -> bool:
+        return not self.curves and not self.bones
+
+
 @dataclass
 class Perspective:
     enabled: bool = False
-    keys: list[Any] = field(default_factory=list)  # 形は F5-4 で決める。それまでは素の JSON 値で持つ
+    axis: str = "distance"  # PERSPECTIVE_AXES のどれか（知らない値も読んで保持し、検証で知らせる）
+    strength: float = 1.0  # 0〜1。全体の強さ（Unity の調整値・Timeline で上書きできる）
+    keys: list[PerspectiveKey] = field(default_factory=list)
     extra: dict[str, Any] = field(default_factory=dict)
 
 

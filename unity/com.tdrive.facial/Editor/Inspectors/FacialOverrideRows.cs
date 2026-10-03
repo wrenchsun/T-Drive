@@ -29,6 +29,7 @@ namespace TDrive.Facial.Editor
             new Row { label = "シャープさ", tooltip = "キーの角度の近くで、キーのポーズそのものに寄せる度合い（既定 1 = 普通の補間）。大きいほど角度の中間でもキーのポーズに近くなり、小さいとなだらかに混ざる。値は Maya へ戻す JSON にも入ります", flag = "overrideSharpness", value = "sharpness", get = p => p.sharpness, hasMin = true, min = 0.01f, format = "0.###" },
             new Row { label = "コマ打ち fps", tooltip = "補正の更新をこの回数 / 秒に間引く（0 = 毎フレーム）。更新の間は前の重みのまま止まり、追従は使わず更新のたびに目標へ切り替わる。値は Maya へ戻す JSON にも入ります", flag = "overrideStepFps", value = "stepFps", get = p => p.stepFps, hasMin = true, min = 0f, format = "0.##" },
             new Row { label = "誇張（0〜1）", tooltip = "重み 1 を超えるポーズ（_Ex シェイプ）をどれだけ効かせるか。1 = 作った通り、0 = 1 までに収める。_Ex の無いキャラクターでは変化なし。値は Maya へ戻す JSON にも入ります", flag = "overrideExaggeration", value = "exaggeration", get = p => p.exaggeration, hasMin = true, min = 0f, format = "0.###" },
+            new Row { label = "パース補正の強さ（0〜1）", tooltip = "広角で寄ったときの奥行きを押さえる補正（パース補正）の強さ。0 = 補正なし、1 = 作った通り。パース補正を使っていないキャラクターでは変化なし。取り込んだ値はキャラクターのデータの強さです", flag = "overridePerspectiveStrength", value = "perspectiveStrength", get = p => p.perspectiveStrength, hasMin = true, min = 0f, format = "0.###" },
         };
 
         /// <summary>行の一覧を描く。imported = 取り込んだ値（データが無ければ null で「—」）。値を変えたら true。</summary>

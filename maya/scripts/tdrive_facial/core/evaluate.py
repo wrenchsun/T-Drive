@@ -238,6 +238,78 @@ def evaluate_correction(
     return [w for w in out if not is_nearly_zero(w.weight)]
 
 
+def perspective_weights(values: Sequence[float], x: float) -> list[float]:
+    """パース補正のキーの重み（R-34。docs/15 §5.v）。values = キーの value（配列の順 = シェイプの番号。並んでいなくてよい）、
+    x = 軸の値。戻りは values と同じ順の重み。
+
+    - value の昇順に並べたとき x を挟む 2 つのキーを直線で混ぜる（重みの合計 = 1）。範囲の外は端のキーが 1
+    - キー 0 個 → []。キー 1 個 → [1]。x が NaN → 全部 0
+    - 同じ value のキーが複数あるときは **添字が小さいほうだけ**が重みを受け取る（残りは常に 0。決まった規則）
+    - value が有限でないキー（NaN / 無限大）は常に 0（検証でエラーにする値）
+    """
+    n = len(values)
+    out = [0.0] * n
+    if n == 0 or math.isnan(x):
+        return out
+    rep: dict[float, int] = {}
+    for i, v in enumerate(values):
+        if math.isfinite(v) and v not in rep:
+            rep[v] = i  # 同じ value は添字が小さいほう
+    if not rep:
+        return out
+    order = sorted(rep)
+    if len(order) == 1 or x <= order[0]:
+        out[rep[order[0]]] = 1.0
+        return out
+    if x >= order[-1]:
+        out[rep[order[-1]]] = 1.0
+        return out
+    hi = next(k for k, v in enumerate(order) if v > x)
+    lo = hi - 1
+    t = (x - order[lo]) / (order[hi] - order[lo])
+    out[rep[order[lo]]] = 1.0 - t
+    out[rep[order[hi]]] = t
+    return out
+
+
+def perspective_morph_weights(
+    doc,
+    distance: float,
+    fov_deg: Optional[float] = None,
+    strength: Optional[float] = None,
+    alpha: float = 1.0,
+) -> dict[str, float]:
+    """`{FC_<asset>_Persp_K{n}: 重み}`（Document のパース補正から。docs/15 §5.v）。
+
+    distance = 視点と格子の中心の距離（**文書の単位**）。fov_deg = 視点の縦の画角（度。None / NaN = 不明）。
+    軸が distance なら distance、fov なら fov_deg（不明なら NaN = 全部 0）を x に使う。
+    strength = None なら doc.perspective.strength、渡せばそれ（上書き。どちらも 0〜1 に丸める）。
+    alpha = 全体の掛け算（globalAlpha・距離フェード・表情での弱めを掛けた値。呼ぶ側が決める）。
+    使わない（None / enabled=False / キー 0 個）ときは {}。空のキー（curves も bones も無い）はシェイプを作らないので出さない。
+    重みがほぼ 0 のものも出さない。角度の補正の結果に足すのは呼ぶ側。
+    """
+    from . import naming  # 循環を避ける（naming は evaluate を使わない）
+
+    p = getattr(doc, "perspective", None)
+    if p is None or not p.enabled or not p.keys:
+        return {}
+    if p.axis == "fov":
+        x = float("nan") if fov_deg is None else float(fov_deg)
+    else:
+        x = float(distance)
+    s = clamp(p.strength if strength is None else float(strength), 0.0, 1.0)
+    scale = s * float(alpha)
+    asset = getattr(doc, "asset", None) or ""
+    out: dict[str, float] = {}
+    for i, w in enumerate(perspective_weights([k.value for k in p.keys], x)):
+        if p.keys[i].is_empty():
+            continue
+        w *= scale
+        if math.isfinite(w) and not is_nearly_zero(w):
+            out[naming.perspective_name(asset, i)] = w
+    return out
+
+
 def compute_grid_cell(grid: GridShape, yaw_deg: float, pitch_deg: float) -> GridCellInfo:
     """今の角度が属するセル（4 隅の番号・補間係数・端のフェード）。"""
     if grid.num_cols <= 0 or grid.num_rows <= 0:

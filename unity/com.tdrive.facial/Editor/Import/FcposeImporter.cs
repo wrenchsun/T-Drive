@@ -9,7 +9,7 @@ using UnityEditor.AssetImporters;
 
 namespace TDrive.Facial.Editor
 {
-    [ScriptedImporter(1, "fcpose")]
+    [ScriptedImporter(2, "fcpose")]
     public sealed class FcposeImporter : ScriptedImporter
     {
         public override void OnImportAsset(AssetImportContext ctx)

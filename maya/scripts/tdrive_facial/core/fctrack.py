@@ -9,7 +9,7 @@ Unity 側（`FacialCorrectionTrack` を足すブリッジ）が読む。拡張�
 ```
 
 - キーは `[秒, 値]`。秒 = (フレーム − range[0]) / frameRate。時刻の昇順（同じ時刻の 2 つ目は段差）
-- カーブの名前: `alpha` / `useManual`（0 か 1）/ `manualYaw` / `manualPitch`（度）/ `exaggeration`（誇張の強さ 0〜1。キーがあるときだけ。無いファイルも正しい）/ `emotion.<レイヤー名>`（0〜1）
+- カーブの名前: `alpha` / `useManual`（0 か 1）/ `manualYaw` / `manualPitch`（度）/ `exaggeration`（誇張の強さ 0〜1。キーがあるときだけ。無いファイルも正しい）/ `perspective`（パース補正の強さ 0〜1。同じくキーがあるときだけ）/ `emotion.<レイヤー名>`（0〜1）
 - 入っているのは「アニメーションしている属性」だけ。接線（補間）は書き出さない（Unity 側は線形。段階は同時刻の 2 キーで表す）
 - 知らないキーは `extra` に受けて書き出しで戻す（往復で落とさない）
 """
@@ -25,7 +25,7 @@ from typing import Any, Union
 FORMAT_TRACK = "FacialTrack"
 SUPPORTED_VERSION = 1
 EMOTION_PREFIX = "emotion."
-FIXED_CURVES = ("alpha", "useManual", "manualYaw", "manualPitch", "exaggeration")
+FIXED_CURVES = ("alpha", "useManual", "manualYaw", "manualPitch", "exaggeration", "perspective")
 FILE_SUFFIX = ".fctrack"
 
 Key = tuple[float, float]  # (秒, 値)
@@ -89,7 +89,7 @@ def validate(track: FacialTrack) -> list[str]:
         errs.append(f"range の開始が終了より後です: {list(r)}")
     for name, keys in track.curves.items():
         if not is_valid_curve_name(name):
-            errs.append(f"カーブ名が正しくありません: {name!r}（alpha / useManual / manualYaw / manualPitch / exaggeration / emotion.<レイヤー名>）")
+            errs.append(f"カーブ名が正しくありません: {name!r}（alpha / useManual / manualYaw / manualPitch / exaggeration / perspective / emotion.<レイヤー名>）")
         last = -math.inf
         for i, k in enumerate(keys):
             if len(k) != 2 or not all(_is_num(x) for x in k):

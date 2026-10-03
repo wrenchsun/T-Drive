@@ -92,6 +92,26 @@ namespace TDrive.Facial.Core
         public double From = 0.0, To = 1.0;
     }
 
+    /// <summary>パース補正のキー 1 個（R-34）。配列の順番がシェイプの番号（FC_&lt;asset&gt;_Persp_K{n}）。</summary>
+    public sealed class FcPerspectiveKey
+    {
+        public double Value;
+        public FcPose Pose = new FcPose();
+        /// <summary>curves も bones も無い = 「補正なし」のキー（シェイプを作らない）。</summary>
+        public bool IsEmpty { get { return Pose.Curves.Count == 0 && Pose.Bones.Count == 0; } }
+    }
+
+    /// <summary>パース補正（perspective）。Axis: "distance"（視点と格子の中心の距離。meta の長さの単位）| "fov"（縦の画角、度）。</summary>
+    public sealed class FcPerspective
+    {
+        public const string AxisDistance = "distance";
+        public const string AxisFov = "fov";
+        public bool Enabled;
+        public string Axis = AxisDistance;
+        public double Strength = 1.0;
+        public readonly List<FcPerspectiveKey> Keys = new List<FcPerspectiveKey>();
+    }
+
     public sealed class FcLimit
     {
         public double Min;
@@ -119,6 +139,8 @@ namespace TDrive.Facial.Core
         public readonly Dictionary<string, FcLimit> Limits = new Dictionary<string, FcLimit>();
         public string MaterialMode = "none";
         public FcQuality Quality = new FcQuality();
+        /// <summary>パース補正。無ければ null（何もしない）。</summary>
+        public FcPerspective Perspective;
         /// <summary>レイヤー名 → 重みの入力元（無ければ入力は呼び出し側 = direct）。F5-3。</summary>
         public readonly Dictionary<string, FcLayerWeight> LayerWeights = new Dictionary<string, FcLayerWeight>();
     }

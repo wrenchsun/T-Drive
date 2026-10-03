@@ -260,6 +260,68 @@ namespace TDrive.Facial.Tests
             Assert.IsFalse(FacialNaming.ShapeNameMatches("x", ""));
         }
 
+        // --- パース補正（F5-4） ---
+
+        [Test]
+        public void PerspectiveSectionIsRead()
+        {
+            const string json = "{\"format\":\"FacialCorrection\",\"perspective\":{\"enabled\":true,\"axis\":\"fov\",\"strength\":0.5,\"keys\":[" +
+                "{\"value\":30,\"curves\":{\"bs.a\":0.5},\"bones\":{\"head\":{\"t\":[0,1,0]}}},{\"value\":80.5}]}}";
+            FcPerspective p = FcposeReader.ReadDocument(json, null).Perspective;
+            Assert.IsNotNull(p);
+            Assert.IsTrue(p.Enabled);
+            Assert.AreEqual("fov", p.Axis);
+            Assert.AreEqual(0.5, p.Strength);
+            Assert.AreEqual(2, p.Keys.Count);
+            Assert.AreEqual(30.0, p.Keys[0].Value);
+            Assert.IsFalse(p.Keys[0].IsEmpty);
+            Assert.AreEqual(0.5, p.Keys[0].Pose.Curves["bs.a"]);
+            Assert.IsTrue(p.Keys[1].IsEmpty);
+            Assert.AreEqual(80.5, p.Keys[1].Value);
+        }
+
+        [Test]
+        public void PerspectiveLegacyAndDefaults()
+        {
+            Assert.IsNull(FcposeReader.ReadDocument("{\"format\":\"FacialCorrection\"}", null).Perspective);
+            FcPerspective p = FcposeReader.ReadDocument("{\"format\":\"FacialCorrection\",\"perspective\":{\"enabled\":false,\"keys\":[]}}", null).Perspective;
+            Assert.IsFalse(p.Enabled);
+            Assert.AreEqual("distance", p.Axis);
+            Assert.AreEqual(1.0, p.Strength);
+            Assert.AreEqual(0, p.Keys.Count);
+            // 実ファイルのフィクスチャ（keys が空）も読める
+            FcDocument d = FcposeReader.ReadDocument(FixtureFiles.Read("tdrive_maya_full.fcpose.json"), null);
+            Assert.IsNotNull(d.Perspective);
+            Assert.AreEqual(0, d.Perspective.Keys.Count);
+        }
+
+        [Test]
+        public void PerspectiveBadKeysAreDroppedWithAWarning()
+        {
+            System.Action<string> sink;
+            List<string> warn = NewWarnings(out sink);
+            FcPerspective p = FcposeReader.ReadDocument(
+                "{\"format\":\"FacialCorrection\",\"perspective\":{\"enabled\":true,\"keys\":[5,{\"value\":\"x\"},{\"value\":40,\"curves\":{\"a\":1}},null]}}", sink).Perspective;
+            Assert.AreEqual(1, p.Keys.Count);
+            Assert.AreEqual(40.0, p.Keys[0].Value);
+            Assert.AreEqual(3, warn.Count);
+        }
+
+        [Test]
+        public void PerspectiveWeightsSpotChecks()
+        {
+            var o = new double[4];
+            FacialCore.PerspectiveWeights(new[] { 80.0, 30.0, 50.0 }, 3, 40.0, o);
+            Assert.AreEqual(0.0, o[0], 1e-12); Assert.AreEqual(0.5, o[1], 1e-12); Assert.AreEqual(0.5, o[2], 1e-12);
+            FacialCore.PerspectiveWeights(new[] { 50.0, 30.0, 50.0 }, 3, 100.0, o);
+            Assert.AreEqual(1.0, o[0]); Assert.AreEqual(0.0, o[1]); Assert.AreEqual(0.0, o[2]);
+            FacialCore.PerspectiveWeights(new[] { 30.0, 80.0 }, 2, double.NaN, o);
+            Assert.AreEqual(0.0, o[0]); Assert.AreEqual(0.0, o[1]);
+            FacialCore.PerspectiveWeights(new[] { 30.0 }, 1, 5.0, o);
+            Assert.AreEqual(1.0, o[0]);
+            FacialCore.PerspectiveWeights(new[] { 30.0, 80.0 }, 0, 5.0, o); // キー 0 個は何も書かない
+        }
+
         [Test]
         public void TryGetBareFcNameStripsNodePrefix()
         {

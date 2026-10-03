@@ -18,6 +18,7 @@ namespace TDrive.Facial
         public float sharpness;
         public float stepFps;
         public float exaggeration;
+        public float perspectiveStrength;
     }
 
     [CreateAssetMenu(menuName = "T-Drive/Facial Correction Overrides", fileName = "FacialCorrectionOverrides", order = 901)]
@@ -53,6 +54,9 @@ namespace TDrive.Facial
         [Tooltip("誇張を上書きする")] public bool overrideExaggeration;
         [Tooltip("誇張（_Ex シェイプ）の強さ（0〜1）。1 = 作った通り、0 = 誇張なし")] [Range(0f, 1f)] public float exaggeration = 1f;
 
+        [Tooltip("パース補正の強さを上書きする")] public bool overridePerspectiveStrength;
+        [Tooltip("パース補正の強さ（0〜1）。0 = 補正なし")] [Range(0f, 1f)] public float perspectiveStrength = 1f;
+
         /// <summary>data と overrides（null 可）から実効の値を求める。data が null なら既定値。</summary>
         public static FacialEffectiveParams Resolve(FacialCorrectionData data, FacialCorrectionOverrides ov)
         {
@@ -69,11 +73,12 @@ namespace TDrive.Facial
                 p.sharpness = data.quality.sharpness;
                 p.stepFps = data.quality.stepFps;
                 p.exaggeration = data.quality.hasExaggeration ? Mathf.Clamp01(data.quality.exaggeration) : 1f;
+                p.perspectiveStrength = Mathf.Clamp01(data.perspective.strength);
             }
             else
             {
                 p.globalAlpha = 1f; p.interpSpeed = 10f; p.snapAngle = 45f; p.expressionDampen = 0.5f;
-                p.edgeFade = 15f; p.sharpness = 1f; p.exaggeration = 1f;
+                p.edgeFade = 15f; p.sharpness = 1f; p.exaggeration = 1f; p.perspectiveStrength = 1f;
             }
             if (ov == null) return p;
             if (ov.overrideGlobalAlpha) p.globalAlpha = ov.globalAlpha;
@@ -86,6 +91,7 @@ namespace TDrive.Facial
             if (ov.overrideSharpness) p.sharpness = ov.sharpness;
             if (ov.overrideStepFps) p.stepFps = ov.stepFps;
             if (ov.overrideExaggeration) p.exaggeration = Mathf.Clamp01(ov.exaggeration);
+            if (ov.overridePerspectiveStrength) p.perspectiveStrength = Mathf.Clamp01(ov.perspectiveStrength);
             return p;
         }
     }

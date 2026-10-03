@@ -37,9 +37,11 @@ namespace TDrive.Facial.Core
         public const int SupportedVersion = 1;
         public const string EmotionPrefix = "emotion.";
         public const string FileSuffix = ".fctrack";
-        public static readonly string[] FixedCurves = { "alpha", "useManual", "manualYaw", "manualPitch", ExaggerationCurve };
+        public static readonly string[] FixedCurves = { "alpha", "useManual", "manualYaw", "manualPitch", ExaggerationCurve, PerspectiveCurve };
         /// <summary>誇張の強さ（0〜1）の固定カーブ名（任意。無ければ .fctrack からの誇張の上書きなし。F5-12）。</summary>
         public const string ExaggerationCurve = "exaggeration";
+        /// <summary>パース補正の強さ（0〜1）の固定カーブ名（任意。無ければ .fctrack からのパース補正の上書きなし。F5-4）。</summary>
+        public const string PerspectiveCurve = "perspective";
 
         public static bool IsValidCurveName(string name)
         {
@@ -122,7 +124,7 @@ namespace TDrive.Facial.Core
             foreach (KeyValuePair<string, object> kv in curvesDict)
             {
                 if (!IsValidCurveName(kv.Key))
-                    throw new FctrackException("カーブ名が正しくありません: '" + kv.Key + "'（alpha / useManual / manualYaw / manualPitch / exaggeration / emotion.<レイヤー名>）");
+                    throw new FctrackException("カーブ名が正しくありません: '" + kv.Key + "'（alpha / useManual / manualYaw / manualPitch / exaggeration / perspective / emotion.<レイヤー名>）");
                 var keys = (List<object>)kv.Value;
                 var list = new List<FcKey>(keys.Count);
                 double last = double.NegativeInfinity;

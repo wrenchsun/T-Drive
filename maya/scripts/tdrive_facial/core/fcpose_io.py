@@ -41,6 +41,7 @@ from .model import (
     Meta,
     Mirror,
     Perspective,
+    PerspectiveKey,
     Policy,
     PoseDocument,
     Quality,
@@ -306,12 +307,34 @@ def _read_quality(d: dict) -> Quality:
     )
 
 
+_PERSP_KEY_KEYS = ("value", "curves", "bones")
+_PERSP_KEYS = ("enabled", "axis", "strength", "keys")
+
+
+def _read_perspective_key(d: Any) -> Optional[PerspectiveKey]:
+    if not isinstance(d, dict):
+        warnings.warn("オブジェクトでないパース補正のキーを読み飛ばしました", UserWarning, stacklevel=4)
+        return None
+    if not _is_num(d.get("value")):
+        warnings.warn("value が数でないパース補正のキーを読み飛ばしました", UserWarning, stacklevel=4)
+        return None
+    pose = _read_pose(d.get("curves"), d.get("bones"))
+    return PerspectiveKey(
+        value=float(d["value"]), curves=pose.curves, bones=pose.bones, extra=_extra(d, _PERSP_KEY_KEYS)
+    )
+
+
 def _read_perspective(d: dict) -> Perspective:
     keys = d.get("keys")
+    out = []
+    if isinstance(keys, list):
+        out = [k for k in (_read_perspective_key(x) for x in keys) if k is not None]
     return Perspective(
         enabled=_b(d.get("enabled"), False),
-        keys=copy.deepcopy(keys) if isinstance(keys, list) else [],
-        extra=_extra(d, ("enabled", "keys")),
+        axis=_s(d.get("axis"), "distance"),
+        strength=_f(d.get("strength"), 1.0),
+        keys=out,
+        extra=_extra(d, _PERSP_KEYS),
     )
 
 
@@ -611,14 +634,26 @@ def to_dict(doc: AnyDocument) -> dict[str, Any]:
             qd["exaggeration"] = q.exaggeration  # 既定（1）のときは出さない（既存のファイルを変えない）
         out["quality"] = _with_extra(qd, q.extra)
     if doc.perspective is not None:
-        out["perspective"] = _with_extra(
-            {"enabled": doc.perspective.enabled, "keys": copy.deepcopy(doc.perspective.keys)}, doc.perspective.extra
-        )
+        out["perspective"] = _perspective_dict(doc.perspective)
     if doc.layer_weights is not None:
         out["layerWeights"] = copy.deepcopy(doc.layer_weights)
     if doc.sculpt_shapes is not None:
         out["sculptShapes"] = _with_extra({"prefix": doc.sculpt_shapes.prefix}, doc.sculpt_shapes.extra)
     return _with_extra(out, doc.extra)
+
+
+def _perspective_dict(p: Perspective) -> dict[str, Any]:
+    d: dict[str, Any] = {"enabled": p.enabled}
+    if p.axis != "distance":
+        d["axis"] = p.axis  # 既定（distance）のときは出さない（既存のファイルを変えない）
+    if p.strength != 1.0:
+        d["strength"] = p.strength
+    keys = []
+    for k in p.keys:
+        curves, bones = _pose_parts(k.pose)
+        keys.append(_with_extra({"value": k.value, "curves": curves, "bones": bones}, k.extra))
+    d["keys"] = keys
+    return _with_extra(d, p.extra)
 
 
 def _fmt_number(v: Union[int, float]) -> str:

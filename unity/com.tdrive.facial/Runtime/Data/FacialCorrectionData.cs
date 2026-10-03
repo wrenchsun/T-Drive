@@ -64,6 +64,26 @@ namespace TDrive.Facial
         [Tooltip("感情の重みの入力元（距離で決める設定など）")] public FacialLayerWeightData weight;
     }
 
+    /// <summary>パース補正の軸（perspective.axis）。</summary>
+    public enum FacialPerspectiveAxis { Distance = 0, Fov = 1 }
+
+    [Serializable]
+    public struct FacialPerspectiveKeyData
+    {
+        [Tooltip("軸の値。距離は m（取り込み時に .fcpose の単位から変換済み）、画角は度")] public float value;
+        [Tooltip("このキーのシェイプ名 FC_<アセット>_Persp_K{n}。ポーズが空のキー（補正なしの範囲）は空。n は配列の番号")] public string morphName;
+    }
+
+    /// <summary>パース補正（広角で寄ったときの奥行きを押さえる）。軸の値からキーの重みを混ぜ、角度の補正に足す。</summary>
+    [Serializable]
+    public struct FacialPerspectiveData
+    {
+        [Tooltip("パース補正を使う")] public bool enabled;
+        [Tooltip("軸。Distance = 視点と格子の中心の距離（m）、Fov = 視点の縦の画角（度）")] public FacialPerspectiveAxis axis;
+        [Tooltip("パース補正の強さ（0〜1）")] public float strength;
+        [Tooltip("キー（配列の順 = シェイプの番号）。値は並んでいなくてよい")] public FacialPerspectiveKeyData[] keys;
+    }
+
     [Serializable]
     public struct FacialLimitEntry
     {
@@ -97,6 +117,9 @@ namespace TDrive.Facial
         {
             angleEpsilon = 0.1f, maxLod = 0, sharpness = 1f, stepFps = 0f,
         };
+
+        [Tooltip("パース補正（キーの値とシェイプ名）。使わない設定・キーなしのときは何もしない")]
+        public FacialPerspectiveData perspective = new FacialPerspectiveData { strength = 1f };
 
         [Tooltip("レイヤー（0 番 = Neutral）。各点のシェイプ名を持つ")]
         public FacialLayerData[] layers = new FacialLayerData[0];

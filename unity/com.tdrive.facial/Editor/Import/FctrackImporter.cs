@@ -29,6 +29,7 @@ namespace TDrive.Facial.Editor
                     case "alpha": a.alpha = keys; break;
                     case "useManual": a.useManual = keys; break;
                     case FctrackReader.ExaggerationCurve: a.exaggeration = keys; break;
+                    case FctrackReader.PerspectiveCurve: a.perspective = keys; break;
                     case "manualYaw": a.manualYaw = keys; break;
                     case "manualPitch": a.manualPitch = keys; break;
                     default:
@@ -50,7 +51,7 @@ namespace TDrive.Facial.Editor
         }
     }
 
-    [ScriptedImporter(1, "fctrack")]
+    [ScriptedImporter(2, "fctrack")]
     public sealed class FctrackImporter : ScriptedImporter
     {
         public override void OnImportAsset(AssetImportContext ctx)

@@ -461,7 +461,7 @@ def test_point_changed_since_bake_and_baked_morph_missing():
 def test_orphan_targets():
     doc = make_doc()
     doc.layers[0].points[(1, 2)].pose.curves["bs.smile_L"] = 1.5  # 重み 1 超 → この点の _Ex は要る（R-37）
-    doc.perspective = m.Perspective(enabled=True, keys=[{}, {}])
+    doc.perspective = m.Perspective(enabled=True, keys=[m.PerspectiveKey(30.0, {"bs.smile_L": 1.0}), m.PerspectiveKey(80.0, {"bs.smile_L": 0.5})])
     scene = make_scene(doc)
     scene.targets = {
         MORPH,

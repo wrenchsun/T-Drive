@@ -43,6 +43,9 @@ namespace TDrive.Facial
         /// <summary>true のとき exaggeration（0〜1）を誇張の強さへ掛ける。</summary>
         public bool hasExaggeration;
         public float exaggeration;
+        /// <summary>true のとき perspective（0〜1）をパース補正の強さへ掛ける。</summary>
+        public bool hasPerspective;
+        public float perspective;
     }
 
     /// <summary>Timeline の編集時プレビュー（再生していないとき）に、視点として使うカメラ。</summary>
@@ -138,6 +141,16 @@ namespace TDrive.Facial
         public float LastSharpness { get { return (float)_lastSharpness; } }
         /// <summary>直近の評価で使った誇張（データ・調整用アセット × Runner × Timeline）。</summary>
         public float LastExaggeration { get { return (float)_lastExaggeration; } }
+        /// <summary>パース補正を使っているか（データの perspective が有効でキーがある）。</summary>
+        public bool PerspectiveActive { get { return data != null && data.perspective.enabled && data.perspective.keys != null && data.perspective.keys.Length > 0; } }
+        /// <summary>直近の評価でのパース補正の軸の値（距離は m、画角は度）。使っていない・視点や画角が分からないときは NaN。</summary>
+        public float LastPerspectiveAxisValue { get { return (float)_lastPerspAxis; } }
+        /// <summary>直近の評価でのパース補正の強さ（調整値・Timeline を掛けたあと）。使っていなければ 0。</summary>
+        public float LastPerspectiveStrength { get { return (float)_lastPerspStrength; } }
+        /// <summary>パース補正のキーの数（データの perspective.keys）。</summary>
+        public int PerspectiveKeyCount { get { return _perspCount; } }
+        /// <summary>直近の評価でのパース補正のキー k の重み（強さ・全体の倍率を掛ける前の、キーの混ざり具合 0〜1）。範囲外は 0。</summary>
+        public float GetPerspectiveKeyWeight(int k) { return k >= 0 && k < _perspCount ? (float)_perspW[k] : 0f; }
         /// <summary>直近の評価で視点から角度を求められたか（手動・視点なしは false）。</summary>
         public bool HasValidAngles { get { return _hasPrev; } }
 
@@ -231,6 +244,14 @@ namespace TDrive.Facial
         double _rawYaw, _rawPitch, _rawEdge;
         double _curYaw, _curPitch, _lastScale = 1.0;
         bool _snapped;
+        // パース補正（F5-4）。名前 → 書き込み先は Rebuild で引く。値は評価のたびにデータから読む（インスペクターでの編集に追従）
+        int _perspCount;
+        double[] _perspValues = new double[0];
+        double[] _perspW = new double[0];
+        string[] _perspNames = new string[0];
+        ShapeBinding[] _perspBind = new ShapeBinding[0];
+        FacialPerspectiveKeyData[] _cachePerspKeys;
+        double _lastPerspAxis = double.NaN, _lastPerspStrength;
         // コマ打ち（F5-2）
         bool _stepHolding;
         double _stepAccum, _lastStepFps, _lastSharpness = 1.0, _lastExaggeration = 1.0;
@@ -407,6 +428,9 @@ namespace TDrive.Facial
             _snapped = false;
             _stepHolding = false;
             _stepAccum = 0.0;
+            _lastPerspAxis = double.NaN;
+            _lastPerspStrength = 0.0;
+            for (int k = 0; k < _perspW.Length; k++) _perspW[k] = 0.0;
             if (_matOut != null) _matOut.Clear(); // マテリアルに渡した値も 0 へ
         }
 
@@ -566,6 +590,7 @@ namespace TDrive.Facial
                 OverrideSlot sl = i < _slots.Count ? _slots[i] : _pendingSlot;
                 if (sl.o.hasAlpha) { m.hasAlpha = true; alpha *= Mathf.Max(0f, sl.o.alpha); }
                 if (sl.o.hasExaggeration) { m.hasExaggeration = true; m.exaggeration = sl.o.exaggeration; }
+                if (sl.o.hasPerspective) { m.hasPerspective = true; m.perspective = sl.o.perspective; }
                 if (sl.o.hasStepFps) { m.hasStepFps = true; m.stepFps = sl.o.stepFps; }
                 if (sl.o.hasManualAngles)
                 {
@@ -640,13 +665,13 @@ namespace TDrive.Facial
                 else
                 {
                     Camera cam = Camera.main;
-                    if (cam != null) { viewer = cam.transform; viewerPos = viewer.position; haveViewer = true; viewerSource = FacialViewerSource.MainCamera; _lastViewerFov = cam.fieldOfView; }
+                    if (cam != null) { viewer = cam.transform; viewerPos = viewer.position; haveViewer = true; viewerSource = FacialViewerSource.MainCamera; _lastViewerFov = cam.orthographic ? 0f : cam.fieldOfView; }
                 }
             }
             if (viewer != null && viewerSource != FacialViewerSource.MainCamera && viewerSource != FacialViewerSource.Fallback)
             {
                 Camera vc;
-                _lastViewerFov = viewer.TryGetComponent(out vc) ? vc.fieldOfView : 0f;
+                _lastViewerFov = viewer.TryGetComponent(out vc) && !vc.orthographic ? vc.fieldOfView : 0f;
             }
             _lastViewer = viewer;
             _lastViewerPos = viewerPos;
@@ -821,6 +846,10 @@ namespace TDrive.Facial
                 _scaled.Add(m);
             }
 
+            // 6.5 パース補正（R-34）: 軸の値（視点と格子の中心の距離 m / 視点の縦の画角）からキーの重みを混ぜ、角度の補正に足す。
+            //      全体の倍率（表情 × 距離フェード × 全体の強さ × Runner・Timeline の強さ）は同じく掛かる。シェイプ名は別なので合算は起きない
+            AddPerspective(d, p, hadOverride, ov, haveViewer, viewerPos, scale);
+
             // 7 スムージング（スナップ時は即時）→ ブレンドシェイプへ書く
             // コマ打ち中は追従を使わず、更新のたびに目標へ切り替える
             FacialCore.SmoothWeights(_last, _scaled, deltaTime, p.interpSpeed, snap || stepping, _smoothed);
@@ -850,6 +879,49 @@ namespace TDrive.Facial
                 _matOut.Write(_targets, materialTargets, yaw, pitch, d.grid.yawRange, d.grid.pitchRange, scale, _emo, layerCount);
             }
             else if (_matOut != null && _matOut.WrittenCount > 0) _matOut.Clear();
+        }
+
+        void AddPerspective(FacialCorrectionData d, FacialEffectiveParams p, bool hadOverride, in FacialFrameOverride ov,
+            bool haveViewer, Vector3 viewerPos, double scale)
+        {
+            _lastPerspAxis = double.NaN;
+            _lastPerspStrength = 0.0;
+            for (int k = 0; k < _perspCount; k++) _perspW[k] = 0.0;
+            FacialPerspectiveData pd = d.perspective;
+            if (!pd.enabled || _perspCount == 0 || pd.keys == null || pd.keys.Length != _perspCount) return;
+
+            double strength = (double)Mathf.Clamp01(p.perspectiveStrength);
+            if (hadOverride && ov.hasPerspective) strength *= System.Math.Max(0.0, System.Math.Min(1.0, (double)ov.perspective));
+            _lastPerspStrength = strength;
+
+            double axisValue = double.NaN; // 分からないとき（視点なし・画角なし）は NaN = 補正 0
+            if (haveViewer)
+            {
+                if (pd.axis == FacialPerspectiveAxis.Fov)
+                {
+                    if (_lastViewerFov > 0f && _lastViewerFov < 180f) axisValue = _lastViewerFov;
+                }
+                else
+                {
+                    Vector3 center;
+                    if (_baseResolved != null) center = _baseResolved.position + _baseResolved.TransformDirection(d.grid.centerOffset);
+                    else center = transform.position;
+                    axisValue = (double)Vector3.Distance(viewerPos, center);
+                }
+            }
+            _lastPerspAxis = axisValue;
+            for (int k = 0; k < _perspCount; k++) _perspValues[k] = pd.keys[k].value;
+            FacialCore.PerspectiveWeights(_perspValues, _perspCount, axisValue, _perspW);
+
+            for (int k = 0; k < _perspCount; k++)
+            {
+                ShapeBinding b = _perspBind[k];
+                if (b == null) continue; // ポーズが空のキー・メッシュに無いシェイプ
+                double w = _perspW[k] * strength * scale;
+                if (FacialCore.IsNearlyZero(w)) continue;
+                if (b.hasLimit) w = FacialCore.Clamp(w, b.limMin, b.limMax);
+                _scaled.Add(new MorphWeight(_perspNames[k], w));
+            }
         }
 
         // checkMesh: 戻すとき（古い番号が別のメッシュの関係ないシェイプを指さないよう、作ったときのメッシュと同じときだけ書く）
@@ -1035,7 +1107,8 @@ namespace TDrive.Facial
         {
             FacialCorrectionData d = data;
             if (d == null) return false;
-            return !ReferenceEquals(d.layers, _cacheLayers) || d.grid.cols != _cacheCols || d.grid.rows != _cacheRows;
+            return !ReferenceEquals(d.layers, _cacheLayers) || d.grid.cols != _cacheCols || d.grid.rows != _cacheRows
+                || !ReferenceEquals(d.perspective.keys, _cachePerspKeys);
         }
 
         void Rebuild()
@@ -1060,6 +1133,8 @@ namespace TDrive.Facial
             _baseResolved = null;
             _intRenderers = new SkinnedMeshRenderer[0];
             _intIndices = new int[0];
+            _perspCount = 0;
+            _perspValues = new double[0]; _perspW = new double[0]; _perspNames = new string[0]; _perspBind = new ShapeBinding[0];
 
             _built = true;
             _scanFrame = Time.frameCount;
@@ -1072,6 +1147,7 @@ namespace TDrive.Facial
             _cacheLayers = d != null ? d.layers : null;
             _cacheCols = d != null ? d.grid.cols : 0;
             _cacheRows = d != null ? d.grid.rows : 0;
+            _cachePerspKeys = d != null ? d.perspective.keys : null;
             if (d == null) return;
 
             string prefix = string.IsNullOrEmpty(d.assetName) ? FacialNaming.FcPrefix : FacialNaming.AssetPrefix(d.assetName);
@@ -1152,6 +1228,35 @@ namespace TDrive.Facial
                     }
                     if (rs.Count == 0) continue;
                     _bindings[nm] = NewBinding(rs, ix);
+                }
+            }
+            // パース補正のシェイプ（FC_<asset>_Persp_K{n}）。ポーズが空のキーは名前なし。無いシェイプは「足りない」に数える
+            FacialPerspectiveKeyData[] pk = d.perspective.keys;
+            if (pk != null && pk.Length > 0)
+            {
+                int pn = pk.Length;
+                _perspCount = pn;
+                _perspValues = new double[pn]; _perspW = new double[pn]; _perspNames = new string[pn]; _perspBind = new ShapeBinding[pn];
+                for (int k = 0; k < pn; k++)
+                {
+                    _perspValues[k] = pk[k].value;
+                    string nm = pk[k].morphName;
+                    if (string.IsNullOrEmpty(nm) || !FacialNaming.IsFcName(nm)) continue;
+                    _perspNames[k] = nm;
+                    ShapeBinding existing;
+                    if (_bindings.TryGetValue(nm, out existing)) { _perspBind[k] = existing; continue; }
+                    if (!seen.Add(nm)) continue;
+                    rs.Clear(); ix.Clear();
+                    bool amb = false;
+                    for (int t = 0; t < _targets.Count; t++)
+                    {
+                        int idx = shapeIndex[t].Find(nm);
+                        if (idx >= 0) { rs.Add(_targets[t]); ix.Add(idx); if (shapeIndex[t].IsAmbiguous(nm)) amb = true; }
+                    }
+                    if (rs.Count == 0) { _missing.Add(nm); continue; }
+                    if (amb) _ambiguous.Add(nm);
+                    _bindings[nm] = NewBinding(rs, ix);
+                    _perspBind[k] = _bindings[nm];
                 }
             }
             if (d.limits != null)
