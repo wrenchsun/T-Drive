@@ -1,0 +1,589 @@
+{
+ "kind": "evaluate",
+ "description": "キー角度のシャープ化（quality.sharpness、R-32）。evaluate と同じ形に `sharpness`（省略 = 1）を足したケース。4 隅の双線形の重みを w^s / Σw^s に直す（フェード・レイヤーの重みの前）。s は [0.01, 64] に丸める。Python 版で作成（UE 版には無い）",
+ "cases": [
+  {
+   "name": "s1_default_explicit",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 2,
+    "rows": 1,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1"
+     ]
+    }
+   ],
+   "yaw": -45,
+   "pitch": 0,
+   "sharpness": 1.0,
+   "note": "s=1 は何もしない（25/75 のまま）",
+   "expect": {
+    "weights": {
+     "FC_R0_C0": 0.75,
+     "FC_R0_C1": 0.25
+    }
+   }
+  },
+  {
+   "name": "s2_quarter_to_10_90",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 2,
+    "rows": 1,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1"
+     ]
+    }
+   ],
+   "yaw": -45,
+   "pitch": 0,
+   "sharpness": 2.0,
+   "note": "25/75 → 0.0625/0.5625 を正規化して 10/90",
+   "expect": {
+    "weights": {
+     "FC_R0_C0": 0.9,
+     "FC_R0_C1": 0.1
+    }
+   }
+  },
+  {
+   "name": "s4_midpoint_untouched",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 2,
+    "rows": 1,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1"
+     ]
+    }
+   ],
+   "yaw": 0,
+   "pitch": 0,
+   "sharpness": 4.0,
+   "note": "ちょうど中間（50/50）は何倍にしても 50/50",
+   "expect": {
+    "weights": {
+     "FC_R0_C0": 0.5,
+     "FC_R0_C1": 0.5
+    }
+   }
+  },
+  {
+   "name": "s64_snaps_to_nearest",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 2,
+    "rows": 1,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1"
+     ]
+    }
+   ],
+   "yaw": -45,
+   "pitch": 0,
+   "sharpness": 64.0,
+   "note": "s を大きくすると最寄りの点だけになる",
+   "expect": {
+    "weights": {
+     "FC_R0_C0": 1.0
+    }
+   }
+  },
+  {
+   "name": "s_gt64_clamped_to_64",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 2,
+    "rows": 1,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1"
+     ]
+    }
+   ],
+   "yaw": -45,
+   "pitch": 0,
+   "sharpness": 1000.0,
+   "note": "64 に丸める",
+   "expect": {
+    "weights": {
+     "FC_R0_C0": 1.0
+    }
+   }
+  },
+  {
+   "name": "s_half_softens",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 2,
+    "rows": 1,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1"
+     ]
+    }
+   ],
+   "yaw": -45,
+   "pitch": 0,
+   "sharpness": 0.5,
+   "note": "s < 1 は点の間をなだらかに（75/25 → 63.4/36.6）",
+   "expect": {
+    "weights": {
+     "FC_R0_C0": 0.633974596,
+     "FC_R0_C1": 0.366025404
+    }
+   }
+  },
+  {
+   "name": "s_tiny_clamped_to_0_01",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 2,
+    "rows": 1,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1"
+     ]
+    }
+   ],
+   "yaw": -45,
+   "pitch": 0,
+   "sharpness": 0.0001,
+   "note": "0.01 に丸める（ほぼ均等）",
+   "expect": {
+    "weights": {
+     "FC_R0_C0": 0.502746503,
+     "FC_R0_C1": 0.497253497
+    }
+   }
+  },
+  {
+   "name": "s_zero_clamped_to_0_01",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 2,
+    "rows": 1,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1"
+     ]
+    }
+   ],
+   "yaw": -45,
+   "pitch": 0,
+   "sharpness": 0.0,
+   "note": "0 以下も 0.01 へ",
+   "expect": {
+    "weights": {
+     "FC_R0_C0": 0.502746503,
+     "FC_R0_C1": 0.497253497
+    }
+   }
+  },
+  {
+   "name": "exact_point_s3",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 2,
+    "rows": 1,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1"
+     ]
+    }
+   ],
+   "yaw": -90,
+   "pitch": 0,
+   "sharpness": 3.0,
+   "note": "点の真上は変わらない",
+   "expect": {
+    "weights": {
+     "FC_R0_C0": 1.0
+    }
+   }
+  },
+  {
+   "name": "four_corners_s2",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 3,
+    "rows": 3,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1",
+      "FC_R0_C2",
+      "FC_R1_C0",
+      "FC_R1_C1",
+      "FC_R1_C2",
+      "FC_R2_C0",
+      "FC_R2_C1",
+      "FC_R2_C2"
+     ]
+    }
+   ],
+   "yaw": -22.5,
+   "pitch": -11.25,
+   "sharpness": 2.0,
+   "note": "4 隅（重み 0.5625/0.1875/0.1875/0.0625）を 2 乗して正規化",
+   "expect": {
+    "weights": {
+     "FC_R0_C0": 0.01,
+     "FC_R0_C1": 0.09,
+     "FC_R1_C0": 0.09,
+     "FC_R1_C1": 0.81
+    }
+   }
+  },
+  {
+   "name": "four_corners_s1_reference",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 3,
+    "rows": 3,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1",
+      "FC_R0_C2",
+      "FC_R1_C0",
+      "FC_R1_C1",
+      "FC_R1_C2",
+      "FC_R2_C0",
+      "FC_R2_C1",
+      "FC_R2_C2"
+     ]
+    }
+   ],
+   "yaw": -22.5,
+   "pitch": -11.25,
+   "sharpness": 1.0,
+   "expect": {
+    "weights": {
+     "FC_R0_C0": 0.0625,
+     "FC_R0_C1": 0.1875,
+     "FC_R1_C0": 0.1875,
+     "FC_R1_C1": 0.5625
+    }
+   }
+  },
+  {
+   "name": "four_corners_s_large",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 3,
+    "rows": 3,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1",
+      "FC_R0_C2",
+      "FC_R1_C0",
+      "FC_R1_C1",
+      "FC_R1_C2",
+      "FC_R2_C0",
+      "FC_R2_C1",
+      "FC_R2_C2"
+     ]
+    }
+   ],
+   "yaw": -22.5,
+   "pitch": -11.25,
+   "sharpness": 50.0,
+   "note": "最寄りの 1 点だけ",
+   "expect": {
+    "weights": {
+     "FC_R1_C1": 1.0
+    }
+   }
+  },
+  {
+   "name": "with_edge_fade_s2",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 2,
+    "rows": 1,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1"
+     ]
+    }
+   ],
+   "yaw": -97.5,
+   "pitch": 0,
+   "sharpness": 2.0,
+   "note": "端のフェード（0.5）はシャープ化のあとに掛かる",
+   "expect": {
+    "weights": {
+     "FC_R0_C0": 0.5
+    }
+   }
+  },
+  {
+   "name": "with_emotion_scale_s2",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 3,
+    "rows": 3,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1",
+      "FC_R0_C2",
+      "FC_R1_C0",
+      "FC_R1_C1",
+      "FC_R1_C2",
+      "FC_R2_C0",
+      "FC_R2_C1",
+      "FC_R2_C2"
+     ]
+    },
+    {
+     "name": "Happy",
+     "enabled": true,
+     "emotionWeight": 0.5,
+     "morphs": [
+      "FC_Happy_R0_C0",
+      "FC_Happy_R0_C1",
+      "FC_Happy_R0_C2",
+      "FC_Happy_R1_C0",
+      "FC_Happy_R1_C1",
+      "FC_Happy_R1_C2",
+      "FC_Happy_R2_C0",
+      "FC_Happy_R2_C1",
+      "FC_Happy_R2_C2"
+     ]
+    }
+   ],
+   "yaw": -22.5,
+   "pitch": 0,
+   "sharpness": 2.0,
+   "note": "レイヤーの重みはシャープ化のあとに掛かる",
+   "expect": {
+    "weights": {
+     "FC_R1_C0": 0.1,
+     "FC_R1_C1": 0.9,
+     "FC_Happy_R1_C0": 0.05,
+     "FC_Happy_R1_C1": 0.45
+    }
+   }
+  },
+  {
+   "name": "unbaked_corner_not_renormalised_s2",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 2,
+    "rows": 1,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      null
+     ]
+    }
+   ],
+   "yaw": -45,
+   "pitch": 0,
+   "sharpness": 2.0,
+   "note": "焼いていない点があっても残りは正規化し直さない（0.9 のまま）",
+   "expect": {
+    "weights": {
+     "FC_R0_C0": 0.9
+    }
+   }
+  },
+  {
+   "name": "shared_morph_names_s2",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 2,
+    "rows": 1,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C0"
+     ]
+    }
+   ],
+   "yaw": -45,
+   "pitch": 0,
+   "sharpness": 2.0,
+   "note": "2 点が同じシェイプ名なら重みは足される（合計 1）",
+   "expect": {
+    "weights": {
+     "FC_R0_C0": 1.0
+    }
+   }
+  },
+  {
+   "name": "single_point_s5",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 1,
+    "rows": 1,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0"
+     ]
+    }
+   ],
+   "yaw": 30,
+   "pitch": 10,
+   "sharpness": 5.0,
+   "expect": {
+    "weights": {
+     "FC_R0_C0": 1.0
+    }
+   }
+  }
+ ]
+}

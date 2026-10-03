@@ -140,6 +140,10 @@ namespace TDrive.Facial.Editor
             EditorGUILayout.LabelField("Yaw / Pitch", r.CurrentYaw.ToString("F1") + " / " + r.CurrentPitch.ToString("F1") + (r.Snapped ? "  （スナップ）" : ""));
             EditorGUILayout.LabelField("倍率（表情 × 距離 × 強さ）", r.LastScale.ToString("F2"));
             EditorGUILayout.LabelField("書いているシェイプ数", r.ActiveWeightCount.ToString());
+            if (r.LastStepFps > 0f)
+                EditorGUILayout.LabelField("コマ打ち", r.LastStepFps.ToString("0.##") + " fps" + (r.StepHolding ? "（このフレームは保持）" : "（このフレームは更新）"));
+            if (r.LastExaggeration < 0.9999f)
+                EditorGUILayout.LabelField("誇張", r.LastExaggeration.ToString("0.##"));
             if (r.ActiveWeightCount > 0)
             {
                 _foldWeights = EditorGUILayout.Foldout(_foldWeights, "今の重み（0〜100）", true);
@@ -211,7 +215,14 @@ namespace TDrive.Facial.Editor
                 bool muted = r.mutedLayers != null && i < r.mutedLayers.Length && r.mutedLayers[i];
                 EditorGUILayout.BeginHorizontal();
                 EditorGUI.BeginChangeCheck();
-                float nw = EditorGUILayout.Slider(new GUIContent(layers[i].name, "このレイヤーの感情の重み（0〜1）"), w, 0f, 1f);
+                FacialLayerWeightData lw = layers[i].weight;
+                if (lw.source == FacialLayerWeightSource.Distance)
+                    EditorGUILayout.LabelField(layers[i].name + "（距離で決める）",
+                        "視点が " + lw.start.ToString("0.##") + "m で " + lw.from.ToString("0.##") + " → " + lw.end.ToString("0.##") + "m で " + lw.to.ToString("0.##")
+                        + "（この欄の値は使いません）");
+                float nw = EditorGUILayout.Slider(new GUIContent(layers[i].name, lw.source == FacialLayerWeightSource.Distance
+                    ? "距離で決めるレイヤーです。ここの値は使われず、視点までの距離で重みが決まります（Timeline の感情の重みは優先されます）"
+                    : "このレイヤーの感情の重み（0〜1）"), w, 0f, 1f);
                 bool nm = GUILayout.Toggle(muted, new GUIContent("ミュート", "オンにするとこのレイヤーを 0 として扱う"), GUILayout.Width(64));
                 if (EditorGUI.EndChangeCheck())
                 {

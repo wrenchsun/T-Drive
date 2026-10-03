@@ -13,6 +13,9 @@ namespace TDrive.Facial.Editor
         public string unit;
         public double expressionDampen, interpSpeed, snapAngle, fadeStart, fadeEnd, globalAlpha;
         public double sharpness, stepFps, angleEpsilon;
+        /// <summary>true のとき quality.exaggeration も書き出す（誇張を上書きしているときだけ）。</summary>
+        public bool hasExaggeration;
+        public double exaggeration;
         public int maxLod;
         /// <summary>true のとき grid.edgeFade も書き出す（端のフェードを上書きしているときだけ）。</summary>
         public bool hasEdgeFade;
@@ -53,6 +56,7 @@ namespace TDrive.Facial.Editor
                 angleEpsilon = data != null ? data.quality.angleEpsilon : 0.1,
                 maxLod = data != null ? data.quality.maxLod : 0,
                 edgeFade = p.edgeFade,
+                exaggeration = p.exaggeration,
             };
         }
 
@@ -61,6 +65,7 @@ namespace TDrive.Facial.Editor
         {
             FacialSourceTuning t = ToSource(data, FacialCorrectionOverrides.Resolve(data, overrides));
             t.hasEdgeFade = overrides != null && overrides.overrideEdgeFade; // 上書きしているときだけ grid を出す
+            t.hasExaggeration = overrides != null && overrides.overrideExaggeration; // 誇張も上書きしているときだけ
             return BuildJson(t);
         }
 
@@ -85,7 +90,8 @@ namespace TDrive.Facial.Editor
             sb.Append("    \"sharpness\": ").Append(N(t.sharpness)).Append(",\n");
             sb.Append("    \"stepFps\": ").Append(N(t.stepFps)).Append(",\n");
             sb.Append("    \"angleEpsilon\": ").Append(N(t.angleEpsilon)).Append(",\n");
-            sb.Append("    \"maxLod\": ").Append(t.maxLod.ToString(CultureInfo.InvariantCulture)).Append("\n");
+            sb.Append("    \"maxLod\": ").Append(t.maxLod.ToString(CultureInfo.InvariantCulture)).Append(t.hasExaggeration ? ",\n" : "\n");
+            if (t.hasExaggeration) sb.Append("    \"exaggeration\": ").Append(N(t.exaggeration)).Append("\n");
             sb.Append("  }\n");
             sb.Append("}\n");
             return sb.ToString();

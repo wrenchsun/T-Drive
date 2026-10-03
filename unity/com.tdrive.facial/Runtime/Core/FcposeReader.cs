@@ -287,8 +287,23 @@ namespace TDrive.Facial.Core
                     StepFps = F(q, "stepFps", def.StepFps),
                     AngleEpsilon = F(q, "angleEpsilon", def.AngleEpsilon),
                     MaxLod = I(q, "maxLod", def.MaxLod),
+                    Exaggeration = F(q, "exaggeration", def.Exaggeration),
                 };
             }
+            Dictionary<string, object> lw = Obj(d, "layerWeights");
+            if (lw != null)
+                foreach (KeyValuePair<string, object> kv in lw)
+                {
+                    var o = kv.Value as Dictionary<string, object>;
+                    if (o == null) continue;
+                    var w = new FcLayerWeight();
+                    w.Source = Str(o, "source", "direct");
+                    w.Start = F(o, "start", 0.0);
+                    w.End = F(o, "end", 0.0);
+                    w.From = F(o, "from", 0.0);
+                    w.To = F(o, "to", 1.0);
+                    doc.LayerWeights[kv.Key] = w;
+                }
             return doc;
         }
 

@@ -67,8 +67,12 @@ namespace TDrive.Facial.Core
         /// layers[0] は Neutral（常に全量）。それ以外は emotionWeight を掛けて足す。
         /// 無効レイヤー・重み 0・焼いていない点は飛ばす。並びは最初に現れた順。
         /// </summary>
+        /// <remarks>
+        /// sharpness（既定 1 = 何もしない）: 4 隅の双線形の重みを w^s / Σ w^s に直す（フェード・レイヤーの重みの前。F5-1）。
+        /// exaggeration（0〜1、既定 1）: layer.ExMorphNames の _Ex シェイプの重み = 対応する通常シェイプの重み × exaggeration（F5-5）。
+        /// </remarks>
         public static void EvaluateCorrection(GridShape grid, IReadOnlyList<LayerEvalInput> layers,
-            double yawDeg, double pitchDeg, List<MorphWeight> output)
+            double yawDeg, double pitchDeg, List<MorphWeight> output, double sharpness = 1.0, double exaggeration = 1.0)
         {
             output.Clear();
             if (layers.Count == 0 || grid.NumCols <= 0 || grid.NumRows <= 0) return;
@@ -76,6 +80,13 @@ namespace TDrive.Facial.Core
             AxisSample row = SampleAxis(pitchDeg, grid.PitchRangeDeg, grid.NumRows, grid.EdgeFadeDeg);
             double fadeScale = col.Fade * row.Fade;
             if (fadeScale <= KindaSmallNumber) return; // 範囲の外（フェード幅も超えた）
+
+            double b0 = (1.0 - col.Frac) * (1.0 - row.Frac);
+            double b1 = col.Frac * (1.0 - row.Frac);
+            double b2 = (1.0 - col.Frac) * row.Frac;
+            double b3 = col.Frac * row.Frac;
+            if (sharpness != 1.0) Sharpen4(ref b0, ref b1, ref b2, ref b3, sharpness);
+            double exag = Clamp(exaggeration, 0.0, 1.0);
 
             for (int li = 0; li < layers.Count; li++)
             {
@@ -85,16 +96,18 @@ namespace TDrive.Facial.Core
                 if (IsNearlyZero(layerScale)) continue;
                 IReadOnlyList<string> names = layer.CornerMorphNames;
                 int count = names == null ? 0 : names.Count;
+                IReadOnlyList<string> exNames = layer.ExMorphNames;
+                int exCount = exNames == null ? 0 : exNames.Count;
                 for (int k = 0; k < 4; k++)
                 {
                     int cRow, cCol;
                     double bilinear;
                     switch (k)
                     {
-                        case 0: cRow = row.Index0; cCol = col.Index0; bilinear = (1.0 - col.Frac) * (1.0 - row.Frac); break;
-                        case 1: cRow = row.Index0; cCol = col.Index1; bilinear = col.Frac * (1.0 - row.Frac); break;
-                        case 2: cRow = row.Index1; cCol = col.Index0; bilinear = (1.0 - col.Frac) * row.Frac; break;
-                        default: cRow = row.Index1; cCol = col.Index1; bilinear = col.Frac * row.Frac; break;
+                        case 0: cRow = row.Index0; cCol = col.Index0; bilinear = b0; break;
+                        case 1: cRow = row.Index0; cCol = col.Index1; bilinear = b1; break;
+                        case 2: cRow = row.Index1; cCol = col.Index0; bilinear = b2; break;
+                        default: cRow = row.Index1; cCol = col.Index1; bilinear = b3; break;
                     }
                     double weight = bilinear * layerScale * fadeScale;
                     if (IsNearlyZero(weight)) continue;
@@ -102,16 +115,11 @@ namespace TDrive.Facial.Core
                     if (pointIndex < 0 || pointIndex >= count) continue; // フェイルソフト
                     string name = names[pointIndex];
                     if (string.IsNullOrEmpty(name)) continue; // 焼いていない点
-                    int at = IndexOfName(output, name);
-                    if (at < 0)
+                    AddWeight(output, name, weight);
+                    if (exCount > 0 && exag > 0.0 && pointIndex < exCount)
                     {
-                        output.Add(new MorphWeight(name, weight));
-                    }
-                    else
-                    {
-                        MorphWeight m = output[at];
-                        m.Weight += weight;
-                        output[at] = m;
+                        string exName = exNames[pointIndex];
+                        if (!string.IsNullOrEmpty(exName)) AddWeight(output, exName, weight * exag);
                     }
                 }
             }
@@ -124,6 +132,84 @@ namespace TDrive.Facial.Core
                 w++;
             }
             if (w < output.Count) output.RemoveRange(w, output.Count - w);
+        }
+
+        static void AddWeight(List<MorphWeight> output, string name, double weight)
+        {
+            int at = IndexOfName(output, name);
+            if (at < 0)
+            {
+                output.Add(new MorphWeight(name, weight));
+            }
+            else
+            {
+                MorphWeight m = output[at];
+                m.Weight += weight;
+                output[at] = m;
+            }
+        }
+
+        public const double SharpnessMin = 0.01;
+        public const double SharpnessMax = 64.0;
+
+        public static double ClampSharpness(double sharpness)
+        {
+            return Clamp(sharpness, SharpnessMin, SharpnessMax);
+        }
+
+        static double PowW(double w, double s) { return w > 0.0 ? Math.Pow(w, s) : 0.0; }
+
+        /// <summary>4 隅の重みを w^s / Σ w^s に直す（0 は 0 のまま。合計 0 ならそのまま）。割り当てなし。</summary>
+        static void Sharpen4(ref double w0, ref double w1, ref double w2, ref double w3, double sharpness)
+        {
+            double s = ClampSharpness(sharpness);
+            if (s == 1.0) return;
+            double p0 = PowW(w0, s), p1 = PowW(w1, s), p2 = PowW(w2, s), p3 = PowW(w3, s);
+            double total = p0 + p1 + p2 + p3;
+            if (total <= 0.0) return;
+            w0 = p0 / total; w1 = p1 / total; w2 = p2 / total; w3 = p3 / total;
+        }
+
+        /// <summary>キー角度の強調（R-32）の補助（テスト・UI 用）。weights を w^s / Σ w^s に直す。</summary>
+        public static void SharpenWeights(double[] weights, double sharpness)
+        {
+            double s = ClampSharpness(sharpness);
+            if (s == 1.0 || weights == null) return;
+            double total = 0.0;
+            for (int i = 0; i < weights.Length; i++) total += PowW(weights[i], s);
+            if (total <= 0.0) return;
+            for (int i = 0; i < weights.Length; i++) weights[i] = PowW(weights[i], s) / total;
+        }
+
+        /// <summary>距離でレイヤーの重みを決める（R-35）。lerp(from, to, saturate((d - start) / (end - start)))。end == start は d &gt;= start で to、他は from。</summary>
+        public static double LayerWeightFromDistance(double distance, double start, double end, double from, double to)
+        {
+            double t;
+            if (end == start) t = distance >= start ? 1.0 : 0.0;
+            else t = Clamp((distance - start) / (end - start), 0.0, 1.0);
+            if (t <= 0.0) return from;
+            if (t >= 1.0) return to;
+            return from + (to - from) * t;
+        }
+
+        /// <summary>
+        /// コマ打ちの判定（R-33）。accum は前回の評価からの経過時間。accum += dt。stepFps &lt;= 0 は (true, 0)。
+        /// force（最初のフレーム・カット）か accum が 1/stepFps に届いたら評価する。
+        /// </summary>
+        public static bool StepGate(double accum, double dt, double stepFps, bool force, out double newAccum)
+        {
+            if (stepFps <= 0.0) { newAccum = 0.0; return true; }
+            accum += dt;
+            double period = 1.0 / stepFps;
+            if (force || accum + 1e-9 >= period)
+            {
+                double rem = accum % period;
+                if (rem + 1e-9 >= period) rem = 0.0; // 周期ぴったりの誤差で残りが周期ぎりぎりにならないように
+                newAccum = rem;
+                return true;
+            }
+            newAccum = accum;
+            return false;
         }
 
         static int IndexOfName(IReadOnlyList<MorphWeight> list, string name)

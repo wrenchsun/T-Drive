@@ -24,6 +24,7 @@ namespace TDrive.Facial.Timeline
         UnityEngine.Object _keyObject;
         bool _hasKey;
         float[] _emo = new float[0];
+        bool[] _emoTouched = new bool[0];
 
         public override void ProcessFrame(Playable playable, FrameData info, object playerData)
         {
@@ -77,6 +78,24 @@ namespace TDrive.Facial.Timeline
                 ov.alpha = alphaSum + (1f - covered); // クリップのない分は 1
             }
 
+            // 誇張: 「誇張を使う」のクリップの値を重みで混ぜる（使わないクリップ・クリップのない分は 1）
+            float exSum = 0f;
+            bool anyEx = false;
+            for (int i = 0; i < count; i++)
+            {
+                FacialCorrectionBehaviour b = Behaviour(playable, i);
+                float w = playable.GetInputWeight(i);
+                if (b == null || w <= 0f) continue;
+                w *= norm;
+                if (b.useExaggeration) { anyEx = true; exSum += w * Mathf.Clamp01(b.exaggeration); }
+                else exSum += w;
+            }
+            if (anyEx)
+            {
+                ov.hasExaggeration = true;
+                ov.exaggeration = exSum + (1f - covered);
+            }
+
             // 感情の重み: Runner の値を土台に、書いてあるレイヤーだけを重みで寄せる
             FacialCorrectionData data = runner.data;
             int layers = data != null && data.layers != null ? data.layers.Length : 0;
@@ -90,7 +109,8 @@ namespace TDrive.Facial.Timeline
                 }
                 if (anyEmo)
                 {
-                    if (_emo.Length != layers) _emo = new float[layers];
+                    if (_emo.Length != layers) { _emo = new float[layers]; _emoTouched = new bool[layers]; }
+                    for (int l = 0; l < layers; l++) _emoTouched[l] = false;
                     float[] baseW = runner.emotionWeights;
                     for (int l = 0; l < layers; l++) _emo[l] = baseW != null && l < baseW.Length ? baseW[l] : 0f;
                     for (int i = 0; i < count; i++)
@@ -103,10 +123,15 @@ namespace TDrive.Facial.Timeline
                         {
                             int li = LayerIndex(data, b.effEmotions[e].layer);
                             if (li <= 0) continue; // 0 番（Neutral）と未知の名前は無視
+                            _emoTouched[li] = true;
                             float baseValue = baseW != null && li < baseW.Length ? baseW[li] : 0f;
                             _emo[li] += w * (Mathf.Max(0f, b.effEmotions[e].weight) - baseValue);
                         }
                     }
+                    // 距離で決めるレイヤー（layerWeights.source = distance）は、どのクリップにも書かれていなければ NaN =「指定なし」
+                    // にして、Runner の距離の重みを生かす（書かれていればクリップの値が優先）
+                    for (int l = 1; l < layers; l++)
+                        if (!_emoTouched[l] && data.layers[l].weight.source == FacialLayerWeightSource.Distance) _emo[l] = float.NaN;
                     ov.emotionWeights = _emo;
                 }
             }

@@ -1,0 +1,509 @@
+{
+ "kind": "step",
+ "description": "コマ打ち（quality.stepFps、R-33）の判定 step_gate。initialAccum から始め、steps を順に適用する（各ステップの新しい accum が次の入力）。force = 最初のフレーム・カット",
+ "cases": [
+  {
+   "name": "off_always_evaluates",
+   "source": "python-port (F5; UE 未実装)",
+   "stepFps": 0,
+   "initialAccum": 0.0,
+   "steps": [
+    {
+     "dt": 0.016,
+     "expect": {
+      "evaluate": true,
+      "accum": 0.0
+     }
+    },
+    {
+     "dt": 0.016,
+     "expect": {
+      "evaluate": true,
+      "accum": 0.0
+     }
+    },
+    {
+     "dt": 0.016,
+     "expect": {
+      "evaluate": true,
+      "accum": 0.0
+     }
+    }
+   ],
+   "note": "stepFps <= 0 は毎フレーム評価（accum は 0）"
+  },
+  {
+   "name": "negative_fps_is_off",
+   "source": "python-port (F5; UE 未実装)",
+   "stepFps": -5,
+   "initialAccum": 0.0,
+   "steps": [
+    {
+     "dt": 0.016,
+     "expect": {
+      "evaluate": true,
+      "accum": 0.0
+     }
+    },
+    {
+     "dt": 0.016,
+     "expect": {
+      "evaluate": true,
+      "accum": 0.0
+     }
+    }
+   ]
+  },
+  {
+   "name": "12fps_at_60fps_first_frame",
+   "source": "python-port (F5; UE 未実装)",
+   "stepFps": 12,
+   "initialAccum": 0.0,
+   "steps": [
+    {
+     "dt": 0.016666666666666666,
+     "force": true,
+     "expect": {
+      "evaluate": true,
+      "accum": 0.016666667
+     }
+    },
+    {
+     "dt": 0.016666666666666666,
+     "expect": {
+      "evaluate": false,
+      "accum": 0.033333333
+     }
+    },
+    {
+     "dt": 0.016666666666666666,
+     "expect": {
+      "evaluate": false,
+      "accum": 0.05
+     }
+    },
+    {
+     "dt": 0.016666666666666666,
+     "expect": {
+      "evaluate": false,
+      "accum": 0.066666667
+     }
+    },
+    {
+     "dt": 0.016666666666666666,
+     "expect": {
+      "evaluate": true,
+      "accum": 0.0
+     }
+    },
+    {
+     "dt": 0.016666666666666666,
+     "expect": {
+      "evaluate": false,
+      "accum": 0.016666667
+     }
+    },
+    {
+     "dt": 0.016666666666666666,
+     "expect": {
+      "evaluate": false,
+      "accum": 0.033333333
+     }
+    },
+    {
+     "dt": 0.016666666666666666,
+     "expect": {
+      "evaluate": false,
+      "accum": 0.05
+     }
+    },
+    {
+     "dt": 0.016666666666666666,
+     "expect": {
+      "evaluate": false,
+      "accum": 0.066666667
+     }
+    },
+    {
+     "dt": 0.016666666666666666,
+     "expect": {
+      "evaluate": true,
+      "accum": 0.0
+     }
+    },
+    {
+     "dt": 0.016666666666666666,
+     "expect": {
+      "evaluate": false,
+      "accum": 0.016666667
+     }
+    },
+    {
+     "dt": 0.016666666666666666,
+     "expect": {
+      "evaluate": false,
+      "accum": 0.033333333
+     }
+    },
+    {
+     "dt": 0.016666666666666666,
+     "expect": {
+      "evaluate": false,
+      "accum": 0.05
+     }
+    }
+   ],
+   "note": "最初のフレームは必ず評価。そのあと 1/12 秒（= 60fps で 5 フレーム）ごと"
+  },
+  {
+   "name": "30fps_at_60fps_every_other",
+   "source": "python-port (F5; UE 未実装)",
+   "stepFps": 30,
+   "initialAccum": 0.0,
+   "steps": [
+    {
+     "dt": 0.016666666666666666,
+     "expect": {
+      "evaluate": false,
+      "accum": 0.016666667
+     }
+    },
+    {
+     "dt": 0.016666666666666666,
+     "expect": {
+      "evaluate": true,
+      "accum": 0.0
+     }
+    },
+    {
+     "dt": 0.016666666666666666,
+     "expect": {
+      "evaluate": false,
+      "accum": 0.016666667
+     }
+    },
+    {
+     "dt": 0.016666666666666666,
+     "expect": {
+      "evaluate": true,
+      "accum": 0.0
+     }
+    },
+    {
+     "dt": 0.016666666666666666,
+     "expect": {
+      "evaluate": false,
+      "accum": 0.016666667
+     }
+    },
+    {
+     "dt": 0.016666666666666666,
+     "expect": {
+      "evaluate": true,
+      "accum": 0.0
+     }
+    }
+   ],
+   "note": "60fps の描画で 30fps → 1 フレームおき（周期ぴったりの誤差でも崩れない）"
+  },
+  {
+   "name": "24fps_at_60fps",
+   "source": "python-port (F5; UE 未実装)",
+   "stepFps": 24,
+   "initialAccum": 0.0,
+   "steps": [
+    {
+     "dt": 0.016666666666666666,
+     "expect": {
+      "evaluate": false,
+      "accum": 0.016666667
+     }
+    },
+    {
+     "dt": 0.016666666666666666,
+     "expect": {
+      "evaluate": false,
+      "accum": 0.033333333
+     }
+    },
+    {
+     "dt": 0.016666666666666666,
+     "expect": {
+      "evaluate": true,
+      "accum": 0.008333333
+     }
+    },
+    {
+     "dt": 0.016666666666666666,
+     "expect": {
+      "evaluate": false,
+      "accum": 0.025
+     }
+    },
+    {
+     "dt": 0.016666666666666666,
+     "expect": {
+      "evaluate": true,
+      "accum": 0.0
+     }
+    },
+    {
+     "dt": 0.016666666666666666,
+     "expect": {
+      "evaluate": false,
+      "accum": 0.016666667
+     }
+    },
+    {
+     "dt": 0.016666666666666666,
+     "expect": {
+      "evaluate": false,
+      "accum": 0.033333333
+     }
+    },
+    {
+     "dt": 0.016666666666666666,
+     "expect": {
+      "evaluate": true,
+      "accum": 0.008333333
+     }
+    },
+    {
+     "dt": 0.016666666666666666,
+     "expect": {
+      "evaluate": false,
+      "accum": 0.025
+     }
+    },
+    {
+     "dt": 0.016666666666666666,
+     "expect": {
+      "evaluate": true,
+      "accum": 0.0
+     }
+    },
+    {
+     "dt": 0.016666666666666666,
+     "expect": {
+      "evaluate": false,
+      "accum": 0.016666667
+     }
+    },
+    {
+     "dt": 0.016666666666666666,
+     "expect": {
+      "evaluate": false,
+      "accum": 0.033333333
+     }
+    },
+    {
+     "dt": 0.016666666666666666,
+     "expect": {
+      "evaluate": true,
+      "accum": 0.008333333
+     }
+    },
+    {
+     "dt": 0.016666666666666666,
+     "expect": {
+      "evaluate": false,
+      "accum": 0.025
+     }
+    },
+    {
+     "dt": 0.016666666666666666,
+     "expect": {
+      "evaluate": true,
+      "accum": 0.0
+     }
+    }
+   ]
+  },
+  {
+   "name": "slow_frame_longer_than_period",
+   "source": "python-port (F5; UE 未実装)",
+   "stepFps": 12,
+   "initialAccum": 0.0,
+   "steps": [
+    {
+     "dt": 0.2,
+     "expect": {
+      "evaluate": true,
+      "accum": 0.033333333
+     }
+    },
+    {
+     "dt": 0.01,
+     "expect": {
+      "evaluate": false,
+      "accum": 0.043333333
+     }
+    },
+    {
+     "dt": 0.08,
+     "expect": {
+      "evaluate": true,
+      "accum": 0.04
+     }
+    }
+   ],
+   "note": "周期より長いフレームは 1 回だけ評価し、余りを持ち越す"
+  },
+  {
+   "name": "force_cut_evaluates_immediately",
+   "source": "python-port (F5; UE 未実装)",
+   "stepFps": 12,
+   "initialAccum": 0.0,
+   "steps": [
+    {
+     "dt": 0.01,
+     "expect": {
+      "evaluate": false,
+      "accum": 0.01
+     }
+    },
+    {
+     "dt": 0.01,
+     "force": true,
+     "expect": {
+      "evaluate": true,
+      "accum": 0.02
+     }
+    },
+    {
+     "dt": 0.01,
+     "expect": {
+      "evaluate": false,
+      "accum": 0.03
+     }
+    }
+   ],
+   "note": "カット（force）は周期の途中でも評価"
+  },
+  {
+   "name": "variable_dt",
+   "source": "python-port (F5; UE 未実装)",
+   "stepFps": 10,
+   "initialAccum": 0.0,
+   "steps": [
+    {
+     "dt": 0.03,
+     "expect": {
+      "evaluate": false,
+      "accum": 0.03
+     }
+    },
+    {
+     "dt": 0.03,
+     "expect": {
+      "evaluate": false,
+      "accum": 0.06
+     }
+    },
+    {
+     "dt": 0.03,
+     "expect": {
+      "evaluate": false,
+      "accum": 0.09
+     }
+    },
+    {
+     "dt": 0.03,
+     "expect": {
+      "evaluate": true,
+      "accum": 0.02
+     }
+    },
+    {
+     "dt": 0.03,
+     "expect": {
+      "evaluate": false,
+      "accum": 0.05
+     }
+    },
+    {
+     "dt": 0.03,
+     "expect": {
+      "evaluate": false,
+      "accum": 0.08
+     }
+    },
+    {
+     "dt": 0.03,
+     "expect": {
+      "evaluate": true,
+      "accum": 0.01
+     }
+    }
+   ]
+  },
+  {
+   "name": "carry_initial_accum",
+   "source": "python-port (F5; UE 未実装)",
+   "stepFps": 10,
+   "initialAccum": 0.07,
+   "steps": [
+    {
+     "dt": 0.02,
+     "expect": {
+      "evaluate": false,
+      "accum": 0.09
+     }
+    },
+    {
+     "dt": 0.02,
+     "expect": {
+      "evaluate": true,
+      "accum": 0.01
+     }
+    }
+   ]
+  },
+  {
+   "name": "exact_period_dt",
+   "source": "python-port (F5; UE 未実装)",
+   "stepFps": 10,
+   "initialAccum": 0.0,
+   "steps": [
+    {
+     "dt": 0.1,
+     "expect": {
+      "evaluate": true,
+      "accum": 0.0
+     }
+    },
+    {
+     "dt": 0.1,
+     "expect": {
+      "evaluate": true,
+      "accum": 0.0
+     }
+    }
+   ],
+   "note": "dt が周期ちょうどなら毎回評価"
+  },
+  {
+   "name": "zero_dt_holds",
+   "source": "python-port (F5; UE 未実装)",
+   "stepFps": 10,
+   "initialAccum": 0.05,
+   "steps": [
+    {
+     "dt": 0.0,
+     "expect": {
+      "evaluate": false,
+      "accum": 0.05
+     }
+    },
+    {
+     "dt": 0.0,
+     "expect": {
+      "evaluate": false,
+      "accum": 0.05
+     }
+    }
+   ],
+   "note": "時間が進まないとき（停止中）は保持"
+  }
+ ]
+}

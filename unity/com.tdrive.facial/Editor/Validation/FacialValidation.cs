@@ -121,7 +121,7 @@ namespace TDrive.Facial.Editor
                 string n = fcShapes[i];
                 if (expectedShapes.Contains(n)) continue;
                 ParsedFacialName parsed;
-                // 誇張 _Ex・パース補正 Persp はあとのチケット（F5）で使うので孤立とは数えない
+                // 誇張 _Ex（任意のシェイプ。無くてもエラーにしない）・パース補正 Persp は管理下のシェイプなので孤立とは数えない
                 if (n.StartsWith(assetPrefix, StringComparison.Ordinal) && FacialNaming.TryParse(n, data.assetName, out parsed)
                     && (parsed.Kind == FacialNameKind.Persp || parsed.Kind == FacialNameKind.PointEx)) continue;
                 Add(issues, FacialIssueSeverity.Warning, FacialIssueKind.OrphanShape,

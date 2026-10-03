@@ -1,0 +1,602 @@
+{
+ "kind": "evaluate",
+ "description": "誇張シェイプ（_Ex、R-37）の実行時の重み。evaluate と同じ形に `exaggeration`（省略 = 1）とレイヤーの `exMorphs`（morphs と同じ並びの _Ex の名前。null / 無し = Ex なし）を足したケース。_Ex の重み = 対応する通常シェイプの重み × exaggeration（0〜1）。Python 版で作成（UE 版には無い）",
+ "cases": [
+  {
+   "name": "ex_full_default",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 2,
+    "rows": 1,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1"
+     ],
+     "exMorphs": [
+      "FC_R0_C0_Ex",
+      "FC_R0_C1_Ex"
+     ]
+    }
+   ],
+   "yaw": -45,
+   "pitch": 0,
+   "note": "exaggeration 省略 = 1。通常シェイプと同じ重みで _Ex も出る",
+   "expect": {
+    "weights": {
+     "FC_R0_C0": 0.75,
+     "FC_R0_C0_Ex": 0.75,
+     "FC_R0_C1": 0.25,
+     "FC_R0_C1_Ex": 0.25
+    }
+   }
+  },
+  {
+   "name": "ex_half",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 2,
+    "rows": 1,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1"
+     ],
+     "exMorphs": [
+      "FC_R0_C0_Ex",
+      "FC_R0_C1_Ex"
+     ]
+    }
+   ],
+   "yaw": -45,
+   "pitch": 0,
+   "exaggeration": 0.5,
+   "note": "_Ex の重み = 通常シェイプの重み × 0.5",
+   "expect": {
+    "weights": {
+     "FC_R0_C0": 0.75,
+     "FC_R0_C0_Ex": 0.375,
+     "FC_R0_C1": 0.25,
+     "FC_R0_C1_Ex": 0.125
+    }
+   }
+  },
+  {
+   "name": "ex_zero_omitted",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 2,
+    "rows": 1,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1"
+     ],
+     "exMorphs": [
+      "FC_R0_C0_Ex",
+      "FC_R0_C1_Ex"
+     ]
+    }
+   ],
+   "yaw": -45,
+   "pitch": 0,
+   "exaggeration": 0.0,
+   "note": "0 のとき _Ex は出力に出ない",
+   "expect": {
+    "weights": {
+     "FC_R0_C0": 0.75,
+     "FC_R0_C1": 0.25
+    }
+   }
+  },
+  {
+   "name": "ex_clamped_above_1",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 2,
+    "rows": 1,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1"
+     ],
+     "exMorphs": [
+      "FC_R0_C0_Ex",
+      "FC_R0_C1_Ex"
+     ]
+    }
+   ],
+   "yaw": -45,
+   "pitch": 0,
+   "exaggeration": 3.0,
+   "note": "1 に丸める",
+   "expect": {
+    "weights": {
+     "FC_R0_C0": 0.75,
+     "FC_R0_C0_Ex": 0.75,
+     "FC_R0_C1": 0.25,
+     "FC_R0_C1_Ex": 0.25
+    }
+   }
+  },
+  {
+   "name": "ex_clamped_below_0",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 2,
+    "rows": 1,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1"
+     ],
+     "exMorphs": [
+      "FC_R0_C0_Ex",
+      "FC_R0_C1_Ex"
+     ]
+    }
+   ],
+   "yaw": -45,
+   "pitch": 0,
+   "exaggeration": -1.0,
+   "note": "0 に丸める",
+   "expect": {
+    "weights": {
+     "FC_R0_C0": 0.75,
+     "FC_R0_C1": 0.25
+    }
+   }
+  },
+  {
+   "name": "ex_none_means_no_ex",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 2,
+    "rows": 1,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1"
+     ]
+    }
+   ],
+   "yaw": -45,
+   "pitch": 0,
+   "exaggeration": 1.0,
+   "note": "exMorphs が無ければ従来どおり",
+   "expect": {
+    "weights": {
+     "FC_R0_C0": 0.75,
+     "FC_R0_C1": 0.25
+    }
+   }
+  },
+  {
+   "name": "ex_only_some_points",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 2,
+    "rows": 1,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1"
+     ],
+     "exMorphs": [
+      "FC_R0_C0_Ex",
+      null
+     ]
+    }
+   ],
+   "yaw": -45,
+   "pitch": 0,
+   "exaggeration": 1.0,
+   "note": "Ex がある点だけ Ex が出る",
+   "expect": {
+    "weights": {
+     "FC_R0_C0": 0.75,
+     "FC_R0_C0_Ex": 0.75,
+     "FC_R0_C1": 0.25
+    }
+   }
+  },
+  {
+   "name": "ex_empty_string_is_none",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 2,
+    "rows": 1,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1"
+     ],
+     "exMorphs": [
+      "",
+      "FC_R0_C1_Ex"
+     ]
+    }
+   ],
+   "yaw": -45,
+   "pitch": 0,
+   "exaggeration": 0.4,
+   "expect": {
+    "weights": {
+     "FC_R0_C0": 0.75,
+     "FC_R0_C1": 0.25,
+     "FC_R0_C1_Ex": 0.1
+    }
+   }
+  },
+  {
+   "name": "ex_unbaked_main_skips_ex",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 2,
+    "rows": 1,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      null,
+      "FC_R0_C1"
+     ],
+     "exMorphs": [
+      "FC_R0_C0_Ex",
+      "FC_R0_C1_Ex"
+     ]
+    }
+   ],
+   "yaw": -45,
+   "pitch": 0,
+   "exaggeration": 1.0,
+   "note": "通常シェイプを焼いていない点の _Ex は出さない",
+   "expect": {
+    "weights": {
+     "FC_R0_C1": 0.25,
+     "FC_R0_C1_Ex": 0.25
+    }
+   }
+  },
+  {
+   "name": "ex_short_list_failsoft",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 2,
+    "rows": 1,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1"
+     ],
+     "exMorphs": [
+      "FC_R0_C0_Ex"
+     ]
+    }
+   ],
+   "yaw": -45,
+   "pitch": 0,
+   "exaggeration": 1.0,
+   "note": "exMorphs が短くても落ちない（足りない点は Ex なし）",
+   "expect": {
+    "weights": {
+     "FC_R0_C0": 0.75,
+     "FC_R0_C0_Ex": 0.75,
+     "FC_R0_C1": 0.25
+    }
+   }
+  },
+  {
+   "name": "ex_emotion_layer_scaled",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 3,
+    "rows": 3,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1",
+      "FC_R0_C2",
+      "FC_R1_C0",
+      "FC_R1_C1",
+      "FC_R1_C2",
+      "FC_R2_C0",
+      "FC_R2_C1",
+      "FC_R2_C2"
+     ],
+     "exMorphs": [
+      "FC_R0_C0_Ex",
+      "FC_R0_C1_Ex",
+      "FC_R0_C2_Ex",
+      "FC_R1_C0_Ex",
+      "FC_R1_C1_Ex",
+      "FC_R1_C2_Ex",
+      "FC_R2_C0_Ex",
+      "FC_R2_C1_Ex",
+      "FC_R2_C2_Ex"
+     ]
+    },
+    {
+     "name": "Happy",
+     "enabled": true,
+     "emotionWeight": 0.5,
+     "morphs": [
+      "FC_Happy_R0_C0",
+      "FC_Happy_R0_C1",
+      "FC_Happy_R0_C2",
+      "FC_Happy_R1_C0",
+      "FC_Happy_R1_C1",
+      "FC_Happy_R1_C2",
+      "FC_Happy_R2_C0",
+      "FC_Happy_R2_C1",
+      "FC_Happy_R2_C2"
+     ],
+     "exMorphs": [
+      "FC_Happy_R0_C0_Ex",
+      "FC_Happy_R0_C1_Ex",
+      "FC_Happy_R0_C2_Ex",
+      "FC_Happy_R1_C0_Ex",
+      "FC_Happy_R1_C1_Ex",
+      "FC_Happy_R1_C2_Ex",
+      "FC_Happy_R2_C0_Ex",
+      "FC_Happy_R2_C1_Ex",
+      "FC_Happy_R2_C2_Ex"
+     ]
+    }
+   ],
+   "yaw": -22.5,
+   "pitch": 0,
+   "exaggeration": 0.5,
+   "note": "感情レイヤーの Ex も レイヤーの重み × exaggeration",
+   "expect": {
+    "weights": {
+     "FC_R1_C0": 0.25,
+     "FC_R1_C0_Ex": 0.125,
+     "FC_R1_C1": 0.75,
+     "FC_R1_C1_Ex": 0.375,
+     "FC_Happy_R1_C0": 0.125,
+     "FC_Happy_R1_C0_Ex": 0.0625,
+     "FC_Happy_R1_C1": 0.375,
+     "FC_Happy_R1_C1_Ex": 0.1875
+    }
+   }
+  },
+  {
+   "name": "ex_edge_fade",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 2,
+    "rows": 1,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1"
+     ],
+     "exMorphs": [
+      "FC_R0_C0_Ex",
+      "FC_R0_C1_Ex"
+     ]
+    }
+   ],
+   "yaw": -97.5,
+   "pitch": 0,
+   "exaggeration": 1.0,
+   "note": "端のフェードは Ex にも掛かる",
+   "expect": {
+    "weights": {
+     "FC_R0_C0": 0.5,
+     "FC_R0_C0_Ex": 0.5
+    }
+   }
+  },
+  {
+   "name": "ex_with_sharpness",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 2,
+    "rows": 1,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1"
+     ],
+     "exMorphs": [
+      "FC_R0_C0_Ex",
+      "FC_R0_C1_Ex"
+     ]
+    }
+   ],
+   "yaw": -45,
+   "pitch": 0,
+   "sharpness": 2.0,
+   "exaggeration": 0.5,
+   "note": "シャープ化した重みから Ex を作る",
+   "expect": {
+    "weights": {
+     "FC_R0_C0": 0.9,
+     "FC_R0_C0_Ex": 0.45,
+     "FC_R0_C1": 0.1,
+     "FC_R0_C1_Ex": 0.05
+    }
+   }
+  },
+  {
+   "name": "ex_disabled_layer",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 3,
+    "rows": 3,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1",
+      "FC_R0_C2",
+      "FC_R1_C0",
+      "FC_R1_C1",
+      "FC_R1_C2",
+      "FC_R2_C0",
+      "FC_R2_C1",
+      "FC_R2_C2"
+     ],
+     "exMorphs": [
+      "FC_R0_C0_Ex",
+      "FC_R0_C1_Ex",
+      "FC_R0_C2_Ex",
+      "FC_R1_C0_Ex",
+      "FC_R1_C1_Ex",
+      "FC_R1_C2_Ex",
+      "FC_R2_C0_Ex",
+      "FC_R2_C1_Ex",
+      "FC_R2_C2_Ex"
+     ]
+    },
+    {
+     "name": "Happy",
+     "enabled": false,
+     "emotionWeight": 0.5,
+     "morphs": [
+      "FC_Happy_R0_C0",
+      "FC_Happy_R0_C1",
+      "FC_Happy_R0_C2",
+      "FC_Happy_R1_C0",
+      "FC_Happy_R1_C1",
+      "FC_Happy_R1_C2",
+      "FC_Happy_R2_C0",
+      "FC_Happy_R2_C1",
+      "FC_Happy_R2_C2"
+     ],
+     "exMorphs": [
+      "FC_Happy_R0_C0_Ex",
+      "FC_Happy_R0_C1_Ex",
+      "FC_Happy_R0_C2_Ex",
+      "FC_Happy_R1_C0_Ex",
+      "FC_Happy_R1_C1_Ex",
+      "FC_Happy_R1_C2_Ex",
+      "FC_Happy_R2_C0_Ex",
+      "FC_Happy_R2_C1_Ex",
+      "FC_Happy_R2_C2_Ex"
+     ]
+    }
+   ],
+   "yaw": 0,
+   "pitch": 0,
+   "exaggeration": 1.0,
+   "expect": {
+    "weights": {
+     "FC_R1_C1": 1.0,
+     "FC_R1_C1_Ex": 1.0
+    }
+   }
+  }
+ ]
+}

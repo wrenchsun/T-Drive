@@ -209,7 +209,8 @@
             "sharpness": { "type": "number", "exclusiveMinimum": 0 },
             "stepFps": { "type": "number", "minimum": 0 },
             "angleEpsilon": { "type": "number", "minimum": 0 },
-            "maxLod": { "type": "integer", "minimum": 0 }
+            "maxLod": { "type": "integer", "minimum": 0 },
+            "exaggeration": { "type": "number", "minimum": 0, "maximum": 1, "description": "誇張（_Ex シェイプ）の既定の強さ。F5-5" }
           },
           "additionalProperties": true
         },
@@ -227,7 +228,13 @@
           "description": "T-Drive 追加（R-35）。レイヤー名 → 重みの入力元",
           "additionalProperties": {
             "type": "object",
-            "properties": { "source": { "enum": ["curve", "direct", "distance"] } },
+            "properties": {
+              "source": { "enum": ["curve", "direct", "distance"] },
+              "start": { "type": "number", "description": "distance: 開始距離（ドキュメントの単位）" },
+              "end": { "type": "number", "description": "distance: 終了距離" },
+              "from": { "type": "number", "description": "distance: start 以下での重み（既定 0）" },
+              "to": { "type": "number", "description": "distance: end 以上での重み（既定 1）" }
+            },
             "additionalProperties": true
           }
         },

@@ -13,6 +13,8 @@ from tdrive_facial.core.model import BoneOffset
 
 CONF = Path(__file__).parent / "conformance"
 WEIGHT_TOL = 1e-4
+F5_SOURCE = "python-port (F5; UE 未実装)"
+F5_FILES = ("evaluate_sharpness.json", "evaluate_exaggeration.json", "layer_distance.json", "step.json")
 
 UE_TESTS = {
     "ExactGridPoint", "BilinearCenter", "EmotionBlend", "ZeroWeightSkip", "EdgeFade", "UnbakedPointFailSoft",
@@ -47,7 +49,7 @@ def test_every_file_has_kind_description_and_cases():
         assert {"kind", "description", "cases"} <= set(data), fname
         assert isinstance(data["cases"], list) and data["cases"], fname
         kinds.add(data["kind"])
-    assert kinds == {"evaluate", "view_angles", "scalar", "smooth", "convert", "autofill", "presenter"}
+    assert kinds == {"evaluate", "view_angles", "scalar", "smooth", "convert", "autofill", "presenter", "step"}
 
 
 def test_case_names_are_unique_per_file_and_sources_are_marked():
@@ -56,7 +58,7 @@ def test_case_names_are_unique_per_file_and_sources_are_marked():
         assert len(names) == len(set(names)), fname
         for c in data["cases"]:
             src = c["source"]
-            assert src == "python-port" or src.startswith("UE FacialCoreTests.cpp:"), (fname, c["name"], src)
+            assert src == "python-port" or src == F5_SOURCE or src.startswith("UE FacialCoreTests.cpp:"), (fname, c["name"], src)
 
 
 def test_all_eleven_ue_automation_tests_are_transcribed():
@@ -96,8 +98,11 @@ def test_required_scenarios_are_covered():
 def run_evaluate(c):
     g = c["grid"]
     grid = ev.GridShape(g["yawRange"], g["pitchRange"], g["cols"], g["rows"], g["edgeFade"])
-    layers = [ev.LayerEvalInput(l["morphs"], l["emotionWeight"], l["enabled"]) for l in c["layers"]]
-    return {w.morph_name: w.weight for w in ev.evaluate_correction(grid, layers, c["yaw"], c["pitch"])}
+    layers = [ev.LayerEvalInput(l["morphs"], l["emotionWeight"], l["enabled"], l.get("exMorphs")) for l in c["layers"]]
+    got = ev.evaluate_correction(
+        grid, layers, c["yaw"], c["pitch"], sharpness=c.get("sharpness", 1.0), exaggeration=c.get("exaggeration", 1.0)
+    )
+    return {w.morph_name: w.weight for w in got}
 
 
 @pytest.mark.parametrize("c", cases_of("evaluate"))
@@ -146,12 +151,31 @@ SCALARS = {
     "distanceFade": ev.distance_fade,
     "finterpTo": ev.finterp_to,
     "normalizeAxis": ev.normalize_axis,
+    "layerWeightFromDistance": ev.layer_weight_from_distance,
 }
 
 
 @pytest.mark.parametrize("c", cases_of("scalar"))
 def test_scalar(c):
     assert SCALARS[c["fn"]](*c["args"]) == pytest.approx(c["expect"], abs=c.get("tolerance", 1e-6))
+
+
+# --- step（コマ打ち。F5）---
+
+
+@pytest.mark.parametrize("c", cases_of("step"))
+def test_step(c):
+    accum = c["initialAccum"]
+    for i, st in enumerate(c["steps"]):
+        evaluate, accum = ev.step_gate(accum, st["dt"], c["stepFps"], st.get("force", False))
+        assert evaluate == st["expect"]["evaluate"], i
+        assert accum == pytest.approx(st["expect"]["accum"], abs=1e-8), i
+
+
+def test_f5_files_are_marked_and_present():
+    for fname in F5_FILES:
+        assert fname in ALL, fname
+        assert all(c["source"] == F5_SOURCE for c in ALL[fname]["cases"]), fname
 
 
 # --- smooth ---

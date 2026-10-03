@@ -2,6 +2,7 @@
 // 重みは Runner（合成メッシュ）の値。Scene ビューは使わない（視点は Runner の viewerOverride / クリップの視点 / 手動の角度）。
 using System.Collections.Generic;
 using NUnit.Framework;
+using TDrive.Facial.Core;
 using TDrive.Facial.Timeline;
 using UnityEngine;
 using UnityEngine.Playables;
@@ -243,12 +244,34 @@ namespace TDrive.Facial.Tests.Timeline
         }
 
         [Test]
-        public void StepFpsIsPassedThroughButTheRunnerIgnoresIt()
+        public void StepFpsOfTheClipIsUsedByTheRunner()
         {
             FacialCorrectionClip c = _h.AddClip(_h.AddTrack(), 0, 2);
             c.template.useStepFps = true; c.template.stepFps = 12f;
             _h.At(1.0);
-            Assert.AreEqual(100f, N11, 0.5f); // 準備中: 結果は変わらない
+            Assert.AreEqual(100f, N11, 0.5f); // 最初のフレームは必ず評価する
+            Assert.AreEqual(12f, _h.rig.runner.LastStepFps, 1e-4f);
+            _h.At(3.0); // クリップの外 = データの値（0 = 毎フレーム）
+            Assert.AreEqual(0f, _h.rig.runner.LastStepFps, 1e-4f);
+        }
+
+        [Test]
+        public void ClipExaggerationScalesTheExShapeOnlyInsideTheClip()
+        {
+            string ex = FacialNaming.MorphName(FacialTestRig.Asset, "Neutral", 1, 1, true);
+            _h.rig.AddShape(ex);
+            var exNames = new string[9];
+            for (int i = 0; i < 9; i++) exNames[i] = "";
+            exNames[4] = ex;
+            _h.rig.data.layers[0].exMorphNames = exNames;
+            FacialCorrectionClip c = _h.AddClip(_h.AddTrack(), 0, 2);
+            c.template.useExaggeration = true; c.template.exaggeration = 0.5f;
+
+            _h.At(1.0);
+            Assert.AreEqual(100f, N11, 0.5f);
+            Assert.AreEqual(50f, _h.rig.W(ex), 0.5f);
+            _h.At(3.0); // クリップの外 = 作った通り
+            Assert.AreEqual(100f, _h.rig.W(ex), 0.5f);
         }
 
         [Test]

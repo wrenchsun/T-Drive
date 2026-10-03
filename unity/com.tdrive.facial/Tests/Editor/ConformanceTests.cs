@@ -15,7 +15,7 @@ namespace TDrive.Facial.Tests
     public static class ConformanceData
     {
         public const string EnvVar = "TDRIVE_CONFORMANCE_DIR";
-        static readonly string[] KnownKinds = { "evaluate", "view_angles", "scalar", "smooth", "convert" };
+        static readonly string[] KnownKinds = { "evaluate", "view_angles", "scalar", "smooth", "convert", "step" };
 
         public sealed class Case
         {
@@ -181,10 +181,19 @@ namespace TDrive.Facial.Tests
                 Obj l = O(lo);
                 var morphs = new List<string>();
                 foreach (object m in A(l["morphs"])) morphs.Add((string)m);
-                layers.Add(new LayerEvalInput(morphs, NumOr(l, "emotionWeight", 0.0), BoolOr(l, "enabled", true)));
+                var li = new LayerEvalInput(morphs, NumOr(l, "emotionWeight", 0.0), BoolOr(l, "enabled", true));
+                object exo;
+                if (l.TryGetValue("exMorphs", out exo) && exo != null)
+                {
+                    var ex = new List<string>();
+                    foreach (object m in A(exo)) ex.Add((string)m);
+                    li.ExMorphNames = ex;
+                }
+                layers.Add(li);
             }
             var output = new List<MorphWeight>();
-            FacialCore.EvaluateCorrection(grid, layers, Num(d["yaw"]), Num(d["pitch"]), output);
+            FacialCore.EvaluateCorrection(grid, layers, Num(d["yaw"]), Num(d["pitch"]), output,
+                NumOr(d, "sharpness", 1.0), NumOr(d, "exaggeration", 1.0));
 
             double tol = NumOr(d, "tolerance", WeightTol);
             var expect = new Dictionary<string, double>();
@@ -251,9 +260,31 @@ namespace TDrive.Facial.Tests
                 case "distanceFade": got = FacialCore.DistanceFade(Num(a[0]), Num(a[1]), Num(a[2])); break;
                 case "finterpTo": got = FacialCore.FInterpTo(Num(a[0]), Num(a[1]), Num(a[2]), Num(a[3])); break;
                 case "normalizeAxis": got = FacialCore.NormalizeAxis(Num(a[0])); break;
+                case "layerWeightFromDistance": got = FacialCore.LayerWeightFromDistance(Num(a[0]), Num(a[1]), Num(a[2]), Num(a[3]), Num(a[4])); break;
                 default: Assert.Fail("未知の fn: " + d["fn"]); return;
             }
             Assert.That(got, Is.EqualTo(Num(d["expect"])).Within(NumOr(d, "tolerance", ScalarTolDefault)));
+        }
+
+        // --- step（コマ打ち。F5）---
+
+        [TestCaseSource(typeof(ConformanceData), "Of", new object[] { "step" })]
+        public void Step(ConformanceData.Case c)
+        {
+            RequireDir(c);
+            Obj d = c.Data;
+            double fps = Num(d["stepFps"]);
+            double accum = Num(d["initialAccum"]);
+            int i = 0;
+            foreach (object so in A(d["steps"]))
+            {
+                Obj st = O(so);
+                bool evaluate = FacialCore.StepGate(accum, Num(st["dt"]), fps, BoolOr(st, "force", false), out accum);
+                Obj e = O(st["expect"]);
+                Assert.That(evaluate, Is.EqualTo((bool)e["evaluate"]), c + " step " + i);
+                Assert.That(accum, Is.EqualTo(Num(e["accum"])).Within(1e-8), c + " step " + i + " accum");
+                i++;
+            }
         }
 
         // --- smooth ---
@@ -351,7 +382,7 @@ namespace TDrive.Facial.Tests
         {
             Assert.That(ConformanceData.Error, Is.Null);
             TestContext.Out.WriteLine("conformance dir: " + ConformanceData.Directory);
-            foreach (string k in new[] { "evaluate", "view_angles", "scalar", "smooth", "convert" })
+            foreach (string k in new[] { "evaluate", "view_angles", "scalar", "smooth", "convert", "step" })
             {
                 TestContext.Out.WriteLine("kind " + k + ": " + ConformanceData.Count(k) + " cases");
                 Assert.That(ConformanceData.Count(k), Is.GreaterThan(0), k);

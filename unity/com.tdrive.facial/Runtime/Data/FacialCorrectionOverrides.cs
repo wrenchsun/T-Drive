@@ -17,6 +17,7 @@ namespace TDrive.Facial
         public float edgeFade;
         public float sharpness;
         public float stepFps;
+        public float exaggeration;
     }
 
     [CreateAssetMenu(menuName = "T-Drive/Facial Correction Overrides", fileName = "FacialCorrectionOverrides", order = 901)]
@@ -44,11 +45,13 @@ namespace TDrive.Facial
         [Tooltip("端のフェードを上書きする")] public bool overrideEdgeFade;
         [Tooltip("範囲の外側で補正が 0 へ減衰する幅（度）")] public float edgeFade = 15f;
 
-        [Header("品質（F5 まで未使用）")]
+        [Header("品質")]
         [Tooltip("シャープさを上書きする")] public bool overrideSharpness;
-        [Tooltip("キー角度のシャープニング（既定 1）")] public float sharpness = 1f;
+        [Tooltip("キー角度のシャープさ（既定 1）。大きいほどキーの角度の近くでキーのポーズに寄る")] public float sharpness = 1f;
         [Tooltip("コマ打ちの fps を上書きする")] public bool overrideStepFps;
-        [Tooltip("コマ打ちの fps（0 = 毎フレーム）")] public float stepFps;
+        [Tooltip("コマ打ちの fps（0 = 毎フレーム）。補正の更新をこの回数 / 秒に間引く")] public float stepFps;
+        [Tooltip("誇張を上書きする")] public bool overrideExaggeration;
+        [Tooltip("誇張（_Ex シェイプ）の強さ（0〜1）。1 = 作った通り、0 = 誇張なし")] [Range(0f, 1f)] public float exaggeration = 1f;
 
         /// <summary>data と overrides（null 可）から実効の値を求める。data が null なら既定値。</summary>
         public static FacialEffectiveParams Resolve(FacialCorrectionData data, FacialCorrectionOverrides ov)
@@ -65,11 +68,12 @@ namespace TDrive.Facial
                 p.edgeFade = data.grid.edgeFade;
                 p.sharpness = data.quality.sharpness;
                 p.stepFps = data.quality.stepFps;
+                p.exaggeration = data.quality.hasExaggeration ? Mathf.Clamp01(data.quality.exaggeration) : 1f;
             }
             else
             {
                 p.globalAlpha = 1f; p.interpSpeed = 10f; p.snapAngle = 45f; p.expressionDampen = 0.5f;
-                p.edgeFade = 15f; p.sharpness = 1f;
+                p.edgeFade = 15f; p.sharpness = 1f; p.exaggeration = 1f;
             }
             if (ov == null) return p;
             if (ov.overrideGlobalAlpha) p.globalAlpha = ov.globalAlpha;
@@ -81,6 +85,7 @@ namespace TDrive.Facial
             if (ov.overrideEdgeFade) p.edgeFade = ov.edgeFade;
             if (ov.overrideSharpness) p.sharpness = ov.sharpness;
             if (ov.overrideStepFps) p.stepFps = ov.stepFps;
+            if (ov.overrideExaggeration) p.exaggeration = Mathf.Clamp01(ov.exaggeration);
             return p;
         }
     }

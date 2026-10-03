@@ -171,6 +171,7 @@ class Quality:
     step_fps: float = 0.0
     angle_epsilon: float = 0.1
     max_lod: int = 0
+    exaggeration: float = 1.0  # 誇張（`_Ex` シェイプ）の既定の強さ 0〜1。1 = 作った通り（F5-5）
     extra: dict[str, Any] = field(default_factory=dict)
 
 

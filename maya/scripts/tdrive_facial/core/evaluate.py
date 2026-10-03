@@ -40,6 +40,8 @@ class LayerEvalInput:
     corner_morph_names: Sequence[Optional[str]] = field(default_factory=list)
     emotion_weight: float = 0.0
     enabled: bool = True
+    # 誇張用シェイプ（`_Ex`）の名前。corner_morph_names と同じ並び。None / 空 = 誇張なし。点ごとに None / "" も可（F5-5）
+    ex_morphs: Optional[Sequence[Optional[str]]] = None
 
 
 @dataclass
@@ -113,17 +115,72 @@ def _sample_axis(angle_deg: float, range_deg: float, num_points: int, edge_fade_
     return out
 
 
+SHARPNESS_MIN = 0.01
+SHARPNESS_MAX = 64.0
+
+
+def clamp_sharpness(sharpness: float) -> float:
+    return clamp(sharpness, SHARPNESS_MIN, SHARPNESS_MAX)
+
+
+def sharpen_weights(weights: Sequence[float], sharpness: float) -> tuple[float, ...]:
+    """キー角度の強調（R-32）。重み w を w^s / Σ w^s に直す（0 の重みは 0 のまま、合計 0 ならそのまま）。
+    s = 1 は何もしない。s > 1 で一番近い点の重みが増え、s → 大 で最寄りの点だけになる。"""
+    s = clamp_sharpness(sharpness)
+    if s == 1.0:
+        return tuple(weights)
+    powered = [math.pow(w, s) if w > 0.0 else 0.0 for w in weights]
+    total = sum(powered)
+    if total <= 0.0:
+        return tuple(weights)
+    return tuple(p / total for p in powered)
+
+
+def layer_weight_from_distance(distance: float, start: float, end: float, w_from: float = 0.0, w_to: float = 1.0) -> float:
+    """距離でレイヤーの重みを決める（R-35）。lerp(from, to, saturate((d - start) / (end - start)))。
+    end == start のときは d >= start で to、それ以外は from。"""
+    if end == start:
+        t = 1.0 if distance >= start else 0.0
+    else:
+        t = clamp((distance - start) / (end - start), 0.0, 1.0)
+    if t <= 0.0:
+        return w_from
+    if t >= 1.0:
+        return w_to
+    return w_from + (w_to - w_from) * t
+
+
+def step_gate(accum: float, dt: float, step_fps: float, force: bool = False) -> tuple[bool, float]:
+    """コマ打ちの判定（R-33）。accum は前回の評価からの経過時間。戻りは (今回評価するか, 新しい accum)。
+    accum += dt。step_fps <= 0 は (True, 0)。force（最初のフレーム・カット）か accum が 1/step_fps に届いたら評価する。"""
+    if step_fps <= 0.0:
+        return True, 0.0
+    accum += dt
+    period = 1.0 / step_fps
+    if force or accum + 1e-9 >= period:
+        rem = accum % period
+        if rem + 1e-9 >= period:
+            rem = 0.0  # 周期ぴったり（浮動小数の誤差）のとき、残りが周期ぎりぎりにならないように
+        return True, rem
+    return False, accum
+
+
 def evaluate_correction(
     grid: GridShape,
     layers: Sequence[LayerEvalInput],
     yaw_deg: float,
     pitch_deg: float,
+    sharpness: float = 1.0,
+    exaggeration: float = 1.0,
 ) -> list[MorphWeight]:
     """角度（基準ボーンから見た Yaw / Pitch、度）から補正シェイプの重み一式を返す（EvaluateCorrection）。
 
     layers[0] は Neutral（基底。常に全量）。それ以外は Neutral との差分で焼いた感情レイヤーで、
     emotion_weight を掛けて足す。範囲の外は edge_fade_deg の幅で 0 へ減衰。
     無効なレイヤー・重み 0・焼いていない点は飛ばす。戻りは最初に現れた順。
+
+    sharpness（既定 1 = 何もしない）: 4 隅の双線形の重みを w^s / Σ w^s に直す（端のフェード・レイヤーの重みを掛ける前）。
+    exaggeration（0〜1、既定 1）: layer.ex_morphs にある `_Ex` シェイプの重み = 対応する通常シェイプの重み × exaggeration。
     """
     if len(layers) == 0 or grid.num_cols <= 0 or grid.num_rows <= 0:
         return []
@@ -139,8 +196,21 @@ def evaluate_correction(
         (row.index1, col.index0, (1.0 - col.frac) * row.frac),
         (row.index1, col.index1, col.frac * row.frac),
     )
+    if sharpness != 1.0:
+        sharp = sharpen_weights([c[2] for c in corners], sharpness)
+        corners = tuple((c[0], c[1], sharp[i]) for i, c in enumerate(corners))
+    exag = clamp(exaggeration, 0.0, 1.0)
     out: list[MorphWeight] = []
     index_of: dict[str, int] = {}
+
+    def add(name: str, weight: float) -> None:
+        at = index_of.get(name)
+        if at is None:
+            index_of[name] = len(out)
+            out.append(MorphWeight(name, weight))
+        else:
+            out[at].weight += weight
+
     for layer_index, layer in enumerate(layers):
         if not layer.enabled:
             continue
@@ -148,6 +218,7 @@ def evaluate_correction(
         if is_nearly_zero(layer_scale):
             continue
         names = layer.corner_morph_names
+        ex_names = layer.ex_morphs
         for c_row, c_col, bilinear in corners:
             weight = bilinear * layer_scale * fade_scale
             if is_nearly_zero(weight):
@@ -158,12 +229,11 @@ def evaluate_correction(
             name = names[point_index]
             if not name:
                 continue  # 焼いていない点は 0 扱い
-            at = index_of.get(name)
-            if at is None:
-                index_of[name] = len(out)
-                out.append(MorphWeight(name, weight))
-            else:
-                out[at].weight += weight
+            add(name, weight)
+            if ex_names is not None and exag > 0.0 and point_index < len(ex_names):
+                ex_name = ex_names[point_index]
+                if ex_name:
+                    add(ex_name, weight * exag)
     # 打ち消し合って 0 近傍になった分は除く
     return [w for w in out if not is_nearly_zero(w.weight)]
 

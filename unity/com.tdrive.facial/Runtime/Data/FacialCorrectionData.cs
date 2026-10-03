@@ -34,8 +34,23 @@ namespace TDrive.Facial
     {
         [Tooltip("角度の変化がこの値（度）未満で感情も同じなら、前回の格子の計算を使い回す")] public float angleEpsilon;
         [Tooltip("評価する LOD の上限（0 = 最も詳細な LOD のみ）。※今は未使用")] public int maxLod;
-        [Tooltip("キー角度のシャープニング（既定 1）。※F5 まで未使用")] public float sharpness;
-        [Tooltip("コマ打ちの fps（0 = 毎フレーム）。※F5 まで未使用")] public float stepFps;
+        [Tooltip("キー角度のシャープさ（既定 1）。1 より大きいとキーの角度の近くでキーのポーズに寄る。0 以下は 1 として扱う")] public float sharpness;
+        [Tooltip("コマ打ちの fps（0 = 毎フレーム）。補正の更新をこの回数 / 秒に間引く（追従はなく、更新のたびに目標へ跳ぶ）")] public float stepFps;
+        [Tooltip("誇張（_Ex シェイプ）の既定の強さ（0〜1）。「指定あり」がオンのときだけ使い、オフなら 1")] public float exaggeration;
+        [Tooltip("exaggeration を使う（オフ = 1）。古いアセットを 1 のままにするためのフラグ")] public bool hasExaggeration;
+    }
+
+    /// <summary>レイヤーの重みの入力元（layerWeights）。</summary>
+    public enum FacialLayerWeightSource { Direct = 0, Curve = 1, Distance = 2 }
+
+    [Serializable]
+    public struct FacialLayerWeightData
+    {
+        [Tooltip("重みの入力元。Direct / Curve = 呼び出し側（Runner の値・Timeline）が与える。Distance = 視点までの距離で決める")] public FacialLayerWeightSource source;
+        [Tooltip("Distance: この距離（m）以下では「近いときの重み」")] public float start;
+        [Tooltip("Distance: この距離（m）以上では「遠いときの重み」。開始と同じなら、開始以上で「遠いとき」")] public float end;
+        [Tooltip("Distance: 開始距離のときの重み")] public float from;
+        [Tooltip("Distance: 終了距離のときの重み")] public float to;
     }
 
     [Serializable]
@@ -45,6 +60,8 @@ namespace TDrive.Facial
         [Tooltip("感情の重みの入力元に使うカーブ名（Animator などから）")] public string emotionCurve;
         [Tooltip("無効にすると評価しない")] public bool enabled;
         [Tooltip("格子の点（行優先: index = row * cols + col）ごとのシェイプ名。点が無ければ空")] public string[] morphNames;
+        [Tooltip("誇張用（_Ex）のシェイプ名（morphNames と同じ並び）。メッシュに無いものは黙って飛ばす（任意のシェイプ）。空 = なし")] public string[] exMorphNames;
+        [Tooltip("感情の重みの入力元（距離で決める設定など）")] public FacialLayerWeightData weight;
     }
 
     [Serializable]

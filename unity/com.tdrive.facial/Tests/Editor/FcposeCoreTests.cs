@@ -65,6 +65,32 @@ namespace TDrive.Facial.Tests
         }
 
         [Test]
+        public void QualityExaggerationAndLayerWeightsAreRead()
+        {
+            const string json = "{\"format\":\"FacialCorrection\",\"quality\":{\"sharpness\":2,\"stepFps\":12,\"exaggeration\":0.5},"
+                + "\"layerWeights\":{\"Joy\":{\"source\":\"distance\",\"start\":100,\"end\":300,\"from\":0.25,\"to\":1},\"Anger\":{\"source\":\"curve\"},\"Bad\":3}}";
+            FcDocument d = FcposeReader.ReadDocument(json, null);
+            Assert.AreEqual(2.0, d.Quality.Sharpness);
+            Assert.AreEqual(12.0, d.Quality.StepFps);
+            Assert.AreEqual(0.5, d.Quality.Exaggeration);
+            Assert.AreEqual(2, d.LayerWeights.Count, "オブジェクトでない項目は無視");
+            FcLayerWeight j = d.LayerWeights["Joy"];
+            Assert.AreEqual("distance", j.Source);
+            Assert.AreEqual(100.0, j.Start); Assert.AreEqual(300.0, j.End);
+            Assert.AreEqual(0.25, j.From); Assert.AreEqual(1.0, j.To);
+            Assert.AreEqual("curve", d.LayerWeights["Anger"].Source);
+        }
+
+        [Test]
+        public void NewKeysAreDefaultsWhenMissing()
+        {
+            FcDocument d = FcposeReader.ReadDocument("{\"format\":\"FacialCorrection\",\"quality\":{\"sharpness\":1.5}}", null);
+            Assert.AreEqual(1.0, d.Quality.Exaggeration);
+            Assert.AreEqual(0.0, d.Quality.StepFps);
+            Assert.AreEqual(0, d.LayerWeights.Count);
+        }
+
+        [Test]
         public void WrongTypesFallBackToDefaults()
         {
             const string json = "{\"format\":\"FacialCorrection\",\"grid\":{\"yawRange\":\"x\",\"cols\":true,\"centerOffset\":[1,2],\"forwardAxis\":3},"

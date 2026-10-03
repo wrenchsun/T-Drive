@@ -34,9 +34,12 @@ namespace TDrive.Facial
         public FacialPoseAsset pose;
         /// <summary>pose に掛ける重み（0〜1）。0 以下 = 加算しない。</summary>
         public float poseWeight;
-        /// <summary>true のとき stepFps を渡す。準備中: Runner は F5 まで使わない（値は保持するだけ）。</summary>
+        /// <summary>true のとき stepFps（コマ打ちの fps。0 = 毎フレーム）でデータ・調整用アセットの値を置き換える。</summary>
         public bool hasStepFps;
         public float stepFps;
+        /// <summary>true のとき exaggeration（0〜1）を誇張の強さへ掛ける。</summary>
+        public bool hasExaggeration;
+        public float exaggeration;
     }
 
     /// <summary>直近の評価で使った視点の出どころ（診断・デバッグ表示用）。</summary>
@@ -83,7 +86,10 @@ namespace TDrive.Facial
         [Tooltip("このコンポーネントの強さ（0〜1）。全体の強さに掛かる")]
         [Range(0f, 1f)] public float alpha = 1f;
 
-        [Tooltip("レイヤーごとの感情の重み（レイヤー番号の順。0 番の Neutral は無視。0 以上）")]
+        [Tooltip("誇張（_Ex シェイプ）の強さ（0〜1）。データ・調整用アセットの誇張に掛かる。1 = 作った通り、0 = 誇張なし")]
+        [Range(0f, 1f)] public float exaggeration = 1f;
+
+        [Tooltip("レイヤーごとの感情の重み（レイヤー番号の順。0 番の Neutral は無視。0 以上）。距離で決める設定のレイヤーは、この値の代わりに距離の重みを使う")]
         public float[] emotionWeights;
 
         [Tooltip("true にしたレイヤーは感情の重みを 0 として扱う（レイヤー番号の順）")]
@@ -109,6 +115,14 @@ namespace TDrive.Facial
         public int ActiveWeightCount { get { return _last.Count; } }
         /// <summary>直近の評価で補正に掛けた倍率の合計（表情 × 距離フェード × 全体の強さ）。</summary>
         public float LastScale { get { return (float)_lastScale; } }
+        /// <summary>直近の Step でコマ打ちのため評価せず、前の重みを保ったか。</summary>
+        public bool StepHolding { get { return _stepHolding; } }
+        /// <summary>直近の Step で使ったコマ打ちの fps（0 = 毎フレーム）。</summary>
+        public float LastStepFps { get { return (float)_lastStepFps; } }
+        /// <summary>直近の評価で使ったシャープさ。</summary>
+        public float LastSharpness { get { return (float)_lastSharpness; } }
+        /// <summary>直近の評価で使った誇張（データ・調整用アセット × Runner × Timeline）。</summary>
+        public float LastExaggeration { get { return (float)_lastExaggeration; } }
         /// <summary>直近の評価で視点から角度を求められたか（手動・視点なしは false）。</summary>
         public bool HasValidAngles { get { return _hasPrev; } }
 
@@ -180,6 +194,10 @@ namespace TDrive.Facial
         double _rawYaw, _rawPitch, _rawEdge;
         double _curYaw, _curPitch, _lastScale = 1.0;
         bool _snapped;
+        // コマ打ち（F5-2）
+        bool _stepHolding;
+        double _stepAccum, _lastStepFps, _lastSharpness = 1.0, _lastExaggeration = 1.0;
+        double _rawSharp = 1.0, _rawExag = 1.0;
         bool _hasPending;
         FacialFrameOverride _pending;
 
@@ -242,6 +260,8 @@ namespace TDrive.Facial
             _hasPrev = false;
             _hasRaw = false;
             _snapped = false;
+            _stepHolding = false;
+            _stepAccum = 0.0;
             if (_matOut != null) _matOut.Clear(); // マテリアルに渡した値も 0 へ
         }
 
@@ -446,14 +466,25 @@ namespace TDrive.Facial
             _snapped = snap;
 
             // 4 感情の重み（0 以上。ミュートしたレイヤーは 0 = 除く）
-            float[] emoSource = hadOverride && ov.emotionWeights != null ? ov.emotionWeights : emotionWeights;
+            // 優先: PushOverride（Timeline）の値 > 距離で決めるレイヤーの距離の重み > Runner の emotionWeights
+            float[] ovEmo = hadOverride ? ov.emotionWeights : null;
+            float[] emoSource = ovEmo != null ? ovEmo : emotionWeights;
             int layerCount = d.layers.Length;
+            double viewDistance = viewer != null
+                ? (double)Vector3.Distance(viewer.position, (_baseResolved != null ? _baseResolved : transform).position) : 0.0;
             if (_emo.Length != layerCount) { _emo = new double[layerCount]; _rawEmo = new double[layerCount]; _hasRaw = false; }
             bool emoSame = true;
             for (int i = 0; i < layerCount; i++)
             {
                 double w = 0.0;
-                if (i > 0 && emoSource != null && i < emoSource.Length)
+                FacialLayerWeightData lwd = d.layers[i].weight;
+                if (i > 0 && lwd.source == FacialLayerWeightSource.Distance && viewer != null)
+                {
+                    w = FacialCore.LayerWeightFromDistance(viewDistance, lwd.start, lwd.end, lwd.from, lwd.to);
+                    if (ovEmo != null && i < ovEmo.Length && !float.IsNaN(ovEmo[i])) w = ovEmo[i]; // Timeline などの明示の値が優先
+                    if (!(w > 0.0)) w = 0.0;
+                }
+                else if (i > 0 && emoSource != null && i < emoSource.Length)
                 {
                     float f = emoSource[i];
                     if (f > 0f) w = f; // NaN・負は 0
@@ -466,17 +497,37 @@ namespace TDrive.Facial
                 li.Enabled = d.layers[i].enabled;
             }
 
+            // 4.5 コマ打ち: stepFps > 0 のとき、前回の評価から 1/stepFps 秒たつまで評価せず前の重みを保つ。
+            //     最初のフレーム・スナップ（カット）は必ず評価する。保っている間は書き込みもマテリアルも触らない
+            double stepFps = hadOverride && ov.hasStepFps ? (double)ov.stepFps : (double)p.stepFps;
+            _lastStepFps = stepFps > 0.0 ? stepFps : 0.0;
+            bool stepping = stepFps > 0.0;
+            if (stepping)
+            {
+                // float の deltaTime（0.02f など）の丸めで周期に 1e-9 届かず 1 フレーム遅れないよう、マイクロ秒に丸めて数える
+                bool doEval = FacialCore.StepGate(_stepAccum, System.Math.Round((double)deltaTime * 1e6) / 1e6, stepFps, snap, out _stepAccum);
+                _stepHolding = !doEval;
+                if (_stepHolding) return;
+                if (snap) _stepAccum = 0.0; // 最初・カットの評価からあらためて 1 周期数える
+            }
+            else { _stepHolding = false; _stepAccum = 0.0; }
+
             // 5 格子の計算。角度の変化が小さく感情も同じなら前回の結果を使う
+            double sharp = p.sharpness > 0f ? (double)p.sharpness : 1.0; // 0 以下 = 未設定（1）
+            double exag = (double)p.exaggeration * (double)Mathf.Clamp01(exaggeration);
+            if (hadOverride && ov.hasExaggeration) exag *= System.Math.Max(0.0, System.Math.Min(1.0, (double)ov.exaggeration));
+            _lastSharpness = sharp;
+            _lastExaggeration = exag;
             double eps = d.quality.angleEpsilon;
             _grid.EdgeFadeDeg = p.edgeFade;
-            bool reuse = _hasRaw && eps > 0.0 && emoSame && p.edgeFade == _rawEdge
+            bool reuse = _hasRaw && eps > 0.0 && emoSame && p.edgeFade == _rawEdge && sharp == _rawSharp && exag == _rawExag
                 && System.Math.Abs(FacialCore.NormalizeAxis(yaw - _rawYaw)) < eps
                 && System.Math.Abs(pitch - _rawPitch) < eps;
             if (!reuse)
             {
-                FacialCore.EvaluateCorrection(_grid, _layerInputs, yaw, pitch, _raw);
+                FacialCore.EvaluateCorrection(_grid, _layerInputs, yaw, pitch, _raw, sharp, exag);
                 for (int i = 0; i < layerCount; i++) _rawEmo[i] = _emo[i];
-                _rawYaw = yaw; _rawPitch = pitch; _rawEdge = p.edgeFade;
+                _rawYaw = yaw; _rawPitch = pitch; _rawEdge = p.edgeFade; _rawSharp = sharp; _rawExag = exag;
                 _hasRaw = true;
             }
 
@@ -513,7 +564,8 @@ namespace TDrive.Facial
             }
 
             // 7 スムージング（スナップ時は即時）→ ブレンドシェイプへ書く
-            FacialCore.SmoothWeights(_last, _scaled, deltaTime, p.interpSpeed, snap, _smoothed);
+            // コマ打ち中は追従を使わず、更新のたびに目標へ切り替える
+            FacialCore.SmoothWeights(_last, _scaled, deltaTime, p.interpSpeed, snap || stepping, _smoothed);
             for (int i = 0; i < _last.Count; i++)
             {
                 string prevName = _last[i].MorphName;
@@ -768,7 +820,7 @@ namespace TDrive.Facial
             Vec3 axisProbe;
             _forwardAxis = FacialSpace.TryAxisVector(d.grid.forwardAxis, out axisProbe) ? d.grid.forwardAxis : "+Z";
             for (int i = 0; i < d.layers.Length; i++)
-                _layerInputs.Add(new LayerEvalInput(d.layers[i].morphNames, 0.0, d.layers[i].enabled));
+                _layerInputs.Add(new LayerEvalInput(d.layers[i].morphNames, 0.0, d.layers[i].enabled) { ExMorphNames = d.layers[i].exMorphNames });
             _emo = new double[d.layers.Length];
             _rawEmo = new double[d.layers.Length];
 
@@ -793,6 +845,25 @@ namespace TDrive.Facial
                         if (idx >= 0) { rs.Add(_targets[t]); ix.Add(idx); }
                     }
                     if (rs.Count == 0) { _missing.Add(nm); continue; }
+                    _bindings[nm] = new ShapeBinding { renderers = rs.ToArray(), indices = ix.ToArray(), count = rs.Count };
+                }
+            }
+            // 誇張用 _Ex シェイプ: メッシュにあるものだけ結ぶ（任意のシェイプ。無くても「足りない」には数えない）
+            for (int li = 0; li < d.layers.Length; li++)
+            {
+                string[] exn = d.layers[li].exMorphNames;
+                if (exn == null) continue;
+                for (int n = 0; n < exn.Length; n++)
+                {
+                    string nm = exn[n];
+                    if (string.IsNullOrEmpty(nm) || !FacialNaming.IsFcName(nm) || !seen.Add(nm)) continue;
+                    rs.Clear(); ix.Clear();
+                    for (int t = 0; t < _targets.Count; t++)
+                    {
+                        int idx = shapeIndex[t].Find(nm);
+                        if (idx >= 0) { rs.Add(_targets[t]); ix.Add(idx); }
+                    }
+                    if (rs.Count == 0) continue;
                     _bindings[nm] = new ShapeBinding { renderers = rs.ToArray(), indices = ix.ToArray(), count = rs.Count };
                 }
             }

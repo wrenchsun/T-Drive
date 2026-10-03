@@ -26,8 +26,9 @@ namespace TDrive.Facial.Editor
             new Row { label = "距離フェード 終了（m）", tooltip = "これより遠いと補正 0。開始以下なら距離フェードなし", flag = "overrideFadeEnd", value = "fadeEnd", get = p => p.fadeEnd, hasMin = true, min = 0f, format = "0.###" },
             new Row { label = "表情での弱め具合", tooltip = "表情が強いとき補正を弱める度合い（0〜1）。0 = 弱めない", flag = "overrideExpressionDampen", value = "expressionDampen", get = p => p.expressionDampen, format = "0.###" },
             new Row { label = "端のフェード（度）", tooltip = "格子の範囲の外側で、補正が 0 へ消えていく幅。0 以下 = 範囲外は即 0", flag = "overrideEdgeFade", value = "edgeFade", get = p => p.edgeFade, hasMin = true, min = 0f, format = "0.##" },
-            new Row { label = "シャープさ（準備中）", tooltip = "キー角度の近くでキーのポーズそのものに寄せる度合い（既定 1）。準備中: いまは使われません（F5 で有効になります）。値は保存され、Maya へ戻す JSON にも入ります", flag = "overrideSharpness", value = "sharpness", get = p => p.sharpness, hasMin = true, min = 0.01f, format = "0.###" },
-            new Row { label = "コマ打ち fps（準備中）", tooltip = "補正の更新を間引く fps（0 = 毎フレーム）。準備中: いまは使われません（F5 で有効になります）。値は保存され、Maya へ戻す JSON にも入ります", flag = "overrideStepFps", value = "stepFps", get = p => p.stepFps, hasMin = true, min = 0f, format = "0.##" },
+            new Row { label = "シャープさ", tooltip = "キーの角度の近くで、キーのポーズそのものに寄せる度合い（既定 1 = 普通の補間）。大きいほど角度の中間でもキーのポーズに近くなり、小さいとなだらかに混ざる。値は Maya へ戻す JSON にも入ります", flag = "overrideSharpness", value = "sharpness", get = p => p.sharpness, hasMin = true, min = 0.01f, format = "0.###" },
+            new Row { label = "コマ打ち fps", tooltip = "補正の更新をこの回数 / 秒に間引く（0 = 毎フレーム）。更新の間は前の重みのまま止まり、追従は使わず更新のたびに目標へ切り替わる。値は Maya へ戻す JSON にも入ります", flag = "overrideStepFps", value = "stepFps", get = p => p.stepFps, hasMin = true, min = 0f, format = "0.##" },
+            new Row { label = "誇張（0〜1）", tooltip = "重み 1 を超えるポーズ（_Ex シェイプ）をどれだけ効かせるか。1 = 作った通り、0 = 1 までに収める。_Ex の無いキャラクターでは変化なし。値は Maya へ戻す JSON にも入ります", flag = "overrideExaggeration", value = "exaggeration", get = p => p.exaggeration, hasMin = true, min = 0f, format = "0.###" },
         };
 
         /// <summary>行の一覧を描く。imported = 取り込んだ値（データが無ければ null で「—」）。値を変えたら true。</summary>

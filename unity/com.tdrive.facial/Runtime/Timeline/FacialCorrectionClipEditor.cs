@@ -49,11 +49,15 @@ namespace TDrive.Facial.Timeline
             Field(t, "pose", "ポーズ", "このクリップの間だけ加算するポーズ（.fcpose から取り込んだもの）。元のデータは書き換わらない。空なら使わない");
             Field(t, "poseWeight", "ポーズの重み（0〜1）", "カット補正の重み");
 
-            Section("コマ打ち（準備中）");
-            EditorGUILayout.HelpBox("準備中: 値は保存して Runner へ渡しますが、Runner は F5 まで使いません。", MessageType.Info);
-            Toggle(t, "useStepFps", "コマ打ちを使う（準備中）", "オンのとき、このクリップの間だけ補正の更新 fps を変える");
+            Section("コマ打ち");
+            Toggle(t, "useStepFps", "コマ打ちを使う", "オンのとき、このクリップの間だけ補正の更新 fps を変える（重なったときは重みの大きいクリップの値）");
             using (new EditorGUI.DisabledScope(!t.FindPropertyRelative("useStepFps").boolValue))
-                Field(t, "stepFps", "fps（準備中）", "補正の更新 fps（0 = 毎フレーム）");
+                Field(t, "stepFps", "fps", "補正の更新 fps（0 = 毎フレーム）。更新の間は前の重みのまま止まり、追従は使わず更新のたびに目標へ切り替わる");
+
+            Section("誇張");
+            Toggle(t, "useExaggeration", "誇張を使う", "オンのとき、このクリップの間だけ誇張（_Ex シェイプ）の強さを下の値にする");
+            using (new EditorGUI.DisabledScope(!t.FindPropertyRelative("useExaggeration").boolValue))
+                Field(t, "exaggeration", "誇張（0〜1）", "1 = 作った通り、0 = 誇張なし。_Ex の無いキャラクターでは変化なし。重なったクリップは重みで混ざる");
 
             serializedObject.ApplyModifiedProperties();
         }

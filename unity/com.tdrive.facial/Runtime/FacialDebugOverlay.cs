@@ -108,6 +108,10 @@ namespace TDrive.Facial
             sb.Append("  Yaw ").Append(r.CurrentYaw.ToString("F1")).Append("  Pitch ").Append(r.CurrentPitch.ToString("F1"));
             sb.Append(r.Snapped ? "  [SNAP]" : "").Append('\n');
             sb.Append("  Scale ").Append(r.LastScale.ToString("F2")).Append("  Shapes ").Append(r.ActiveWeightCount).Append('\n');
+            if (r.LastStepFps > 0f)
+                sb.Append("  Step ").Append(r.LastStepFps.ToString("F1")).Append("fps ").Append(r.StepHolding ? "[HOLD]" : "[EVAL]").Append('\n');
+            if (r.LastSharpness != 1f || r.LastExaggeration < 0.9999f)
+                sb.Append("  Sharp ").Append(r.LastSharpness.ToString("F2")).Append("  Exag ").Append(r.LastExaggeration.ToString("F2")).Append('\n');
             sb.Append("  Viewer ").Append(r.LastViewerSource.ToString());
             if (r.LastViewer != null) sb.Append(" (").Append(r.LastViewer.name).Append(')');
             sb.Append("  Angles ").Append(r.LastAngleSource.ToString()).Append('\n');

@@ -34,6 +34,8 @@ namespace TDrive.Facial.Core
         public IReadOnlyList<string> CornerMorphNames;
         public double EmotionWeight;
         public bool Enabled = true;
+        /// <summary>誇張用（_Ex）のシェイプ名。CornerMorphNames と同じ並び。null / "" = その点は Ex なし（F5-5）。</summary>
+        public IReadOnlyList<string> ExMorphNames;
 
         public LayerEvalInput() { }
 

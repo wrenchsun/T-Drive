@@ -81,6 +81,8 @@ namespace TDrive.Facial.Editor
                 maxLod = doc.Quality.MaxLod,
                 sharpness = (float)doc.Quality.Sharpness,
                 stepFps = (float)doc.Quality.StepFps,
+                exaggeration = (float)doc.Quality.Exaggeration,
+                hasExaggeration = true,
             };
 
             // レイヤー: 作った点だけシェイプ名を持つ（名前は規則から決まる）。格子の外の点は使わない
@@ -90,16 +92,43 @@ namespace TDrive.Facial.Editor
             {
                 FcLayer l = doc.Layers[li];
                 var names = new string[rows * cols];
-                for (int i = 0; i < names.Length; i++) names[i] = "";
+                var exNames = new string[rows * cols];
+                for (int i = 0; i < names.Length; i++) { names[i] = ""; exNames[i] = ""; }
                 int outside = 0;
                 for (int pi = 0; pi < l.Points.Count; pi++)
                 {
                     FcPoint p = l.Points[pi];
                     if (p.Row < 0 || p.Row >= rows || p.Col < 0 || p.Col >= cols) { outside++; continue; }
                     names[p.Row * cols + p.Col] = FacialNaming.MorphName(asset, l.Name, p.Row, p.Col);
+                    // 誇張用 _Ex は焼いた点にだけあり得る。限界値はここでは分からないので、すべての点の名前を列挙する
+                    // （メッシュに無い Ex は Runner が黙って飛ばす。足りないシェイプとしては数えない）
+                    exNames[p.Row * cols + p.Col] = FacialNaming.MorphName(asset, l.Name, p.Row, p.Col, true);
                 }
                 if (outside > 0 && warn != null) warn("レイヤー '" + l.Name + "' の格子の外の点 " + outside + " 個は使いません");
-                layers[li] = new FacialLayerData { name = l.Name, emotionCurve = l.EmotionCurve, enabled = l.Enabled, morphNames = names };
+                var lw = new FacialLayerWeightData { source = FacialLayerWeightSource.Direct, from = 0f, to = 1f };
+                FcLayerWeight spec;
+                if (doc.LayerWeights.TryGetValue(l.Name, out spec) && spec != null)
+                {
+                    string srcKind = spec.Source ?? "direct";
+                    if (string.Equals(srcKind, "distance", StringComparison.Ordinal))
+                    {
+                        // 距離はドキュメントの単位 → m（フェード距離と同じ）
+                        lw = new FacialLayerWeightData
+                        {
+                            source = FacialLayerWeightSource.Distance,
+                            start = (float)(spec.Start * cv.Scale), end = (float)(spec.End * cv.Scale),
+                            from = (float)spec.From, to = (float)spec.To,
+                        };
+                    }
+                    else if (string.Equals(srcKind, "curve", StringComparison.Ordinal)) lw.source = FacialLayerWeightSource.Curve;
+                    else if (!string.Equals(srcKind, "direct", StringComparison.Ordinal) && warn != null)
+                        warn("レイヤー '" + l.Name + "' の layerWeights.source '" + srcKind + "' は未知なので direct として扱います");
+                }
+                layers[li] = new FacialLayerData
+                {
+                    name = l.Name, emotionCurve = l.EmotionCurve, enabled = l.Enabled, morphNames = names,
+                    exMorphNames = exNames, weight = lw,
+                };
             }
             data.layers = layers;
 

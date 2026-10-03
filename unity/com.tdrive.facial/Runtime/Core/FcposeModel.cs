@@ -79,6 +79,17 @@ namespace TDrive.Facial.Core
         public double StepFps = 0.0;
         public double AngleEpsilon = 0.1;
         public int MaxLod = 0;
+        /// <summary>誇張（_Ex シェイプ）の既定の強さ 0〜1（1 = 作った通り）。F5-5。</summary>
+        public double Exaggeration = 1.0;
+    }
+
+    /// <summary>レイヤーの重みの入力元（layerWeights の 1 項目。F5-3）。Source: "direct" | "curve" | "distance"。</summary>
+    public sealed class FcLayerWeight
+    {
+        public string Source = "direct";
+        /// <summary>distance のとき: 開始・終了の距離（ドキュメントの単位）と、そのときの重み。</summary>
+        public double Start, End;
+        public double From = 0.0, To = 1.0;
     }
 
     public sealed class FcLimit
@@ -108,6 +119,8 @@ namespace TDrive.Facial.Core
         public readonly Dictionary<string, FcLimit> Limits = new Dictionary<string, FcLimit>();
         public string MaterialMode = "none";
         public FcQuality Quality = new FcQuality();
+        /// <summary>レイヤー名 → 重みの入力元（無ければ入力は呼び出し側 = direct）。F5-3。</summary>
+        public readonly Dictionary<string, FcLayerWeight> LayerWeights = new Dictionary<string, FcLayerWeight>();
     }
 
     /// <summary>"format": "FacialPose"（1 点分のポーズ）。</summary>

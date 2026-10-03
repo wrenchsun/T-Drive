@@ -52,12 +52,19 @@ namespace TDrive.Facial.Timeline
         [Tooltip("カット補正の重み（0〜1）")]
         [Range(0f, 1f)] public float poseWeight = 1f;
 
-        [Header("コマ打ち（準備中）")]
-        [Tooltip("準備中: 値は保持して Runner へ渡しますが、Runner は F5 まで使いません。オンのとき、このクリップの間だけ補正の更新 fps を変える")]
+        [Header("コマ打ち")]
+        [Tooltip("オンのとき、このクリップの間だけ補正の更新 fps を変える（重なったときは重みの大きいクリップの値）")]
         public bool useStepFps;
 
-        [Tooltip("準備中: 補正の更新 fps（0 = 毎フレーム）")]
+        [Tooltip("補正の更新 fps（0 = 毎フレーム）。更新の間は前の重みのまま止まる")]
         public float stepFps;
+
+        [Header("誇張")]
+        [Tooltip("オンのとき、このクリップの間だけ誇張（_Ex シェイプ）の強さを下の値にする")]
+        public bool useExaggeration;
+
+        [Tooltip("誇張の強さ（0〜1）。1 = 作った通り、0 = 誇張なし（重みを 1 までに収める）")]
+        [Range(0f, 1f)] public float exaggeration = 1f;
 
         /// <summary>解決した視点（実行時にクリップが入れる。保存されない）。</summary>
         [NonSerialized] public Transform resolvedViewer;

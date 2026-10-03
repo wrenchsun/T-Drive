@@ -275,7 +275,7 @@ def _read_material(d: dict) -> Material:
     return Material(mode=_s(d.get("mode"), "none"), extra=_extra(d, ("mode",)))
 
 
-_QUALITY_KEYS = ("sharpness", "stepFps", "angleEpsilon", "maxLod")
+_QUALITY_KEYS = ("sharpness", "stepFps", "angleEpsilon", "maxLod", "exaggeration")
 
 
 def _read_quality(d: dict) -> Quality:
@@ -285,6 +285,7 @@ def _read_quality(d: dict) -> Quality:
         step_fps=_f(d.get("stepFps"), q.step_fps),
         angle_epsilon=_f(d.get("angleEpsilon"), q.angle_epsilon),
         max_lod=_i(d.get("maxLod"), q.max_lod),
+        exaggeration=_f(d.get("exaggeration"), q.exaggeration),
         extra=_extra(d, _QUALITY_KEYS),
     )
 
@@ -541,10 +542,10 @@ def to_dict(doc: AnyDocument) -> dict[str, Any]:
         out["material"] = _with_extra({"mode": doc.material.mode}, doc.material.extra)
     if doc.quality is not None:
         q = doc.quality
-        out["quality"] = _with_extra(
-            {"sharpness": q.sharpness, "stepFps": q.step_fps, "angleEpsilon": q.angle_epsilon, "maxLod": q.max_lod},
-            q.extra,
-        )
+        qd = {"sharpness": q.sharpness, "stepFps": q.step_fps, "angleEpsilon": q.angle_epsilon, "maxLod": q.max_lod}
+        if q.exaggeration != 1.0:
+            qd["exaggeration"] = q.exaggeration  # 既定（1）のときは出さない（既存のファイルを変えない）
+        out["quality"] = _with_extra(qd, q.extra)
     if doc.perspective is not None:
         out["perspective"] = _with_extra(
             {"enabled": doc.perspective.enabled, "keys": copy.deepcopy(doc.perspective.keys)}, doc.perspective.extra
