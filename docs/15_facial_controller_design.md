@@ -323,6 +323,14 @@ D-Drive を変更しない前提でできることだけを入れる（変更が
 | 検証 | `IValidator` 実装: CutsceneData の `.playable` にある FacialCorrectionTrack のバインド先に Runner があるか、Data の FC_* がモデルにそろっているか |
 | fctrack の取り込み | `AssetPostprocessor`（D-Drive の Cutscene 取り込みより後の順番）で、`SourceAssets/Cutscene/<Category>/<Shot>__<Model>.fctrack` から、対応する `.playable` に `FacialCorrectionTrack` を足す / 更新する。自動で作ったトラックは名前 `<Model>_Facial(auto)` で見分け、デザイナーのトラックは触らない |
 
+### 5.u 補間の種類（F5-11、2026-10-04）
+
+- `quality.interpolation`: `"bilinear"`（既定。今までと同じ）/ `"catmullRom"`
+- catmullRom: 格子の各軸で、角度を挟む 4 点の Catmull-Rom の重み（一様。端は端の点を繰り返す）を求め、Yaw と Pitch の重みの積を 16 点に配る。重みは負になり得る（行き過ぎ）ので、**点ごとの重みを 0 以上に丸めてから合計が 1 になるよう割り直す**（ブレンドシェイプに負の重みを書かない）。格子の点ちょうどでは双線形と同じ（その点が 1）
+- シャープさは、この重みに対して同じ式で掛ける。端のフェード・追従・コマ打ちは変わらない
+- 純粋関数の引数は既定値 = 双線形（既存のテストデータの結果は不変）。共通のテストデータに catmullRom のケースを足す
+- Maya のプレビューの式・Unity の Runner の両方が対応。Unity の調整値で上書き可
+
 ### 5.v パース補正の計算（F5-4、2026-10-04）
 
 - 純粋関数（Python `core/evaluate.py` / C# `FacialCore`。共通のテストデータの種類 `perspective`）
