@@ -15,6 +15,7 @@ namespace TDrive.Facial.Editor
             public bool hasMin;
             public float min;
             public string format;
+            public string[] options; // 選択式の行（値は列挙の番号）
         }
 
         static readonly Row[] Rows =
@@ -29,6 +30,7 @@ namespace TDrive.Facial.Editor
             new Row { label = "シャープさ", tooltip = "キーの角度の近くで、キーのポーズそのものに寄せる度合い（既定 1 = 普通の補間）。大きいほど角度の中間でもキーのポーズに近くなり、小さいとなだらかに混ざる。値は Maya へ戻す JSON にも入ります", flag = "overrideSharpness", value = "sharpness", get = p => p.sharpness, hasMin = true, min = 0.01f, format = "0.###" },
             new Row { label = "コマ打ち fps", tooltip = "補正の更新をこの回数 / 秒に間引く（0 = 毎フレーム）。更新の間は前の重みのまま止まり、追従は使わず更新のたびに目標へ切り替わる。値は Maya へ戻す JSON にも入ります", flag = "overrideStepFps", value = "stepFps", get = p => p.stepFps, hasMin = true, min = 0f, format = "0.##" },
             new Row { label = "誇張（0〜1）", tooltip = "重み 1 を超えるポーズ（_Ex シェイプ）をどれだけ効かせるか。1 = 作った通り、0 = 1 までに収める。_Ex の無いキャラクターでは変化なし。値は Maya へ戻す JSON にも入ります", flag = "overrideExaggeration", value = "exaggeration", get = p => p.exaggeration, hasMin = true, min = 0f, format = "0.###" },
+            new Row { label = "補間", tooltip = "キーとキーの間の混ぜ方。双線形（標準）= 4 つのキーを直線的に混ぜる。なめらか（Catmull-Rom）= まわりのキーも使って動きをなめらかにする（キーの角度以外では少し行き過ぎることがある）。値は Maya へ戻す JSON にも入ります", flag = "overrideInterpolation", value = "interpolation", get = p => (float)(int)p.interpolation, options = new[] { "双線形（標準）", "なめらか（Catmull-Rom）" } },
             new Row { label = "書き込む LOD の上限", tooltip = "補正のシェイプを書く LOD の上限。0 = 制限なし（すべての LOD に書く）、N = LOD N まで書き、それより粗い LOD の Renderer には書かない。LODGroup に入っていない Renderer は常に書く。値は Maya へ戻す JSON にも入ります", flag = "overrideMaxLod", value = "maxLod", get = p => p.maxLod, hasMin = true, min = 0f, format = "0" },
             new Row { label = "パース補正の強さ（0〜1）", tooltip = "広角で寄ったときの奥行きを押さえる補正（パース補正）の強さ。0 = 補正なし、1 = 作った通り。パース補正を使っていないキャラクターでは変化なし。取り込んだ値はキャラクターのデータの強さです", flag = "overridePerspectiveStrength", value = "perspectiveStrength", get = p => p.perspectiveStrength, hasMin = true, min = 0f, format = "0.###" },
             new Row { label = "リップシンクの強さ（0〜1）", tooltip = "口のシェイプ（リップシンク）を書く強さ。0 = 口を動かさない、1 = 対応表の通り。リップシンクを使っていないキャラクターでは変化なし", flag = "overrideLipSyncStrength", value = "lipSyncStrength", get = p => p.lipSyncStrength, hasMin = true, min = 0f, format = "0.###" },
@@ -55,11 +57,20 @@ namespace TDrive.Facial.Editor
                 if (flag == null || value == null) continue;
                 EditorGUILayout.BeginHorizontal();
                 GUILayout.Label(new GUIContent(row.label, row.tooltip), GUILayout.Width(150));
-                GUILayout.Label(imported.HasValue ? row.get(imported.Value).ToString(row.format) : "—", GUILayout.Width(56));
+                string shown = "—";
+                if (imported.HasValue)
+                {
+                    float got = row.get(imported.Value);
+                    shown = row.options != null ? row.options[Mathf.Clamp((int)got, 0, row.options.Length - 1)].Split('（')[0] : got.ToString(row.format);
+                }
+                GUILayout.Label(shown, GUILayout.Width(56));
                 flag.boolValue = EditorGUILayout.ToggleLeft(new GUIContent("上書き", "チェックすると、右の値を使う（取り込んだ値は変わらない）"), flag.boolValue, GUILayout.Width(62));
                 using (new EditorGUI.DisabledScope(!flag.boolValue))
                 {
-                    EditorGUILayout.PropertyField(value, GUIContent.none);
+                    if (row.options != null)
+                        value.enumValueIndex = EditorGUILayout.Popup(Mathf.Clamp(value.enumValueIndex, 0, row.options.Length - 1), row.options);
+                    else
+                        EditorGUILayout.PropertyField(value, GUIContent.none);
                     if (row.hasMin)
                     {
                         if (value.propertyType == SerializedPropertyType.Integer) { if (value.intValue < (int)row.min) value.intValue = (int)row.min; }

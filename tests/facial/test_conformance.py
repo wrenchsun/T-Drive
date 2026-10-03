@@ -15,7 +15,7 @@ from tdrive_facial.core.model import BoneOffset
 CONF = Path(__file__).parent / "conformance"
 WEIGHT_TOL = 1e-4
 F5_SOURCE = "python-port (F5; UE 未実装)"
-F5_FILES = ("evaluate_sharpness.json", "evaluate_exaggeration.json", "layer_distance.json", "step.json", "perspective.json", "lipsync.json")
+F5_FILES = ("evaluate_sharpness.json", "evaluate_catmullrom.json", "evaluate_exaggeration.json", "layer_distance.json", "step.json", "perspective.json", "lipsync.json")
 
 UE_TESTS = {
     "ExactGridPoint", "BilinearCenter", "EmotionBlend", "ZeroWeightSkip", "EdgeFade", "UnbakedPointFailSoft",
@@ -101,7 +101,8 @@ def run_evaluate(c):
     grid = ev.GridShape(g["yawRange"], g["pitchRange"], g["cols"], g["rows"], g["edgeFade"])
     layers = [ev.LayerEvalInput(l["morphs"], l["emotionWeight"], l["enabled"], l.get("exMorphs")) for l in c["layers"]]
     got = ev.evaluate_correction(
-        grid, layers, c["yaw"], c["pitch"], sharpness=c.get("sharpness", 1.0), exaggeration=c.get("exaggeration", 1.0)
+        grid, layers, c["yaw"], c["pitch"], sharpness=c.get("sharpness", 1.0), exaggeration=c.get("exaggeration", 1.0),
+        interpolation=c.get("interpolation", "bilinear"),
     )
     return {w.morph_name: w.weight for w in got}
 

@@ -200,6 +200,7 @@ class Quality:
     angle_epsilon: float = 0.1
     max_lod: int = 0
     exaggeration: float = 1.0  # 誇張（`_Ex` シェイプ）の既定の強さ 0〜1。1 = 作った通り（F5-5）
+    interpolation: str = "bilinear"  # 補間の種類: "bilinear"（既定）/ "catmullRom"（F5-11）
     extra: dict[str, Any] = field(default_factory=dict)
 
 

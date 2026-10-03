@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from typing import Collection, Iterable, Mapping, Optional, Sequence
 
 from . import naming
+from .evaluate import INTERPOLATIONS
 from . import space
 from . import strength as part_strength_mod
 from .model import (
@@ -345,6 +346,7 @@ def validate(
     _check_grid(doc, scene, add)
     _check_layers(doc, add)
     _check_layer_weights(doc, add)
+    _check_quality(doc, add)
     _check_perspective(doc, add)
     _check_lipsync(doc, add)
 
@@ -645,6 +647,21 @@ def perspective_value_ok(axis: str, value: float) -> bool:
     if not (isinstance(value, (int, float)) and math.isfinite(value)):
         return False
     return 0.0 < value < 180.0 if axis == "fov" else value > 0.0
+
+
+def _check_quality(doc: Document, add) -> None:
+    """品質の構造: 補間の種類（bilinear / catmullRom 以外はエラー）。"""
+    q = doc.quality
+    if q is not None and q.interpolation not in INTERPOLATIONS:
+        add(
+            Issue(
+                "quality_interpolation_invalid",
+                SEVERITY_ERROR,
+                f"補間の種類「{q.interpolation}」は使えません（{' / '.join(INTERPOLATIONS)}）",
+                name=str(q.interpolation),
+                suggestion="bilinear",
+            )
+        )
 
 
 def _check_perspective(doc: Document, add) -> None:

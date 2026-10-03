@@ -117,6 +117,9 @@ namespace TDrive.Facial
         [Tooltip("マテリアルへ角度・感情の重みを渡す方式。「データに従う」= 取り込んだデータの material の指定どおり。Renderer ごとの MaterialPropertyBlock に書く（他のキャラクターと衝突しない）。注意: MaterialPropertyBlock を持つ Renderer は SRP Batcher の対象から外れる（出力している間だけ。出力を切る・無効化すると自分の値だけのブロックは外す）。大量に並べるキャラクターでは「出力しない」を使う")]
         public FacialMaterialOutputMode materialOutput = FacialMaterialOutputMode.FollowData;
 
+        [Tooltip("T-Drive の Toon シェーダーの「顔の角度連動」へ角度を渡す（_ToonFacialAngles に _FC_Angles と同じ値を書く）。マテリアル出力が有効なときだけ働く。Toon のマテリアルで「顔の角度連動」を使っていなければ何も変わらない")]
+        public bool writeToonAngles = true;
+
         [Tooltip("補正の対象メッシュのほかに、値を渡したい Renderer（まつ毛・眉など別メッシュ）")]
         public Renderer[] materialTargets;
 
@@ -139,6 +142,8 @@ namespace TDrive.Facial
         public float LastStepFps { get { return (float)_lastStepFps; } }
         /// <summary>直近の評価で使ったシャープさ。</summary>
         public float LastSharpness { get { return (float)_lastSharpness; } }
+        /// <summary>直近の評価で使った補間の種類。</summary>
+        public FacialInterpolation LastInterpolation { get { return _lastInterp; } }
         /// <summary>直近の評価で使った誇張（データ・調整用アセット × Runner × Timeline）。</summary>
         public float LastExaggeration { get { return (float)_lastExaggeration; } }
         /// <summary>パース補正を使っているか（データの perspective が有効でキーがある）。</summary>
@@ -286,6 +291,7 @@ namespace TDrive.Facial
         // コマ打ち（F5-2）
         bool _stepHolding;
         double _stepAccum, _lastStepFps, _lastSharpness = 1.0, _lastExaggeration = 1.0;
+        FacialInterpolation _lastInterp, _rawInterp;
         double _rawSharp = 1.0, _rawExag = 1.0;
 
         // 上書き（SetOverride = 持ち主ごとに持続 / PushOverride = 1 フレーム）。並びは (priority 昇順, 登録順)。後ろほど強い
@@ -837,16 +843,18 @@ namespace TDrive.Facial
             if (hadOverride && ov.hasExaggeration) exag *= System.Math.Max(0.0, System.Math.Min(1.0, (double)ov.exaggeration));
             _lastSharpness = sharp;
             _lastExaggeration = exag;
+            FacialInterpolation interp = p.interpolation;
+            _lastInterp = interp;
             double eps = d.quality.angleEpsilon;
             _grid.EdgeFadeDeg = p.edgeFade;
-            bool reuse = _hasRaw && eps > 0.0 && emoSame && p.edgeFade == _rawEdge && sharp == _rawSharp && exag == _rawExag
+            bool reuse = _hasRaw && eps > 0.0 && emoSame && p.edgeFade == _rawEdge && sharp == _rawSharp && exag == _rawExag && interp == _rawInterp
                 && System.Math.Abs(FacialCore.NormalizeAxis(yaw - _rawYaw)) < eps
                 && System.Math.Abs(pitch - _rawPitch) < eps;
             if (!reuse)
             {
-                FacialCore.EvaluateCorrection(_grid, _layerInputs, yaw, pitch, _raw, sharp, exag);
+                FacialCore.EvaluateCorrection(_grid, _layerInputs, yaw, pitch, _raw, sharp, exag, interp);
                 for (int i = 0; i < layerCount; i++) _rawEmo[i] = _emo[i];
-                _rawYaw = yaw; _rawPitch = pitch; _rawEdge = p.edgeFade; _rawSharp = sharp; _rawExag = exag;
+                _rawYaw = yaw; _rawPitch = pitch; _rawEdge = p.edgeFade; _rawSharp = sharp; _rawExag = exag; _rawInterp = interp;
                 _hasRaw = true;
             }
 
@@ -912,7 +920,7 @@ namespace TDrive.Facial
             if (MaterialOutputActive)
             {
                 if (_matOut == null) _matOut = new FacialMaterialOutput();
-                _matOut.Write(_targets, materialTargets, yaw, pitch, d.grid.yawRange, d.grid.pitchRange, scale, _emo, layerCount);
+                _matOut.Write(_targets, materialTargets, yaw, pitch, d.grid.yawRange, d.grid.pitchRange, scale, _emo, layerCount, writeToonAngles);
             }
             else if (_matOut != null && _matOut.WrittenCount > 0) _matOut.Clear();
         }

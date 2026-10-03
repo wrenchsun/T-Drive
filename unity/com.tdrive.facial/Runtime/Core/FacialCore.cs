@@ -69,10 +69,13 @@ namespace TDrive.Facial.Core
         /// </summary>
         /// <remarks>
         /// sharpness（既定 1 = 何もしない）: 4 隅の双線形の重みを w^s / Σ w^s に直す（フェード・レイヤーの重みの前。F5-1）。
+        /// interpolation（既定 Bilinear）: CatmullRom なら各軸 4 点の Catmull-Rom の積（16 点。負は 0 に丸めて合計 1 に割り直す。格子の点ちょうどでは双線形と同じ）。
+        /// シャープさはその重みに掛ける（F5-11）。点ごとの重みの作業用バッファは ThreadStatic（最初の 1 回だけ割り当てる）。
         /// exaggeration（0〜1、既定 1）: layer.ExMorphNames の _Ex シェイプの重み = 対応する通常シェイプの重み × exaggeration（F5-5）。
         /// </remarks>
         public static void EvaluateCorrection(GridShape grid, IReadOnlyList<LayerEvalInput> layers,
-            double yawDeg, double pitchDeg, List<MorphWeight> output, double sharpness = 1.0, double exaggeration = 1.0)
+            double yawDeg, double pitchDeg, List<MorphWeight> output, double sharpness = 1.0, double exaggeration = 1.0,
+            FacialInterpolation interpolation = FacialInterpolation.Bilinear)
         {
             output.Clear();
             if (layers.Count == 0 || grid.NumCols <= 0 || grid.NumRows <= 0) return;
@@ -81,11 +84,23 @@ namespace TDrive.Facial.Core
             double fadeScale = col.Fade * row.Fade;
             if (fadeScale <= KindaSmallNumber) return; // 範囲の外（フェード幅も超えた）
 
-            double b0 = (1.0 - col.Frac) * (1.0 - row.Frac);
-            double b1 = col.Frac * (1.0 - row.Frac);
-            double b2 = (1.0 - col.Frac) * row.Frac;
-            double b3 = col.Frac * row.Frac;
-            if (sharpness != 1.0) Sharpen4(ref b0, ref b1, ref b2, ref b3, sharpness);
+            double[] cw = _cw ?? (_cw = new double[16]);
+            int[] cr = _cr ?? (_cr = new int[16]);
+            int[] cc = _cc ?? (_cc = new int[16]);
+            int n;
+            if (interpolation == FacialInterpolation.CatmullRom)
+            {
+                n = CatmullRomCorners(col, row, grid.NumCols, grid.NumRows, cr, cc, cw);
+            }
+            else
+            {
+                n = 4;
+                cr[0] = row.Index0; cc[0] = col.Index0; cw[0] = (1.0 - col.Frac) * (1.0 - row.Frac);
+                cr[1] = row.Index0; cc[1] = col.Index1; cw[1] = col.Frac * (1.0 - row.Frac);
+                cr[2] = row.Index1; cc[2] = col.Index0; cw[2] = (1.0 - col.Frac) * row.Frac;
+                cr[3] = row.Index1; cc[3] = col.Index1; cw[3] = col.Frac * row.Frac;
+            }
+            if (sharpness != 1.0) SharpenN(cw, n, sharpness);
             double exag = Clamp(exaggeration, 0.0, 1.0);
 
             for (int li = 0; li < layers.Count; li++)
@@ -98,17 +113,10 @@ namespace TDrive.Facial.Core
                 int count = names == null ? 0 : names.Count;
                 IReadOnlyList<string> exNames = layer.ExMorphNames;
                 int exCount = exNames == null ? 0 : exNames.Count;
-                for (int k = 0; k < 4; k++)
+                for (int k = 0; k < n; k++)
                 {
-                    int cRow, cCol;
-                    double bilinear;
-                    switch (k)
-                    {
-                        case 0: cRow = row.Index0; cCol = col.Index0; bilinear = b0; break;
-                        case 1: cRow = row.Index0; cCol = col.Index1; bilinear = b1; break;
-                        case 2: cRow = row.Index1; cCol = col.Index0; bilinear = b2; break;
-                        default: cRow = row.Index1; cCol = col.Index1; bilinear = b3; break;
-                    }
+                    int cRow = cr[k], cCol = cc[k];
+                    double bilinear = cw[k];
                     double weight = bilinear * layerScale * fadeScale;
                     if (IsNearlyZero(weight)) continue;
                     int pointIndex = cRow * grid.NumCols + cCol;
@@ -132,6 +140,92 @@ namespace TDrive.Facial.Core
                 w++;
             }
             if (w < output.Count) output.RemoveRange(w, output.Count - w);
+        }
+
+        // 点ごとの重みの作業用バッファ（最大 4 x 4 = 16。スレッドごとに 1 回だけ作る）
+        [ThreadStatic] static double[] _cw;
+        [ThreadStatic] static int[] _cr, _cc;
+
+        /// <summary>一様 Catmull-Rom の 4 点の重み（t = 中の 2 点の間の位置 0..1。合計 1。負になり得る）。</summary>
+        public static void CatmullRomBasis(double t, out double w0, out double w1, out double w2, out double w3)
+        {
+            double t2 = t * t, t3 = t2 * t;
+            w0 = 0.5 * (-t3 + 2.0 * t2 - t);
+            w1 = 0.5 * (3.0 * t3 - 5.0 * t2 + 2.0);
+            w2 = 0.5 * (-3.0 * t3 + 4.0 * t2 + t);
+            w3 = 0.5 * (t3 - t2);
+        }
+
+        static int ClampIndex(int i, int numPoints) { return i < 0 ? 0 : (i > numPoints - 1 ? numPoints - 1 : i); }
+
+        /// <summary>k 番目（0..3）の点が、同じ点の中で最初に現れる番号か（clamp した添字が先に同じものがあればその番号）。</summary>
+        static int FirstOccurrence(int index0, int numPoints, int k)
+        {
+            int i = ClampIndex(index0 - 1 + k, numPoints);
+            for (int j = 0; j < k; j++)
+                if (ClampIndex(index0 - 1 + j, numPoints) == i) return j;
+            return k;
+        }
+
+        /// <summary>同じ点に重なった分（端は端の点を繰り返す）を足した、その点の重み。</summary>
+        static double SumSameIndex(int index0, int numPoints, int pointIndex, double b0, double b1, double b2, double b3)
+        {
+            double sum = 0.0;
+            for (int k = 0; k < 4; k++)
+            {
+                if (ClampIndex(index0 - 1 + k, numPoints) != pointIndex) continue;
+                sum += k == 0 ? b0 : (k == 1 ? b1 : (k == 2 ? b2 : b3));
+            }
+            return sum;
+        }
+
+        /// <summary>
+        /// Catmull-Rom の格子点ごとの重みを (row, col, w) として詰める（戻りは点の数）。軸ごとに 4 点（端は繰り返し → 同じ点は足す）→ 積 →
+        /// 負を 0 に → 合計 1 に割り直す（Python 版 evaluate.catmull_rom_corners と同じ。docs/15 §5.u）。
+        /// </summary>
+        static int CatmullRomCorners(AxisSample col, AxisSample row, int numCols, int numRows, int[] outRow, int[] outCol, double[] outW)
+        {
+            int c0 = col.Index0, r0 = row.Index0;
+            double cb0, cb1, cb2, cb3, rb0, rb1, rb2, rb3;
+            CatmullRomBasis(col.Frac, out cb0, out cb1, out cb2, out cb3);
+            CatmullRomBasis(row.Frac, out rb0, out rb1, out rb2, out rb3);
+            double total = 0.0;
+            int n = 0;
+            for (int rk = 0; rk < 4; rk++)
+            {
+                if (FirstOccurrence(r0, numRows, rk) != rk) continue;
+                int ri = ClampIndex(r0 - 1 + rk, numRows);
+                double rwt = SumSameIndex(r0, numRows, ri, rb0, rb1, rb2, rb3);
+                for (int ck = 0; ck < 4; ck++)
+                {
+                    if (FirstOccurrence(c0, numCols, ck) != ck) continue;
+                    int ci = ClampIndex(c0 - 1 + ck, numCols);
+                    double cwt = SumSameIndex(c0, numCols, ci, cb0, cb1, cb2, cb3);
+                    double w = rwt * cwt;
+                    if (w < 0.0) w = 0.0;
+                    outRow[n] = ri; outCol[n] = ci; outW[n] = w;
+                    total += w;
+                    n++;
+                }
+            }
+            if (total <= 0.0)
+            {
+                outRow[0] = r0; outCol[0] = c0; outW[0] = 1.0;
+                return 1;
+            }
+            for (int i = 0; i < n; i++) outW[i] /= total;
+            return n;
+        }
+
+        /// <summary>weights[0..n) を w^s / Σ w^s に直す（0 は 0 のまま。合計 0 ならそのまま）。割り当てなし。</summary>
+        static void SharpenN(double[] weights, int n, double sharpness)
+        {
+            double s = ClampSharpness(sharpness);
+            if (s == 1.0) return;
+            double total = 0.0;
+            for (int i = 0; i < n; i++) total += PowW(weights[i], s);
+            if (total <= 0.0) return;
+            for (int i = 0; i < n; i++) weights[i] = PowW(weights[i], s) / total;
         }
 
         static void AddWeight(List<MorphWeight> output, string name, double weight)
@@ -158,17 +252,6 @@ namespace TDrive.Facial.Core
         }
 
         static double PowW(double w, double s) { return w > 0.0 ? Math.Pow(w, s) : 0.0; }
-
-        /// <summary>4 隅の重みを w^s / Σ w^s に直す（0 は 0 のまま。合計 0 ならそのまま）。割り当てなし。</summary>
-        static void Sharpen4(ref double w0, ref double w1, ref double w2, ref double w3, double sharpness)
-        {
-            double s = ClampSharpness(sharpness);
-            if (s == 1.0) return;
-            double p0 = PowW(w0, s), p1 = PowW(w1, s), p2 = PowW(w2, s), p3 = PowW(w3, s);
-            double total = p0 + p1 + p2 + p3;
-            if (total <= 0.0) return;
-            w0 = p0 / total; w1 = p1 / total; w2 = p2 / total; w3 = p3 / total;
-        }
 
         /// <summary>キー角度の強調（R-32）の補助（テスト・UI 用）。weights を w^s / Σ w^s に直す。</summary>
         public static void SharpenWeights(double[] weights, double sharpness)

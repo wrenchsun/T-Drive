@@ -1,0 +1,1319 @@
+{
+ "kind": "evaluate",
+ "description": "補間の種類 catmullRom（quality.interpolation、F5-11、docs/15 §5.u）。evaluate と同じ形に `interpolation`（省略 = bilinear）を足したケース。各軸 4 点の一様 Catmull-Rom の重み（端は端の点を繰り返し、同じ点に重なった分は足す）の積 16 点 → 負を 0 に → 合計 1 に割り直す → シャープさ → 端のフェード・レイヤーの重み。格子の点ちょうどでは双線形と同じ。Python 版で作成（UE 版には無い）",
+ "cases": [
+  {
+   "name": "exact_grid_point_5x3_center",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 5,
+    "rows": 3,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1",
+      "FC_R0_C2",
+      "FC_R0_C3",
+      "FC_R0_C4",
+      "FC_R1_C0",
+      "FC_R1_C1",
+      "FC_R1_C2",
+      "FC_R1_C3",
+      "FC_R1_C4",
+      "FC_R2_C0",
+      "FC_R2_C1",
+      "FC_R2_C2",
+      "FC_R2_C3",
+      "FC_R2_C4"
+     ]
+    }
+   ],
+   "yaw": 0,
+   "pitch": 0,
+   "interpolation": "catmullRom",
+   "note": "格子の点ちょうど（中央）= その点が 1",
+   "expect": {
+    "weights": {
+     "FC_R1_C2": 1.0
+    }
+   }
+  },
+  {
+   "name": "exact_grid_point_5x3_corner",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 5,
+    "rows": 3,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1",
+      "FC_R0_C2",
+      "FC_R0_C3",
+      "FC_R0_C4",
+      "FC_R1_C0",
+      "FC_R1_C1",
+      "FC_R1_C2",
+      "FC_R1_C3",
+      "FC_R1_C4",
+      "FC_R2_C0",
+      "FC_R2_C1",
+      "FC_R2_C2",
+      "FC_R2_C3",
+      "FC_R2_C4"
+     ]
+    }
+   ],
+   "yaw": -90,
+   "pitch": -45,
+   "interpolation": "catmullRom",
+   "note": "格子の角の点ちょうど",
+   "expect": {
+    "weights": {
+     "FC_R0_C0": 1.0
+    }
+   }
+  },
+  {
+   "name": "exact_grid_point_5x3_inner",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 5,
+    "rows": 3,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1",
+      "FC_R0_C2",
+      "FC_R0_C3",
+      "FC_R0_C4",
+      "FC_R1_C0",
+      "FC_R1_C1",
+      "FC_R1_C2",
+      "FC_R1_C3",
+      "FC_R1_C4",
+      "FC_R2_C0",
+      "FC_R2_C1",
+      "FC_R2_C2",
+      "FC_R2_C3",
+      "FC_R2_C4"
+     ]
+    }
+   ],
+   "yaw": 45,
+   "pitch": 0,
+   "interpolation": "catmullRom",
+   "note": "格子の内側の点ちょうど（yaw = 45）",
+   "expect": {
+    "weights": {
+     "FC_R1_C3": 1.0
+    }
+   }
+  },
+  {
+   "name": "cell_mid_5x3_center",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 5,
+    "rows": 3,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1",
+      "FC_R0_C2",
+      "FC_R0_C3",
+      "FC_R0_C4",
+      "FC_R1_C0",
+      "FC_R1_C1",
+      "FC_R1_C2",
+      "FC_R1_C3",
+      "FC_R1_C4",
+      "FC_R2_C0",
+      "FC_R2_C1",
+      "FC_R2_C2",
+      "FC_R2_C3",
+      "FC_R2_C4"
+     ]
+    }
+   ],
+   "yaw": 22.5,
+   "pitch": 11.25,
+   "interpolation": "catmullRom",
+   "note": "5x3。中央のセルの真ん中（4 点 + まわりに配る）",
+   "expect": {
+    "weights": {
+     "FC_R0_C1": 0.003623188406,
+     "FC_R0_C4": 0.003623188406,
+     "FC_R1_C2": 0.402173913043,
+     "FC_R1_C3": 0.402173913043,
+     "FC_R2_C2": 0.094202898551,
+     "FC_R2_C3": 0.094202898551
+    }
+   }
+  },
+  {
+   "name": "cell_quarter_5x3",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 5,
+    "rows": 3,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1",
+      "FC_R0_C2",
+      "FC_R0_C3",
+      "FC_R0_C4",
+      "FC_R1_C0",
+      "FC_R1_C1",
+      "FC_R1_C2",
+      "FC_R1_C3",
+      "FC_R1_C4",
+      "FC_R2_C0",
+      "FC_R2_C1",
+      "FC_R2_C2",
+      "FC_R2_C3",
+      "FC_R2_C4"
+     ]
+    }
+   ],
+   "yaw": -33.75,
+   "pitch": 5.625,
+   "interpolation": "catmullRom",
+   "note": "5x3。セルの 1/4 の位置",
+   "expect": {
+    "weights": {
+     "FC_R0_C0": 0.002924248051,
+     "FC_R0_C3": 0.00097474935,
+     "FC_R1_C1": 0.726466765689,
+     "FC_R1_C2": 0.189797623468,
+     "FC_R2_C1": 0.063299029229,
+     "FC_R2_C2": 0.016537584213
+    }
+   }
+  },
+  {
+   "name": "cell_first_5x3",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 5,
+    "rows": 3,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1",
+      "FC_R0_C2",
+      "FC_R0_C3",
+      "FC_R0_C4",
+      "FC_R1_C0",
+      "FC_R1_C1",
+      "FC_R1_C2",
+      "FC_R1_C3",
+      "FC_R1_C4",
+      "FC_R2_C0",
+      "FC_R2_C1",
+      "FC_R2_C2",
+      "FC_R2_C3",
+      "FC_R2_C4"
+     ]
+    }
+   ],
+   "yaw": -78.75,
+   "pitch": -33.75,
+   "interpolation": "catmullRom",
+   "note": "5x3。最初のセル（端の点を繰り返す）。負の重みの丸めが効く",
+   "expect": {
+    "weights": {
+     "FC_R0_C0": 0.605940594059,
+     "FC_R0_C1": 0.172277227723,
+     "FC_R1_C0": 0.172277227723,
+     "FC_R1_C1": 0.048980780431,
+     "FC_R2_C2": 0.000524170064
+    }
+   }
+  },
+  {
+   "name": "cell_last_5x3",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 5,
+    "rows": 3,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1",
+      "FC_R0_C2",
+      "FC_R0_C3",
+      "FC_R0_C4",
+      "FC_R1_C0",
+      "FC_R1_C1",
+      "FC_R1_C2",
+      "FC_R1_C3",
+      "FC_R1_C4",
+      "FC_R2_C0",
+      "FC_R2_C1",
+      "FC_R2_C2",
+      "FC_R2_C3",
+      "FC_R2_C4"
+     ]
+    }
+   ],
+   "yaw": 78.75,
+   "pitch": 33.75,
+   "interpolation": "catmullRom",
+   "note": "5x3。最後のセル（端の点を繰り返す）",
+   "expect": {
+    "weights": {
+     "FC_R0_C2": 0.000524170064,
+     "FC_R1_C3": 0.048980780431,
+     "FC_R1_C4": 0.172277227723,
+     "FC_R2_C3": 0.172277227723,
+     "FC_R2_C4": 0.605940594059
+    }
+   }
+  },
+  {
+   "name": "cell_second_last_col_5x3",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 5,
+    "rows": 3,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1",
+      "FC_R0_C2",
+      "FC_R0_C3",
+      "FC_R0_C4",
+      "FC_R1_C0",
+      "FC_R1_C1",
+      "FC_R1_C2",
+      "FC_R1_C3",
+      "FC_R1_C4",
+      "FC_R2_C0",
+      "FC_R2_C1",
+      "FC_R2_C2",
+      "FC_R2_C3",
+      "FC_R2_C4"
+     ]
+    }
+   ],
+   "yaw": 56.25,
+   "pitch": 0,
+   "interpolation": "catmullRom",
+   "note": "5x3。最後から 2 番目のセル（列だけ端の点を繰り返す）",
+   "expect": {
+    "weights": {
+     "FC_R1_C3": 0.810218978102,
+     "FC_R1_C4": 0.189781021898
+    }
+   }
+  },
+  {
+   "name": "grid_2x2_mid",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 2,
+    "rows": 2,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1",
+      "FC_R1_C0",
+      "FC_R1_C1"
+     ]
+    }
+   ],
+   "yaw": 22.5,
+   "pitch": -11.25,
+   "interpolation": "catmullRom",
+   "note": "2x2。点が 4 つだけ（どの軸も端の繰り返し）",
+   "expect": {
+    "weights": {
+     "FC_R0_C0": 0.226192474365,
+     "FC_R0_C1": 0.428104400635,
+     "FC_R1_C0": 0.119510650635,
+     "FC_R1_C1": 0.226192474365
+    }
+   }
+  },
+  {
+   "name": "grid_2x1_mid",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 2,
+    "rows": 1,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1"
+     ]
+    }
+   ],
+   "yaw": -30,
+   "pitch": 0,
+   "interpolation": "catmullRom",
+   "note": "2x1（1 行）。行は 1 点",
+   "expect": {
+    "weights": {
+     "FC_R0_C0": 0.703703703704,
+     "FC_R0_C1": 0.296296296296
+    }
+   }
+  },
+  {
+   "name": "grid_1x1",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 1,
+    "rows": 1,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0"
+     ]
+    }
+   ],
+   "yaw": 30,
+   "pitch": 10,
+   "interpolation": "catmullRom",
+   "note": "1x1。単一点は常に 1",
+   "expect": {
+    "weights": {
+     "FC_R0_C0": 1.0
+    }
+   }
+  },
+  {
+   "name": "grid_3x1_mid",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 3,
+    "rows": 1,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1",
+      "FC_R0_C2"
+     ]
+    }
+   ],
+   "yaw": 22.5,
+   "pitch": 0,
+   "interpolation": "catmullRom",
+   "note": "3x1。1 行の格子",
+   "expect": {
+    "weights": {
+     "FC_R0_C1": 0.810218978102,
+     "FC_R0_C2": 0.189781021898
+    }
+   }
+  },
+  {
+   "name": "grid_1x3_mid",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 1,
+    "rows": 3,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R1_C0",
+      "FC_R2_C0"
+     ]
+    }
+   ],
+   "yaw": 0,
+   "pitch": 11.25,
+   "interpolation": "catmullRom",
+   "note": "1x3。1 列の格子",
+   "expect": {
+    "weights": {
+     "FC_R1_C0": 0.810218978102,
+     "FC_R2_C0": 0.189781021898
+    }
+   }
+  },
+  {
+   "name": "grid_7x5_mid",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 7,
+    "rows": 5,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1",
+      "FC_R0_C2",
+      "FC_R0_C3",
+      "FC_R0_C4",
+      "FC_R0_C5",
+      "FC_R0_C6",
+      "FC_R1_C0",
+      "FC_R1_C1",
+      "FC_R1_C2",
+      "FC_R1_C3",
+      "FC_R1_C4",
+      "FC_R1_C5",
+      "FC_R1_C6",
+      "FC_R2_C0",
+      "FC_R2_C1",
+      "FC_R2_C2",
+      "FC_R2_C3",
+      "FC_R2_C4",
+      "FC_R2_C5",
+      "FC_R2_C6",
+      "FC_R3_C0",
+      "FC_R3_C1",
+      "FC_R3_C2",
+      "FC_R3_C3",
+      "FC_R3_C4",
+      "FC_R3_C5",
+      "FC_R3_C6",
+      "FC_R4_C0",
+      "FC_R4_C1",
+      "FC_R4_C2",
+      "FC_R4_C3",
+      "FC_R4_C4",
+      "FC_R4_C5",
+      "FC_R4_C6"
+     ]
+    }
+   ],
+   "yaw": 20,
+   "pitch": -10,
+   "interpolation": "catmullRom",
+   "note": "7x5。内側のセル",
+   "expect": {
+    "weights": {
+     "FC_R0_C2": 0.001610305958,
+     "FC_R0_C5": 0.003220611916,
+     "FC_R1_C3": 0.128260869565,
+     "FC_R1_C4": 0.299275362319,
+     "FC_R2_C3": 0.16847826087,
+     "FC_R2_C4": 0.393115942029,
+     "FC_R3_C2": 0.002012882448,
+     "FC_R3_C5": 0.004025764895
+    }
+   }
+  },
+  {
+   "name": "grid_7x5_edge",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 7,
+    "rows": 5,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1",
+      "FC_R0_C2",
+      "FC_R0_C3",
+      "FC_R0_C4",
+      "FC_R0_C5",
+      "FC_R0_C6",
+      "FC_R1_C0",
+      "FC_R1_C1",
+      "FC_R1_C2",
+      "FC_R1_C3",
+      "FC_R1_C4",
+      "FC_R1_C5",
+      "FC_R1_C6",
+      "FC_R2_C0",
+      "FC_R2_C1",
+      "FC_R2_C2",
+      "FC_R2_C3",
+      "FC_R2_C4",
+      "FC_R2_C5",
+      "FC_R2_C6",
+      "FC_R3_C0",
+      "FC_R3_C1",
+      "FC_R3_C2",
+      "FC_R3_C3",
+      "FC_R3_C4",
+      "FC_R3_C5",
+      "FC_R3_C6",
+      "FC_R4_C0",
+      "FC_R4_C1",
+      "FC_R4_C2",
+      "FC_R4_C3",
+      "FC_R4_C4",
+      "FC_R4_C5",
+      "FC_R4_C6"
+     ]
+    }
+   ],
+   "yaw": -80,
+   "pitch": 40,
+   "interpolation": "catmullRom",
+   "note": "7x5。端に近いセル",
+   "expect": {
+    "weights": {
+     "FC_R2_C2": 0.000672494956,
+     "FC_R3_C0": 0.128686713421,
+     "FC_R3_C1": 0.060956864252,
+     "FC_R4_C0": 0.549428379287,
+     "FC_R4_C1": 0.260255548083
+    }
+   }
+  },
+  {
+   "name": "outside_range_fade",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 5,
+    "rows": 3,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1",
+      "FC_R0_C2",
+      "FC_R0_C3",
+      "FC_R0_C4",
+      "FC_R1_C0",
+      "FC_R1_C1",
+      "FC_R1_C2",
+      "FC_R1_C3",
+      "FC_R1_C4",
+      "FC_R2_C0",
+      "FC_R2_C1",
+      "FC_R2_C2",
+      "FC_R2_C3",
+      "FC_R2_C4"
+     ]
+    }
+   ],
+   "yaw": 97.5,
+   "pitch": 0,
+   "interpolation": "catmullRom",
+   "note": "範囲の外（yaw 97.5 = 端 + フェード幅の半分）。端の点の重みにフェードを掛ける",
+   "expect": {
+    "weights": {
+     "FC_R1_C4": 0.5
+    }
+   }
+  },
+  {
+   "name": "outside_range_both_axes",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 5,
+    "rows": 3,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1",
+      "FC_R0_C2",
+      "FC_R0_C3",
+      "FC_R0_C4",
+      "FC_R1_C0",
+      "FC_R1_C1",
+      "FC_R1_C2",
+      "FC_R1_C3",
+      "FC_R1_C4",
+      "FC_R2_C0",
+      "FC_R2_C1",
+      "FC_R2_C2",
+      "FC_R2_C3",
+      "FC_R2_C4"
+     ]
+    }
+   ],
+   "yaw": -95,
+   "pitch": 50,
+   "interpolation": "catmullRom",
+   "note": "範囲の外（両方の軸）",
+   "expect": {
+    "weights": {
+     "FC_R2_C0": 0.444444444444
+    }
+   }
+  },
+  {
+   "name": "outside_beyond_fade",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 5,
+    "rows": 3,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1",
+      "FC_R0_C2",
+      "FC_R0_C3",
+      "FC_R0_C4",
+      "FC_R1_C0",
+      "FC_R1_C1",
+      "FC_R1_C2",
+      "FC_R1_C3",
+      "FC_R1_C4",
+      "FC_R2_C0",
+      "FC_R2_C1",
+      "FC_R2_C2",
+      "FC_R2_C3",
+      "FC_R2_C4"
+     ]
+    }
+   ],
+   "yaw": 120,
+   "pitch": 0,
+   "interpolation": "catmullRom",
+   "note": "フェード幅の外 = 重みなし",
+   "expect": {
+    "weights": {}
+   }
+  },
+  {
+   "name": "emotion_layer_mid",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 5,
+    "rows": 3,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_Neutral_R0_C0",
+      "FC_Neutral_R0_C1",
+      "FC_Neutral_R0_C2",
+      "FC_Neutral_R0_C3",
+      "FC_Neutral_R0_C4",
+      "FC_Neutral_R1_C0",
+      "FC_Neutral_R1_C1",
+      "FC_Neutral_R1_C2",
+      "FC_Neutral_R1_C3",
+      "FC_Neutral_R1_C4",
+      "FC_Neutral_R2_C0",
+      "FC_Neutral_R2_C1",
+      "FC_Neutral_R2_C2",
+      "FC_Neutral_R2_C3",
+      "FC_Neutral_R2_C4"
+     ]
+    },
+    {
+     "name": "Joy",
+     "enabled": true,
+     "emotionWeight": 0.5,
+     "morphs": [
+      "FC_Joy_R0_C0",
+      "FC_Joy_R0_C1",
+      "FC_Joy_R0_C2",
+      "FC_Joy_R0_C3",
+      "FC_Joy_R0_C4",
+      "FC_Joy_R1_C0",
+      "FC_Joy_R1_C1",
+      "FC_Joy_R1_C2",
+      "FC_Joy_R1_C3",
+      "FC_Joy_R1_C4",
+      "FC_Joy_R2_C0",
+      "FC_Joy_R2_C1",
+      "FC_Joy_R2_C2",
+      "FC_Joy_R2_C3",
+      "FC_Joy_R2_C4"
+     ]
+    }
+   ],
+   "yaw": 15,
+   "pitch": 8,
+   "interpolation": "catmullRom",
+   "note": "感情レイヤー（重み 0.5）。同じ重みを掛けて足す",
+   "expect": {
+    "weights": {
+     "FC_Neutral_R0_C1": 0.003757817062,
+     "FC_Neutral_R0_C4": 0.001878908531,
+     "FC_Neutral_R1_C2": 0.610251717472,
+     "FC_Neutral_R1_C3": 0.261536450345,
+     "FC_Neutral_R2_C2": 0.085802574613,
+     "FC_Neutral_R2_C3": 0.036772531977,
+     "FC_Joy_R0_C1": 0.001878908531,
+     "FC_Joy_R0_C4": 0.000939454266,
+     "FC_Joy_R1_C2": 0.305125858736,
+     "FC_Joy_R1_C3": 0.130768225173,
+     "FC_Joy_R2_C2": 0.042901287306,
+     "FC_Joy_R2_C3": 0.018386265988
+    }
+   }
+  },
+  {
+   "name": "unbaked_point_not_renormalised",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 5,
+    "rows": 3,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_Neutral_R0_C0",
+      "FC_Neutral_R0_C1",
+      "FC_Neutral_R0_C2",
+      "FC_Neutral_R0_C3",
+      "FC_Neutral_R0_C4",
+      "FC_Neutral_R1_C0",
+      "FC_Neutral_R1_C1",
+      "FC_Neutral_R1_C2",
+      "FC_Neutral_R1_C3",
+      "FC_Neutral_R1_C4",
+      "FC_Neutral_R2_C0",
+      "FC_Neutral_R2_C1",
+      "FC_Neutral_R2_C2",
+      "FC_Neutral_R2_C3",
+      "FC_Neutral_R2_C4"
+     ]
+    },
+    {
+     "name": "Joy",
+     "enabled": true,
+     "emotionWeight": 1.0,
+     "morphs": [
+      "FC_Joy_R0_C0",
+      "FC_Joy_R0_C1",
+      "FC_Joy_R0_C2",
+      "FC_Joy_R0_C3",
+      "FC_Joy_R0_C4",
+      "FC_Joy_R1_C0",
+      "FC_Joy_R1_C1",
+      null,
+      "FC_Joy_R1_C3",
+      "FC_Joy_R1_C4",
+      "FC_Joy_R2_C0",
+      "FC_Joy_R2_C1",
+      "FC_Joy_R2_C2",
+      "FC_Joy_R2_C3",
+      "FC_Joy_R2_C4"
+     ]
+    }
+   ],
+   "yaw": 15,
+   "pitch": 8,
+   "interpolation": "catmullRom",
+   "note": "焼いていない点（null）は飛ばすだけ。残りを割り直さない",
+   "expect": {
+    "weights": {
+     "FC_Neutral_R0_C1": 0.003757817062,
+     "FC_Neutral_R0_C4": 0.001878908531,
+     "FC_Neutral_R1_C2": 0.610251717472,
+     "FC_Neutral_R1_C3": 0.261536450345,
+     "FC_Neutral_R2_C2": 0.085802574613,
+     "FC_Neutral_R2_C3": 0.036772531977,
+     "FC_Joy_R0_C1": 0.003757817062,
+     "FC_Joy_R0_C4": 0.001878908531,
+     "FC_Joy_R1_C3": 0.261536450345,
+     "FC_Joy_R2_C2": 0.085802574613,
+     "FC_Joy_R2_C3": 0.036772531977
+    }
+   }
+  },
+  {
+   "name": "sharp_2_mid",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 5,
+    "rows": 3,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1",
+      "FC_R0_C2",
+      "FC_R0_C3",
+      "FC_R0_C4",
+      "FC_R1_C0",
+      "FC_R1_C1",
+      "FC_R1_C2",
+      "FC_R1_C3",
+      "FC_R1_C4",
+      "FC_R2_C0",
+      "FC_R2_C1",
+      "FC_R2_C2",
+      "FC_R2_C3",
+      "FC_R2_C4"
+     ]
+    }
+   ],
+   "yaw": 22.5,
+   "pitch": 11.25,
+   "interpolation": "catmullRom",
+   "sharpness": 2.0,
+   "note": "シャープさ 2。Catmull-Rom の重みに w^s / Σ w^s",
+   "expect": {
+    "weights": {
+     "FC_R0_C1": 3.8467457e-05,
+     "FC_R0_C4": 3.8467457e-05,
+     "FC_R1_C2": 0.473957531928,
+     "FC_R1_C3": 0.473957531928,
+     "FC_R2_C2": 0.026004000615,
+     "FC_R2_C3": 0.026004000615
+    }
+   }
+  },
+  {
+   "name": "sharp_4_first_cell",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 5,
+    "rows": 3,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1",
+      "FC_R0_C2",
+      "FC_R0_C3",
+      "FC_R0_C4",
+      "FC_R1_C0",
+      "FC_R1_C1",
+      "FC_R1_C2",
+      "FC_R1_C3",
+      "FC_R1_C4",
+      "FC_R2_C0",
+      "FC_R2_C1",
+      "FC_R2_C2",
+      "FC_R2_C3",
+      "FC_R2_C4"
+     ]
+    }
+   ],
+   "yaw": -78.75,
+   "pitch": -33.75,
+   "interpolation": "catmullRom",
+   "sharpness": 4.0,
+   "note": "シャープさ 4。端のセル",
+   "expect": {
+    "weights": {
+     "FC_R0_C0": 0.987058613435,
+     "FC_R0_C1": 0.006449621777,
+     "FC_R1_C0": 0.006449621777,
+     "FC_R1_C1": 4.214301e-05
+    }
+   }
+  },
+  {
+   "name": "sharp_half_mid",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 5,
+    "rows": 3,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1",
+      "FC_R0_C2",
+      "FC_R0_C3",
+      "FC_R0_C4",
+      "FC_R1_C0",
+      "FC_R1_C1",
+      "FC_R1_C2",
+      "FC_R1_C3",
+      "FC_R1_C4",
+      "FC_R2_C0",
+      "FC_R2_C1",
+      "FC_R2_C2",
+      "FC_R2_C3",
+      "FC_R2_C4"
+     ]
+    }
+   ],
+   "yaw": 10,
+   "pitch": 5,
+   "interpolation": "catmullRom",
+   "sharpness": 0.5,
+   "note": "シャープさ 0.5（なだらか）",
+   "expect": {
+    "weights": {
+     "FC_R0_C1": 0.029821840951,
+     "FC_R0_C4": 0.015940444497,
+     "FC_R1_C2": 0.511291465592,
+     "FC_R1_C3": 0.237951039101,
+     "FC_R2_C2": 0.139891024111,
+     "FC_R2_C3": 0.065104185749
+    }
+   }
+  },
+  {
+   "name": "sharp_2_outside_fade",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 5,
+    "rows": 3,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1",
+      "FC_R0_C2",
+      "FC_R0_C3",
+      "FC_R0_C4",
+      "FC_R1_C0",
+      "FC_R1_C1",
+      "FC_R1_C2",
+      "FC_R1_C3",
+      "FC_R1_C4",
+      "FC_R2_C0",
+      "FC_R2_C1",
+      "FC_R2_C2",
+      "FC_R2_C3",
+      "FC_R2_C4"
+     ]
+    }
+   ],
+   "yaw": 97.5,
+   "pitch": 10,
+   "interpolation": "catmullRom",
+   "sharpness": 2.0,
+   "note": "シャープさ 2 + 範囲の外のフェード",
+   "expect": {
+    "weights": {
+     "FC_R1_C4": 0.481668674562,
+     "FC_R2_C4": 0.018331325438
+    }
+   }
+  },
+  {
+   "name": "exaggeration_mid",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 5,
+    "rows": 3,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_Neutral_R0_C0",
+      "FC_Neutral_R0_C1",
+      "FC_Neutral_R0_C2",
+      "FC_Neutral_R0_C3",
+      "FC_Neutral_R0_C4",
+      "FC_Neutral_R1_C0",
+      "FC_Neutral_R1_C1",
+      "FC_Neutral_R1_C2",
+      "FC_Neutral_R1_C3",
+      "FC_Neutral_R1_C4",
+      "FC_Neutral_R2_C0",
+      "FC_Neutral_R2_C1",
+      "FC_Neutral_R2_C2",
+      "FC_Neutral_R2_C3",
+      "FC_Neutral_R2_C4"
+     ],
+     "exMorphs": [
+      "FC_Neutral_Ex_R0_C0",
+      "FC_Neutral_Ex_R0_C1",
+      "FC_Neutral_Ex_R0_C2",
+      "FC_Neutral_Ex_R0_C3",
+      "FC_Neutral_Ex_R0_C4",
+      "FC_Neutral_Ex_R1_C0",
+      "FC_Neutral_Ex_R1_C1",
+      null,
+      "FC_Neutral_Ex_R1_C3",
+      "FC_Neutral_Ex_R1_C4",
+      "FC_Neutral_Ex_R2_C0",
+      "FC_Neutral_Ex_R2_C1",
+      "FC_Neutral_Ex_R2_C2",
+      "FC_Neutral_Ex_R2_C3",
+      "FC_Neutral_Ex_R2_C4"
+     ]
+    }
+   ],
+   "yaw": 22.5,
+   "pitch": 11.25,
+   "interpolation": "catmullRom",
+   "exaggeration": 0.5,
+   "note": "誇張。_Ex の重み = 通常シェイプの重み x exaggeration",
+   "expect": {
+    "weights": {
+     "FC_Neutral_R0_C1": 0.003623188406,
+     "FC_Neutral_Ex_R0_C1": 0.001811594203,
+     "FC_Neutral_R0_C4": 0.003623188406,
+     "FC_Neutral_Ex_R0_C4": 0.001811594203,
+     "FC_Neutral_R1_C2": 0.402173913043,
+     "FC_Neutral_R1_C3": 0.402173913043,
+     "FC_Neutral_Ex_R1_C3": 0.201086956522,
+     "FC_Neutral_R2_C2": 0.094202898551,
+     "FC_Neutral_Ex_R2_C2": 0.047101449275,
+     "FC_Neutral_R2_C3": 0.094202898551,
+     "FC_Neutral_Ex_R2_C3": 0.047101449275
+    }
+   }
+  },
+  {
+   "name": "negative_clamp_visible",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 5,
+    "rows": 3,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1",
+      "FC_R0_C2",
+      "FC_R0_C3",
+      "FC_R0_C4",
+      "FC_R1_C0",
+      "FC_R1_C1",
+      "FC_R1_C2",
+      "FC_R1_C3",
+      "FC_R1_C4",
+      "FC_R2_C0",
+      "FC_R2_C1",
+      "FC_R2_C2",
+      "FC_R2_C3",
+      "FC_R2_C4"
+     ]
+    }
+   ],
+   "yaw": -63,
+   "pitch": 0,
+   "interpolation": "catmullRom",
+   "note": "Catmull-Rom が行き過ぎる位置（セルの 0.3）。負の点は 0 に丸めて割り直す",
+   "expect": {
+    "weights": {
+     "FC_R1_C0": 0.350746268657,
+     "FC_R1_C1": 0.649253731343
+    }
+   }
+  },
+  {
+   "name": "cell_half_exact",
+   "source": "python-port (F5; UE 未実装)",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 5,
+    "rows": 3,
+    "edgeFade": 15
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "emotionWeight": 0.0,
+     "morphs": [
+      "FC_R0_C0",
+      "FC_R0_C1",
+      "FC_R0_C2",
+      "FC_R0_C3",
+      "FC_R0_C4",
+      "FC_R1_C0",
+      "FC_R1_C1",
+      "FC_R1_C2",
+      "FC_R1_C3",
+      "FC_R1_C4",
+      "FC_R2_C0",
+      "FC_R2_C1",
+      "FC_R2_C2",
+      "FC_R2_C3",
+      "FC_R2_C4"
+     ]
+    }
+   ],
+   "yaw": -22.5,
+   "pitch": 0,
+   "interpolation": "catmullRom",
+   "note": "セルのちょうど真ん中（frac 0.5）。左右対称の重み",
+   "expect": {
+    "weights": {
+     "FC_R1_C1": 0.5,
+     "FC_R1_C2": 0.5
+    }
+   }
+  }
+ ]
+}

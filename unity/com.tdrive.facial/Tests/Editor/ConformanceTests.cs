@@ -221,7 +221,8 @@ namespace TDrive.Facial.Tests
             }
             var output = new List<MorphWeight>();
             FacialCore.EvaluateCorrection(grid, layers, Num(d["yaw"]), Num(d["pitch"]), output,
-                NumOr(d, "sharpness", 1.0), NumOr(d, "exaggeration", 1.0));
+                NumOr(d, "sharpness", 1.0), NumOr(d, "exaggeration", 1.0),
+                d.ContainsKey("interpolation") && (string)d["interpolation"] == "catmullRom" ? FacialInterpolation.CatmullRom : FacialInterpolation.Bilinear);
 
             double tol = NumOr(d, "tolerance", WeightTol);
             var expect = new Dictionary<string, double>();

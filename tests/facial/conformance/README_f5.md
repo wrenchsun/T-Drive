@@ -6,6 +6,7 @@ Python（`core/evaluate.py`）と C#（`FacialCore`）が同じファイルを�
 | ファイル | kind | 内容 |
 |---|---|---|
 | `evaluate_sharpness.json` | `evaluate`（`sharpness` 付き） | キー角度のシャープ化（R-32） |
+| `evaluate_catmullrom.json` | `evaluate`（`interpolation: "catmullRom"` 付き） | 補間の種類 Catmull-Rom（F5-11） |
 | `evaluate_exaggeration.json` | `evaluate`（`exaggeration`・`exMorphs` 付き） | 誇張シェイプ `_Ex`（R-37） |
 | `layer_distance.json` | `scalar`（`fn: layerWeightFromDistance`） | 距離でレイヤーの重みを決める（R-35） |
 | `step.json` | `step`（新） | コマ打ちの判定（R-33） |
@@ -16,6 +17,9 @@ Python（`core/evaluate.py`）と C#（`FacialCore`）が同じファイルを�
 
 - ケース直下 `sharpness`（省略 = 1）: 4 隅の双線形の重み w を `w^s / Σ w^s` に直す（重み 0 の隅は 0 のまま。合計 0 ならそのまま）。
   `s` は [0.01, 64] に丸める。端のフェード・レイヤーの重みを掛ける**前**に直す。焼いていない隅があっても残りは正規化し直さない
+- ケース直下 `interpolation`（省略 = `"bilinear"`）: `"catmullRom"` なら 4 隅の双線形の代わりに、各軸 4 点（角度を挟むセルの index0-1 … index0+2。
+  端は端の点を繰り返し、同じ点に重なった分は足す）の一様 Catmull-Rom の重みの積を格子の点ごとに作り、負を 0 に丸めて合計 1 に割り直す。
+  シャープさ（`w^s / Σ w^s`）はその点ごとの重みに掛ける。焼いていない点があっても割り直さない（格子の全点で割る）。格子の点ちょうどでは双線形と同じ
 - ケース直下 `exaggeration`（省略 = 1、0〜1 に丸める）
 - レイヤー `exMorphs`: `morphs` と同じ並びの `_Ex` シェイプ名（無し / null / 空文字 = その点は Ex なし。`morphs` より短くても落ちない）。
   Ex の重み = 同じ点の通常シェイプの重み × `exaggeration`（通常シェイプを焼いていない点の Ex は出さない。0 のときは出力に出ない）

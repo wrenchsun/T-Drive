@@ -21,6 +21,15 @@ namespace TDrive.Facial.Editor
         }
 
         /// <summary>JSON 文字列 → FacialCorrectionData（呼び出し側が破棄する。FacialPose だと例外）。</summary>
+        /// <summary>補間の種類の文字列（"bilinear" / "catmullRom"）→ 列挙。知らない値は警告して双線形。</summary>
+        public static FacialInterpolation ParseInterpolation(string s, Action<string> warn)
+        {
+            if (string.IsNullOrEmpty(s) || s == "bilinear") return FacialInterpolation.Bilinear;
+            if (s == "catmullRom") return FacialInterpolation.CatmullRom;
+            if (warn != null) warn("quality.interpolation「" + s + "」は使えません（bilinear / catmullRom）。双線形として扱います");
+            return FacialInterpolation.Bilinear;
+        }
+
         public static FacialCorrectionData BuildData(string json, string fallbackAssetName, Action<string> warn)
         {
             FcFile file = FcposeReader.Read(json, warn);
@@ -83,6 +92,7 @@ namespace TDrive.Facial.Editor
                 stepFps = (float)doc.Quality.StepFps,
                 exaggeration = (float)doc.Quality.Exaggeration,
                 hasExaggeration = true,
+                interpolation = ParseInterpolation(doc.Quality.Interpolation, warn),
             };
 
             data.perspective = BuildPerspective(doc, asset, cv, warn);

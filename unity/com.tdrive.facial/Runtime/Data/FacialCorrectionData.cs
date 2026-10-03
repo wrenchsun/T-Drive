@@ -39,6 +39,7 @@ namespace TDrive.Facial
         [Tooltip("コマ打ちの fps（0 = 毎フレーム）。補正の更新をこの回数 / 秒に間引く（追従はなく、更新のたびに目標へ跳ぶ）")] public float stepFps;
         [Tooltip("誇張（_Ex シェイプ）の既定の強さ（0〜1）。「指定あり」がオンのときだけ使い、オフなら 1")] public float exaggeration;
         [Tooltip("exaggeration を使う（オフ = 1）。古いアセットを 1 のままにするためのフラグ")] public bool hasExaggeration;
+        [Tooltip("補間の種類。Bilinear = 4 隅の双線形（標準）/ CatmullRom = キーとキーの間がなめらか（キーの角度以外では少し行き過ぎることがある）")] public FacialInterpolation interpolation;
     }
 
     /// <summary>レイヤーの重みの入力元（layerWeights）。</summary>

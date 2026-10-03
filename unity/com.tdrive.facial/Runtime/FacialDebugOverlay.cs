@@ -120,6 +120,7 @@ namespace TDrive.Facial
                 sb.Append("  Step ").Append(r.LastStepFps.ToString("F1")).Append("fps ").Append(r.StepHolding ? "[HOLD]" : "[EVAL]").Append('\n');
             if (r.LastSharpness != 1f || r.LastExaggeration < 0.9999f)
                 sb.Append("  Sharp ").Append(r.LastSharpness.ToString("F2")).Append("  Exag ").Append(r.LastExaggeration.ToString("F2")).Append('\n');
+            if (r.LastInterpolation == TDrive.Facial.Core.FacialInterpolation.CatmullRom) sb.Append("  Interp CatmullRom\n");
             if (r.PerspectiveActive)
             {
                 sb.Append("  Persp ").Append(r.data.perspective.axis == FacialPerspectiveAxis.Fov ? "fov " : "dist ");

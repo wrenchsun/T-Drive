@@ -236,7 +236,8 @@
             "stepFps": { "type": "number", "minimum": 0 },
             "angleEpsilon": { "type": "number", "minimum": 0 },
             "maxLod": { "type": "integer", "minimum": 0 },
-            "exaggeration": { "type": "number", "minimum": 0, "maximum": 1, "description": "誇張（_Ex シェイプ）の既定の強さ。F5-5" }
+            "exaggeration": { "type": "number", "minimum": 0, "maximum": 1, "description": "誇張（_Ex シェイプ）の既定の強さ。F5-5" },
+            "interpolation": { "enum": ["bilinear", "catmullRom"], "description": "補間の種類。省略 = bilinear。F5-11" }
           },
           "additionalProperties": true
         },

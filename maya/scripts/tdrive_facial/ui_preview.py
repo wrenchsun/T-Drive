@@ -149,6 +149,10 @@ class PreviewGroup(QtWidgets.QGroupBox):
         self.warn_note.setWordWrap(True)
         self.warn_note.setStyleSheet(WARN_STYLE)
         v.addWidget(self.warn_note)
+        self.material_note = QtWidgets.QLabel()
+        self.material_note.setWordWrap(True)
+        self.material_note.setStyleSheet(DIM_STYLE)
+        v.addWidget(self.material_note)
 
         # 強さ・感情
         self.sliders = QtWidgets.QGridLayout()
@@ -326,6 +330,8 @@ class PreviewGroup(QtWidgets.QGroupBox):
         warn = " / ".join(st.warnings)
         self.warn_note.setText(warn)
         self.warn_note.setVisible(bool(warn))
+        self.material_note.setText(st.material_link)
+        self.material_note.setVisible(bool(st.material_link) and exists)
 
         cur = self.camera_combo.currentData()
         self._refresh_cameras(cur)

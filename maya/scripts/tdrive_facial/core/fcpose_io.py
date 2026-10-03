@@ -319,7 +319,7 @@ def _read_material(d: dict) -> Material:
     return Material(mode=_s(d.get("mode"), "none"), extra=_extra(d, ("mode",)))
 
 
-_QUALITY_KEYS = ("sharpness", "stepFps", "angleEpsilon", "maxLod", "exaggeration")
+_QUALITY_KEYS = ("sharpness", "stepFps", "angleEpsilon", "maxLod", "exaggeration", "interpolation")
 
 
 def _read_quality(d: dict) -> Quality:
@@ -330,6 +330,7 @@ def _read_quality(d: dict) -> Quality:
         angle_epsilon=_f(d.get("angleEpsilon"), q.angle_epsilon),
         max_lod=_i(d.get("maxLod"), q.max_lod),
         exaggeration=_f(d.get("exaggeration"), q.exaggeration),
+        interpolation=_s(d.get("interpolation"), q.interpolation),
         extra=_extra(d, _QUALITY_KEYS),
     )
 
@@ -710,6 +711,8 @@ def to_dict(doc: AnyDocument) -> dict[str, Any]:
         qd = {"sharpness": q.sharpness, "stepFps": q.step_fps, "angleEpsilon": q.angle_epsilon, "maxLod": q.max_lod}
         if q.exaggeration != 1.0:
             qd["exaggeration"] = q.exaggeration  # 既定（1）のときは出さない（既存のファイルを変えない）
+        if q.interpolation != "bilinear":
+            qd["interpolation"] = q.interpolation  # 既定（双線形）のときは出さない
         out["quality"] = _with_extra(qd, q.extra)
     if doc.perspective is not None:
         out["perspective"] = _perspective_dict(doc.perspective)

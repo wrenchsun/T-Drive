@@ -1,6 +1,7 @@
 // 取り込んだデータ（FacialCorrectionData）とは別に持つ調整値。取り込み直しても消えない。実行時は読み取り専用。
 // 各項目は「上書きする」のフラグ付き。フラグが false の項目は FacialCorrectionData の値を使う。
 using System;
+using TDrive.Facial.Core;
 using UnityEngine;
 
 namespace TDrive.Facial
@@ -22,6 +23,7 @@ namespace TDrive.Facial
         public float lipSyncStrength;
         public float lipSyncFollow; // 0 以下 = 即時
         public int maxLod; // 補正を書く LOD の上限（0 = 制限なし。N = LOD N まで）
+        public FacialInterpolation interpolation; // 補間の種類（既定 = 双線形）
     }
 
     [CreateAssetMenu(menuName = "T-Drive/Facial Correction Overrides", fileName = "FacialCorrectionOverrides", order = 901)]
@@ -57,6 +59,9 @@ namespace TDrive.Facial
         [Tooltip("誇張を上書きする")] public bool overrideExaggeration;
         [Tooltip("誇張（_Ex シェイプ）の強さ（0〜1）。1 = 作った通り、0 = 誇張なし")] [Range(0f, 1f)] public float exaggeration = 1f;
 
+        [Tooltip("補間の種類を上書きする")] public bool overrideInterpolation;
+        [Tooltip("補間の種類。双線形（標準）/ なめらか（Catmull-Rom。キーとキーの間がなめらかになるが、キーの角度以外では少し行き過ぎることがある）")] public FacialInterpolation interpolation = FacialInterpolation.Bilinear;
+
         [Tooltip("書き込む LOD の上限を上書きする")] public bool overrideMaxLod;
         [Tooltip("補正を書く LOD の上限（0 = 制限なし。N = LOD N まで書く。LODGroup に入っていない Renderer は常に書く）")] [Min(0)] public int maxLod;
 
@@ -89,6 +94,7 @@ namespace TDrive.Facial
                 p.lipSyncStrength = Mathf.Clamp01(data.lipSync.strength);
                 p.lipSyncFollow = data.lipSync.follow;
                 p.maxLod = Mathf.Max(0, data.quality.maxLod);
+                p.interpolation = data.quality.interpolation;
             }
             else
             {
@@ -111,6 +117,7 @@ namespace TDrive.Facial
             if (ov.overrideLipSyncStrength) p.lipSyncStrength = Mathf.Clamp01(ov.lipSyncStrength);
             if (ov.overrideLipSyncFollow) p.lipSyncFollow = ov.lipSyncFollow;
             if (ov.overrideMaxLod) p.maxLod = Mathf.Max(0, ov.maxLod);
+            if (ov.overrideInterpolation) p.interpolation = ov.interpolation;
             return p;
         }
     }

@@ -172,6 +172,73 @@ namespace TDrive.Facial.Tests
             Assert.AreEqual(Vector4.zero, Get(_a.smr, "_FC_Angles"));
         }
 
+        // ---- _ToonFacialAngles（Toon シェーダーの「顔の角度連動」の入力。F5-9）
+
+        [Test]
+        public void ToonAnglesAreWrittenWithTheSameValueAsFcAngles()
+        {
+            Assert.IsTrue(_a.runner.writeToonAngles, "既定でオン");
+            _a.runner.alpha = 0.5f;
+            _a.runner.EvaluateNow(45f, -22.5f, Dt);
+            Vector4 fc = Get(_a.smr, "_FC_Angles"), toon = Get(_a.smr, "_ToonFacialAngles");
+            Assert.AreEqual(fc, toon);
+            Assert.AreEqual(0.5f, toon.x, 1e-4f);
+            Assert.AreEqual(-0.5f, toon.y, 1e-4f);
+            Assert.AreEqual(0.5f, toon.z, 1e-4f, "強さ = 全体に掛けた値");
+        }
+
+        [Test]
+        public void ToonAnglesAreNotWrittenWhenTheOptionIsOff()
+        {
+            _a.runner.writeToonAngles = false;
+            _a.runner.EvaluateNow(45f, 0f, Dt);
+            _a.smr.GetPropertyBlock(_mpb);
+            Assert.IsTrue(_mpb.HasVector("_FC_Angles"));
+            Assert.IsFalse(_mpb.HasVector("_ToonFacialAngles"));
+        }
+
+        [Test]
+        public void TurningTheOptionOffZeroesToonAngles()
+        {
+            _a.runner.EvaluateNow(45f, 0f, Dt);
+            Assert.AreEqual(0.5f, Get(_a.smr, "_ToonFacialAngles").x, 1e-4f);
+            _a.runner.writeToonAngles = false;
+            _a.runner.EvaluateNow(45f, 0f, 1f);
+            Assert.AreEqual(Vector4.zero, Get(_a.smr, "_ToonFacialAngles"));
+            Assert.AreEqual(0.5f, Get(_a.smr, "_FC_Angles").x, 1e-4f, "_FC_Angles はそのまま");
+        }
+
+        [Test]
+        public void ToonAnglesAreZeroedOnResetAndTheOwnBlockIsRemoved()
+        {
+            _a.runner.EvaluateNow(45f, 20f, Dt);
+            _a.runner.ResetWeights();
+            Assert.AreEqual(Vector4.zero, Get(_a.smr, "_ToonFacialAngles"));
+            _a.smr.GetPropertyBlock(_mpb);
+            Assert.IsTrue(_mpb.isEmpty, "自分の値だけのブロックは外す（U-5）");
+        }
+
+        [Test]
+        public void ToonAnglesAreZeroedButOtherValuesStayInAForeignBlock()
+        {
+            _mpb.Clear();
+            _mpb.SetVector("_Other", new Vector4(1, 2, 3, 4));
+            _a.smr.SetPropertyBlock(_mpb);
+            _a.runner.EvaluateNow(45f, 0f, Dt);
+            _a.runner.ResetWeights();
+            Assert.AreEqual(Vector4.zero, Get(_a.smr, "_ToonFacialAngles"));
+            Assert.AreEqual(new Vector4(1, 2, 3, 4), Get(_a.smr, "_Other"));
+        }
+
+        [Test]
+        public void ToonAnglesAreNotWrittenWhenMaterialOutputIsOff()
+        {
+            _a.runner.materialOutput = FacialMaterialOutputMode.Off;
+            _a.runner.EvaluateNow(45f, 0f, Dt);
+            _a.smr.GetPropertyBlock(_mpb);
+            Assert.IsFalse(_mpb.HasVector("_ToonFacialAngles"));
+        }
+
         [Test]
         public void SteadyStateDoesNotAllocate()
         {

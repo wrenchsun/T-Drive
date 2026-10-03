@@ -380,6 +380,7 @@ namespace TDrive.Facial.Core
                     AngleEpsilon = F(q, "angleEpsilon", def.AngleEpsilon),
                     MaxLod = I(q, "maxLod", def.MaxLod),
                     Exaggeration = F(q, "exaggeration", def.Exaggeration),
+                    Interpolation = Str(q, "interpolation", def.Interpolation),
                 };
             }
             Dictionary<string, object> ps = Obj(d, "perspective");

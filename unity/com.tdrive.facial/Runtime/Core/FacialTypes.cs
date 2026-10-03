@@ -3,6 +3,9 @@ using System.Collections.Generic;
 
 namespace TDrive.Facial.Core
 {
+    /// <summary>補間の種類（quality.interpolation。F5-11）。Bilinear = 4 隅の双線形（既定）/ CatmullRom = 各軸 4 点のなめらかな補間。</summary>
+    public enum FacialInterpolation { Bilinear = 0, CatmullRom = 1 }
+
     /// <summary>格子の形（角度 → セル位置に必要な最小情報）。</summary>
     public sealed class GridShape
     {

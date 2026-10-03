@@ -334,9 +334,10 @@ namespace TDrive.Facial.Editor
             if (!_foldMaterial) return;
             serializedObject.Update();
             EditorGUILayout.PropertyField(serializedObject.FindProperty("materialOutput"));
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("writeToonAngles"), new GUIContent("Toon の顔の角度連動へ渡す", "Toon シェーダーの「顔の角度連動」へ角度を渡します（_ToonFacialAngles に _FC_Angles と同じ値を書く）。Toon のマテリアルで「顔の角度連動」を使っていなければ何も変わりません"));
             EditorGUILayout.PropertyField(serializedObject.FindProperty("materialTargets"), true);
             serializedObject.ApplyModifiedProperties();
-            EditorGUILayout.LabelField("今の状態", r.MaterialOutputActive ? "出力する（_FC_Angles / _FC_Emotion*）" : "出力しない");
+            EditorGUILayout.LabelField("今の状態", r.MaterialOutputActive ? (r.writeToonAngles ? "出力する（_FC_Angles / _FC_Emotion* / _ToonFacialAngles）" : "出力する（_FC_Angles / _FC_Emotion*）") : "出力しない");
         }
 
         // ---------------------------------------------------------------- 検証

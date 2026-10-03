@@ -81,6 +81,8 @@ namespace TDrive.Facial.Core
         public int MaxLod = 0;
         /// <summary>誇張（_Ex シェイプ）の既定の強さ 0〜1（1 = 作った通り）。F5-5。</summary>
         public double Exaggeration = 1.0;
+        /// <summary>補間の種類（"bilinear" 既定 / "catmullRom"）。F5-11。</summary>
+        public string Interpolation = "bilinear";
     }
 
     /// <summary>レイヤーの重みの入力元（layerWeights の 1 項目。F5-3）。Source: "direct" | "curve" | "distance"。</summary>

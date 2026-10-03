@@ -95,6 +95,7 @@ from .core.model import (
     GridPoint,
     LodMesh,
     Meta,
+    Material,
     Quality,
     SourcePose,
     Target,
@@ -1859,6 +1860,7 @@ class FacialSession:
         step_fps: Optional[float] = None,
         exaggeration: Optional[float] = None,
         angle_epsilon: Optional[float] = None,
+        interpolation: Optional[str] = None,
     ) -> CommandResult:
         """品質（実行時の見え方。R-32 / R-33 / R-37）。None の値は触らない。範囲外・数値でない値は失敗（Document は変わらない）。
 
@@ -1866,7 +1868,8 @@ class FacialSession:
         - step_fps（0〜240。0 = 使わない）: 補正の更新を間引く fps。**Unity でだけ効く**（Maya のプレビューには掛からない）
         - exaggeration（0〜1）: 誇張（`_Ex`）の既定の強さ。プレビューの rig の `exaggeration` の初期値にもなる
         - angle_epsilon（0〜45°）: 角度がこれ未満しか変わらないときは再計算しない（Unity）
-        プレビューの式は sharpness が変わると作り直される（`preview_is_stale`）。exaggeration を変えたときは、キーの無い rig の値も合わせる。
+        - interpolation（"bilinear" / "catmullRom"）: 補間の種類。Maya のプレビューにも掛かる（式が作り直される）
+        プレビューの式は sharpness・interpolation が変わると作り直される（`preview_is_stale`）。exaggeration を変えたときは、キーの無い rig の値も合わせる。
         """
         doc = self.require()
         q = doc.quality if doc.quality is not None else Quality()
@@ -1884,14 +1887,34 @@ class FacialSession:
             if not isinstance(given, (int, float)) or isinstance(given, bool) or not math.isfinite(given) or not lo <= given <= hi:
                 return CommandResult(ok=False, code="invalid", message=msg)
             new[key] = float(given)
-        if all(new[k] == getattr(q, k) for k in new):
+        new_interp = q.interpolation
+        if interpolation is not None:
+            if interpolation not in evaluate.INTERPOLATIONS:
+                return CommandResult(ok=False, code="invalid", message="補間の種類は bilinear / catmullRom のどちらかです")
+            new_interp = interpolation
+        if all(new[k] == getattr(q, k) for k in new) and new_interp == q.interpolation:
             return CommandResult(code="unchanged")
         if doc.quality is None:
             doc.quality = Quality()
         for k, v in new.items():
             setattr(doc.quality, k, v)
+        doc.quality.interpolation = new_interp
         if exaggeration is not None:
             self._sync_preview_exaggeration(float(exaggeration))
+        return CommandResult()
+
+    @undoable(notify=True)
+    def set_material_link(self, enabled: bool) -> CommandResult:
+        """マテリアル連携（`material.mode`。"none" / "propertyBlock"）。オンのとき、プレビューの角度を Toon マテリアルの「顔の角度連動」へつなぐ
+        （プレビューの作り直しで反映。`preview_is_stale` が True になる）。Maya では "none" 以外はすべてオン。"""
+        doc = self.require()
+        mode = "propertyBlock" if enabled else "none"
+        cur = doc.material.mode if doc.material is not None else "none"
+        if (cur != "none") == bool(enabled):
+            return CommandResult(code="unchanged")
+        if doc.material is None:
+            doc.material = Material()
+        doc.material.mode = mode
         return CommandResult()
 
     def _sync_preview_exaggeration(self, value: float) -> None:
@@ -2869,6 +2892,7 @@ class FacialSession:
         except preview_rig.PreviewRigError:
             cam = None
         st.camera = scene_mod.short_name(cam) if cam else ""
+        st.material_link = preview_rig.material_link_message(doc.asset or "") if preview_rig.material_link_enabled(doc) else ""
         return st
 
     def preview_weights(self) -> dict[str, float]:
@@ -3340,6 +3364,7 @@ class PreviewStatus:
     emotions: list[tuple[str, str, float, bool]] = field(default_factory=list)  # (レイヤー名, rig のアトリビュート名, 値, キーあり)
     editing: bool = False  # 編集中は補正が止まっている
     warnings: list[str] = field(default_factory=list)
+    material_link: str = ""  # マテリアル連携の一行（連携がオフのときは空）
 
 
 def _normalize(v: Sequence[float]) -> tuple[float, float, float]:

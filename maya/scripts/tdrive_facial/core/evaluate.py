@@ -115,6 +115,48 @@ def _sample_axis(angle_deg: float, range_deg: float, num_points: int, edge_fade_
     return out
 
 
+INTERP_BILINEAR = "bilinear"
+INTERP_CATMULL_ROM = "catmullRom"
+INTERPOLATIONS = (INTERP_BILINEAR, INTERP_CATMULL_ROM)
+
+
+def catmull_rom_basis(t: float) -> tuple[float, float, float, float]:
+    """一様 Catmull-Rom の 4 点の重み（t = 中の 2 点の間の位置 0..1。合計 1。負になり得る）。"""
+    t2 = t * t
+    t3 = t2 * t
+    return (
+        0.5 * (-t3 + 2.0 * t2 - t),
+        0.5 * (3.0 * t3 - 5.0 * t2 + 2.0),
+        0.5 * (-3.0 * t3 + 4.0 * t2 + t),
+        0.5 * (t3 - t2),
+    )
+
+
+def _axis_catmull_rom(index0: int, frac: float, num_points: int) -> list[tuple[int, float]]:
+    """1 軸分: 角度を挟む 4 点（index0-1 … index0+2。端は端の点を繰り返す）の重み。同じ点に重なった分は足す。"""
+    out: list[tuple[int, float]] = []
+    for k, w in enumerate(catmull_rom_basis(frac)):
+        idx = min(max(index0 - 1 + k, 0), num_points - 1)
+        for j, (i2, w2) in enumerate(out):
+            if i2 == idx:
+                out[j] = (i2, w2 + w)
+                break
+        else:
+            out.append((idx, w))
+    return out
+
+
+def catmull_rom_corners(col: "_AxisSample", row: "_AxisSample", num_cols: int, num_rows: int) -> list[tuple[int, int, float]]:
+    """Catmull-Rom の格子点ごとの重み（row, col, w）。16 点の積 → 負を 0 に → 合計 1 に割り直す（docs/15 §5.u）。"""
+    cols = _axis_catmull_rom(col.index0, col.frac, num_cols)
+    rows = _axis_catmull_rom(row.index0, row.frac, num_rows)
+    raw = [(r, c, max(0.0, wr * wc)) for r, wr in rows for c, wc in cols]
+    total = sum(w for _, _, w in raw)
+    if total <= 0.0:
+        return [(row.index0, col.index0, 1.0)]
+    return [(r, c, w / total) for r, c, w in raw]
+
+
 SHARPNESS_MIN = 0.01
 SHARPNESS_MAX = 64.0
 
@@ -172,6 +214,7 @@ def evaluate_correction(
     pitch_deg: float,
     sharpness: float = 1.0,
     exaggeration: float = 1.0,
+    interpolation: str = INTERP_BILINEAR,
 ) -> list[MorphWeight]:
     """角度（基準ボーンから見た Yaw / Pitch、度）から補正シェイプの重み一式を返す（EvaluateCorrection）。
 
@@ -180,6 +223,8 @@ def evaluate_correction(
     無効なレイヤー・重み 0・焼いていない点は飛ばす。戻りは最初に現れた順。
 
     sharpness（既定 1 = 何もしない）: 4 隅の双線形の重みを w^s / Σ w^s に直す（端のフェード・レイヤーの重みを掛ける前）。
+    interpolation（既定 "bilinear"）: "catmullRom" なら 4 隅の双線形の代わりに各軸 4 点の Catmull-Rom の積（16 点。
+    負は 0 に丸めて合計 1 に割り直す。格子の点ちょうどでは双線形と同じ）。シャープさはその重みに掛ける。
     exaggeration（0〜1、既定 1）: layer.ex_morphs にある `_Ex` シェイプの重み = 対応する通常シェイプの重み × exaggeration。
     """
     if len(layers) == 0 or grid.num_cols <= 0 or grid.num_rows <= 0:
@@ -190,12 +235,15 @@ def evaluate_correction(
     if fade_scale <= KINDA_SMALL_NUMBER:
         return []  # 範囲の外（フェード幅も超えた）
 
-    corners = (
-        (row.index0, col.index0, (1.0 - col.frac) * (1.0 - row.frac)),
-        (row.index0, col.index1, col.frac * (1.0 - row.frac)),
-        (row.index1, col.index0, (1.0 - col.frac) * row.frac),
-        (row.index1, col.index1, col.frac * row.frac),
-    )
+    if interpolation == INTERP_CATMULL_ROM:
+        corners = tuple(catmull_rom_corners(col, row, grid.num_cols, grid.num_rows))
+    else:
+        corners = (
+            (row.index0, col.index0, (1.0 - col.frac) * (1.0 - row.frac)),
+            (row.index0, col.index1, col.frac * (1.0 - row.frac)),
+            (row.index1, col.index0, (1.0 - col.frac) * row.frac),
+            (row.index1, col.index1, col.frac * row.frac),
+        )
     if sharpness != 1.0:
         sharp = sharpen_weights([c[2] for c in corners], sharpness)
         corners = tuple((c[0], c[1], sharp[i]) for i, c in enumerate(corners))

@@ -296,6 +296,19 @@ class SetupTab(QtWidgets.QWidget):
         )
         self.quality_sharpness.valueChanged.connect(lambda *_: self.on_quality_changed())
         f.addRow("シャープさ", self.quality_sharpness)
+        self.quality_interp = QtWidgets.QComboBox()
+        self.quality_interp.addItem("双線形（標準）", "bilinear")
+        self.quality_interp.addItem("なめらか（Catmull-Rom）", "catmullRom")
+        self.quality_interp.setToolTip(
+            "キーとキーの間の混ぜ方。なめらか = キーとキーの間の動きが滑らかになりますが、キーの角度以外では少し行き過ぎることがあります。"
+            "Maya のプレビュー（作り直すと反映）と Unity の両方で効きます"
+        )
+        self.quality_interp.activated.connect(lambda *_: self.on_quality_changed())
+        f.addRow("補間", self.quality_interp)
+        interp_note = QtWidgets.QLabel("なめらか = キーとキーの間の動きが滑らかになるが、キーの角度以外では少し行き過ぎることがある")
+        interp_note.setWordWrap(True)
+        interp_note.setStyleSheet(DIM_STYLE)
+        f.addRow(interp_note)
         self.quality_step_fps = _spin(0.0, 240.0, 1.0, 1, " fps")
         self.quality_step_fps.setToolTip("コマ打ち fps: 0 = 使わない。補正の更新をこの fps に間引きます。Unity で効きます — Maya のプレビューには掛かりません")
         self.quality_step_fps.valueChanged.connect(lambda *_: self.on_quality_changed())
@@ -311,7 +324,14 @@ class SetupTab(QtWidgets.QWidget):
         self.quality_epsilon.setToolTip("角度がこれより小さくしか変わらないときは、補正を計算し直しません（Unity の軽量化）。Maya のプレビューには掛かりません")
         self.quality_epsilon.valueChanged.connect(lambda *_: self.on_quality_changed())
         f.addRow("角度のしきい値", self.quality_epsilon)
-        note = QtWidgets.QLabel("シャープさ・誇張は Maya のプレビューにも反映されます。コマ打ちと角度のしきい値は Unity だけで効きます。")
+        self.material_link = QtWidgets.QCheckBox("Toon マテリアルに顔の角度を渡す")
+        self.material_link.setToolTip(
+            "オンのとき、プレビューのカメラの角度を、顔のメッシュの Toon マテリアルの「顔の角度連動」へ渡します（プレビューを作り直すと反映）。"
+            "Toon のマテリアルで「顔の角度連動」を使っていなければ何も変わりません。Unity では Runner のマテリアル出力が同じ働きをします"
+        )
+        self.material_link.toggled.connect(lambda *_: self.on_material_link_changed())
+        f.addRow(self.material_link)
+        note = QtWidgets.QLabel("シャープさ・補間・誇張は Maya のプレビューにも反映されます。コマ打ちと角度のしきい値は Unity だけで効きます。")
         note.setWordWrap(True)
         note.setStyleSheet(DIM_STYLE)
         f.addRow(note)
@@ -523,6 +543,8 @@ class SetupTab(QtWidgets.QWidget):
             self.quality_sharpness.setValue(q.sharpness if q is not None else 1.0)
             self.quality_step_fps.setValue(q.step_fps if q is not None else 0.0)
             self.quality_exaggeration.setValue(q.exaggeration if q is not None else 1.0)
+            self._set_combo_data(self.quality_interp, q.interpolation if q is not None else "bilinear")
+            self.material_link.setChecked(doc.material is not None and doc.material.mode != "none")
             self.quality_epsilon.setValue(q.angle_epsilon if q is not None else 0.1)
             self._refresh_exclude(doc)
             self._refresh_part_strength()
@@ -954,7 +976,13 @@ class SetupTab(QtWidgets.QWidget):
             step_fps=self.quality_step_fps.value(),
             exaggeration=self.quality_exaggeration.value(),
             angle_epsilon=self.quality_epsilon.value(),
+            interpolation=self.quality_interp.currentData(),
         )
+
+    def on_material_link_changed(self) -> None:
+        if self._updating:
+            return
+        self._run(self.session.set_material_link, self.material_link.isChecked())
 
     def on_exclude_add(self, kind: str) -> None:
         text = self.exclude_inputs[kind].text().strip()

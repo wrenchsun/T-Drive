@@ -18,6 +18,9 @@ namespace TDrive.Facial.Editor
         public bool hasExaggeration;
         public double exaggeration;
         public int maxLod;
+        /// <summary>true のとき quality.interpolation も書き出す（補間の種類を上書きしているときだけ）。</summary>
+        public bool hasInterpolation;
+        public string interpolation;
         /// <summary>true のとき perspective.strength も書き出す（パース補正の強さを上書きしているときだけ）。</summary>
         public bool hasPerspectiveStrength;
         public double perspectiveStrength;
@@ -61,6 +64,7 @@ namespace TDrive.Facial.Editor
                 maxLod = p.maxLod,
                 edgeFade = p.edgeFade,
                 exaggeration = p.exaggeration,
+                interpolation = p.interpolation == FacialInterpolation.CatmullRom ? "catmullRom" : "bilinear",
                 perspectiveStrength = p.perspectiveStrength,
             };
         }
@@ -71,6 +75,7 @@ namespace TDrive.Facial.Editor
             FacialSourceTuning t = ToSource(data, FacialCorrectionOverrides.Resolve(data, overrides));
             t.hasEdgeFade = overrides != null && overrides.overrideEdgeFade; // 上書きしているときだけ grid を出す
             t.hasExaggeration = overrides != null && overrides.overrideExaggeration; // 誇張も上書きしているときだけ
+            t.hasInterpolation = overrides != null && overrides.overrideInterpolation; // 補間の種類も上書きしているときだけ
             t.hasPerspectiveStrength = overrides != null && overrides.overridePerspectiveStrength; // パース補正の強さも上書きしているときだけ
             return BuildJson(t);
         }
@@ -102,8 +107,9 @@ namespace TDrive.Facial.Editor
             sb.Append("    \"sharpness\": ").Append(N(t.sharpness)).Append(",\n");
             sb.Append("    \"stepFps\": ").Append(N(t.stepFps)).Append(",\n");
             sb.Append("    \"angleEpsilon\": ").Append(N(t.angleEpsilon)).Append(",\n");
-            sb.Append("    \"maxLod\": ").Append(t.maxLod.ToString(CultureInfo.InvariantCulture)).Append(t.hasExaggeration ? ",\n" : "\n");
-            if (t.hasExaggeration) sb.Append("    \"exaggeration\": ").Append(N(t.exaggeration)).Append("\n");
+            sb.Append("    \"maxLod\": ").Append(t.maxLod.ToString(CultureInfo.InvariantCulture)).Append(t.hasExaggeration || t.hasInterpolation ? ",\n" : "\n");
+            if (t.hasExaggeration) sb.Append("    \"exaggeration\": ").Append(N(t.exaggeration)).Append(t.hasInterpolation ? ",\n" : "\n");
+            if (t.hasInterpolation) sb.Append("    \"interpolation\": \"").Append(t.interpolation == "catmullRom" ? "catmullRom" : "bilinear").Append("\"\n");
             sb.Append("  }\n");
             sb.Append("}\n");
             return sb.ToString();

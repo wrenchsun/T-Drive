@@ -21,6 +21,7 @@
     <Compile Include="..\com.tdrive.facial\Tests\Editor\FcposeCoreTests.cs" Link="Tests\FcposeCoreTests.cs" />
     <Compile Include="..\com.tdrive.facial\Tests\Editor\FctrackCoreTests.cs" Link="Tests\FctrackCoreTests.cs" />
     <Compile Include="..\com.tdrive.facial\Tests\Editor\FacialCoreRobustnessTests.cs" Link="Tests\FacialCoreRobustnessTests.cs" />
+    <Compile Include="..\com.tdrive.facial\Tests\Editor\FacialInterpolationCoreTests.cs" Link="Tests\FacialInterpolationCoreTests.cs" />
   </ItemGroup>
 
   <ItemGroup>

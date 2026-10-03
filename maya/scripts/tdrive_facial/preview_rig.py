@@ -30,6 +30,12 @@ tdFacialPreview_<asset>.（enable / alpha / useManual / manualYaw / manualPitch 
 追加の品質機能（F5。既定のときは式が変わらない = 従来と同じ）:
 - **シャープニング**（`quality.sharpness` ≠ 1 のときだけ式に入る）: 4 隅の双線形の重み w を w^s / Σ w^s にしてから、端のフェード・レイヤーの重みを掛ける
   （`evaluate.sharpen_weights` と同じ。s は [0.01, 64] に丸める）
+- **マテリアル連携**（`doc.material.mode` が "none" 以外のときだけ。オフのときは式が従来と同一）: rig に `toonYaw` / `toonPitch`（Yaw / 可動域・Pitch / 可動域を −1〜1 に丸めた値。
+  Unity の `_FC_Angles.xy` と同じ）と `toonStrength`（alpha × 表情での弱め × 補正あり / なし。端のフェードは掛けない）を出し、対象メッシュのマテリアルの Toon シェーダーノードの
+  `ToonFacialYaw` / `ToonFacialPitch` / `ToonFacialStrength`（`tdrive_toon.params.MAYA_RUNTIME_ATTRS`）へつなぐ。受け口があるノードにだけつなぎ（無ければ「つないでいません」）、
+  ほかから接続されている受け口は触らない。消す・作り直す・キーに焼くときは接続を外して受け口を 0 に戻す。Look のデータには何も書かない
+- **補間の種類**（`quality.interpolation == "catmullRom"` のときだけ式が変わる。双線形は式が従来と同一）: 各軸 4 点の Catmull-Rom の重み（端は端の点を繰り返す）
+  の積 → 負を 0 に → 合計 1 に割り直し（格子の全点で。焼いていない点も含めて割る）→ シャープさ。`evaluate.catmull_rom_corners` と同じ
 - **誇張**: シーンに `FC_…_Ex` があって、基になる `FC_…` が配線されるとき、`_Ex` の weight = 基の weight × rig の `exaggeration`（0〜1、キーが打てる。
   初期値は `quality.exaggeration`）。`_Ex` が 1 本も無いときは式に `exaggeration` を書かない
 - **距離で重みを決めるレイヤー**（`layerWeights[<レイヤー>].source == "distance"`）: レイヤーの重み = lerp(from, to, saturate((d − start) / (end − start)))。
@@ -77,6 +83,9 @@ EXAGGERATION_ATTR = "exaggeration"  # 誇張（_Ex）の強さ 0〜1（キーが
 OUT_DISTANCE_ATTR = "outDistance"  # カメラと格子の中心の距離（cm。距離で重みを決めるレイヤーがあるときだけ作る）
 PERSPECTIVE_ATTR = "perspective"  # パース補正の強さ 0〜1（キーが打てる。キーがあれば export.read_fctrack が `perspective` カーブとして .fctrack に出す）
 OUT_PERSPECTIVE_ATTR = "outPerspective"  # パース補正の軸の値（距離 cm / 画角 度。パース補正を配線したときだけ作る）
+MATERIAL_ATTR = "tdFacialMaterial"  # マテリアル連携でつないだ {shaders, links, skipped, message} の JSON
+RIG_TOON_ATTRS = ("toonYaw", "toonPitch", "toonStrength")  # マテリアル連携の出力（−1〜1 の yaw / pitch・強さ。連携がオンのときだけ作る）
+TOON_SHADER_ATTRS_DEFAULT = ("ToonFacialYaw", "ToonFacialPitch", "ToonFacialStrength")  # Toon のシェーダーノード側の受け口（params.MAYA_RUNTIME_ATTRS と同じ）
 CAM_FOCAL_ATTR = "camFocal"  # 画角の軸のとき、カメラの focalLength をつなぐ（式がカメラの値を読むため）
 CAM_FILM_ATTR = "camFilm"  # 同 verticalFilmAperture（インチ）
 FILM_FIT_VERTICAL = 2  # camera.filmFit の「縦」（Fill 0 / Horizontal 1 / Vertical 2 / Overscan 3）
@@ -307,6 +316,140 @@ def has_perspective_targets(asset: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# マテリアル連携（Toon の「顔の角度連動」へ角度を渡す。F5-9、docs/14 §6.6）
+# ---------------------------------------------------------------------------
+
+
+def material_link_enabled(doc: Document) -> bool:
+    """文書のマテリアル連携がオンか（`material.mode` が "none" 以外。Maya では "propertyBlock" だけが定義されているので、どれでもオン）。"""
+    return doc.material is not None and doc.material.mode != "none"
+
+
+def toon_shader_attrs() -> tuple[str, str, str]:
+    """Toon のシェーダーノード側の受け口（yaw / pitch / 強さ）。tdrive_toon があればその契約（params.MAYA_RUNTIME_ATTRS）から、無ければ既定の名前。"""
+    try:
+        from tdrive_toon import params  # 遅延: Toon が無い環境でも動く
+
+        attrs = tuple(params.MAYA_RUNTIME_ATTRS["_ToonFacialAngles"])
+        if len(attrs) == 3:
+            return attrs  # type: ignore[return-value]
+    except (ImportError, AttributeError, KeyError):
+        pass
+    return TOON_SHADER_ATTRS_DEFAULT
+
+
+def normalized_angle(angle_deg: float, range_deg: float) -> float:
+    """角度 / 可動域を −1〜1 に丸めた値（Unity の `_FC_Angles.xy` と同じ。範囲が 0 に近いときは 0）。"""
+    return evaluate.clamp(angle_deg / range_deg, -1.0, 1.0) if range_deg > 1e-6 else 0.0
+
+
+def _has_attrs(node: str, attrs: Sequence[str]) -> bool:
+    return bool(node) and cmds.objExists(node) and all(cmds.attributeQuery(a, node=node, exists=True) for a in attrs)
+
+
+def _preview_shader_of(material: str) -> Optional[str]:
+    try:
+        from tdrive_toon import preview as toon_preview  # 遅延
+
+        return toon_preview.preview_shader_of(material)
+    except (ImportError, AttributeError):
+        return None
+
+
+def find_toon_shaders(doc: Document) -> tuple[list[str], list[str]]:
+    """対象メッシュ（顔・extra・LOD）に割り当てられたマテリアルから、3 つの受け口を持つ Toon のシェーダーノードを探す。
+    戻り = (見つかったシェーダーノード, 見つからなかったマテリアル)。マテリアルのシェーダーそのものが受け口を持てばそれ（Toon のプレビュー中）、
+    持たなければ元のマテリアルの Toon プレビューのシェーダー（`tdrive_toon.preview.preview_shader_of`）を使う。"""
+    attrs = toon_shader_attrs()
+    found: list[str] = []
+    missing: list[str] = []
+    seen: set[str] = set()
+    for mesh in _meshes(doc):
+        shapes = cmds.listRelatives(mesh, shapes=True, noIntermediate=True, fullPath=True) or [mesh]
+        for se in cmds.listConnections(shapes, type="shadingEngine") or []:
+            if se in seen:
+                continue
+            seen.add(se)
+            for mat in cmds.listConnections(f"{se}.surfaceShader", source=True, destination=False) or []:
+                if _has_attrs(mat, attrs):
+                    cand: Optional[str] = mat
+                else:
+                    pv = _preview_shader_of(mat)
+                    cand = pv if pv and _has_attrs(pv, attrs) else None
+                if cand is None:
+                    if mat not in missing:
+                        missing.append(mat)
+                elif cand not in found:
+                    found.append(cand)
+    return found, missing
+
+
+def _disconnect_material(rig: str) -> None:
+    """記録した接続を外し、受け口を 0 に戻す（他から付け替えられた接続・消えたノードは触らない）。"""
+    info = _read_json(rig, MATERIAL_ATTR, {})
+    for src, dst in info.get("links", []):
+        try:
+            node = dst.split(".", 1)[0]
+            if not cmds.objExists(node) or not cmds.objExists(dst):
+                continue
+            if src in (cmds.listConnections(dst, source=True, destination=False, plugs=True) or []):
+                cmds.disconnectAttr(src, dst)
+            if not cmds.listConnections(dst, source=True, destination=False):
+                cmds.setAttr(dst, 0.0)
+        except RuntimeError:
+            pass
+    if info:
+        _write_json(rig, MATERIAL_ATTR, {})
+
+
+def _connect_material(rig: str, doc: Document) -> dict:
+    """rig の toonYaw / toonPitch / toonStrength を Toon のシェーダーの受け口へつなぐ。受け口が無いシェーダー・他から接続済みの受け口はつながない。
+    戻り = {"shaders": [...], "links": [[元, 先]...], "skipped": [...], "message": 画面に出す一行}（rig にも記録する）。"""
+    dst_attrs = toon_shader_attrs()
+    shaders, _missing = find_toon_shaders(doc)
+    links: list[list[str]] = []
+    skipped: list[str] = []
+    used: list[str] = []
+    for sh in shaders:
+        ok = False
+        for src_attr, dst_attr in zip(RIG_TOON_ATTRS, dst_attrs):
+            src, dst = f"{rig}.{src_attr}", f"{sh}.{dst_attr}"
+            have = cmds.listConnections(dst, source=True, destination=False, plugs=True) or []
+            if have and src not in have:
+                skipped.append(dst)
+                continue
+            if not have:
+                cmds.connectAttr(src, dst, force=True)
+            links.append([src, dst])
+            ok = True
+        if ok:
+            used.append(sh)
+    if used:
+        msg = f"マテリアル連携: {len(used)} 個の Toon マテリアルにつなぎました"
+        if skipped:
+            msg += f"（ほかから接続されている受け口 {len(skipped)} 個はつないでいません）"
+    else:
+        msg = "マテリアル連携: Toon のプレビューが無いため、つないでいません"
+    info = {"shaders": used, "links": links, "skipped": skipped, "message": msg}
+    _write_json(rig, MATERIAL_ATTR, info)
+    return info
+
+
+def material_link_message(asset: str) -> str:
+    """プレビューの欄に出す、マテリアル連携の一行（連携がオフ・rig が無いときは空）。"""
+    rig = find_rig(asset)
+    if rig is None:
+        return ""
+    return str(_read_json(rig, MATERIAL_ATTR, {}).get("message", ""))
+
+
+def material_link_info(asset: str) -> dict:
+    """つないだ記録 {"shaders", "links", "skipped", "message"}（無ければ {}）。"""
+    rig = find_rig(asset)
+    return _read_json(rig, MATERIAL_ATTR, {}) if rig is not None else {}
+
+
+# ---------------------------------------------------------------------------
 # 配線の計画（データ → expression の文字列）
 # ---------------------------------------------------------------------------
 
@@ -345,6 +488,8 @@ class _Plan:
     persp: list[_PerspTarget] = field(default_factory=list)  # 配線するパース補正のシェイプ
     persp_axis: str = "distance"
     persp_values: list[float] = field(default_factory=list)  # 全キーの value（配列の順 = シェイプの番号。空のキーも。重みの計算に使う）
+    interpolation: str = evaluate.INTERP_BILINEAR  # 補間の種類（式に埋め込む。変わると作り直し）
+    material_link: bool = False  # マテリアル連携（式に toonYaw / toonPitch / toonStrength の出力を足す。変わると作り直し）
 
     def plug_map(self) -> dict[str, list[str]]:
         return {t.alias: list(t.plugs) for t in (*self.targets, *self.ex_targets, *self.persp)}
@@ -388,6 +533,28 @@ def _axis_lines(tag: str, angle: str, range_deg: float, n: int, edge_fade: float
     else:
         lines.append(f"if ($ex{tag} > 0.0) $fade{tag} = clamp(0.0, 1.0, 1.0 - $ex{tag} / {_f(edge_fade)});")
     return lines
+
+
+def _catmull_rom_lines(tag: str, n: int) -> list[str]:
+    """1 軸分の Catmull-Rom の重み（evaluate.catmull_rom_basis / _axis_catmull_rom と同じ）。
+    $k<tag>0..3 = 4 点の基底、$w<tag><i> = 格子の i 番目（端は端の点を繰り返すので、同じ点に重なった分は足す）。"""
+    f = f"$f{tag}"
+    t2, t3 = f"$k{tag}s", f"$k{tag}c"
+    L = [
+        f"float {t2} = {f} * {f};",
+        f"float {t3} = {t2} * {f};",
+        f"float $k{tag}0 = 0.5 * (-{t3} + 2.0 * {t2} - {f});",
+        f"float $k{tag}1 = 0.5 * (3.0 * {t3} - 5.0 * {t2} + 2.0);",
+        f"float $k{tag}2 = 0.5 * (-3.0 * {t3} + 4.0 * {t2} + {f});",
+        f"float $k{tag}3 = 0.5 * ({t3} - {t2});",
+    ]
+    for k in range(4):
+        off = ["- 1", "+ 0", "+ 1", "+ 2"][k]
+        L.append(f"int $i{tag}{k} = clamp(0, {n - 1}, ${tag}0 {off});")
+    for i in range(n):
+        terms = " + ".join(f"((($i{tag}{k}) == {i}) ? $k{tag}{k} : 0.0)" for k in range(4))
+        L.append(f"float $w{tag}{i} = {terms};")
+    return L
 
 
 def _collect_targets(doc: Document, meshes: Sequence[str]) -> tuple[list[_Target], dict[int, str], list[_Target]]:
@@ -569,8 +736,32 @@ def _plan(doc: Document, own_nodes: Iterable[str] = ()) -> _Plan:
         L.append(f"$damp = 1.0 - {_f(dampen)} * clamp(0.0, 1.0, {' + '.join(inten)});")
     L.append("float $g = @RIG@.alpha * $fade * $damp;")
     L.append("if (@RIG@.enable == 0) $g = 0.0;")
+    link = material_link_enabled(doc)
+    if link:  # マテリアル連携: Unity の _FC_Angles と同じ（−1〜1 に丸めた角度・全体の強さ。端のフェードは掛けない）
+        L.append(f"@RIG@.{RIG_TOON_ATTRS[0]} = " + (f"clamp(-1.0, 1.0, $yaw / {_f(g.yaw_range)});" if g.yaw_range > 1e-6 else "0.0;"))
+        L.append(f"@RIG@.{RIG_TOON_ATTRS[1]} = " + (f"clamp(-1.0, 1.0, $pitch / {_f(g.pitch_range)});" if g.pitch_range > 1e-6 else "0.0;"))
+        L.append("float $gT = @RIG@.alpha * $damp;")
+        L.append("if (@RIG@.enable == 0) $gT = 0.0;")
+        L.append(f"@RIG@.{RIG_TOON_ATTRS[2]} = $gT;")
     wired = [*targets, *ex_targets]
-    if use_sharp:  # シャープニング: 4 隅の双線形の重みを w^s / Σ w^s に（端のフェード・レイヤーの重みを掛ける前）
+    interp = doc.quality.interpolation if doc.quality is not None else evaluate.INTERP_BILINEAR
+    use_cr = interp == evaluate.INTERP_CATMULL_ROM
+    if use_cr:  # Catmull-Rom: 各軸 4 点 → 16 点の積 → 負を 0 に → 合計 1 に割り直す（→ シャープさ）
+        L += _catmull_rom_lines("c", g.cols)
+        L += _catmull_rom_lines("r", g.rows)
+        pts = [(r, c) for r in range(g.rows) for c in range(g.cols)]
+        for r, c in pts:
+            L.append(f"float $n{r}_{c} = max(0.0, $wc{c} * $wr{r});")
+        L.append("float $nt = " + " + ".join(f"$n{r}_{c}" for r, c in pts) + ";")
+        L.append("if ($nt <= 0.0) $nt = 1.0;")
+        for r, c in pts:
+            L.append(f"$n{r}_{c} = $n{r}_{c} / $nt;")
+        if use_sharp:
+            for r, c in pts:
+                L.append(f"float $m{r}_{c} = ($n{r}_{c} > 0.0) ? pow($n{r}_{c}, {_f(sharp)}) : 0.0;")
+            L.append("float $ms = " + " + ".join(f"$m{r}_{c}" for r, c in pts) + ";")
+            L.append("if ($ms > 0.0) { " + " ".join(f"$n{r}_{c} = $m{r}_{c} / $ms;" for r, c in pts) + " }")
+    elif use_sharp:  # シャープニング: 4 隅の双線形の重みを w^s / Σ w^s に（端のフェード・レイヤーの重みを掛ける前）
         L += [
             "float $b00 = (1.0 - $fc) * (1.0 - $fr);",
             "float $b01 = $fc * (1.0 - $fr);",
@@ -611,6 +802,8 @@ def _plan(doc: Document, own_nodes: Iterable[str] = ()) -> _Plan:
             L.append(f"float $gL{li} = $g * @RIG@.{attr};")
 
     def corner_weight(t: _Target) -> str:
+        if use_cr:
+            return f"$n{t.row}_{t.col}"
         if not use_sharp:
             return f"$wc{t.col} * $wr{t.row}"
         r, c = t.row, t.col
@@ -631,7 +824,7 @@ def _plan(doc: Document, own_nodes: Iterable[str] = ()) -> _Plan:
         (template + "|" + joint + "|" + "|".join(f"{k}={','.join(v)}" for k, v in sorted(plug_by_alias.items()))).encode("utf-8")
     ).hexdigest()[:16]
     return _Plan(
-        doc.asset, joint, targets, ex_targets, sharp, distance, layer_attrs, inten, dampen, template, sig, skipped, persp, persp_axis, persp_values
+        doc.asset, joint, targets, ex_targets, sharp, distance, layer_attrs, inten, dampen, template, sig, skipped, persp, persp_axis, persp_values, interp, link
     )
 
 
@@ -691,6 +884,10 @@ def _create_attrs(rig: str, doc: Document, plan: Optional[_Plan] = None) -> None
     if wired_persp and plan.persp_axis == "fov":  # 画角の軸: カメラのレンズの値を読む入れ物
         for a in (CAM_FOCAL_ATTR, CAM_FILM_ATTR):
             _add_attr(rig, a, attributeType="double", defaultValue=1.0)
+    if material_link_enabled(doc):
+        for a in RIG_TOON_ATTRS:
+            _add_attr(rig, a, attributeType="double", defaultValue=0.0)
+            cmds.setAttr(f"{rig}.{a}", edit=True, channelBox=True)
     for a in ("outYaw", "outPitch", *((OUT_DISTANCE_ATTR,) if distance_layers(doc) else ()), *((OUT_PERSPECTIVE_ATTR,) if wired_persp else ())):
         if _add_attr(rig, a, attributeType="double", defaultValue=0.0):
             cmds.setAttr(f"{rig}.{a}", edit=True, channelBox=True)
@@ -747,6 +944,7 @@ def delete(asset: str) -> bool:
         return False
     plugs = _all_plugs(rig)
     helpers = _helper_nodes(rig)
+    _disconnect_material(rig)  # Toon の受け口との接続を外して 0 に戻す
     _delete_nodes([n for n in helpers if cmds.nodeType(n) == "expression"])  # 先に式（出力接続）を消す
     _delete_nodes(helpers)
     _zero_plugs(plugs)
@@ -783,6 +981,7 @@ def _build_ex(doc: Document, camera: Optional[str], created: list[str]) -> Build
     plan = _plan(doc, own)
     old_plugs = _all_plugs(rig) if rig else []
     if rig:
+        _disconnect_material(rig)  # 作り直し: 先に Toon の受け口との接続を外す（連携がオンなら下でつなぎ直す）
         _delete_nodes([n for n in _helper_nodes(rig) if cmds.nodeType(n) == "expression"])
         _delete_nodes(_helper_nodes(rig))
         _zero_plugs([p for p in old_plugs])
@@ -809,6 +1008,12 @@ def _build_ex(doc: Document, camera: Optional[str], created: list[str]) -> Build
     _write_json(rig, TARGETS_ATTR, plan.plug_map())
     cmds.setAttr(f"{rig}.{SIGNATURE_ATTR}", plan.signature, type="string")
     cmds.setAttr(f"{rig}.{ASSET_ATTR}", asset, type="string")
+    if plan.material_link:
+        _connect_material(rig, doc)
+    else:
+        for a in RIG_TOON_ATTRS:  # 連携をやめた作り直し: 前の出力の値を残さない
+            if cmds.attributeQuery(a, node=rig, exists=True):
+                cmds.setAttr(f"{rig}.{a}", 0.0)
     warnings = [f"{p} は他から接続されているため配線しませんでした" for p in plan.skipped]
     return BuildReport(
         rig, expr, plan.signature, len(plan.targets), [doc.layers[i].name for i in plan.layer_attrs], len(text), warnings, len(plan.ex_targets), len(plan.persp)
@@ -924,10 +1129,10 @@ def evaluate_python(
     emotions（レイヤー名 → 0〜1）・alpha・enable・manual（(Yaw, Pitch)）・use_manual・exaggeration は、省くと rig があればその値、無ければ既定
     （感情 0・alpha = policy.globalAlpha・enable・カメラから・exaggeration = quality.exaggeration）。表情での弱めはシーンの今の blendShape の重みを読む。
     距離で重みを決めるレイヤーは emotions を無視し、距離 d（省くとカメラと格子の中心の距離）から `layer_weight_from_distance` で決める。
-    sharpness は doc.quality から。
+    sharpness・interpolation は doc.quality から。
     パース補正は、軸が distance なら distance（省くとカメラから）、fov なら fov[度]（省くとカメラの縦の画角）から重みを求め、
     perspective_strength（省くと rig の `perspective`、無ければ doc の強さ）× alpha × enable × 表情での弱め（角度の端のフェードは掛けない）で
-    配線されている `Persp_K{n}` に入れる。戻りの "axis_value" = 使った軸の値。
+    配線されている `Persp_K{n}` に入れる。戻りの "axis_value" = 使った軸の値。"toon" = マテリアル連携がオンのとき (yaw 正規化, pitch 正規化, 強さ)、オフなら None。
     """
     pose_apply.assert_maya_space(doc)
     asset = doc.asset or ""
@@ -977,11 +1182,13 @@ def evaluate_python(
         layers.append(evaluate.LayerEvalInput(corner, w, layer.enabled, ex_corner))
     out = {t.alias: 0.0 for t in (*plan.targets, *plan.ex_targets, *plan.persp)}
     scale = float(alpha) if enable else 0.0
+    s_int = 0.0
     if plan.intensity_plugs:
-        s = sum(float(cmds.getAttr(p)) for p in plan.intensity_plugs)
-        scale *= evaluate.expression_scale(plan.dampen, s)
+        s_int = sum(float(cmds.getAttr(p)) for p in plan.intensity_plugs)
+        scale *= evaluate.expression_scale(plan.dampen, s_int)
     sharp = doc.quality.sharpness if doc.quality is not None else 1.0
-    for mw in evaluate.evaluate_correction(shape, layers, yaw, pitch, sharp, evaluate.clamp(float(exaggeration), 0.0, 1.0)):
+    interp = doc.quality.interpolation if doc.quality is not None else evaluate.INTERP_BILINEAR
+    for mw in evaluate.evaluate_correction(shape, layers, yaw, pitch, sharp, evaluate.clamp(float(exaggeration), 0.0, 1.0), interp):
         out[mw.morph_name] = out.get(mw.morph_name, 0.0) + mw.weight * scale
     axis_value = None
     if plan.persp:
@@ -992,7 +1199,14 @@ def evaluate_python(
         for name, w in evaluate.perspective_morph_weights(doc, float(distance) if distance is not None else float("nan"), fov, perspective_strength, scale).items():
             if name in wired:
                 out[name] = w
-    return {"yaw": yaw, "pitch": pitch, "distance": distance, "weights": out, "axis_value": axis_value}
+    toon = None
+    if plan.material_link:  # マテリアル連携の出力（rig の toonYaw / toonPitch / toonStrength と同じ）
+        toon = (
+            normalized_angle(yaw, g.yaw_range),
+            normalized_angle(pitch, g.pitch_range),
+            float(alpha) * (evaluate.expression_scale(plan.dampen, s_int) if plan.intensity_plugs else 1.0) if enable else 0.0,
+        )
+    return {"yaw": yaw, "pitch": pitch, "distance": distance, "weights": out, "axis_value": axis_value, "toon": toon}
 
 
 # ---------------------------------------------------------------------------
@@ -1037,6 +1251,7 @@ def bake_to_keys(doc: Document, start: float, end: float, step: float = 1, remov
     cmds.undoInfo(openChunk=True, chunkName="tdFacialBakeToKeys")
     try:
         plugs_all = _all_plugs(rig)
+        _disconnect_material(rig)  # 式が無くなるので Toon の受け口との接続も外す（値は 0 に戻る）
         _delete_nodes([n for n in _helper_nodes(rig) if cmds.nodeType(n) == "expression"])
         _delete_nodes([n for n in _helper_nodes(rig) if cmds.nodeType(n) != "transform"])
         _zero_plugs(plugs_all)
