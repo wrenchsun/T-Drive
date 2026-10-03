@@ -6,7 +6,7 @@
   進行中は「書き出し中…」と経過秒数を出し、終わったら出力先・メッシュ・FC_* の数・除いた fcs_* の数・警告を要約する。
   出力の前に検証して、エラー・未ベイク・ベイク後の変更があれば「それでも出力する」かを聞く
 - **UE 版向けに出力**: データ（.fcpose.json）をそのまま書く（保存先を聞く）
-- **Timeline 用に出力**: プレビュー用ノードの強さ・感情・手動角度のキーを `<Shot>__<Model>.fctrack` へ。Unity 側では .fctrack を取り込んで Timeline に反映できる（実際のカットシーンでの確認は途中）
+- **Timeline 用に出力**: プレビュー用ノードの強さ・感情・手動角度・誇張のキーを `<Shot>__<Model>.fctrack` へ。Unity 側では .fctrack を取り込んで Timeline に反映できる（実際のカットシーンでの確認は途中）
 """
 
 from __future__ import annotations
@@ -135,7 +135,7 @@ class ExportTab(QtWidgets.QWidget):
         note = QtWidgets.QLabel(
             "グリッドタブのプレビューの強さ・感情・手動角度に打ったキーを、ショットごとのファイルにします。"
             "Unity 側では .fctrack を取り込んで Timeline に反映できます（<span style='color:#f0a040;'>実際のカットシーンでの確認は途中</span>です）。"
-            "誇張の強さは .fctrack には入りません（Unity 側で調整します）。"
+            "プレビューの「誇張」にキーを打ってあれば、その動きも入ります（キーが無ければ入りません）。"
         )
         note.setWordWrap(True)
         note.setTextFormat(QtCore.Qt.RichText)

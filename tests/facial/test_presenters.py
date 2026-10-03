@@ -1207,3 +1207,20 @@ def test_layer_weights_follow_rename_and_are_dropped_on_delete():
     assert list(ps.ctx.doc.layer_weights) == ["Happy"]
     assert ps.layers.delete(1).ok
     assert not ps.ctx.doc.layer_weights
+
+
+def test_exclude_change_marks_baked_points_changed_in_grid():
+    ps = make_set(bake_state={})
+    doc = ps.ctx.doc
+    morph = naming.morph_name("a", "Neutral", 1, 2)
+    ps.ctx.bake_state[morph] = V.pose_hash(doc.layers[0].points[(1, 2)].pose)
+    ps.ctx.bake_exclude = {morph: V.exclude_signature(doc)}
+    assert ps.grid.point_view(1, 2).bake == "baked"
+    doc.exclude.curves = ["smile"]
+    pv = ps.grid.point_view(1, 2)
+    assert pv.bake == "changed" and pv.frame == P.FRAME_CHANGED
+    doc.exclude.curves = []
+    assert ps.grid.point_view(1, 2).bake == "baked"
+    ps.ctx.bake_exclude = None  # 古いデータ（記録なし）は変更ありにならない
+    doc.exclude.curves = ["smile"]
+    assert ps.grid.point_view(1, 2).bake == "baked"

@@ -840,3 +840,35 @@ def test_rename_chain_does_not_lose_values():
     doc.layers[0].points[(1, 2)].pose.curves = {"A": 1.0, "C": 3.0}
     V.rename_report(doc, {"A": "B", "C": "A"}, "curve")
     assert doc.layers[0].points[(1, 2)].pose.curves == {"B": 1.0, "A": 3.0}
+
+
+# ---------------------------------------------------------------------------
+# 除外パターンを変えたあとの「変更あり」（記録した指紋と今を比べる）
+# ---------------------------------------------------------------------------
+
+
+def test_exclude_signature_is_normalized():
+    a, b = make_doc(), make_doc()
+    a.exclude.curves = ["eye", " mouth ", "eye", ""]
+    b.exclude.curves = ["mouth", "eye"]
+    assert V.exclude_signature(a) == V.exclude_signature(b)
+    b.exclude.bones = ["bone_eye"]
+    assert V.exclude_signature(a) != V.exclude_signature(b)
+
+
+def test_exclude_change_marks_baked_points_changed_and_revert_clears():
+    doc = make_doc()
+    rec = {MORPH: V.exclude_signature(doc)}
+    assert run(doc, bake=make_bake(doc)) == [] and V.validate(doc, make_scene(doc), None, make_bake(doc), rec) == []
+    doc.exclude.curves = ["smile_R"]
+    got = find(V.validate(doc, make_scene(doc), None, make_bake(doc), rec), "point_changed_since_bake")
+    assert got[0].severity == "warning" and got[0].name == MORPH and "除外" in got[0].message
+    doc.exclude.curves = []  # 元に戻す
+    assert "point_changed_since_bake" not in codes(V.validate(doc, make_scene(doc), None, make_bake(doc), rec))
+
+
+def test_exclude_legacy_record_is_not_stale():
+    doc = make_doc()
+    doc.exclude.curves = ["smile_R"]
+    for rec in (None, {}, {"FC_other": "x"}):  # 記録なし・この点の記録なし = 不明 → 今と同じ
+        assert "point_changed_since_bake" not in codes(V.validate(doc, make_scene(doc), None, make_bake(doc), rec))

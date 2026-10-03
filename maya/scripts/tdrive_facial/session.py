@@ -504,14 +504,19 @@ class FacialSession:
         doc = self.presenters.ctx.doc
         info = scene_mod.build_scene_info(doc)
         state: Optional[dict[str, str]] = None
+        excl: Optional[dict[str, str]] = None
         try:
             if doc.target is not None and doc.target.mesh:
-                state = scene_mod.bake_state_for(scene_mod.resolve_mesh(doc.target.mesh))
+                mesh = scene_mod.resolve_mesh(doc.target.mesh)
+                state = scene_mod.bake_state_for(mesh)
+                excl = scene_mod.bake_exclude_for(mesh)
         except ValueError:
             state = None
+            excl = None
         ctx = self.presenters.ctx
         ctx.scene = info  # まとめて入れてから通知する（途中の状態を見せない）
         ctx.bake_state = state
+        ctx.bake_exclude = excl
         if notify:
             ctx.set_scene(info)
             ctx.set_bake_state(state)
@@ -1729,7 +1734,7 @@ class FacialSession:
         doc = self.require()
         self.refresh_scene(notify=False)
         ctx = self.ctx
-        issues = V.validate(doc, ctx.scene or V.SceneInfo(), ctx.profile, ctx.bake_state)
+        issues = V.validate(doc, ctx.scene or V.SceneInfo(), ctx.profile, ctx.bake_state, ctx.bake_exclude)
         out: list[tuple[int, int, int]] = []
         for i in issues:
             if i.code in self.STALE_CODES and i.layer is not None and i.row is not None and i.col is not None:

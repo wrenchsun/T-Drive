@@ -130,7 +130,7 @@ def _blend_nodes(meshes: list[str]) -> list[str]:
 def _bake_warnings(doc: Document) -> list[str]:
     try:
         face = scene_mod.resolve_mesh(doc.target.mesh)  # type: ignore[union-attr]
-        issues = validate.validate(doc, scene_mod.build_scene_info(doc), bake_state=scene_mod.bake_state_for(face))
+        issues = validate.validate(doc, scene_mod.build_scene_info(doc), bake_state=scene_mod.bake_state_for(face), bake_exclude=scene_mod.bake_exclude_for(face))
     except (ValueError, RuntimeError):
         return ["検証できませんでした（対象メッシュを確かめてください）"]
     out: list[str] = []
@@ -408,6 +408,7 @@ def read_fctrack(
         raise ExportError("終了フレームが開始フレームより前です")
     fps = float(frame_rate) if frame_rate else frame_rate_of_scene()
     attrs: dict[str, str] = {name: name for name in preview_rig.KEYABLE_FIXED}
+    attrs[preview_rig.EXAGGERATION_ATTR] = "exaggeration"  # 誇張の強さ（キーがあるときだけ出る）
     for li, attr in preview_rig.emotion_attrs(doc).items():
         attrs[attr] = fctrack_mod.emotion_curve_name(doc.layers[li].name)
     curves: dict[str, list[fctrack_mod.Key]] = {}
@@ -419,6 +420,8 @@ def read_fctrack(
         keys, bad = _animated_keys(f"{rig}.{attr}", start, end)
         if not keys:
             continue
+        if curve == "exaggeration":
+            keys = [(t, min(1.0, max(0.0, v))) for t, v in keys]  # 0〜1 に収める
         curves[curve] = [((t - start) / fps, v) for t, v in keys]
         if bad and not tangent_warned:
             tangent_warned = True

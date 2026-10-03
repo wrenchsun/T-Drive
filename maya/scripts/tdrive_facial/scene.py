@@ -31,6 +31,7 @@ from .core import naming, validate
 from .core.model import Document
 
 BAKE_STATE_ATTR = "tdFacialBakeState"
+BAKE_EXCLUDE_ATTR = "tdFacialBakeExclude"  # morph 名 → ベイク時の除外パターンの指紋（無い = 不明）
 PREVIEW_ONLY_ATTR = "tdPreviewOnly"  # Toon のプレビュー専用メッシュの目印（preview.PREVIEW_ONLY_ATTR と同じ名前）
 FRONT_BLEND_SHAPE_PREFIX = "tdFacial_"
 DELTA_ITEM = 6000  # inputTargetItem の番号（6000 = 重み 1.0 の形）
@@ -953,6 +954,31 @@ def set_bake_state(node: str, state: dict[str, str]) -> None:
     if not cmds.attributeQuery(BAKE_STATE_ATTR, node=node, exists=True):
         cmds.addAttr(node, longName=BAKE_STATE_ATTR, dataType="string")
     cmds.setAttr(f"{node}.{BAKE_STATE_ATTR}", json.dumps(state, sort_keys=True, ensure_ascii=False), type="string")
+
+
+def get_bake_exclude(node: str) -> dict[str, str]:
+    """blendShape ノードの `tdFacialBakeExclude`（morph 名 → ベイク時の除外パターンの指紋）。無い・壊れていれば空（= 不明）。"""
+    if not cmds.objExists(node) or not cmds.attributeQuery(BAKE_EXCLUDE_ATTR, node=node, exists=True):
+        return {}
+    try:
+        data = json.loads(cmds.getAttr(f"{node}.{BAKE_EXCLUDE_ATTR}") or "{}")
+    except ValueError:
+        return {}
+    return {str(k): str(v) for k, v in data.items()} if isinstance(data, dict) else {}
+
+
+def set_bake_exclude(node: str, record: dict[str, str]) -> None:
+    if not cmds.attributeQuery(BAKE_EXCLUDE_ATTR, node=node, exists=True):
+        cmds.addAttr(node, longName=BAKE_EXCLUDE_ATTR, dataType="string")
+    cmds.setAttr(f"{node}.{BAKE_EXCLUDE_ATTR}", json.dumps(record, sort_keys=True, ensure_ascii=False), type="string")
+
+
+def bake_exclude_for(mesh: str) -> dict[str, str]:
+    """メッシュの blendShape ノードすべての除外パターンの記録を合わせたもの（検証に渡す）。"""
+    out: dict[str, str] = {}
+    for n in reversed(blend_shapes(mesh)):
+        out.update(get_bake_exclude(n))
+    return out
 
 
 def bake_state_for(mesh: str) -> dict[str, str]:

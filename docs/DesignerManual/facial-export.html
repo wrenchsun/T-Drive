@@ -23,7 +23,7 @@
 <tr><th>項目</th><th>内容</th></tr>
 <tr><td><strong>Unity 向けに出力</strong></td><td>FBX と補正データ（<span class="path">.fcpose</span>）を書き出します。別のプロセスで書くので、Maya の画面は止まりません（「書き出し中… ○ 秒」と出ます）。<strong>中止</strong>・<strong>フォルダを開く</strong>もあります。開いているシーンは変わりません</td></tr>
 <tr><td>UE 版向けに出力…</td><td>補正データを <span class="path">.fcpose.json</span> のまま書き出します（Unreal Engine 版の FacialController 用）</td></tr>
-<tr><td>Timeline 用に出力（.fctrack）</td><td>プレビューの強さ・感情・手動角度に打ったキーを、ショットごとのファイル（<span class="path">&lt;ショット名&gt;__&lt;モデル名&gt;.fctrack</span>）にします。置いたあとの流れは<a href="#fctrack">下の説明</a>。誇張の強さは入りません</td></tr>
+<tr><td>Timeline 用に出力（.fctrack）</td><td>プレビューの強さ・感情・手動角度に打ったキーを、ショットごとのファイル（<span class="path">&lt;ショット名&gt;__&lt;モデル名&gt;.fctrack</span>）にします。置いたあとの流れは<a href="#fctrack">下の説明</a>。プレビューの「誇張」にキーを打ってあれば、その動きも入ります</td></tr>
 </table>
 <p>出力の前に自動で検証が走り、エラー・未ベイク・ベイク後の変更があれば、<strong>それでも出力する / やめる</strong>を聞かれます。出力前に<a href="facial-layers.html#validate">検証タブ</a>で直しておくのがおすすめです。</p>
 

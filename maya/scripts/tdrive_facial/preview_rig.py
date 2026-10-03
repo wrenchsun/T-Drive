@@ -66,7 +66,7 @@ SIGNATURE_ATTR = "tdFacialSignature"
 EMOTION_PREFIX = "emotion_"
 KEYABLE_FIXED = ("alpha", "useManual", "manualYaw", "manualPitch")
 FADE_EPSILON = evaluate.KINDA_SMALL_NUMBER  # evaluate_correction の「範囲の外」の判定
-EXAGGERATION_ATTR = "exaggeration"  # 誇張（_Ex）の強さ 0〜1（キーが打てる。KEYABLE_FIXED には入れない: .fctrack に出さない）
+EXAGGERATION_ATTR = "exaggeration"  # 誇張（_Ex）の強さ 0〜1（キーが打てる。KEYABLE_FIXED には入れないが、キーがあれば export.read_fctrack が `exaggeration` カーブとして .fctrack に出す）
 OUT_DISTANCE_ATTR = "outDistance"  # カメラと格子の中心の距離（cm。距離で重みを決めるレイヤーがあるときだけ作る）
 
 

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import difflib
 import hashlib
+import json
 import math
 import re
 from collections import Counter
@@ -99,6 +100,19 @@ _HASH_SCALE = 1_000_000  # 1e-6 に丸める
 def _q(v: float) -> int:
     """1e-6 に丸めた整数（-0 を作らない）。"""
     return int(round(v * _HASH_SCALE))
+
+
+def normalize_exclude(patterns) -> list[str]:
+    """除外パターンの正規化（前後の空白を除き、空を捨て、重複を除いて並べ替える）。"""
+    return sorted({str(x).strip() for x in patterns if str(x).strip()})
+
+
+def exclude_signature(doc: Document) -> str:
+    """補正から除外するもの（シェイプ・ボーン）の指紋（正規化した値の sha1 の先頭 12 文字）。ベイク時に記録して今と比べる。"""
+    norm = json.dumps(
+        {"curves": normalize_exclude(doc.exclude.curves), "bones": normalize_exclude(doc.exclude.bones)}, sort_keys=True, ensure_ascii=False
+    )
+    return hashlib.sha1(norm.encode("utf-8")).hexdigest()[:12]
 
 
 def pose_hash(pose: SourcePose) -> str:
@@ -243,10 +257,13 @@ def validate(
     scene_info: SceneInfo,
     profile: Optional[NamingProfile] = None,
     bake_state: Optional[Mapping[str, str]] = None,
+    bake_exclude: Optional[Mapping[str, str]] = None,
 ) -> list[Issue]:
     """Document を検証して Issue の一覧を返す（コードの一覧は docs/14 §5.9）。Document もシーンも変更しない。
 
     bake_state = ベイク済みのターゲット名（FC_*） → ベイク時の pose_hash。None なら未ベイク系の検査は飛ばす。
+    bake_exclude = ターゲット名 → ベイク時の除外パターンの指紋（`exclude_signature`）。今と違えば「ベイク後に変更」。
+    None・記録の無い名前は「不明 = 今と同じ」とみなす（従来のデータが一斉に変更ありにならない）。
     """
     issues: list[Issue] = []
     add = issues.append
@@ -293,7 +310,7 @@ def validate(
 
     # --- ベイク・ターゲット ---
     if asset:
-        _check_bake(doc, scene, bake_state, add)
+        _check_bake(doc, scene, bake_state, add, bake_exclude)
         _check_targets(doc, scene, add)
     return issues
 
@@ -777,9 +794,10 @@ def _bake_candidates(doc: Document):
             yield li, layer, rc, pt
 
 
-def _check_bake(doc: Document, scene: SceneInfo, bake_state: Optional[Mapping[str, str]], add) -> None:
+def _check_bake(doc: Document, scene: SceneInfo, bake_state: Optional[Mapping[str, str]], add, bake_exclude: Optional[Mapping[str, str]] = None) -> None:
     if bake_state is None:
         return
+    cur_sig = exclude_signature(doc) if bake_exclude else ""
     targets = set(scene.targets) if scene.targets is not None else None
     for li, layer, rc, pt in _bake_candidates(doc):
         morph = naming.morph_name(doc.asset or "", layer.name, rc[0], rc[1])
@@ -803,6 +821,16 @@ def _check_bake(doc: Document, scene: SceneInfo, bake_state: Optional[Mapping[st
                     "point_changed_since_bake",
                     SEVERITY_WARNING,
                     f"ベイク後に変更された点: {_where(li, doc, rc)}（再ベイクしてください）",
+                    **base,
+                )
+            )
+            continue
+        if bake_exclude and bake_exclude.get(morph, cur_sig) != cur_sig:
+            add(
+                Issue(
+                    "point_changed_since_bake",
+                    SEVERITY_WARNING,
+                    f"補正から除外するものを変えたあと、焼き直していません: {_where(li, doc, rc)}（再ベイクしてください）",
                     **base,
                 )
             )
@@ -1051,6 +1079,8 @@ __all__: Sequence[str] = (
     "RenameReport",
     "validate",
     "pose_hash",
+    "exclude_signature",
+    "normalize_exclude",
     "suggest_names",
     "case_only_match",
     "levenshtein",

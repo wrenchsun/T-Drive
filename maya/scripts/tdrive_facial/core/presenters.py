@@ -163,8 +163,10 @@ class EditContext(Observable):
         profile: Optional[NamingProfile] = None,
         bake_state: Optional[dict[str, str]] = None,
         scene: Optional[V.SceneInfo] = None,
+        bake_exclude: Optional[dict[str, str]] = None,
     ) -> None:
         super().__init__()
+        self.bake_exclude = bake_exclude  # FC_* → ベイク時の除外パターンの指紋。None / 記録なし = 不明（今と同じとみなす）
         self.doc = doc
         self.profile = profile
         self.bake_state = bake_state
@@ -331,6 +333,9 @@ def _bake_status(ctx: EditContext, layer: Layer, rc: tuple[int, int]) -> str:
         return BAKE_UNBAKED  # 焼いていない、または焼いたはずが無い（再インポートで消えた）
     if h != V.pose_hash(p.pose):
         return BAKE_CHANGED
+    be = ctx.bake_exclude
+    if be and be.get(morph, V.exclude_signature(ctx.doc)) != V.exclude_signature(ctx.doc):
+        return BAKE_CHANGED  # 除外パターンを変えたあと焼き直していない
     li = next((i for i, l in enumerate(ctx.doc.layers) if l is layer), None)
     if li is not None and V.needs_extreme(ctx.doc, li, rc):  # 誇張用 `_Ex`（重み 1 超）が要るのに焼けていない
         ex = naming.morph_name(ctx.doc.asset, layer.name, rc[0], rc[1], extreme=True)
@@ -1909,7 +1914,7 @@ class ValidationPresenter(Observable):
     def run(self) -> list[V.Issue]:
         """検証する（Document もシーンも変えない）。重さ順（エラー → 警告 → 情報）、同じ重さの中は レイヤー → 行 → 列 → コード。"""
         ctx = self.ctx
-        found = V.validate(ctx.doc, ctx.scene or V.SceneInfo(), ctx.profile, ctx.bake_state)
+        found = V.validate(ctx.doc, ctx.scene or V.SceneInfo(), ctx.profile, ctx.bake_state, ctx.bake_exclude)
         self.issues = sorted(found, key=self._sort_key)  # sorted は安定（同じキーは検出順）
         self.ran = True
         self.stale = False

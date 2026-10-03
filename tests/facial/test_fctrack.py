@@ -125,3 +125,18 @@ def test_loads_rejects_non_finite_and_deep_json():
     for bad in ('{"curves": {"a": [[0, NaN]]}}', '{"curves": {"a": [[0, 1e999]]}}', '{"x": ' + "[" * 300 + "]" * 300 + "}"):
         with pytest.raises(fctrack.FcTrackError):
             fctrack.loads(bad)
+
+
+def test_exaggeration_curve_round_trip_and_optional():
+    assert "exaggeration" in ft.FIXED_CURVES and ft.is_valid_curve_name("exaggeration")
+    without = _track()
+    assert "exaggeration" not in ft.loads(ft.dumps(without)).curves  # 無いファイルも読める（従来どおり）
+    with_ex = _track()
+    with_ex.curves["exaggeration"] = [(0.0, 1.0), (1.0, 0.25), (1.0, 0.0)]
+    back = ft.loads(ft.dumps(with_ex))
+    assert back.curves["exaggeration"] == [(0.0, 1.0), (1.0, 0.25), (1.0, 0.0)]
+    assert back.version == 1 and ft.to_dict(back) == ft.to_dict(with_ex)
+    d = ft.to_dict(with_ex)
+    d["curves"]["exaggeration"] = [[1.0, 0.0], [0.5, 1.0]]
+    with pytest.raises(ft.FcTrackError, match="昇順"):
+        ft.from_dict(d)

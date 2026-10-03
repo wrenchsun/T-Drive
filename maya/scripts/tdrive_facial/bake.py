@@ -261,12 +261,15 @@ def bake(
         nodes = {m: scene.primary_blend_shape(m, create=True) for m in meshes}
         geo = {m: scene.geometry_index(nodes[m], m) for m in meshes}
         state = {m: scene.get_bake_state(nodes[m]) for m in meshes}
+        excl = {m: scene.get_bake_exclude(nodes[m]) for m in meshes}
+        sig = validate.exclude_signature(doc)  # 焼いた点ごとに、そのときの除外パターンを記録する（部分ベイクで他の点の記録を消さない）
         for name, pose, sparse in results:
             total = 0
             for m in meshes:
                 idx, d = sparse[m]
                 _, created = scene.write_target_delta(nodes[m], name, d, idx.tolist(), geo[m])
                 state[m][name] = validate.pose_hash(pose)
+                excl[m][name] = sig
                 total += len(idx)
                 if m == meshes[0]:
                     (rep.created if created else rep.replaced).append(name)
@@ -286,6 +289,7 @@ def bake(
             if doomed:
                 for n in scene.delete_targets(nodes[m], doomed):
                     state[m].pop(n, None)
+                    excl[m].pop(n, None)
                     if n not in rep.removed:
                         rep.removed.append(n)
             # 書き込み先でない blendShape ノード（以前の版でスキンの後ろのノードに焼いた・持ち主のノードが変わった）にある、
@@ -303,14 +307,20 @@ def bake(
                     scene.delete_targets(other, stale)
                     other_state = scene.get_bake_state(other)
                     if any(t in other_state for t in stale):
+                        other_excl = scene.get_bake_exclude(other)
                         for t in stale:
                             other_state.pop(t, None)
+                            other_excl.pop(t, None)
                         scene.set_bake_state(other, other_state)
+                        scene.set_bake_exclude(other, other_excl)
                     rep.notes.append(f"{scene.short_name(other)} にあった古い補正シェイプ {len(stale)} 個を消しました（{scene.short_name(nodes[m])} に移しました）")
             # 状態は消えたターゲットのぶんも掃除する
             for n in [k for k in state[m] if k not in scene.target_indices(nodes[m])]:
                 state[m].pop(n, None)
+            for n in [k for k in excl[m] if k not in state[m]]:
+                excl[m].pop(n, None)
             scene.set_bake_state(nodes[m], state[m])
+            scene.set_bake_exclude(nodes[m], excl[m])
     finally:
         cmds.undoInfo(closeChunk=True)
     rep.seconds = time.perf_counter() - t0

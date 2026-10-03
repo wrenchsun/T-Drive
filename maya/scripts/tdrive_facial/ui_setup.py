@@ -289,7 +289,7 @@ class SetupTab(QtWidgets.QWidget):
         v = QtWidgets.QVBoxLayout(box)
         hint = QtWidgets.QLabel(
             "名前にここの文字を含むシェイプ・ボーンは、ベイクで無視されます（部分一致。例: 目線のシェイプを外す）。"
-            "ポーズには残りますが、補正のシェイプには焼かれません。変えたあとは、ポーズを焼き直してください。"
+            "ポーズには残りますが、補正のシェイプには焼かれません。変えると、焼いた点は「変更あり」の印が付くので、「ベイク（変更のある点）」で焼き直してください。"
         )
         hint.setWordWrap(True)
         hint.setStyleSheet(DIM_STYLE)
@@ -776,7 +776,7 @@ class SetupTab(QtWidgets.QWidget):
             return
         if self._run(self.session.add_exclude, kind, text):
             self.exclude_inputs[kind].clear()
-            self.show_status(f"「{text}」を除外に足しました。ポーズを焼き直すと反映されます")
+            self.show_status(f"「{text}」を除外に足しました。焼いた点に「変更あり」の印が付きます（焼き直すと反映されます）")
 
     def on_exclude_remove(self, kind: str) -> None:
         items = self.exclude_lists[kind].selectedItems()
@@ -786,7 +786,7 @@ class SetupTab(QtWidgets.QWidget):
         for it in items:
             if not self._run(self.session.remove_exclude, kind, it.text()):
                 return
-        self.show_status("除外から外しました。ポーズを焼き直すと反映されます")
+        self.show_status("除外から外しました。焼いた点に「変更あり」の印が付きます（焼き直すと反映されます）")
 
     # ---- プロファイル
     def on_profile_apply(self) -> None:

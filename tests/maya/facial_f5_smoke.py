@@ -347,6 +347,35 @@ def run() -> None:
     s.set_exclude(curves=[], bones=[])
     s.bake_all()
     check("除外を外して焼き直すと smile_L が入る（結果が変わる）", float(np.abs(total("Neutral", 1, 2) - got).max()) > 0.01)
+    # ---- 除外パターンを変えたら自動で「変更あり」（ベイク時の指紋と比べる）
+    from tdrive_facial.core import validate as VV
+
+    all_pts = sorted({(li, r, c) for li, _l, (r, c), _pt in VV._bake_candidates(s.doc)})
+    check("除外の記録: 焼き直した直後は変更ありの点が無い", all_pts and s.stale_points() == [], str(s.stale_points()))
+    prev_total = total("Neutral", 1, 2)
+    s.add_exclude("curve", "smile")
+    ids = {(i.layer, i.row, i.col) for i in s.validate() if i.code == "point_changed_since_bake"}
+    check("除外の記録: パターンを足すと全レイヤー・全点が「ベイク後に変更」", ids == set(all_pts), f"{sorted(ids)} vs {all_pts}")
+    check("除外の記録: stale_points も全点（グリッドの印・「変更のある点をベイク」・出力前の警告と同じ道）", s.stale_points() == all_pts)
+    check("除外の記録: 警告の文言", any("除外するものを変えたあと、焼き直していません" in i.message for i in s.validate()))
+    check("除外の記録: 元に戻す（パターンを外す）と記録と同じになり変更なし", s.remove_exclude("curve", "smile").ok and s.stale_points() == [])
+    s.add_exclude("curve", "smile")
+    s.bake_point(1, 2)
+    left = s.stale_points()
+    check("除外の記録: 一部の点だけ焼いても、焼いていない点の印は消えない", (0, 1, 2) not in left and left and set(left) < set(all_pts) and all(p[1:] != (1, 2) for p in left), str(left))  # Neutral の点を焼くと同じ位置の感情の点も焼き直される
+    rep_st = s.bake_stale()
+    check("除外の記録: 変更のある点をベイクすると全点が消える", s.stale_points() == [] and rep_st.created is not None)
+    got_ex = total("Neutral", 1, 2)
+    exp_ex = pose_delta(s.doc, s.doc.layers[0].points[(1, 2)].pose)
+    check("除外の記録: 除外したシェイプ（smile）は焼いた差分に入らない（除外つきで当てた結果と一致・除外前とは違う）", float(np.abs(got_ex - exp_ex).max()) < 1e-3 and float(np.abs(got_ex - prev_total).max()) > 0.01)
+    # 記録の無い（古い）データは変更ありにならない
+    for n in scene.blend_shapes(face):
+        scene.set_bake_exclude(n, {})
+    s.refresh_scene(notify=False)
+    check("除外の記録: 記録が無いデータ（従来）は不明 = 今と同じで変更なしにならない", s.stale_points() == [])
+    s.set_exclude(curves=[], bones=[])
+    s.bake_all()
+    check("除外の記録: 後片付け（除外なしで全部焼き直し）で変更なし", s.stale_points() == [])
     node = scene.primary_blend_shape(face)
 
     # ============================================================ 6. プレビュー: 誇張・シャープさ・距離
@@ -382,7 +411,16 @@ def run() -> None:
     n_ex = len([n for n in scene.target_indices(node) if n.endswith("_Ex")])
     check("プレビュー: _Ex を配線（報告の誇張の数）・ターゲットの数は _Ex を含まない", rep6.extreme_targets == n_ex and rep6.targets == len([n for n in scene.target_indices(node) if naming.is_fc_name(n) and not n.endswith("_Ex")]), str(rep6.summary()))
     check("プレビュー: キー可アトリビュート exaggeration があり、初期値 = quality.exaggeration（0.5）", cmds.attributeQuery("exaggeration", node=rig, exists=True) and "exaggeration" in (cmds.listAttr(rig, keyable=True) or []) and abs(cmds.getAttr(rig + ".exaggeration") - 0.5) < 1e-9)
-    check("プレビュー: exaggeration は .fctrack に出さない（KEYABLE_FIXED / FIXED_CURVES に入れない）", "exaggeration" not in pr.KEYABLE_FIXED and "exaggeration" not in fct.FIXED_CURVES)
+    check("プレビュー: exaggeration は FIXED_CURVES にある（キーがあれば .fctrack に出る）。KEYABLE_FIXED には入れない", "exaggeration" not in pr.KEYABLE_FIXED and "exaggeration" in fct.FIXED_CURVES)
+    out_ftx = tmp / "ft_ex"
+    res_nx = export.export_fctrack(doc, "S010", "mini", 1, 25, out_dir=out_ftx)
+    check("fctrack: 誇張にキーが無ければ exaggeration カーブは出ない", "exaggeration" not in fct.load(res_nx["path"]).curves, str(res_nx["curves"]))
+    cmds.setKeyframe(rig, attribute="exaggeration", time=1, value=1.0)
+    cmds.setKeyframe(rig, attribute="exaggeration", time=13, value=0.25)
+    res_kx = export.export_fctrack(doc, "S020", "mini", 1, 25, frame_rate=24, out_dir=out_ftx)
+    ex_keys = fct.load(res_kx["path"]).curves.get("exaggeration", [])
+    check("fctrack: 誇張のキー → exaggeration カーブ（秒・値 0〜1）", len(ex_keys) == 2 and abs(ex_keys[0][0]) < 1e-6 and abs(ex_keys[0][1] - 1.0) < 1e-6 and abs(ex_keys[1][0] - 0.5) < 1e-6 and abs(ex_keys[1][1] - 0.25) < 1e-6, str(ex_keys))
+    cmds.cutKey(rig, attribute="exaggeration", clear=True)
     check("プレビュー: 式に誇張の記述があり、署名がある", "exaggeration" in cmds.expression(rep6.expression, query=True, string=True))
 
     def compare(tag: str, **kw) -> float:
