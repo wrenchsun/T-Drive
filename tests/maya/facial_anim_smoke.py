@@ -342,7 +342,7 @@ def run() -> None:
           "ffb74d" in rows["bs.smile_R"].label.styleSheet() and "土台と合わせて可動域を超えています（1.70）" in rows["bs.smile_R"].base_label.toolTip()
           and "土台と合わせて可動域を超えています（1.70）" in rows["bs.smile_R"].label.toolTip() and "ffb74d" not in rows["bs.mouth_open"].label.styleSheet())
     check("ポーズタブ: 可動域を超えたシェイプの一覧が土台の行の下に出る", not pose.base_warn.isHidden() and "bs.smile_R" in pose.base_warn.text(), pose.base_warn.text())
-    check("ポーズタブ: 土台の説明文", pose.base_note.text() == "表情を下敷きとして当てます。ポーズの値に足して表示されます（データには入りません）", pose.base_note.text())
+    check("ポーズタブ: 土台の説明文", pose.base_note.text() == "土台の表情の値は、ポーズの値に足されてシーンに当たります（ゲームと同じ。データにもベイクにも入りません）", pose.base_note.text())
     s.select_point(0, 2)  # キー: mouth_open 0.3 / eye_L（smile_R・brow_up は持たない）
     pump()
     check("土台: ポーズが持たないシェイプは土台の値に戻る", abs(cmds.getAttr(f"{bs}.smile_R") - 0.7) < 1e-4 and abs(cmds.getAttr(f"{bs}.brow_up") - 0.9) < 1e-4 and abs(cmds.getAttr(f"{bs}.mouth_open") - 0.3) < 1e-4)

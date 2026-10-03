@@ -1,4 +1,4 @@
-"""レイヤータブ（docs/14 §5.5）: 感情レイヤーの追加・改名・有効 / 無効・削除・コピーと、表情での弱めの設定。
+"""レイヤータブ（docs/14 §5.5）: 感情レイヤーの追加・改名・有効 / 無効・削除・コピー、重みの出どころ（直接 / カメラの距離）、表情での弱めの設定。
 
 レイヤーの一覧で選んだ行が「編集するレイヤー」（アクティブレイヤー）。切り替えるときに未保存のポーズ編集があれば、
 保存 / 破棄 / キャンセルを聞く（`ask_switch_choice`。テストが差し替える）。操作はすべてセッションのコマンドを呼ぶ。
@@ -125,6 +125,43 @@ class LayersTab(QtWidgets.QWidget):
         ov.addLayout(row)
         col.addWidget(op_box)
 
+        # ---- 重みの出どころ（選んだレイヤー）
+        src_box = QtWidgets.QGroupBox("重みの出どころ（選んだレイヤー）")
+        sf = QtWidgets.QFormLayout(src_box)
+        sf.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
+        self.src_combo = QtWidgets.QComboBox()
+        self.src_combo.addItem("直接（Timeline / 部品の値）", "direct")
+        self.src_combo.addItem("カメラの距離", "distance")
+        self.src_combo.setToolTip(
+            "感情レイヤーの重みをどこから受け取るか。直接 = Timeline や部品の値（感情カーブ）から入れる。"
+            "カメラの距離 = カメラが遠い・近いで自動で決める（遠景だけデフォルメ用のレイヤーを効かせる、など）"
+        )
+        self.src_combo.activated.connect(lambda *_: self.on_source_activated())
+        sf.addRow("重みの出どころ", self.src_combo)
+        self.src_start = self._dist_spin(0.0, 100000.0, 10.0, " cm", "この距離のとき、重みは「から」の値になる（これより近くても同じ）")
+        self.src_end = self._dist_spin(0.0, 100000.0, 10.0, " cm", "この距離のとき、重みは「まで」の値になる（これより遠くても同じ）。間は直線で変わる")
+        row = QtWidgets.QHBoxLayout()
+        row.addWidget(QtWidgets.QLabel("開始"))
+        row.addWidget(self.src_start)
+        row.addWidget(QtWidgets.QLabel("終了"))
+        row.addWidget(self.src_end)
+        row.addStretch(1)
+        sf.addRow("距離", row)
+        self.src_from = self._dist_spin(0.0, 1.0, 0.05, "", "開始の距離（とそれより近いとき）の重み")
+        self.src_to = self._dist_spin(0.0, 1.0, 0.05, "", "終了の距離（とそれより遠いとき）の重み")
+        row = QtWidgets.QHBoxLayout()
+        row.addWidget(QtWidgets.QLabel("から"))
+        row.addWidget(self.src_from)
+        row.addWidget(QtWidgets.QLabel("まで"))
+        row.addWidget(self.src_to)
+        row.addStretch(1)
+        sf.addRow("重み", row)
+        self.src_note = QtWidgets.QLabel()
+        self.src_note.setWordWrap(True)
+        self.src_note.setStyleSheet(DIM_STYLE)
+        sf.addRow(self.src_note)
+        col.addWidget(src_box)
+
         # ---- 表情での弱め
         dampen_box = QtWidgets.QGroupBox("表情が強いときに補正を弱める")
         f = QtWidgets.QFormLayout(dampen_box)
@@ -148,6 +185,18 @@ class LayersTab(QtWidgets.QWidget):
         col.addWidget(dampen_box)
         col.addStretch(1)
         self.refresh()
+
+    def _dist_spin(self, lo: float, hi: float, step: float, suffix: str, tip: str) -> QtWidgets.QDoubleSpinBox:
+        w = QtWidgets.QDoubleSpinBox()
+        w.setRange(lo, hi)
+        w.setSingleStep(step)
+        w.setDecimals(2)
+        w.setKeyboardTracking(False)
+        if suffix:
+            w.setSuffix(suffix)
+        w.setToolTip(tip)
+        w.valueChanged.connect(lambda *_: self.on_source_value_changed())
+        return w
 
     # ============================================================ 表示
     def show_status(self, text: str, error: bool = False) -> None:
@@ -178,10 +227,32 @@ class LayersTab(QtWidgets.QWidget):
                 for j in view.copy_sources.get(act.index, []):
                     self.copy_source.addItem(view.layers[j].name, j)
                 self.copy_btn.setEnabled(self.copy_source.count() > 0)
+            self._refresh_source(act)
             self.dampen.setValue(doc.policy.expression_dampen)
             self._fill_intensity(doc)
         finally:
             self._updating = False
+
+    def _refresh_source(self, act) -> None:
+        """重みの出どころの欄（選んでいるレイヤーのぶん）。Neutral は常に全量なので使えない。"""
+        usable = act is not None and not act.is_neutral
+        spec = self.session.layer_weight_source(act.index) if usable else {"source": "curve"}
+        by_distance = spec.get("source") == "distance"
+        self.src_combo.setCurrentIndex(1 if by_distance else 0)
+        d = self.session.layers.DISTANCE_DEFAULTS
+        for w, key in ((self.src_start, "start"), (self.src_end, "end"), (self.src_from, "from"), (self.src_to, "to")):
+            w.setValue(float(spec.get(key, d[key])))
+            w.setEnabled(usable and by_distance)
+        self.src_combo.setEnabled(usable)
+        if not usable:
+            self.src_note.setText("Neutral は常に全量で足されるので、重みの出どころはありません")
+        elif by_distance:
+            self.src_note.setText(
+                "カメラと格子の中心の距離で重みが決まります（Maya のプレビューにも反映。プレビューの「感情」スライダーは使われません）。"
+                "Unity でも同じ距離で決まります"
+            )
+        else:
+            self.src_note.setText("Timeline や部品の値（感情カーブ）から重みを受け取ります（Maya のプレビューでは「感情」スライダー）")
 
     def _fill_table(self, view) -> None:
         self.table.setRowCount(0)
@@ -374,6 +445,34 @@ class LayersTab(QtWidgets.QWidget):
         if res is not None:
             self.show_status(res.message)
             self.refresh()
+
+    def on_source_activated(self) -> None:
+        if self._updating:
+            return
+        idx = self._active_index()
+        want = self.src_combo.currentData()
+        cur = self.session.layer_weight_source(idx).get("source", "curve")
+        if want == "direct" and cur in ("direct", "curve"):
+            return
+        res = self._run(self.session.set_layer_weight_source, idx, want)
+        if res is not None:
+            self.show_status("重みの出どころを変えました")
+        self.refresh()
+
+    def on_source_value_changed(self) -> None:
+        if self._updating:
+            return
+        res = self._run(
+            self.session.set_layer_weight_source,
+            self._active_index(),
+            "distance",
+            start=self.src_start.value(),
+            end=self.src_end.value(),
+            w_from=self.src_from.value(),
+            w_to=self.src_to.value(),
+        )
+        if res is not None:
+            self.show_status("")
 
     def on_dampen_changed(self) -> None:
         if self._updating:

@@ -10,7 +10,7 @@ from __future__ import annotations
 import traceback
 from typing import Optional
 
-from PySide6 import QtCore, QtWidgets
+from PySide6 import QtCore, QtGui, QtWidgets
 
 from tdrive import lifecycle
 
@@ -76,7 +76,7 @@ class ShapesTab(QtWidgets.QWidget):
         # --- 対象のシェイプ
         g = QtWidgets.QGroupBox("対象のシェイプ")
         gv = QtWidgets.QVBoxLayout(g)
-        gv.addWidget(_hint("顔メッシュの blendShape のシェイプ。道具はここで選んだものに使います（複数選択可）。タグ: 元から / FC_（ベイクの結果）/ fcs_（彫り用）/ 作ったもの"))
+        gv.addWidget(_hint("顔メッシュの blendShape のシェイプ。道具はここで選んだものに使います（複数選択可）。タグ: 元から / FC_（ベイクの結果）/ fcs_（彫り用）/ 組み合わせ（2 本の積で動く補正）/ 作ったもの"))
         row = QtWidgets.QHBoxLayout()
         self.filter_edit = QtWidgets.QLineEdit()
         self.filter_edit.setPlaceholderText("名前で絞り込み")
@@ -113,7 +113,7 @@ class ShapesTab(QtWidgets.QWidget):
         self.sculpt_list = QtWidgets.QListWidget()
         self.sculpt_list.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
         self.sculpt_list.setMaximumHeight(90)
-        self.sculpt_list.setToolTip("fcs_ シェイプと、それがどの点のものか。どの点からも使われていないもの（孤立）は赤字")
+        self.sculpt_list.setToolTip("fcs_ シェイプと、それがどの点のものか。どの点からも使われていないもの（孤立）はオレンジ色で「孤立」と付きます")
         gv.addWidget(self.sculpt_list)
         v.addWidget(g)
 
@@ -165,20 +165,20 @@ class ShapesTab(QtWidgets.QWidget):
         # --- 中間・誇張・組み合わせ
         g = QtWidgets.QGroupBox("中間・誇張・組み合わせ")
         gv = QtWidgets.QVBoxLayout(g)
-        gv.addWidget(_hint("中間: 今のシーンの形を、選んだシェイプの重み◯のときの形として足します（元のシェイプは確認が必要）。誇張: 選んだシェイプを 1 にした形に足す分を <名前>_Ex にして可動域を 0〜2 に（評価は F5 から）。組み合わせ: 2 本を選ぶと、同時に上げたときだけ効く補正 fcs_combo_… を作ります（Maya の中だけの評価。ベイクには含まれ、Unity へは出しません）"))
+        gv.addWidget(_hint("中間: 今のシーンの形を、選んだシェイプの重み◯のときの形として足します（元のシェイプは確認が必要）。誇張: 選んだシェイプを 1 にした形に足す分を <名前>_Ex にして、可動域を 0〜2 に開きます。ポーズでシェイプの重みを 1 より大きくすると、1 を超えた分がベイクのとき別の誇張用のシェイプ（FC_…_Ex）に分けて焼かれ、プレビューの「誇張」や Unity で強さを調整できます。組み合わせ: 2 本を選んで fcs_combo_… を作ります。2 本を同時に上げたときだけ効く補正です。Maya の中で計算され、ベイクした結果には含まれます（補正そのものは Unity へ出しません）"))
         row = QtWidgets.QHBoxLayout()
         row.addWidget(QtWidgets.QLabel("重み"))
         self.inb_weight = _spin(0.01, 0.99, 0.5, 0.05, 2)
         row.addWidget(self.inb_weight)
         self.inb_btn = _btn("中間形を足す", "今のシーンの形を中間形として追加します", self.on_inbetween)
-        self.ex_btn = _btn("誇張形 _Ex を作る", "<名前>_Ex を作り、可動域を 0〜2 にします", self.on_exaggerate)
+        self.ex_btn = _btn("誇張形 _Ex を作る", "<名前>_Ex を作り、可動域を 0〜2 にします。ポーズでこのシェイプを 1 より大きくした分は、ベイクのとき誇張用のシェイプ（FC_…_Ex）に分けて焼かれます", self.on_exaggerate)
         row.addWidget(self.inb_btn)
         row.addWidget(self.ex_btn)
         row.addStretch(1)
         gv.addLayout(row)
         row = QtWidgets.QHBoxLayout()
-        self.combo_btn = _btn("組み合わせ補正を作る（2 本選択）", "選んだ 2 本が同時に上がるときだけ効く補正シェイプ", self.on_combo)
-        self.combo_sculpt_btn = _btn("組み合わせ補正を彫る", "選んだ組み合わせ補正を、駆動元を 1 にした状態で彫ります（終わりは上の「彫り終わる」）", self.on_combo_sculpt)
+        self.combo_btn = _btn("組み合わせ補正を作る（2 本選択）", "2 本を同時に上げたときだけ効く補正です。Maya の中で計算され、ベイクした結果には含まれます（補正そのものは Unity へ出しません）", self.on_combo)
+        self.combo_sculpt_btn = _btn("組み合わせ補正を彫る", "選んだ組み合わせ補正を、駆動元を 1 にした状態で彫ります（終わりは「彫る」の箱の「彫り終わる」）", self.on_combo_sculpt)
         row.addWidget(self.combo_btn)
         row.addWidget(self.combo_sculpt_btn)
         row.addStretch(1)
@@ -201,7 +201,7 @@ class ShapesTab(QtWidgets.QWidget):
         # --- 整理
         g = QtWidgets.QGroupBox("整理")
         gv = QtWidgets.QVBoxLayout(g)
-        gv.addWidget(_hint("微小な差分の掃除（元からのシェイプは確認が必要）、空・未使用の一覧、プロファイルの標準シェイプの不足。一覧は情報だけで、消せるのは fcs_ / FC_ だけです"))
+        gv.addWidget(_hint("微小な差分の掃除（元からのシェイプは確認が必要）、空・未使用・孤立の一覧、プロファイルの標準シェイプの不足。空 = 差分が無い / 未使用 = どのポーズ・作業セットからも使われていない / 孤立 = 対応する点が無い FC_ / fcs_。一覧は情報だけで、消せるのは孤立した fcs_ / FC_ だけです"))
         row = QtWidgets.QHBoxLayout()
         row.addWidget(QtWidgets.QLabel("しきい値"))
         self.clean_thr = _spin(0.00001, 1.0, 0.001, 0.0005, 5, " cm")
@@ -211,8 +211,8 @@ class ShapesTab(QtWidgets.QWidget):
         row.addStretch(1)
         gv.addLayout(row)
         row = QtWidgets.QHBoxLayout()
-        self.audit_btn = _btn("空・未使用を調べる", "空のシェイプ・どこからも使われていないシェイプを一覧にします", self.on_audit)
-        self.audit_del_btn = _btn("孤立した fcs_ / FC_ を消す", "どの点からも使われていない fcs_ と、格子に対応しない FC_ を消します", self.on_audit_delete)
+        self.audit_btn = _btn("空・未使用・孤立を調べる", "空（差分が無い）・未使用（どのポーズ・作業セットからも使われていない）・孤立（対応する点が無い FC_ / fcs_）を一覧にします", self.on_audit)
+        self.audit_del_btn = _btn("孤立した fcs_ / FC_ を消す", "孤立した fcs_（どの点のポーズからも使われていない）と、格子に対応する点が無い FC_ を消します", self.on_audit_delete)
         self.validate_btn = _btn("検証タブへ（改名の候補）", "プロファイルに沿った一括改名は検証タブで行います", self.on_goto_validate)
         row.addWidget(self.audit_btn)
         row.addWidget(self.audit_del_btn)
@@ -337,7 +337,7 @@ class ShapesTab(QtWidgets.QWidget):
             it = QtWidgets.QListWidgetItem(f"{info.name}    {where}" + ("    孤立" if info.name in orphans else ""))
             it.setData(QtCore.Qt.UserRole, info.name)
             if info.name in orphans:
-                it.setForeground(QtWidgets.QApplication.palette().link())
+                it.setForeground(QtGui.QColor("#ffb74d"))  # 孤立（ツールチップの「オレンジ色」と同じ色）
             self.sculpt_list.addItem(it)
 
     def _combo_drivers(self, name: str) -> list[str]:
@@ -562,10 +562,10 @@ class ShapesTab(QtWidgets.QWidget):
         except ERRORS as e:
             self.set_status(str(e), error=True)
             return
-        lines = [f"空のシェイプ: {', '.join(au.empty) or 'なし'}",
-                 f"未使用（ポーズ・作業セットから参照なし）: {', '.join(au.unreferenced) or 'なし'}",
-                 f"孤立した fcs_: {', '.join(au.orphan_sculpt) or 'なし'}",
-                 f"孤立した FC_: {', '.join(au.orphan_fc) or 'なし'}",
+        lines = [f"空のシェイプ（差分が無い）: {', '.join(au.empty) or 'なし'}",
+                 f"未使用（どのポーズ・作業セットからも使われていない）: {', '.join(au.unreferenced) or 'なし'}",
+                 f"孤立した fcs_（どの点のポーズからも使われていない）: {', '.join(au.orphan_sculpt) or 'なし'}",
+                 f"孤立した FC_（対応する点が無い）: {', '.join(au.orphan_fc) or 'なし'}",
                  f"プロファイルの標準シェイプの不足: {len(miss)} 個" + (f"（{', '.join(miss[:12])}{'…' if len(miss) > 12 else ''}）" if miss else "")]
         self.audit_text.setPlainText("\n".join(lines))
         self._audit = au

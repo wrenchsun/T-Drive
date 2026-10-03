@@ -15,6 +15,10 @@ for 点: ポーズを当てる → P = 変形後の頂点 → D = P − N
 - 差分は「スキンの後」の形で取るが、書き込み先（blendShape）はスキンの前。バインドポーズではスキンの行列が単位なので一致する
   （基準姿勢でしか焼かない理由）。基準姿勢にできなければ焼かずに止める
 - 感情レイヤーの差分は、Neutral の「しきい値で捨てる前」の差分を引いてから捨てる（UE 版と同じ順）
+- **誇張（R-37）**: ポーズに重み 1 を超えるシェイプがある点は、2 本焼く。通常の `FC_…_R{r}_C{c}` = 重みを 1 までに丸めたポーズの差分、
+  `FC_…_R{r}_C{c}_Ex` = 元のポーズの差分 − 丸めたポーズの差分（FC × 1 + Ex × 1 = 作った通りのポーズ）。
+  感情レイヤー（差分ベイク）は通常・Ex のそれぞれから Neutral の同じ点の通常・Ex を引く。そのため Neutral の点に誇張があると、
+  感情レイヤーの同じ位置の点にも Ex ができる（自分のポーズに 1 超が無くても。引いた分を打ち消すため）。誇張が要らない点の古い `_Ex` は消す
 - 法線は焼かない
 """
 
@@ -48,6 +52,7 @@ class BakeReport:
     replaced: list[str] = field(default_factory=list)  # 置き換えたターゲット
     removed: list[str] = field(default_factory=list)  # 孤立していて消したターゲット
     empty: list[str] = field(default_factory=list)  # 差分が 1 つも残らなかったターゲット
+    extreme: list[str] = field(default_factory=list)  # 作った / 置き換えた誇張用ターゲット（`_Ex`。created / replaced にも入っている）
     vertex_counts: dict[str, int] = field(default_factory=dict)  # ターゲット名 → 差分を持つ頂点の数（メッシュの合計）
     total_vertices: int = 0  # 全ターゲット・全メッシュの差分を持つ頂点の合計
     culled_vertices: int = 0  # しきい値で捨てた頂点の合計
@@ -62,9 +67,15 @@ class BakeReport:
     def targets(self) -> list[str]:
         return self.created + self.replaced
 
+    @property
+    def extreme_count(self) -> int:
+        """誇張用（`_Ex`）として焼いたターゲットの数。"""
+        return len(self.extreme)
+
     def summary(self) -> str:
+        ex = f"（うち誇張用 {len(self.extreme)}）" if self.extreme else ""
         return (
-            f"ベイク: 作成 {len(self.created)} / 置き換え {len(self.replaced)} / 削除 {len(self.removed)}、"
+            f"ベイク: 作成 {len(self.created)} / 置き換え {len(self.replaced)}{ex} / 削除 {len(self.removed)}、"
             f"頂点 {self.total_vertices}（しきい値で捨てた {self.culled_vertices}）、{self.seconds:.2f} 秒"
         )
 
@@ -141,16 +152,19 @@ def _sparse(delta: np.ndarray, threshold: float) -> tuple[np.ndarray, np.ndarray
     return idx, delta[idx], culled
 
 
-def _is_orphan(doc: Document, name: str, live: set[tuple[str, int, int]]) -> bool:
-    """この asset の FC_* で、格子に対応する点が無いもの（`validate` の orphan_target と同じ判定）。"""
+def _is_orphan(doc: Document, name: str, live: set[tuple[str, int, int]], live_ex: set[tuple[str, int, int]]) -> bool:
+    """この asset の FC_* で、格子に対応する点が無いもの（`validate` の orphan_target と同じ判定）。
+    誇張用の `_Ex` は、その点があって `validate.needs_extreme` のときだけ生きている。"""
     asset = doc.asset or ""
     if not name.startswith(f"{naming.FC_PREFIX}{asset}_"):
         return False
     p = naming.parse_name(name, asset)
     if p is None:
         return True
-    if p.kind in (naming.KIND_POINT, naming.KIND_POINT_EX):
+    if p.kind == naming.KIND_POINT:
         return (p.layer, p.row, p.col) not in live
+    if p.kind == naming.KIND_POINT_EX:
+        return (p.layer, p.row, p.col) not in live_ex
     if p.kind == naming.KIND_PERSP:
         n_persp = len(doc.perspective.keys) if doc.perspective is not None else 0
         return (p.index or 0) >= n_persp
@@ -187,10 +201,10 @@ def bake(
     try:
         ref = _enter_reference(meshes, doc)
         rep.warnings.extend(ref.warnings)
-        results: list[tuple[str, int, int, int, SourcePose, dict[str, tuple[np.ndarray, np.ndarray]]]] = []
+        results: list[tuple[str, SourcePose, dict[str, tuple[np.ndarray, np.ndarray]]]] = []
         try:
             base = {m: scene.read_points(m) for m in meshes}
-            neutral_cache: dict[tuple[int, int], dict[str, np.ndarray]] = {}
+            neutral_cache: dict[tuple[int, int], Optional[tuple[dict[str, np.ndarray], Optional[dict[str, np.ndarray]]]]] = {}
 
             def deform(pose: SourcePose) -> dict[str, np.ndarray]:
                 ar = pose_apply.apply_pose(doc, pose, ref)
@@ -198,31 +212,45 @@ def bake(
                 _merge(rep.missing_bones, ar.missing_bones)
                 return {m: scene.read_points(m) - base[m] for m in meshes}
 
-            def neutral_delta(r: int, c: int) -> Optional[dict[str, np.ndarray]]:
+            def deltas(pose: SourcePose) -> tuple[dict[str, np.ndarray], Optional[dict[str, np.ndarray]]]:
+                """(通常の差分, 誇張の差分)。重み 1 超が無ければ誇張は None。通常 = 重みを 1 までに丸めたポーズ、誇張 = 元のポーズ − 丸めたポーズ。"""
+                full = deform(pose)
+                if not validate.has_extreme(doc, pose):
+                    return full, None
+                clamped = deform(validate.clamp_extreme(pose))
+                return clamped, {m: full[m] - clamped[m] for m in meshes}
+
+            def neutral_delta(r: int, c: int):
                 if (r, c) not in neutral_cache:
                     pt = doc.layers[0].points.get((r, c)) if doc.layers else None
-                    neutral_cache[(r, c)] = deform(pt.pose) if pt is not None and not pt.pose.is_empty() else None
+                    neutral_cache[(r, c)] = deltas(pt.pose) if pt is not None and not pt.pose.is_empty() else None
                 return neutral_cache[(r, c)]
+
+            def to_sparse(delta: dict[str, np.ndarray]) -> dict[str, tuple[np.ndarray, np.ndarray]]:
+                out = {}
+                for m in meshes:
+                    idx, d, cl = _sparse(delta[m], thr)
+                    out[m] = (idx, d)
+                    rep.culled_vertices += cl
+                return out
 
             for i, (li, lname, r, c, pose) in enumerate(jobs):
                 name = naming.morph_name(asset, lname, r, c)
                 if progress:
                     progress(i, len(jobs), name)
-                delta = deform(pose)
+                normal, ex = deltas(pose)
                 if li == 0:
-                    neutral_cache[(r, c)] = delta
+                    neutral_cache[(r, c)] = (normal, ex)
                 elif differential:
                     nd = neutral_delta(r, c)
                     if nd is not None:
-                        delta = {m: delta[m] - nd[m] for m in meshes}
-                sparse = {}
-                culled = 0
-                for m in meshes:
-                    idx, d, cl = _sparse(delta[m], thr)
-                    sparse[m] = (idx, d)
-                    culled += cl
-                rep.culled_vertices += culled
-                results.append((name, li, r, c, pose, sparse))
+                        normal = {m: normal[m] - nd[0][m] for m in meshes}
+                        if nd[1] is not None:  # Neutral の誇張も引く（自分に誇張が無ければ 0 − Neutral の誇張）
+                            ex = {m: (ex[m] if ex is not None else 0.0) - nd[1][m] for m in meshes}
+                results.append((name, pose, to_sparse(normal)))
+                if validate.needs_extreme(doc, li, (r, c)):
+                    zero = {m: np.zeros_like(normal[m]) for m in meshes}
+                    results.append((naming.morph_name(asset, lname, r, c, extreme=True), pose, to_sparse(ex if ex is not None else zero)))
             if progress:
                 progress(len(jobs), len(jobs), "")
         finally:
@@ -233,7 +261,7 @@ def bake(
         nodes = {m: scene.primary_blend_shape(m, create=True) for m in meshes}
         geo = {m: scene.geometry_index(nodes[m], m) for m in meshes}
         state = {m: scene.get_bake_state(nodes[m]) for m in meshes}
-        for name, li, r, c, pose, sparse in results:
+        for name, pose, sparse in results:
             total = 0
             for m in meshes:
                 idx, d = sparse[m]
@@ -242,15 +270,19 @@ def bake(
                 total += len(idx)
                 if m == meshes[0]:
                     (rep.created if created else rep.replaced).append(name)
+                    if name.endswith(naming.EXTREME_SUFFIX):
+                        rep.extreme.append(name)
             rep.vertex_counts[name] = total
             rep.total_vertices += total
             if total == 0:
                 rep.empty.append(name)
 
         # --- 孤立した FC_* の掃除（FC_ の名前だけ）
-        live = {(doc.layers[li].name, r, c) for li, r, c in _live_points(doc)}
+        live_pts = _live_points(doc)
+        live = {(doc.layers[li].name, r, c) for li, r, c in live_pts}
+        live_ex = {(doc.layers[li].name, r, c) for li, r, c in live_pts if validate.needs_extreme(doc, li, (r, c))}
         for m in meshes:
-            doomed = [t.alias for t in scene.list_curves(m, include_fc=True) if t.node == nodes[m] and _is_orphan(doc, t.alias, live)]
+            doomed = [t.alias for t in scene.list_curves(m, include_fc=True) if t.node == nodes[m] and _is_orphan(doc, t.alias, live, live_ex)]
             if doomed:
                 for n in scene.delete_targets(nodes[m], doomed):
                     state[m].pop(n, None)

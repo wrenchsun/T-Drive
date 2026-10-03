@@ -1,4 +1,4 @@
-"""プレビューのグループ（グリッドタブの中。docs/14 §5.8、F1-5 の画面）: カメラ連動の補正を、Maya のビューポートでそのまま確かめる。
+"""プレビューのグループ（グリッドタブの中。docs/14 §5.8）: カメラ連動の補正を、Maya のビューポートでそのまま確かめる。
 
 ## なぜグリッドタブの中か
 カメラを動かして角度を変える・点をクリックしてカメラを合わせる、という操作はグリッドタブでする。補正が効いている様子を見るのも
@@ -10,7 +10,9 @@
 - [プレビューを作る / 作り直す] [消す]: rig（`tdFacialPreview_<asset>`）と式を作る・消す。編集中でも使える（セッションが一度抜けて戻る）
 - [補正あり / なし]: A/B 比較（rig の enable）
 - カメラ: モデルパネルのカメラ + 「今のビューのカメラ」。プレビューがあれば、選ぶとすぐつなぎ替える
-- 強さ（alpha）・感情の重み（レイヤーごと）: rig のアトリビュートを動かす。キーが打ってあるものは動かせない（「キーあり」と出す）
+- 強さ（alpha）・誇張（exaggeration）・感情の重み（レイヤーごと）: rig のアトリビュートを動かす。キーが打ってあるものは動かせない（「キーあり」と出す）
+  - 誇張: 重み 1 を超えるポーズをベイクしてできる `_Ex` シェイプ（誇張用）の効き具合。`_Ex` が無いときは動かせない
+  - 重みをカメラの距離で決めているレイヤーは、感情のスライダーを動かせない（距離で決まる）。距離は角度の表示の横に出る
 - 手動の角度: カメラを使わず Yaw / Pitch を数値で指定する（角度を決め打ちで確かめる）
 - [キーに焼く…]: 時間範囲を評価して FC_* にキーを打つ（レンダリング・Unity 以外への持ち出し用）。式は外れる
 - 「格子やベイクが変わりました。作り直してください」: 作ったあとでデータが変わったとき。自動の作り直しが保留されたとき（編集中）も出る
@@ -97,7 +99,7 @@ class PreviewGroup(QtWidgets.QGroupBox):
         self.session = session
         self._updating = False
         self._emotion_rows: dict[str, tuple[QtWidgets.QLabel, QtWidgets.QSlider, QtWidgets.QLabel]] = {}
-        self._emotion_sig: tuple = ()
+        self._emotion_sig: Optional[tuple] = None  # None = まだ行を作っていない（感情レイヤーが無くても強さ・誇張の行は作る）
         self._detached = False
         self._drag = 0  # スライダーをドラッグしている間は、通知で描き直さない（つまみが跳ねる）
 
@@ -157,6 +159,16 @@ class PreviewGroup(QtWidgets.QGroupBox):
         self.alpha_value = QtWidgets.QLabel()
         self.alpha_slider.valueChanged.connect(partial(self.on_slider, "alpha"))
         self._watch_drag(self.alpha_slider)
+        self.ex_label = QtWidgets.QLabel("誇張")
+        self.ex_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        self.ex_slider.setRange(0, SLIDER_STEPS)
+        self.ex_slider.setToolTip(
+            "誇張の強さ（0 = 誇張なし、1 = ポーズに入れた誇張の通り）。重みが 1 を超えるポーズをベイクすると、"
+            "その分が誇張用のシェイプ（_Ex）に入ります。誇張用のシェイプが無いときは動かせません"
+        )
+        self.ex_value = QtWidgets.QLabel()
+        self.ex_slider.valueChanged.connect(partial(self.on_slider, "exaggeration"))
+        self._watch_drag(self.ex_slider)
 
         # 手動の角度
         row = QtWidgets.QHBoxLayout()
@@ -301,13 +313,19 @@ class PreviewGroup(QtWidgets.QGroupBox):
                 self.camera_combo.setCurrentIndex(i)
 
         # 強さ・感情のスライダー（行の構成は感情レイヤーが変わったときだけ作り直す）
-        sig = tuple(attr for _name, attr, _v, _k in st.emotions)
+        sig = tuple((attr, name in st.distance_layers) for name, attr, _v, _k in st.emotions)
         if sig != self._emotion_sig:
             self._rebuild_emotion_rows(st)
         self._set_slider(self.alpha_slider, self.alpha_value, st.alpha, st.alpha_keyed, live)
+        self._set_slider(self.ex_slider, self.ex_value, st.exaggeration, st.exaggeration_keyed, live and st.has_extreme)
+        if exists and not st.has_extreme:
+            self.ex_value.setText(f"{st.exaggeration:.2f}（誇張用のシェイプなし）")
         for name, attr, value, keyed in st.emotions:
             label, slider, vl = self._emotion_rows[attr]
             self._set_slider(slider, vl, value, keyed, live)
+            if name in st.distance_layers:  # 重みはカメラの距離で決まる: emotion_ は使われない
+                slider.setEnabled(False)
+                vl.setText("距離で決まる" + (f"（今 {st.out_distance:.0f} cm）" if st.out_distance is not None else ""))
         self.manual_check.setEnabled(live and not st.manual_keyed)
         self.manual_check.setChecked(st.use_manual)
         for w, val in ((self.manual_yaw, st.manual_yaw), (self.manual_pitch, st.manual_pitch)):
@@ -325,11 +343,19 @@ class PreviewGroup(QtWidgets.QGroupBox):
         self.sliders.addWidget(self.alpha_label, 0, 0)
         self.sliders.addWidget(self.alpha_slider, 0, 1)
         self.sliders.addWidget(self.alpha_value, 0, 2)
-        for i, (name, attr, _v, _k) in enumerate(st.emotions, start=1):
+        self.sliders.addWidget(self.ex_label, 1, 0)
+        self.sliders.addWidget(self.ex_slider, 1, 1)
+        self.sliders.addWidget(self.ex_value, 1, 2)
+        for i, (name, attr, _v, _k) in enumerate(st.emotions, start=2):
+            by_distance = name in st.distance_layers
             label = QtWidgets.QLabel(f"感情 {name}")
             slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
             slider.setRange(0, SLIDER_STEPS)
-            slider.setToolTip(f"レイヤー「{name}」の補正の重み（0〜1）。Unity では感情カーブから入ります")
+            slider.setToolTip(
+                f"レイヤー「{name}」は重みをカメラの距離で決めます（レイヤータブの「重みの出どころ」）。このスライダーは使われません"
+                if by_distance
+                else f"レイヤー「{name}」の補正の重み（0〜1）。Unity では感情カーブから入ります"
+            )
             vl = QtWidgets.QLabel()
             slider.valueChanged.connect(partial(self.on_slider, attr))
             self._watch_drag(slider)
@@ -337,7 +363,7 @@ class PreviewGroup(QtWidgets.QGroupBox):
             self.sliders.addWidget(slider, i, 1)
             self.sliders.addWidget(vl, i, 2)
             self._emotion_rows[attr] = (label, slider, vl)
-        self._emotion_sig = tuple(attr for _n, attr, _v, _k in st.emotions)
+        self._emotion_sig = tuple((attr, n in st.distance_layers) for n, attr, _v, _k in st.emotions)
 
     @staticmethod
     def _set_slider(slider: QtWidgets.QSlider, value_label: QtWidgets.QLabel, value: float, keyed: bool, usable: bool) -> None:
@@ -358,7 +384,13 @@ class PreviewGroup(QtWidgets.QGroupBox):
         except (RuntimeError, ValueError):
             self.angle_label.setText("")
             return
-        self.angle_label.setText(f"使っている角度: Yaw {yaw:.1f}° / Pitch {pitch:.1f}°")
+        text = f"使っている角度: Yaw {yaw:.1f}° / Pitch {pitch:.1f}°"
+        try:
+            if cmds.attributeQuery("outDistance", node=rig, exists=True):  # 距離で重みを決めるレイヤーがあるとき
+                text += f" / 距離 {cmds.getAttr(f'{rig}.outDistance'):.0f} cm"
+        except (RuntimeError, ValueError):
+            pass
+        self.angle_label.setText(text)
 
     def tick(self) -> None:
         """グリッドタブのカメラ追従のタイマーから呼ばれる（約 10 回 / 秒）。角度の表示だけを更新する。"""
@@ -435,7 +467,7 @@ class PreviewGroup(QtWidgets.QGroupBox):
             return
         v = pos / SLIDER_STEPS
         got = self._call("値の設定", lambda: self.session.preview_set_attr(attr, v))
-        label = self.alpha_value if attr == "alpha" else self._emotion_rows[attr][2]
+        label = self.alpha_value if attr == "alpha" else self.ex_value if attr == "exaggeration" else self._emotion_rows[attr][2]
         if got is not None:
             label.setText(f"{got:.2f}")
 

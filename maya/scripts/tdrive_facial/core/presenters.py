@@ -329,7 +329,14 @@ def _bake_status(ctx: EditContext, layer: Layer, rc: tuple[int, int]) -> str:
     targets = ctx.scene.targets if ctx.scene is not None else None
     if h is None or (targets is not None and morph not in set(targets)):
         return BAKE_UNBAKED  # 焼いていない、または焼いたはずが無い（再インポートで消えた）
-    return BAKE_BAKED if h == V.pose_hash(p.pose) else BAKE_CHANGED
+    if h != V.pose_hash(p.pose):
+        return BAKE_CHANGED
+    li = next((i for i, l in enumerate(ctx.doc.layers) if l is layer), None)
+    if li is not None and V.needs_extreme(ctx.doc, li, rc):  # 誇張用 `_Ex`（重み 1 超）が要るのに焼けていない
+        ex = naming.morph_name(ctx.doc.asset, layer.name, rc[0], rc[1], extreme=True)
+        if bs.get(ex) != h or (targets is not None and ex not in set(targets)):
+            return BAKE_CHANGED
+    return BAKE_BAKED
 
 
 def _baked_names(ctx: EditContext) -> set[str]:
@@ -342,6 +349,7 @@ def _baked_names(ctx: EditContext) -> set[str]:
         for rc, p in layer.points.items():
             if ctx.in_grid(*rc) and not p.pose.is_empty():
                 out.add(naming.morph_name(asset, layer.name, rc[0], rc[1]))
+                out.add(naming.morph_name(asset, layer.name, rc[0], rc[1], extreme=True))  # 誇張用（あれば。無い名前は known で除かれる）
     return out
 
 
@@ -1649,6 +1657,9 @@ class LayerPresenter(Observable):
         stale = layer_morph_names(self.ctx, layer)
         with self.ctx.edit():
             layer.name = chk.name
+            lw = self.doc.layer_weights
+            if lw and old in lw:  # 重みの出どころ（layerWeights）はレイヤー名がキー: 名前に付いていく
+                lw[chk.name] = lw.pop(old)
         return LayerResult(
             index=index,
             message=f"レイヤー名を「{old}」から「{chk.name}」にしました",
@@ -1683,6 +1694,53 @@ class LayerPresenter(Observable):
             layer.emotion_curve = new
         return LayerResult(index=index, warnings=warnings)
 
+    WEIGHT_SOURCES = ("direct", "curve", "distance")
+    DISTANCE_DEFAULTS = {"start": 100.0, "end": 300.0, "from": 0.0, "to": 1.0}  # cm・重み（近いと 0、遠いと 1）
+
+    def weight_source(self, index: int) -> dict:
+        """レイヤーの重みの出どころ（layerWeights の 1 件の複製）。無ければ {"source": "curve"}（既定。Timeline / 部品の値から入る）。"""
+        lw = self.doc.layer_weights or {}
+        spec = lw.get(self.doc.layers[index].name) if 0 <= index < len(self.doc.layers) else None
+        return dict(spec) if spec else {"source": "curve"}
+
+    def set_weight_source(
+        self,
+        index: int,
+        source: str,
+        start: Optional[float] = None,
+        end: Optional[float] = None,
+        w_from: Optional[float] = None,
+        w_to: Optional[float] = None,
+    ) -> LayerResult:
+        """感情レイヤーの重みの出どころ（R-35）。source = "direct" / "curve"（Timeline・部品の値から入る）/ "distance"（カメラとの距離で決まる）。
+        distance のとき start / end（cm）と w_from / w_to（0〜1）: 距離 start で w_from、end で w_to、間は直線（範囲の外は端の値）。
+        省いた値は今の値、無ければ既定（100 cm → 300 cm、0 → 1）。Neutral は不可。入力が正しくなければ Document は変えない。"""
+        bad = self._need_editable(index, "重みの出どころを設定")
+        if bad:
+            return bad
+        if source not in self.WEIGHT_SOURCES:
+            return _fail("source", f"重みの出どころは direct / curve / distance のどれかです: {source!r}", LayerResult, index=index)
+        layer = self.doc.layers[index]
+        spec = dict((self.doc.layer_weights or {}).get(layer.name) or {})
+        spec["source"] = source
+        if source == "distance":
+            vals = {}
+            for key, given in (("start", start), ("end", end), ("from", w_from), ("to", w_to)):
+                v = given if given is not None else spec.get(key, self.DISTANCE_DEFAULTS[key])
+                if not isinstance(v, (int, float)) or isinstance(v, bool) or not math.isfinite(v):
+                    return _fail("invalid", f"{key} は数値で指定してください", LayerResult, index=index)
+                vals[key] = float(v)
+            if vals["start"] < 0 or vals["end"] < 0:
+                return _fail("invalid", "距離は 0 以上（cm）で指定してください", LayerResult, index=index)
+            if not (0.0 <= vals["from"] <= 1.0 and 0.0 <= vals["to"] <= 1.0):
+                return _fail("invalid", "重みは 0〜1 で指定してください", LayerResult, index=index)
+            spec.update(vals)
+        with self.ctx.edit():
+            if self.doc.layer_weights is None:
+                self.doc.layer_weights = {}
+            self.doc.layer_weights[layer.name] = spec
+        return LayerResult(index=index)
+
     def delete(self, index: int) -> LayerResult:
         """レイヤーを消す。そのレイヤーの FC_*（ベイク済み）は stale_morphs で返す（Maya 層がシーンから消す）。
         アクティブレイヤーの扱い: 消したのがアクティブなら同じ番号（最後なら一つ前）、前のレイヤーを消したら番号を 1 つ詰める。"""
@@ -1703,6 +1761,8 @@ class LayerPresenter(Observable):
             new_active = active
         with ctx.edit() as scope:
             del self.doc.layers[index]
+            if self.doc.layer_weights:
+                self.doc.layer_weights.pop(name, None)  # そのレイヤーの重みの出どころも消す
             ctx.active_layer = new_active  # 通知はブロックを抜けるときの "document" 1 回（同じレイヤーなら編集中の値は残る）
         discarded = scope.discarded_edits
         return LayerResult(

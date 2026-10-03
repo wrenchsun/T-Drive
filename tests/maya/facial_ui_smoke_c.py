@@ -366,7 +366,7 @@ def run() -> None:
     ex = panel.tab("export")
     panel.select_tab("export")
     check("出力: タブが本物・Unity / UE / Timeline の 3 つの出力", ex.btn_unity.isEnabled() and ex.btn_ue.isEnabled() and ex.btn_track.isEnabled())
-    check("出力: Timeline の .fctrack の Unity 側取り込みは準備中と書いてある", any("準備中" in l.text() for l in ex.findChildren(QtWidgets.QLabel)))
+    check("出力: Timeline の .fctrack は Unity 側で取り込めると書いてある（準備中ではない・実カットシーンでの確認は途中）", any("取り込んで Timeline に反映できます" in l.text() for l in ex.findChildren(QtWidgets.QLabel)) and not any("準備中" in l.text() for l in ex.findChildren(QtWidgets.QLabel)))
     check("出力: モデル名の既定 = キャラクター ID・範囲の既定 = 再生範囲", ex.model.text() == "mini" and ex.start.value() == cmds.playbackOptions(query=True, minTime=True) and ex.end.value() == cmds.playbackOptions(query=True, maxTime=True))
     out_dir = tmp / "facial" / "mini" / "export" / "unity"
     check("出力: 出力先の表示", out_dir.as_posix() in ex.out_label.text(), ex.out_label.text())
@@ -433,7 +433,7 @@ def run() -> None:
     pump()
     track = out_dir / fct.file_name("sc010", "mini")
     check("出力: Timeline 用: <Shot>__<Model>.fctrack ができる（感情のキーを含む）", track.exists() and fct.emotion_curve_name("Joy") in fct.load(track).curves and "書き出しました" in ex.status.text(), ex.status.text())
-    check("出力: Timeline 用の結果に「準備中」の注記", "準備中" in ex.track_label.text())
+    check("出力: Timeline 用の結果に Unity 側の取り込みの注記（準備中ではない）", "取り込んで Timeline に反映できます" in ex.track_label.text() and "準備中" not in ex.track_label.text())
 
     # ============================================================ スクリーンショット（7 つのタブ）
     s.set_active_layer(0)

@@ -77,6 +77,7 @@ from .core.model import (
     Document,
     GridPoint,
     Meta,
+    Quality,
     SourcePose,
     Target,
 )
@@ -1267,10 +1268,39 @@ class FacialSession:
         """補正の除外（R-17）を置き換える（None の側は触らない）。"""
         ex = self.require().exclude
         if curves is not None:
-            ex.curves = list(dict.fromkeys(curves))
+            ex.curves = list(dict.fromkeys(c.strip() for c in curves if c and c.strip()))
         if bones is not None:
-            ex.bones = list(dict.fromkeys(bones))
+            ex.bones = list(dict.fromkeys(b.strip() for b in bones if b and b.strip()))
         return CommandResult()
+
+    def add_exclude(self, kind: str, pattern: str) -> CommandResult:
+        """補正除外のパターン（名前にこの文字を含むシェイプ / ボーンはベイクで無視される）を足す。kind = "curve" / "bone"。"""
+        pattern = (pattern or "").strip()
+        if kind not in ("curve", "bone"):
+            return CommandResult(ok=False, code="kind", message="種類は curve / bone のどちらかです")
+        if not pattern:
+            return CommandResult(ok=False, code="empty", message="パターンが空です")
+        ex = self.require().exclude
+        cur = list(ex.curves if kind == "curve" else ex.bones)
+        if pattern in cur:
+            return CommandResult(ok=False, code="exists", message=f"「{pattern}」は既にあります")
+        return self.set_exclude(**({"curves": [*cur, pattern]} if kind == "curve" else {"bones": [*cur, pattern]}))
+
+    def remove_exclude(self, kind: str, pattern: str) -> CommandResult:
+        """補正除外のパターンを外す。"""
+        if kind not in ("curve", "bone"):
+            return CommandResult(ok=False, code="kind", message="種類は curve / bone のどちらかです")
+        ex = self.require().exclude
+        cur = list(ex.curves if kind == "curve" else ex.bones)
+        if pattern not in cur:
+            return CommandResult(ok=False, code="missing", message=f"「{pattern}」はありません")
+        left = [p for p in cur if p != pattern]
+        return self.set_exclude(**({"curves": left} if kind == "curve" else {"bones": left}))
+
+    def is_excluded(self, kind: str, name: str) -> bool:
+        """名前が補正除外パターンに当たるか（ポーズタブの表示用）。kind = "curve" / "bone"。"""
+        doc = self.doc
+        return doc is not None and pose_apply.is_excluded(doc, kind, name)
 
     # --- セットアップ ---
     @undoable(refresh=True, notify=True)
@@ -1415,6 +1445,81 @@ class FacialSession:
         if fade is not None:
             p.fade = (float(fade[0]), float(fade[1]))
         return CommandResult()
+
+    @undoable(notify=True)
+    def set_quality(
+        self,
+        sharpness: Optional[float] = None,
+        step_fps: Optional[float] = None,
+        exaggeration: Optional[float] = None,
+        angle_epsilon: Optional[float] = None,
+    ) -> CommandResult:
+        """品質（実行時の見え方。R-32 / R-33 / R-37）。None の値は触らない。範囲外・数値でない値は失敗（Document は変わらない）。
+
+        - sharpness（0.01〜64。1 = そのまま）: 大きいほど、キーの角度のそばでそのキーのポーズそのものに寄る。Maya のプレビューにも掛かる
+        - step_fps（0〜240。0 = 使わない）: 補正の更新を間引く fps。**Unity でだけ効く**（Maya のプレビューには掛からない）
+        - exaggeration（0〜1）: 誇張（`_Ex`）の既定の強さ。プレビューの rig の `exaggeration` の初期値にもなる
+        - angle_epsilon（0〜45°）: 角度がこれ未満しか変わらないときは再計算しない（Unity）
+        プレビューの式は sharpness が変わると作り直される（`preview_is_stale`）。exaggeration を変えたときは、キーの無い rig の値も合わせる。
+        """
+        doc = self.require()
+        q = doc.quality if doc.quality is not None else Quality()
+        new = {"sharpness": q.sharpness, "step_fps": q.step_fps, "exaggeration": q.exaggeration, "angle_epsilon": q.angle_epsilon}
+        limits = {
+            "sharpness": (0.01, 64.0, "シャープさは 0.01〜64 の数値です"),
+            "step_fps": (0.0, 240.0, "コマ打ちの fps は 0〜240 の数値です（0 = 使わない）"),
+            "exaggeration": (0.0, 1.0, "誇張の強さは 0〜1 の数値です"),
+            "angle_epsilon": (0.0, 45.0, "角度のしきい値は 0〜45 の数値です"),
+        }
+        for key, given in (("sharpness", sharpness), ("step_fps", step_fps), ("exaggeration", exaggeration), ("angle_epsilon", angle_epsilon)):
+            if given is None:
+                continue
+            lo, hi, msg = limits[key]
+            if not isinstance(given, (int, float)) or isinstance(given, bool) or not math.isfinite(given) or not lo <= given <= hi:
+                return CommandResult(ok=False, code="invalid", message=msg)
+            new[key] = float(given)
+        if all(new[k] == getattr(q, k) for k in new):
+            return CommandResult(code="unchanged")
+        if doc.quality is None:
+            doc.quality = Quality()
+        for k, v in new.items():
+            setattr(doc.quality, k, v)
+        if exaggeration is not None:
+            self._sync_preview_exaggeration(float(exaggeration))
+        return CommandResult()
+
+    def _sync_preview_exaggeration(self, value: float) -> None:
+        """rig の `exaggeration` がキーも接続も無ければ、新しい既定値に合わせる（キーがあるときは触らない）。"""
+        try:
+            rig = preview_rig.find_rig(self.require().asset or "")
+            if rig is None or not cmds.attributeQuery(preview_rig.EXAGGERATION_ATTR, node=rig, exists=True):
+                return
+            plug = f"{rig}.{preview_rig.EXAGGERATION_ATTR}"
+            if (cmds.keyframe(plug, query=True, keyframeCount=True) or 0) > 0 or cmds.listConnections(plug, source=True, destination=False):
+                return
+            cmds.setAttr(plug, value)
+        except RuntimeError:
+            pass
+
+    @undoable(notify=True)
+    def set_layer_weight_source(
+        self,
+        index: int,
+        source: str,
+        start: Optional[float] = None,
+        end: Optional[float] = None,
+        w_from: Optional[float] = None,
+        w_to: Optional[float] = None,
+    ) -> LayerResult:
+        """感情レイヤーの重みの出どころ（R-35）。source = "direct" / "curve"（Timeline・部品の値から入る）/ "distance"（カメラとの距離で決まる）。
+        distance のとき start / end（cm）と w_from / w_to（0〜1）。距離 start で w_from、end で w_to、間は直線。Neutral は不可。
+        distance のレイヤーは、プレビューの `emotion_<レイヤー>` を使わず距離で決める（式は作り直される）。"""
+        return self.layers.set_weight_source(index, source, start, end, w_from, w_to)
+
+    def layer_weight_source(self, index: int) -> dict:
+        """レイヤーの重みの出どころ（{"source": ..., "start", "end", "from", "to"}。無ければ {"source": "curve"}）。"""
+        self.require()
+        return self.layers.weight_source(index)
 
     # ============================================================ ベイク
     def bake_all(self, progress=None) -> bake_mod.BakeReport:
@@ -1838,7 +1943,7 @@ class FacialSession:
         return CommandResult(message=f"{curve} の可動域を {lo:g}〜{hi:g} にしました")
 
     def shape_exaggerate(self, name: str) -> shapes.ShapeResult:
-        """誇張形 `<name>_Ex` を作り、`name` の可動域を 0〜2 にする（R-37 の準備。評価は F5）。"""
+        """誇張形 `<name>_Ex` を作り、`name` の可動域を 0〜2 にする（R-37。ポーズの 1 超の分はベイクで FC_…_Ex に焼き分ける）。"""
         sc = self._shape_ctx_or_raise()
         res = self._shape_run(shapes.make_exaggeration, sc, name)
         self.set_limit(scene_mod.curve_name(sc.node, name), 0.0, 2.0)
@@ -2018,10 +2123,10 @@ class FacialSession:
         return preview_rig.get_camera(self.doc.asset or "")
 
     def preview_set_attr(self, name: str, value) -> float:
-        """rig のアトリビュート（alpha / useManual / manualYaw / manualPitch / emotion_<Layer>）を設定する。
+        """rig のアトリビュート（alpha / useManual / manualYaw / manualPitch / exaggeration / emotion_<Layer>）を設定する。
         キーが打ってある・他から駆動されているアトリビュートは変えられない（FacialSessionError）。設定した値を返す。"""
         rig = self._preview_rig_or_raise()
-        allowed = {*preview_rig.KEYABLE_FIXED, *preview_rig.emotion_attrs(self.doc).values()}
+        allowed = {*preview_rig.KEYABLE_FIXED, preview_rig.EXAGGERATION_ATTR, *preview_rig.emotion_attrs(self.doc).values()}
         if name not in allowed:
             raise FacialSessionError(f"プレビューのアトリビュート「{name}」は変えられません")
         plug = f"{rig}.{name}"
@@ -2060,6 +2165,12 @@ class FacialSession:
         st.manual_keyed = ky or kp
         st.out_yaw = float(cmds.getAttr(f"{rig}.outYaw"))
         st.out_pitch = float(cmds.getAttr(f"{rig}.outPitch"))
+        if cmds.attributeQuery(preview_rig.EXAGGERATION_ATTR, node=rig, exists=True):
+            st.exaggeration, st.exaggeration_keyed = info(preview_rig.EXAGGERATION_ATTR)
+        st.has_extreme = preview_rig.has_extreme_targets(doc.asset or "")
+        st.distance_layers = [doc.layers[i].name for i in preview_rig.distance_layers(doc)]
+        if st.distance_layers and cmds.attributeQuery(preview_rig.OUT_DISTANCE_ATTR, node=rig, exists=True):
+            st.out_distance = float(cmds.getAttr(f"{rig}.{preview_rig.OUT_DISTANCE_ATTR}"))
         for li, attr in preview_rig.emotion_attrs(doc).items():
             v, keyed = info(attr)
             st.emotions.append((doc.layers[li].name, attr, v, keyed))
@@ -2481,6 +2592,11 @@ class PreviewStatus:
     manual_keyed: bool = False
     out_yaw: float = 0.0
     out_pitch: float = 0.0
+    exaggeration: float = 1.0  # 誇張（`_Ex`）の強さ（rig の exaggeration）
+    exaggeration_keyed: bool = False
+    has_extreme: bool = False  # 配線している `_Ex` があるか（無いと誇張のスライダーは効かない）
+    out_distance: Optional[float] = None  # カメラと格子の中心の距離（cm）。距離で重みを決めるレイヤーがあるときだけ
+    distance_layers: list[str] = field(default_factory=list)  # 重みをカメラの距離で決めているレイヤー（emotion_ は使われない）
     emotions: list[tuple[str, str, float, bool]] = field(default_factory=list)  # (レイヤー名, rig のアトリビュート名, 値, キーあり)
     editing: bool = False  # 編集中は補正が止まっている
     warnings: list[str] = field(default_factory=list)

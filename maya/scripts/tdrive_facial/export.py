@@ -184,10 +184,12 @@ def export_in_place(meshes: list[str], path: str | Path, sculpt_prefix: str = na
             cmds.setAttr(plug, 0.0)
     counts: dict[str, int] = {}
     fc: dict[str, int] = {}
+    fc_ex: dict[str, int] = {}
     for m in meshes:
         aliases = [a for n in scene_mod.blend_shapes(m) for a in scene_mod.target_indices(n)]
         counts[m] = len(aliases)
         fc[m] = sum(1 for a in aliases if naming.is_fc_name(a))
+        fc_ex[m] = sum(1 for a in aliases if naming.is_fc_name(a) and a.endswith(naming.EXTREME_SUFFIX))  # 誇張用（_Ex）も FBX に入る
     # --- FBX
     cmds.select(meshes + scene_mod.skeleton_roots(meshes), replace=True)
     for cmd in FBX_OPTIONS:
@@ -203,6 +205,7 @@ def export_in_place(meshes: list[str], path: str | Path, sculpt_prefix: str = na
         "meshes": [scene_mod.short_name(m) for m in meshes],
         "blendshapes": {scene_mod.short_name(m): n for m, n in counts.items()},
         "fc": {scene_mod.short_name(m): n for m, n in fc.items()},
+        "fc_ex": {scene_mod.short_name(m): n for m, n in fc_ex.items()},
         "excluded_fcs": excluded,
     }
 
@@ -225,7 +228,8 @@ class UnityExportResult:
     fcpose: Path
     meshes: list[str] = field(default_factory=list)
     blendshapes: dict[str, int] = field(default_factory=dict)  # メッシュ → FBX に入ったブレンドシェイプの数
-    fc_count: int = 0  # FBX に入った FC_*（顔メッシュ）
+    fc_count: int = 0  # FBX に入った FC_*（顔メッシュ。誇張用の _Ex を含む）
+    fc_ex_count: int = 0  # うち誇張用（_Ex）
     excluded_fcs: int = 0  # 除いた fcs_*
     warnings: list[str] = field(default_factory=list)
     seconds: float = 0.0
@@ -236,8 +240,9 @@ class UnityExportResult:
         return d
 
     def summary(self) -> str:
+        ex_note = f"（うち誇張用 {self.fc_ex_count}）" if self.fc_ex_count else ""
         return (
-            f"出力: {self.fbx.name}（メッシュ {len(self.meshes)}、FC_* {self.fc_count}、除いた fcs_* {self.excluded_fcs}）+ {self.fcpose.name}"
+            f"出力: {self.fbx.name}（メッシュ {len(self.meshes)}、FC_* {self.fc_count}{ex_note}、除いた fcs_* {self.excluded_fcs}）+ {self.fcpose.name}"
             f"、{self.seconds:.1f} 秒" + (f"、警告 {len(self.warnings)} 件" if self.warnings else "")
         )
 
@@ -317,6 +322,7 @@ class UnityExportJob:
             meshes=list(res["meshes"]),
             blendshapes=dict(res["blendshapes"]),
             fc_count=int(res["fc"].get(face, 0)),
+            fc_ex_count=int(res.get("fc_ex", {}).get(face, 0)),
             excluded_fcs=int(res["excluded_fcs"]),
             warnings=list(self.warnings),
             seconds=time.perf_counter() - self._t0,

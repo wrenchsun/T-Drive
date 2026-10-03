@@ -21,6 +21,7 @@ from maya import cmds
 from . import scene
 from .core import space
 from .core.model import BoneOffset, Document, SourcePose
+from .core.profile import is_mirror_excluded
 
 THRESHOLD_T = 1e-3  # cm。これ未満のずれは取り込まない
 THRESHOLD_R = 1e-4  # クォータニオンの xyz 成分。これ以下は恒等とみなす
@@ -53,7 +54,17 @@ def assert_maya_space(doc: Document) -> None:
 
 
 def _is_excluded_curve(doc: Document, name: str) -> bool:
-    return name in doc.exclude.curves
+    """補正除外パターン（部分一致。UE 版・ミラー除外と同じ。空のパターンは無視）に当たるシェイプか。"""
+    return is_mirror_excluded(name, doc.exclude.curves)
+
+
+def _is_excluded_bone(doc: Document, name: str) -> bool:
+    return is_mirror_excluded(name, doc.exclude.bones)
+
+
+def is_excluded(doc: Document, kind: str, name: str) -> bool:
+    """画面（ポーズタブ）が使う判定。kind = "curve" / "bone"。"""
+    return _is_excluded_curve(doc, name) if kind == "curve" else _is_excluded_bone(doc, name)
 
 
 def reset_to_reference(ref: scene.Reference) -> None:
@@ -71,7 +82,7 @@ def reset_to_reference(ref: scene.Reference) -> None:
 def apply_pose(doc: Document, pose: SourcePose, ref: scene.Reference) -> ApplyReport:
     """ポーズを当てる。先に基準へ戻してから、ポーズのシェイプとボーンだけを動かす（前に当てたものは残らない）。
 
-    doc.exclude のシェイプ・ボーンは触らない。シーンに無い名前は飛ばして ApplyReport に入れる。
+    doc.exclude のパターン（部分一致）に当たるシェイプ・ボーンは触らない。シーンに無い名前は飛ばして ApplyReport に入れる。
     """
     assert_maya_space(doc)
     rep = ApplyReport()
@@ -92,7 +103,7 @@ def apply_pose(doc: Document, pose: SourcePose, ref: scene.Reference) -> ApplyRe
                 rep.locked.append(plug)
 
     for name, off in pose.bones.items():
-        if name in doc.exclude.bones:
+        if _is_excluded_bone(doc, name):
             rep.skipped_excluded.append(name)
             continue
         base = ref.bones.get(name)
@@ -131,7 +142,7 @@ def capture_pose(doc: Document, ref: scene.Reference, working_set_only: bool = F
             pose.curves[name] = float(w)
 
     for name, base in ref.bones.items():
-        if name in doc.exclude.bones or (ws_bones is not None and name not in ws_bones):
+        if _is_excluded_bone(doc, name) or (ws_bones is not None and name not in ws_bones):
             continue
         t, q, s = scene.read_local(base.path)
         dt = tuple(c - b for c, b in zip(t, base.t))

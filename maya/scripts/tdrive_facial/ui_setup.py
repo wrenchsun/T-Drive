@@ -1,4 +1,4 @@
-"""セットアップタブ（docs/14 §5.2）: 対象メッシュ・基準ボーン・前方向・格子・ミラー・自動生成・ベイク・プロファイル・作業セット。
+"""セットアップタブ（docs/14 §5.2）: 対象メッシュ・基準ボーン・前方向・格子・ミラー・自動生成・ベイク・品質・プロファイル・補正の除外・作業セット。
 
 画面の操作はすべてセッションのコマンド（`session.set_*` など）を呼ぶ。失敗したときは `result.message` を下の状態欄に出す。
 値の表示は `refresh()` で Document から入れ直す（そのあいだ `_updating` で操作の通知を止める）。
@@ -24,7 +24,7 @@ from .ui import DIM_STYLE, NO_PROFILE, WARN_STYLE, ask_yes_no, mesh_choices, pro
 MESH_MISSING = "（シーンに見つかりません）"
 FORWARD_CHOICES = ("+X", "-X", "+Z", "-Z")  # Maya は Y-up なので上下は選べない
 FILL_LABELS = {"IDW": "IDW（まわりのキーをなめらかに混ぜる）", "NearestKey": "最近傍（いちばん近いキーをそのまま使う）"}
-CURVE_TIP = "シェイプ（blendShape のターゲット）。シェイプを選んだときのビューポートでの強調表示は準備中です"
+CURVE_TIP = "シェイプ（blendShape のターゲット）。チェックを入れると作業セットに入ります"
 BONE_TIP = "クリックすると Maya でこのジョイントを選びます"
 
 
@@ -93,7 +93,9 @@ class SetupTab(QtWidgets.QWidget):
         self._build_grid()
         self._build_mirror()
         self._build_autogen()
+        self._build_quality()
         self._build_profile()
+        self._build_exclude()
         self._build_t20()
         self._build_working_set()
         self.form.addStretch(1)
@@ -254,6 +256,77 @@ class SetupTab(QtWidgets.QWidget):
         self.threshold.valueChanged.connect(lambda *_: self.on_bake_changed())
         f.addRow("ベイクのしきい値", self.threshold)
 
+    def _build_quality(self) -> None:
+        f = self._group("品質（実行時の見え方）")
+        self.quality_sharpness = _spin(0.01, 64.0, 0.25, 2)
+        self.quality_sharpness.setToolTip(
+            "1 = そのまま。大きいほど、キーの角度のそばでキーのポーズそのものに寄ります（キーとキーの間の混ざりが減ります）。Maya のプレビューにも掛かります"
+        )
+        self.quality_sharpness.valueChanged.connect(lambda *_: self.on_quality_changed())
+        f.addRow("シャープさ", self.quality_sharpness)
+        self.quality_step_fps = _spin(0.0, 240.0, 1.0, 1, " fps")
+        self.quality_step_fps.setToolTip("コマ打ち fps: 0 = 使わない。補正の更新をこの fps に間引きます。Unity で効きます — Maya のプレビューには掛かりません")
+        self.quality_step_fps.valueChanged.connect(lambda *_: self.on_quality_changed())
+        f.addRow("コマ打ち fps", self.quality_step_fps)
+        self.quality_exaggeration = _spin(0.0, 1.0, 0.05, 2)
+        self.quality_exaggeration.setToolTip(
+            "誇張の既定の強さ（0〜1）。重みが 1 を超えるポーズをベイクしてできる誇張用のシェイプ（_Ex）を、どれだけ効かせるか。"
+            "1 = ポーズに入れた誇張の通り。Maya のプレビューの「誇張」スライダーの初期値にもなります"
+        )
+        self.quality_exaggeration.valueChanged.connect(lambda *_: self.on_quality_changed())
+        f.addRow("誇張の既定の強さ", self.quality_exaggeration)
+        self.quality_epsilon = _spin(0.0, 45.0, 0.05, 2, "°")
+        self.quality_epsilon.setToolTip("角度がこれより小さくしか変わらないときは、補正を計算し直しません（Unity の軽量化）。Maya のプレビューには掛かりません")
+        self.quality_epsilon.valueChanged.connect(lambda *_: self.on_quality_changed())
+        f.addRow("角度のしきい値", self.quality_epsilon)
+        note = QtWidgets.QLabel("シャープさ・誇張は Maya のプレビューにも反映されます。コマ打ちと角度のしきい値は Unity だけで効きます。")
+        note.setWordWrap(True)
+        note.setStyleSheet(DIM_STYLE)
+        f.addRow(note)
+
+    def _build_exclude(self) -> None:
+        box = QtWidgets.QGroupBox("補正から除外するもの")
+        v = QtWidgets.QVBoxLayout(box)
+        hint = QtWidgets.QLabel(
+            "名前にここの文字を含むシェイプ・ボーンは、ベイクで無視されます（部分一致。例: 目線のシェイプを外す）。"
+            "ポーズには残りますが、補正のシェイプには焼かれません。変えたあとは、ポーズを焼き直してください。"
+        )
+        hint.setWordWrap(True)
+        hint.setStyleSheet(DIM_STYLE)
+        v.addWidget(hint)
+        cols = QtWidgets.QHBoxLayout()
+        self.exclude_lists: dict[str, QtWidgets.QListWidget] = {}
+        self.exclude_inputs: dict[str, QtWidgets.QLineEdit] = {}
+        for kind, title in (("curve", "シェイプ"), ("bone", "ボーン")):
+            col = QtWidgets.QVBoxLayout()
+            col.addWidget(QtWidgets.QLabel(title))
+            lst = QtWidgets.QListWidget()
+            lst.setMaximumHeight(90)
+            lst.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
+            lst.setToolTip(f"除外するパターン（名前にこの文字を含む{title}は焼かれません）")
+            col.addWidget(lst)
+            row = QtWidgets.QHBoxLayout()
+            edit = QtWidgets.QLineEdit()
+            edit.setPlaceholderText("パターンを入力")
+            edit.returnPressed.connect(lambda *_, k=kind: self.on_exclude_add(k))
+            add = QtWidgets.QPushButton("追加")
+            add.clicked.connect(lambda *_, k=kind: self.on_exclude_add(k))
+            rm = QtWidgets.QPushButton("外す")
+            rm.clicked.connect(lambda *_, k=kind: self.on_exclude_remove(k))
+            row.addWidget(edit, 1)
+            row.addWidget(add)
+            row.addWidget(rm)
+            col.addLayout(row)
+            cols.addLayout(col, 1)
+            self.exclude_lists[kind] = lst
+            self.exclude_inputs[kind] = edit
+        v.addLayout(cols)
+        self.exclude_note = QtWidgets.QLabel()
+        self.exclude_note.setWordWrap(True)
+        self.exclude_note.setStyleSheet(DIM_STYLE)
+        v.addWidget(self.exclude_note)
+        self.form.addWidget(box)
+
     def _build_profile(self) -> None:
         f = self._group("命名規則プロファイル")
         row = QtWidgets.QHBoxLayout()
@@ -364,6 +437,12 @@ class SetupTab(QtWidgets.QWidget):
             self.idw_power.setValue(doc.autogen.idw_power)
             self.idw_power.setEnabled(doc.autogen.mode == "IDW")
             self.threshold.setValue(doc.bake.delta_threshold if doc.bake is not None else 0.001)
+            q = doc.quality
+            self.quality_sharpness.setValue(q.sharpness if q is not None else 1.0)
+            self.quality_step_fps.setValue(q.step_fps if q is not None else 0.0)
+            self.quality_exaggeration.setValue(q.exaggeration if q is not None else 1.0)
+            self.quality_epsilon.setValue(q.angle_epsilon if q is not None else 0.1)
+            self._refresh_exclude(doc)
             self._refresh_profile(doc)
             self._refresh_working_set(doc)
         finally:
@@ -413,6 +492,31 @@ class SetupTab(QtWidgets.QWidget):
                 it.setForeground(QtCore.Qt.gray)
             it.setData(QtCore.Qt.UserRole, name)
             self.extra_list.addItem(it)
+
+    def _refresh_exclude(self, doc) -> None:
+        for kind, patterns in (("curve", doc.exclude.curves), ("bone", doc.exclude.bones)):
+            lst = self.exclude_lists[kind]
+            lst.clear()
+            for pat in patterns:
+                lst.addItem(pat)
+        used = self._excluded_in_poses(doc)
+        self.exclude_note.setText(f"除外に当たる名前がポーズに入っています: {used} 個（ベイクでは無視されます）" if used else "")
+
+    @staticmethod
+    def _excluded_in_poses(doc) -> int:
+        """ポーズに入っているシェイプ・ボーンのうち、除外パターンに当たるものの数（名前の重複は 1 つと数える）。"""
+        from .pose_apply import is_excluded
+
+        found: set[tuple[str, str]] = set()
+        for layer in doc.layers:
+            for pt in layer.points.values():
+                for n, w in pt.pose.curves.items():
+                    if abs(w) > 1e-6 and is_excluded(doc, "curve", n):
+                        found.add(("curve", n))
+                for n in pt.pose.bones:
+                    if is_excluded(doc, "bone", n):
+                        found.add(("bone", n))
+        return len(found)
 
     def _refresh_profile(self, doc) -> None:
         names = profile_names(doc.asset or "")
@@ -653,6 +757,37 @@ class SetupTab(QtWidgets.QWidget):
             return
         self._run(self.session.set_bake_options, delta_threshold=self.threshold.value())
 
+    # ---- 品質・除外
+    def on_quality_changed(self) -> None:
+        if self._updating:
+            return
+        self._run(
+            self.session.set_quality,
+            sharpness=self.quality_sharpness.value(),
+            step_fps=self.quality_step_fps.value(),
+            exaggeration=self.quality_exaggeration.value(),
+            angle_epsilon=self.quality_epsilon.value(),
+        )
+
+    def on_exclude_add(self, kind: str) -> None:
+        text = self.exclude_inputs[kind].text().strip()
+        if not text:
+            self.show_status("パターンを入力してから追加してください", error=True)
+            return
+        if self._run(self.session.add_exclude, kind, text):
+            self.exclude_inputs[kind].clear()
+            self.show_status(f"「{text}」を除外に足しました。ポーズを焼き直すと反映されます")
+
+    def on_exclude_remove(self, kind: str) -> None:
+        items = self.exclude_lists[kind].selectedItems()
+        if not items:
+            self.show_status("外すパターンを一覧から選んでください", error=True)
+            return
+        for it in items:
+            if not self._run(self.session.remove_exclude, kind, it.text()):
+                return
+        self.show_status("除外から外しました。ポーズを焼き直すと反映されます")
+
     # ---- プロファイル
     def on_profile_apply(self) -> None:
         name = self.profile_combo.currentData()
@@ -712,7 +847,7 @@ class SetupTab(QtWidgets.QWidget):
         self._run(self.session.add_to_working_set if on else self.session.remove_from_working_set, **kw)
 
     def on_ws_current_changed(self, kind: str, item: Optional[QtWidgets.QListWidgetItem]) -> None:
-        """ボーンを選ぶと、そのジョイントを Maya で選ぶ（いちばん安全な強調）。シェイプの強調表示は準備中。"""
+        """ボーンを選ぶと、そのジョイントを Maya で選ぶ（いちばん安全な強調）。シェイプには強調表示は無い。"""
         if self._updating or item is None or kind != "bone":
             return
         name = item.data(QtCore.Qt.UserRole)

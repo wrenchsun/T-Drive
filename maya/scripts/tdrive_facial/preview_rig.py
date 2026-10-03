@@ -27,6 +27,15 @@ tdFacialPreview_<asset>.（enable / alpha / useManual / manualYaw / manualPitch 
 - 作る・消すのは `tdFacialPreview_<asset>` と、その `tdFacialCreated`（文字列アトリビュート）に記録したノードだけ
 - 出力（FBX）には含めない: rig の transform に `tdPreviewOnly` を付ける（export.py は別プロセスの一時シーンで消す）
 
+追加の品質機能（F5。既定のときは式が変わらない = 従来と同じ）:
+- **シャープニング**（`quality.sharpness` ≠ 1 のときだけ式に入る）: 4 隅の双線形の重み w を w^s / Σ w^s にしてから、端のフェード・レイヤーの重みを掛ける
+  （`evaluate.sharpen_weights` と同じ。s は [0.01, 64] に丸める）
+- **誇張**: シーンに `FC_…_Ex` があって、基になる `FC_…` が配線されるとき、`_Ex` の weight = 基の weight × rig の `exaggeration`（0〜1、キーが打てる。
+  初期値は `quality.exaggeration`）。`_Ex` が 1 本も無いときは式に `exaggeration` を書かない
+- **距離で重みを決めるレイヤー**（`layerWeights[<レイヤー>].source == "distance"`）: レイヤーの重み = lerp(from, to, saturate((d − start) / (end − start)))。
+  d = カメラと格子の中心（基準ボーン + 中心のずらし）の距離（cm）。**`emotion_<Layer>` は使わない（無視する）**: アトリビュートは残る（キー・値は壊さない）が効かない。
+  d は `outDistance`（距離のレイヤーがあるときだけ作る）に出る。手動の角度（useManual）でも距離はカメラから測る。スムージングなどは掛けない
+
 評価コスト: 式の長さは「配線するターゲットの数 + 軸の数」にほぼ比例し、毎評価で O(ターゲット数)。数百ターゲットでも数 ms（smoke の SMOKE INFO）。
 """
 
@@ -34,6 +43,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 from dataclasses import dataclass, field
 from typing import Iterable, Optional, Sequence
@@ -45,6 +55,7 @@ from . import pose_apply
 from . import scene as scene_mod
 from .core import evaluate, naming, space
 from .core.model import Document
+from .core.presenters import LayerPresenter
 
 RIG_PREFIX = "tdFacialPreview_"
 PREVIEW_ONLY_ATTR = scene_mod.PREVIEW_ONLY_ATTR  # tdPreviewOnly（Toon のプレビュー専用メッシュと同じ目印）
@@ -55,6 +66,8 @@ SIGNATURE_ATTR = "tdFacialSignature"
 EMOTION_PREFIX = "emotion_"
 KEYABLE_FIXED = ("alpha", "useManual", "manualYaw", "manualPitch")
 FADE_EPSILON = evaluate.KINDA_SMALL_NUMBER  # evaluate_correction の「範囲の外」の判定
+EXAGGERATION_ATTR = "exaggeration"  # 誇張（_Ex）の強さ 0〜1（キーが打てる。KEYABLE_FIXED には入れない: .fctrack に出さない）
+OUT_DISTANCE_ATTR = "outDistance"  # カメラと格子の中心の距離（cm。距離で重みを決めるレイヤーがあるときだけ作る）
 
 
 class PreviewRigError(RuntimeError):
@@ -197,6 +210,46 @@ def view_angles(doc: Document, camera: Optional[str] = None) -> tuple[float, flo
     )
 
 
+def view_distance(doc: Document, camera: Optional[str] = None) -> float:
+    """カメラと格子の中心（基準ボーン + 中心のずらし）の距離（cm。距離で重みを決めるレイヤーの d）。"""
+    pose_apply.assert_maya_space(doc)
+    joint = base_joint(doc)
+    tm = om.MTransformationMatrix(_dag(joint).inclusiveMatrix())
+    t = tm.translation(om.MSpace.kWorld)
+    q = tm.rotation(asQuaternion=True)
+    off = space.rotate_vector(space.quat_normalize((q.x, q.y, q.z, q.w)), tuple(doc.grid.center_offset))
+    c = om.MTransformationMatrix(_dag(camera_transform(camera)).inclusiveMatrix()).translation(om.MSpace.kWorld)
+    return math.sqrt((c.x - t.x - off[0]) ** 2 + (c.y - t.y - off[1]) ** 2 + (c.z - t.z - off[2]) ** 2)
+
+
+def distance_spec(doc: Document, layer_index: int) -> Optional[dict]:
+    """レイヤーの重みをカメラの距離で決めるときの {"start", "end", "from", "to"}（数値）。そうでなければ None。Neutral は常に None。"""
+    if layer_index <= 0 or layer_index >= len(doc.layers) or not doc.layer_weights:
+        return None
+    spec = doc.layer_weights.get(doc.layers[layer_index].name)
+    if not spec or spec.get("source") != "distance":
+        return None
+    d = LayerPresenter.DISTANCE_DEFAULTS
+    out = {}
+    for k in ("start", "end", "from", "to"):
+        v = spec.get(k, d[k])
+        if not isinstance(v, (int, float)) or isinstance(v, bool) or not math.isfinite(v):
+            return None
+        out[k] = float(v)
+    return out
+
+
+def distance_layers(doc: Document) -> list[int]:
+    """重みをカメラの距離で決めるレイヤーの番号（Neutral を除く。有効・無効は問わない）。"""
+    return [i for i in range(1, len(doc.layers)) if distance_spec(doc, i) is not None]
+
+
+def has_extreme_targets(asset: str) -> bool:
+    """rig が配線している `_Ex` があるか。"""
+    rig = find_rig(asset)
+    return rig is not None and any(a.endswith(naming.EXTREME_SUFFIX) for a in _read_json(rig, TARGETS_ATTR, {}))
+
+
 # ---------------------------------------------------------------------------
 # 配線の計画（データ → expression の文字列）
 # ---------------------------------------------------------------------------
@@ -209,6 +262,7 @@ class _Target:
     row: int
     col: int
     plugs: list[str] = field(default_factory=list)
+    ex: bool = False  # 誇張用（`_Ex`）。基になる FC_…（同じレイヤー・行・列）が配線されているときだけ使う
 
 
 @dataclass
@@ -216,6 +270,9 @@ class _Plan:
     asset: str
     joint: str
     targets: list[_Target]
+    ex_targets: list[_Target]
+    sharpness: float
+    distance: dict[int, dict]  # レイヤー番号 → 距離の指定（配線に使うレイヤーのうち、距離で重みを決めるもの）
     layer_attrs: dict[int, str]  # 配線に使うレイヤー（有効で、ターゲットがあるもの）→ emotion アトリビュート名（Neutral は ""）
     intensity_plugs: list[str]
     dampen: float
@@ -224,7 +281,7 @@ class _Plan:
     skipped: list[str] = field(default_factory=list)  # 他から接続されていて配線しなかった weight
 
     def plug_map(self) -> dict[str, list[str]]:
-        return {t.alias: list(t.plugs) for t in self.targets}
+        return {t.alias: list(t.plugs) for t in (*self.targets, *self.ex_targets)}
 
 
 def _f(v: float) -> str:
@@ -267,28 +324,31 @@ def _axis_lines(tag: str, angle: str, range_deg: float, n: int, edge_fade: float
     return lines
 
 
-def _collect_targets(doc: Document, meshes: Sequence[str]) -> tuple[list[_Target], dict[int, str]]:
-    """シーンにある FC_<asset>_<layer>_R{r}_C{c}（格子の中・有効なレイヤー）を集める。"""
+def _collect_targets(doc: Document, meshes: Sequence[str]) -> tuple[list[_Target], dict[int, str], list[_Target]]:
+    """シーンにある FC_<asset>_<layer>_R{r}_C{c}（格子の中・有効なレイヤー）と、誇張用の `…_Ex` を集める。"""
     asset = doc.asset or ""
     prefix = doc.sculpt_shapes.prefix if doc.sculpt_shapes is not None else naming.DEFAULT_SCULPT_PREFIX
     layer_index = {layer.name: i for i, layer in enumerate(doc.layers)}
     attrs = emotion_attrs(doc)
     found: dict[str, _Target] = {}
+    found_ex: dict[str, _Target] = {}
     for mesh in meshes:
         for ref in scene_mod.fc_targets(mesh, prefix):
             parsed = naming.parse_name(ref.alias, asset)
-            if parsed is None or parsed.kind != naming.KIND_POINT:
+            if parsed is None or parsed.kind not in (naming.KIND_POINT, naming.KIND_POINT_EX):
                 continue
             li = layer_index.get(parsed.layer or "")
             if li is None or not doc.layers[li].enabled:
                 continue
             if not (0 <= parsed.row < doc.grid.rows and 0 <= parsed.col < doc.grid.cols):
                 continue
-            t = found.setdefault(ref.alias, _Target(ref.alias, li, parsed.row, parsed.col))
+            ex = parsed.kind == naming.KIND_POINT_EX
+            t = (found_ex if ex else found).setdefault(ref.alias, _Target(ref.alias, li, parsed.row, parsed.col, ex=ex))
             if ref.plug not in t.plugs:
                 t.plugs.append(ref.plug)
     targets = sorted(found.values(), key=lambda t: (t.layer, t.row, t.col))
-    return targets, {li: attrs.get(li, "") for li in sorted({t.layer for t in targets})}
+    ex_targets = sorted(found_ex.values(), key=lambda t: (t.layer, t.row, t.col))
+    return targets, {li: attrs.get(li, "") for li in sorted({t.layer for t in targets})}, ex_targets
 
 
 def _intensity_plugs(doc: Document, meshes: Sequence[str]) -> list[str]:
@@ -311,9 +371,9 @@ def _plan(doc: Document, own_nodes: Iterable[str] = ()) -> _Plan:
     meshes = _meshes(doc)
     joint = base_joint(doc)
     own = set(own_nodes)
-    targets, layer_attrs = _collect_targets(doc, meshes)
+    targets, layer_attrs, ex_targets = _collect_targets(doc, meshes)
     skipped: list[str] = []
-    for t in targets:  # 他の接続（アニメ・別の expression 等）が既にある weight は戦わないので配線しない
+    for t in (*targets, *ex_targets):  # 他の接続（アニメ・別の expression 等）が既にある weight は戦わないので配線しない
         free = []
         for p in t.plugs:
             srcs = cmds.listConnections(p, source=True, destination=False) or []
@@ -324,6 +384,12 @@ def _plan(doc: Document, own_nodes: Iterable[str] = ()) -> _Plan:
         t.plugs = free
     targets = [t for t in targets if t.plugs]
     layer_attrs = {li: layer_attrs[li] for li in sorted({t.layer for t in targets})}
+    # 誇張: 基になる FC_…（同じレイヤー・行・列）が配線されるものだけ（evaluate_correction と同じ。基が無い点の Ex は鳴らさない）
+    base_keys = {(t.layer, t.row, t.col) for t in targets}
+    ex_targets = [t for t in ex_targets if t.plugs and (t.layer, t.row, t.col) in base_keys]
+    sharp = evaluate.clamp_sharpness(doc.quality.sharpness) if doc.quality is not None else 1.0
+    use_sharp = sharp != 1.0
+    distance = {li: sp for li in layer_attrs if (sp := distance_spec(doc, li)) is not None}
 
     g = doc.grid
     dampen = evaluate.clamp(doc.policy.expression_dampen, 0.0, 1.0)
@@ -366,23 +432,62 @@ def _plan(doc: Document, own_nodes: Iterable[str] = ()) -> _Plan:
         L.append(f"$damp = 1.0 - {_f(dampen)} * clamp(0.0, 1.0, {' + '.join(inten)});")
     L.append("float $g = @RIG@.alpha * $fade * $damp;")
     L.append("if (@RIG@.enable == 0) $g = 0.0;")
-    for c in sorted({t.col for t in targets}):
-        L.append(f"float $wc{c} = (($c0 == {c}) ? (1.0 - $fc) : 0.0) + (($c1 == {c}) ? $fc : 0.0);")
-    for r in sorted({t.row for t in targets}):
-        L.append(f"float $wr{r} = (($r0 == {r}) ? (1.0 - $fr) : 0.0) + (($r1 == {r}) ? $fr : 0.0);")
+    wired = [*targets, *ex_targets]
+    if use_sharp:  # シャープニング: 4 隅の双線形の重みを w^s / Σ w^s に（端のフェード・レイヤーの重みを掛ける前）
+        L += [
+            "float $b00 = (1.0 - $fc) * (1.0 - $fr);",
+            "float $b01 = $fc * (1.0 - $fr);",
+            "float $b10 = (1.0 - $fc) * $fr;",
+            "float $b11 = $fc * $fr;",
+        ]
+        for k in ("00", "01", "10", "11"):
+            L.append(f"float $q{k} = ($b{k} > 0.0) ? pow($b{k}, {_f(sharp)}) : 0.0;")
+        L.append("float $qs = $q00 + $q01 + $q10 + $q11;")
+        L.append("if ($qs > 0.0) { $b00 = $q00 / $qs; $b01 = $q01 / $qs; $b10 = $q10 / $qs; $b11 = $q11 / $qs; }")
+        for c in sorted({t.col for t in wired}):
+            L.append(f"float $ca{c} = ($c0 == {c}); float $cb{c} = ($c1 == {c});")
+        for r in sorted({t.row for t in wired}):
+            L.append(f"float $ra{r} = ($r0 == {r}); float $rb{r} = ($r1 == {r});")
+    else:
+        for c in sorted({t.col for t in wired}):
+            L.append(f"float $wc{c} = (($c0 == {c}) ? (1.0 - $fc) : 0.0) + (($c1 == {c}) ? $fc : 0.0);")
+        for r in sorted({t.row for t in wired}):
+            L.append(f"float $wr{r} = (($r0 == {r}) ? (1.0 - $fr) : 0.0) + (($r1 == {r}) ? $fr : 0.0);")
+    if distance:
+        L.append("float $dist = sqrt($dx * $dx + $dy * $dy + $dz * $dz);")
+        L.append(f"@RIG@.{OUT_DISTANCE_ATTR} = $dist;")
     for li, attr in layer_attrs.items():
         if li == 0:
             L.append("float $gL0 = $g;")
+        elif li in distance:  # 距離で決める: emotion_<Layer> は使わない
+            sp = distance[li]
+            if sp["end"] == sp["start"]:
+                L.append(f"float $lw{li} = ($dist >= {_f(sp['start'])}) ? {_f(sp['to'])} : {_f(sp['from'])};")
+            else:
+                L.append(
+                    f"float $lw{li} = {_f(sp['from'])} + ({_f(sp['to'])} - {_f(sp['from'])}) * clamp(0.0, 1.0, ($dist - {_f(sp['start'])}) / ({_f(sp['end'])} - {_f(sp['start'])}));"
+                )
+            L.append(f"float $gL{li} = $g * $lw{li};")
         else:
             L.append(f"float $gL{li} = $g * @RIG@.{attr};")
+
+    def corner_weight(t: _Target) -> str:
+        if not use_sharp:
+            return f"$wc{t.col} * $wr{t.row}"
+        r, c = t.row, t.col
+        return f"($ra{r} * $ca{c} * $b00 + $ra{r} * $cb{c} * $b01 + $rb{r} * $ca{c} * $b10 + $rb{r} * $cb{c} * $b11)"
+
     for t in targets:
         for p in t.plugs:
-            L.append(f"{p} = $wc{t.col} * $wr{t.row} * $gL{t.layer};")
+            L.append(f"{p} = {corner_weight(t)} * $gL{t.layer};")
+    for t in ex_targets:
+        for p in t.plugs:
+            L.append(f"{p} = {corner_weight(t)} * $gL{t.layer} * @RIG@.{EXAGGERATION_ATTR};")
     template = "\n".join(L) + "\n"
     sig = hashlib.sha1(
-        (template + "|" + joint + "|" + "|".join(f"{k}={','.join(v)}" for k, v in sorted({t.alias: t.plugs for t in targets}.items()))).encode("utf-8")
+        (template + "|" + joint + "|" + "|".join(f"{k}={','.join(v)}" for k, v in sorted({t.alias: t.plugs for t in wired}.items()))).encode("utf-8")
     ).hexdigest()[:16]
-    return _Plan(doc.asset, joint, targets, layer_attrs, inten, dampen, template, sig, skipped)
+    return _Plan(doc.asset, joint, targets, ex_targets, sharp, distance, layer_attrs, inten, dampen, template, sig, skipped)
 
 
 # ---------------------------------------------------------------------------
@@ -399,9 +504,11 @@ class BuildReport:
     layers: list[str]
     expression_chars: int
     warnings: list[str] = field(default_factory=list)
+    extreme_targets: int = 0  # 配線した誇張用（_Ex）の数（targets には含めない）
 
     def summary(self) -> str:
-        return f"プレビュー: {self.rig}（ターゲット {self.targets}、式 {self.expression_chars} 文字）"
+        ex = f"、誇張 {self.extreme_targets}" if self.extreme_targets else ""
+        return f"プレビュー: {self.rig}（ターゲット {self.targets}{ex}、式 {self.expression_chars} 文字）"
 
 
 def _add_attr(rig: str, name: str, **kw) -> bool:
@@ -421,12 +528,15 @@ def _create_attrs(rig: str, doc: Document) -> None:
         pass
     if _add_attr(rig, "alpha", attributeType="double", minValue=0.0, maxValue=1.0, defaultValue=1.0, keyable=True):
         cmds.setAttr(f"{rig}.alpha", evaluate.clamp(doc.policy.global_alpha, 0.0, 1.0))
+    if _add_attr(rig, EXAGGERATION_ATTR, attributeType="double", minValue=0.0, maxValue=1.0, defaultValue=1.0, keyable=True):
+        q = doc.quality
+        cmds.setAttr(f"{rig}.{EXAGGERATION_ATTR}", evaluate.clamp(q.exaggeration if q is not None else 1.0, 0.0, 1.0))
     _add_attr(rig, "useManual", attributeType="bool", defaultValue=False, keyable=True)
     _add_attr(rig, "manualYaw", attributeType="double", defaultValue=0.0, keyable=True)
     _add_attr(rig, "manualPitch", attributeType="double", defaultValue=0.0, keyable=True)
     for _, attr in emotion_attrs(doc).items():
         _add_attr(rig, attr, attributeType="double", minValue=0.0, maxValue=1.0, defaultValue=0.0, keyable=True)
-    for a in ("outYaw", "outPitch"):
+    for a in ("outYaw", "outPitch", *((OUT_DISTANCE_ATTR,) if distance_layers(doc) else ())):
         if _add_attr(rig, a, attributeType="double", defaultValue=0.0):
             cmds.setAttr(f"{rig}.{a}", edit=True, channelBox=True)
     for a in ("tx", "ty", "tz", "rx", "ry", "rz", "sx", "sy", "sz", "v"):
@@ -507,7 +617,9 @@ def build_ex(doc: Document, camera: Optional[str] = None) -> BuildReport:
     cmds.setAttr(f"{rig}.{SIGNATURE_ATTR}", plan.signature, type="string")
     cmds.setAttr(f"{rig}.{ASSET_ATTR}", asset, type="string")
     warnings = [f"{p} は他から接続されているため配線しませんでした" for p in plan.skipped]
-    return BuildReport(rig, expr, plan.signature, len(plan.targets), [doc.layers[i].name for i in plan.layer_attrs], len(text), warnings)
+    return BuildReport(
+        rig, expr, plan.signature, len(plan.targets), [doc.layers[i].name for i in plan.layer_attrs], len(text), warnings, len(plan.ex_targets)
+    )
 
 
 def build(doc: Document, camera: Optional[str] = None) -> str:
@@ -522,7 +634,8 @@ def has_expression(asset: str) -> bool:
 
 
 def is_stale(doc: Document) -> bool:
-    """作ったあとで格子・レイヤー・存在する FC_* のターゲット・基準ボーン・表情での弱めの設定が変わった（= 作り直しが要る）か。
+    """作ったあとで格子・レイヤー・存在する FC_*（`_Ex` を含む）のターゲット・基準ボーン・表情での弱め・シャープさ・距離で決めるレイヤーの設定が変わった
+    （= 作り直しが要る）か。
     rig が無ければ False。rig はあるが式が無い（キーに焼いたあと）なら True。"""
     rig = find_rig(doc.asset or "")
     if rig is None:
@@ -607,11 +720,15 @@ def evaluate_python(
     enable: Optional[bool] = None,
     manual: Optional[tuple[float, float]] = None,
     use_manual: Optional[bool] = None,
+    exaggeration: Optional[float] = None,
+    distance: Optional[float] = None,
 ) -> dict:
-    """rig と同じ計算を core.evaluate で行う。戻り: {"yaw", "pitch", "weights": {ターゲット名: 重み}}（配線される全ターゲット。0 も含む）。
+    """rig と同じ計算を core.evaluate で行う。戻り: {"yaw", "pitch", "distance", "weights": {ターゲット名: 重み}}（配線される全ターゲット。`_Ex` と 0 も含む）。
 
-    emotions（レイヤー名 → 0〜1）・alpha・enable・manual（(Yaw, Pitch)）・use_manual は、省くと rig があればその値、無ければ既定
-    （感情 0・alpha = policy.globalAlpha・enable・カメラから）。表情での弱めはシーンの今の blendShape の重みを読む。
+    emotions（レイヤー名 → 0〜1）・alpha・enable・manual（(Yaw, Pitch)）・use_manual・exaggeration は、省くと rig があればその値、無ければ既定
+    （感情 0・alpha = policy.globalAlpha・enable・カメラから・exaggeration = quality.exaggeration）。表情での弱めはシーンの今の blendShape の重みを読む。
+    距離で重みを決めるレイヤーは emotions を無視し、距離 d（省くとカメラと格子の中心の距離）から `layer_weight_from_distance` で決める。
+    sharpness は doc.quality から。
     """
     pose_apply.assert_maya_space(doc)
     asset = doc.asset or ""
@@ -632,30 +749,40 @@ def evaluate_python(
         yaw, pitch = manual if manual is not None else (float(rig_attr("manualYaw", 0.0)), float(rig_attr("manualPitch", 0.0)))
     else:
         yaw, pitch = view_angles(doc, camera)
+    if exaggeration is None:
+        exaggeration = float(rig_attr(EXAGGERATION_ATTR, doc.quality.exaggeration if doc.quality is not None else 1.0))
+    if plan.distance and distance is None:
+        distance = view_distance(doc, camera)
     attrs = emotion_attrs(doc)
     g = doc.grid
     shape = evaluate.GridShape(g.yaw_range, g.pitch_range, g.cols, g.rows, g.edge_fade)
     names: dict[tuple[int, int, int], str] = {(t.layer, t.row, t.col): t.alias for t in plan.targets}
+    ex_names: dict[tuple[int, int, int], str] = {(t.layer, t.row, t.col): t.alias for t in plan.ex_targets}
     layers: list[evaluate.LayerEvalInput] = []
     for li, layer in enumerate(doc.layers):
-        if emotions is not None and layer.name in emotions:
+        if li in plan.distance:
+            sp = plan.distance[li]
+            w = evaluate.layer_weight_from_distance(float(distance), sp["start"], sp["end"], sp["from"], sp["to"])
+        elif emotions is not None and layer.name in emotions:
             w = float(emotions[layer.name])
         elif li > 0 and rig and attrs.get(li):
             w = float(rig_attr(attrs[li], 0.0))
         else:
             w = 0.0
-        if li > 0:
+        if li > 0 and li not in plan.distance:
             w = evaluate.clamp(w, 0.0, 1.0)  # rig のアトリビュートは 0〜1 に収まる
         corner = [names.get((li, r, c)) for r in range(g.rows) for c in range(g.cols)]
-        layers.append(evaluate.LayerEvalInput(corner, w, layer.enabled))
-    out = {t.alias: 0.0 for t in plan.targets}
+        ex_corner = [ex_names.get((li, r, c)) for r in range(g.rows) for c in range(g.cols)] if ex_names else None
+        layers.append(evaluate.LayerEvalInput(corner, w, layer.enabled, ex_corner))
+    out = {t.alias: 0.0 for t in (*plan.targets, *plan.ex_targets)}
     scale = float(alpha) if enable else 0.0
     if plan.intensity_plugs:
         s = sum(float(cmds.getAttr(p)) for p in plan.intensity_plugs)
         scale *= evaluate.expression_scale(plan.dampen, s)
-    for mw in evaluate.evaluate_correction(shape, layers, yaw, pitch):
+    sharp = doc.quality.sharpness if doc.quality is not None else 1.0
+    for mw in evaluate.evaluate_correction(shape, layers, yaw, pitch, sharp, evaluate.clamp(float(exaggeration), 0.0, 1.0)):
         out[mw.morph_name] = out.get(mw.morph_name, 0.0) + mw.weight * scale
-    return {"yaw": yaw, "pitch": pitch, "weights": out}
+    return {"yaw": yaw, "pitch": pitch, "distance": distance, "weights": out}
 
 
 # ---------------------------------------------------------------------------

@@ -1054,6 +1054,8 @@ class GridTab(QtWidgets.QWidget):
         lines = [report.summary()]
         for n in report.notes:
             lines.append(n)
+        if report.extreme:
+            lines.append(f"誇張用のシェイプ（重み 1 を超えたポーズの分 _Ex）: {len(report.extreme)} 個")
         if report.empty:
             lines.append(f"差分が残らなかった点（空のシェイプ）: {len(report.empty)} 個")
         if report.missing_curves:

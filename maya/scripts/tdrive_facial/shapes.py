@@ -46,6 +46,7 @@ from maya.api import OpenMaya as om
 
 from . import scene
 from .core import naming, space
+from .core import validate as V
 from .core import profile as profile_mod
 from .core.model import Document
 
@@ -701,7 +702,7 @@ def add_inbetween(
 
 
 def make_exaggeration(ctx: ShapeCtx, name: str, delta: Optional[np.ndarray] = None) -> ShapeResult:
-    """誇張形 `<name>_Ex` を作る（R-37 の準備。評価は F5）。形 = 今のシーンの形（name 自身の重みは 0 で測る）− name の差分。
+    """誇張形 `<name>_Ex` を作る（R-37）。形 = 今のシーンの形（name 自身の重みは 0 で測る）− name の差分。
 
     つまり `_Ex` は「name を 1 にした形に足す分」。可動域の上限を 2 に開く設定は呼ぶ側（session.set_limit）が行う。
     """
@@ -719,7 +720,7 @@ def make_exaggeration(ctx: ShapeCtx, name: str, delta: Optional[np.ndarray] = No
         res = ShapeResult(message=f"誇張形 {ex} を{'置き換え' if was else '作成'}しました（頂点 {n}）。{name} の可動域を 0〜2 にします")
         (res.replaced if was else res.created).append(ex)
         res.stats = {"vertices": n, "extreme": ex}
-        res.notes.append("誇張の評価（重み 1 を超えたときに _Ex を足す）は F5 で入ります。今はシェイプと可動域の準備だけです")
+        res.notes.append("ポーズでこのシェイプを 1 より大きくした分は、ベイクのとき誇張用のシェイプ（FC_…_Ex）に分けて焼かれます")
         return res
 
 
@@ -989,7 +990,9 @@ def audit(ctx: ShapeCtx, doc: Document) -> Audit:
     from . import bake as bake_mod  # 循環を避ける
 
     refs = referenced_names(doc)
-    live = {(doc.layers[li].name, r, c) for li, r, c in bake_mod._live_points(doc)}
+    live_pts = bake_mod._live_points(doc)
+    live = {(doc.layers[li].name, r, c) for li, r, c in live_pts}
+    live_ex = {(doc.layers[li].name, r, c) for li, r, c in live_pts if V.needs_extreme(doc, li, (r, c))}  # 誇張用 _Ex が要る点
     out = Audit()
     drivers: set[str] = set()
     infos = list_shapes(ctx)
@@ -1002,7 +1005,7 @@ def audit(ctx: ShapeCtx, doc: Document) -> Audit:
         if s.tag == TAG_COMBO or s.name in drivers:
             continue
         if s.tag == TAG_FC:
-            if bake_mod._is_orphan(doc, s.name, live):
+            if bake_mod._is_orphan(doc, s.name, live, live_ex):
                 out.orphan_fc.append(s.name)
             continue
         if s.name not in refs:

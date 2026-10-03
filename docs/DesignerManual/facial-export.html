@@ -23,7 +23,7 @@
 <tr><th>項目</th><th>内容</th></tr>
 <tr><td><strong>Unity 向けに出力</strong></td><td>FBX と補正データ（<span class="path">.fcpose</span>）を書き出します。別のプロセスで書くので、Maya の画面は止まりません（「書き出し中… ○ 秒」と出ます）。<strong>中止</strong>・<strong>フォルダを開く</strong>もあります。開いているシーンは変わりません</td></tr>
 <tr><td>UE 版向けに出力…</td><td>補正データを <span class="path">.fcpose.json</span> のまま書き出します（Unreal Engine 版の FacialController 用）</td></tr>
-<tr><td>Timeline 用に出力（.fctrack）</td><td>プレビューの強さ・感情・手動角度に打ったキーを、ショットごとのファイル（<span class="path">&lt;ショット名&gt;__&lt;モデル名&gt;.fctrack</span>）にします。<strong>Unity 側の取り込みは <span class="soon">準備中</span></strong>（先に書き出しておけます）</td></tr>
+<tr><td>Timeline 用に出力（.fctrack）</td><td>プレビューの強さ・感情・手動角度に打ったキーを、ショットごとのファイル（<span class="path">&lt;ショット名&gt;__&lt;モデル名&gt;.fctrack</span>）にします。置いたあとの流れは<a href="#fctrack">下の説明</a>。誇張の強さは入りません</td></tr>
 </table>
 <p>出力の前に自動で検証が走り、エラー・未ベイク・ベイク後の変更があれば、<strong>それでも出力する / やめる</strong>を聞かれます。出力前に<a href="facial-layers.html#validate">検証タブ</a>で直しておくのがおすすめです。</p>
 
@@ -78,7 +78,8 @@
 <tr><td>角度を固定する / Yaw / Pitch</td><td>オンにすると、カメラの位置に関係なく、ここで決めた角度で補正します（決め構図用）。Yaw はキャラクターの正面が 0 で、カメラがキャラクターから見て左にあると正。Pitch はカメラが上（ふかん）で正</td></tr>
 <tr><td>視点</td><td>補正の基準にするカメラなど。空なら、Runner の設定（なければメインカメラ）に従います</td></tr>
 <tr><td>カット補正（ポーズ / ポーズの重み）</td><td>このクリップの間だけ、1 点のポーズ（<span class="path">.fcpose</span> から取り込んだもの）を足します。ショットごとの手直し用です。元のデータは変わらず、クリップが終わると元に戻ります</td></tr>
-<tr><td>コマ打ち <span class="soon">準備中</span></td><td>欄はありますが、まだ効きません</td></tr>
+<tr><td>コマ打ち（コマ打ちを使う / fps）</td><td>オンにすると、このクリップの間だけ補正の更新をこの fps に間引きます（0 = 毎フレーム）。更新の間は前の重みのまま止まります</td></tr>
+<tr><td>誇張（誇張を使う / 0〜1）</td><td>オンにすると、このクリップの間だけ誇張用シェイプ（<code>FC_…_Ex</code>）の強さを変えます。1 = 作った通り、0 = 誇張なし。誇張用シェイプの無いキャラクターでは変わりません</td></tr>
 </table>
 <ul>
 <li><strong>クリップが重なっている所は、なめらかにブレンドされます</strong></li>
@@ -122,8 +123,9 @@
 <tr><td>距離フェード 開始 / 終了（m）</td><td>視点が遠くなると補正が弱まり始める距離 / 補正が 0 になる距離。開始 = 終了 = 0 で無効</td></tr>
 <tr><td>表情での弱め具合</td><td>表情が強いとき補正を弱める度合い（0〜1）。0 = 弱めない</td></tr>
 <tr><td>端のフェード（度）</td><td>格子の範囲の外側で、補正が 0 へ消えていく幅</td></tr>
-<tr><td>シャープさ <span class="soon">準備中</span></td><td>キー角度の近くでキーのポーズそのものに寄せる度合い。欄はありますが、まだ効きません</td></tr>
-<tr><td>コマ打ち fps <span class="soon">準備中</span></td><td>補正の更新を間引く fps。欄はありますが、まだ効きません</td></tr>
+<tr><td>シャープさ</td><td>1 = そのまま。大きいほど、キーの角度のそばでキーのポーズそのものに寄ります</td></tr>
+<tr><td>コマ打ち fps</td><td>補正の更新をこの回数 / 秒に間引きます（0 = 毎フレーム）</td></tr>
+<tr><td>誇張（0〜1）</td><td>誇張用シェイプ（<code>FC_…_Ex</code>）の強さ。1 = 作った通り、0 = 誇張なし</td></tr>
 </table>
 
 <h2>Unity でできないこと</h2>
@@ -135,7 +137,7 @@
 <h2 id="soon">準備中の機能</h2>
 <table>
 <tr><th>機能</th><th>状態</th></tr>
-<tr><td>シャープさ・コマ打ち・距離でレイヤーの重み・パース補正・誇張の評価・部位別の強さ・LOD1 以降へのベイク・リップシンク</td><td><span class="soon">準備中</span></td></tr>
+<tr><td>パース補正・部位別の強さ・LOD1 以降へのベイク・リップシンク</td><td><span class="soon">準備中</span></td></tr>
 <tr><td>Maya のターンテーブル</td><td><span class="soon">準備中</span></td></tr>
 </table>
 <p>シェイプタブ・アニメから読み込む・他のデータからコピー・Timeline のトラック・デバッグ表示は、使えます（<a href="facial.html#now">今できること</a>）。</p>

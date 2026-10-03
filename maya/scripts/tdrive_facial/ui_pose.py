@@ -41,6 +41,9 @@ OK_STYLE = "color: #9aa6b8;"
 ERR_STYLE = "color: #ff8a80;"
 EDITED_STYLE = "color: #f0c060; font-weight: bold;"  # 0 でない / 恒等でない行（Toon の「上書き中」と同じ色）
 MISSING_STYLE = "color: #ff8a80;"
+EXCLUDED_STYLE = "color: #6c7686; font-style: italic;"  # 補正の除外に当たる行（ベイクでは無視される）
+EXCLUDED_TIP = "補正の除外に当たるため、ベイクでは無視されます（セットアップタブの「補正から除外するもの」）"
+EXTREME_TIP = "重みが 1 を超えた分は、ベイクで誇張用のシェイプ（_Ex）に入ります"
 WARN_STYLE = "color: #ffb74d; font-weight: bold;"  # 土台と合わせて可動域を超えた行
 BASE_STYLE = "color: #7f8ba0; font-size: 11px;"  # 「+0.60（土台）」
 DIRTY_COLOR = "#ff9f1c"
@@ -125,6 +128,7 @@ class _CurveRowWidgets:
         self.base_label.setVisible(False)
         self._edited = False
         self._missing = False
+        self._excluded = False
         self._over: Optional[float] = None
         self._tips: list[str] = [row.name]
 
@@ -143,7 +147,7 @@ class _CurveRowWidgets:
             self.base_label.setStyleSheet(WARN_STYLE if over is not None else BASE_STYLE)
             self.base_label.setVisible(True)
         tip = f"土台と合わせて可動域を超えています（{over:.2f}）" if over is not None else ""
-        self.base_label.setToolTip(tip or ("土台の表情が足している値です。シーンにはポーズの値にこれを足して当たります（データには入りません）" if base is not None else ""))
+        self.base_label.setToolTip(tip or ("土台の表情が足している値です。シーンにはポーズの値にこれを足して当たります（データにもベイクにも入りません）" if base is not None else ""))
         self.label.setToolTip(" / ".join(self._tips + ([tip] if tip else [])))
         self._restyle()
 
@@ -179,7 +183,9 @@ class _CurveRowWidgets:
 
     def _restyle(self) -> None:
         self.label.setStyleSheet(
-            MISSING_STYLE if self._missing else (WARN_STYLE if self._over is not None else (EDITED_STYLE if self._edited else ""))
+            MISSING_STYLE
+            if self._missing
+            else (EXCLUDED_STYLE if self._excluded else (WARN_STYLE if self._over is not None else (EDITED_STYLE if self._edited else "")))
         )
 
     def show(self, value: float) -> None:
@@ -197,6 +203,12 @@ class _CurveRowWidgets:
         tips.append(f"範囲 {row.lo:g} 〜 {row.hi:g}" + ("" if row.explicit_limit else "（既定）"))
         if not row.in_working_set:
             tips.append("作業セットの外")
+        self._excluded = self.tab.session.is_excluded("curve", row.name)
+        if self._excluded:
+            tips.append(EXCLUDED_TIP)
+        if row.value > 1.0 + 1e-6:
+            tips.append(EXTREME_TIP)
+        self._restyle()
         self._tips = tips
         self.label.setToolTip(" / ".join(tips + ([f"土台と合わせて可動域を超えています（{self._over:.2f}）"] if self._over is not None else [])))
 
@@ -253,12 +265,15 @@ class _BoneRowWidgets:
             sp.blockSignals(True)
             sp.setValue(val)
             sp.blockSignals(False)
-        self.radio.setStyleSheet(MISSING_STYLE if row.missing else (EDITED_STYLE if row.edited else ""))
+        excluded = self.tab.session.is_excluded("bone", row.name)
+        self.radio.setStyleSheet(MISSING_STYLE if row.missing else (EXCLUDED_STYLE if excluded else (EDITED_STYLE if row.edited else "")))
         tips = [row.name]
         if row.missing:
             tips.append("このモデルに無いボーンです")
         if not row.in_working_set:
             tips.append("作業セットの外")
+        if excluded:
+            tips.append(EXCLUDED_TIP)
         self.radio.setToolTip(" / ".join(tips))
 
 
@@ -452,8 +467,11 @@ lifecycle.on_reload(_detach_all)
 class PoseTab(QtWidgets.QWidget):
     """ポーズタブ。`refresh()` で全部描き直し、`detach()` で通知の購読をやめる。"""
 
-    _BASE_HINT = "表情を下敷きとして当てます。ポーズの値に足して表示されます（データには入りません）"
-    _BASE_TIP = "表情のアニメ（Unity の .anim）の値を下敷きとして当て、その表情のときの補正を確かめます。ポーズの値に足してシーンに出ます（ゲームと同じ）。データには入りません。シェイプだけで、編集を終えると外れます"
+    _BASE_HINT = "土台の表情の値は、ポーズの値に足されてシーンに当たります（ゲームと同じ。データにもベイクにも入りません）"
+    _BASE_TIP = (
+        "表情のアニメ（Unity の .anim）の値を、ポーズの値に足してシーンに当て、その表情のときの補正を確かめます（ゲームと同じ）。"
+        "データにもベイクにも入りません。シェイプだけで、編集を終えると外れます"
+    )
     _CAPTURE_TIP = "Maya のシェイプエディタ・チャンネルボックス・回転 / 移動ツールで動かした値を、編集中のポーズへ取り込みます。取り込んだあと「保存」で点に書きます"
 
     def __init__(self, session) -> None:
@@ -556,7 +574,7 @@ class PoseTab(QtWidgets.QWidget):
         self.btn_base_pick.setToolTip(self._BASE_TIP)
         self.btn_base_pick.clicked.connect(lambda *_: self.on_base_pick())
         self.btn_base_clear = QtWidgets.QPushButton("外す")
-        self.btn_base_clear.setToolTip("土台の表情を外します（編集中のポーズだけがシーンに残ります）")
+        self.btn_base_clear.setToolTip("土台の表情を外します（ポーズの値だけがシーンに当たる状態に戻ります）")
         self.btn_base_clear.clicked.connect(lambda *_: self.on_base_clear())
         row.addWidget(self.base_label, 1)
         row.addWidget(self.btn_base_pick)

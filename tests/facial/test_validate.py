@@ -460,11 +460,12 @@ def test_point_changed_since_bake_and_baked_morph_missing():
 
 def test_orphan_targets():
     doc = make_doc()
+    doc.layers[0].points[(1, 2)].pose.curves["bs.smile_L"] = 1.5  # 重み 1 超 → この点の _Ex は要る（R-37）
     doc.perspective = m.Perspective(enabled=True, keys=[{}, {}])
     scene = make_scene(doc)
     scene.targets = {
         MORPH,
-        "FC_a_Neutral_R1_C2_Ex",  # 点がある → 孤立ではない
+        "FC_a_Neutral_R1_C2_Ex",  # 点があり、重み 1 超がある → 孤立ではない
         "FC_a_Neutral_R0_C0",  # 点が無い
         "FC_a_Joy_R1_C2",  # レイヤーが無い
         "FC_a_Persp_K1",  # キーがある
@@ -476,6 +477,9 @@ def test_orphan_targets():
     got = sorted(i.name for i in run(doc, scene) if i.code == "orphan_target")
     assert got == ["FC_a_Joy_R1_C2", "FC_a_Neutral_R0_C0", "FC_a_Persp_K2", "FC_a_garbage"]
     assert "orphan_target" not in codes(run())
+    # 重み 1 超が無くなった点の _Ex は孤立（ベイクで消える）。感情レイヤーは Neutral の同じ点に誇張があれば要る
+    doc.layers[0].points[(1, 2)].pose.curves["bs.smile_L"] = 1.0
+    assert "FC_a_Neutral_R1_C2_Ex" in [i.name for i in run(doc, scene) if i.code == "orphan_target"]
 
 
 def test_orphan_when_point_outside_grid_or_empty_pose():

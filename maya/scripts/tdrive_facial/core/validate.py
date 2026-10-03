@@ -190,6 +190,46 @@ def _in_grid(doc: Document, rc: tuple[int, int]) -> bool:
     return 0 <= rc[0] < doc.grid.rows and 0 <= rc[1] < doc.grid.cols
 
 
+EXTREME_EPS = 1e-6  # 重みが 1 を超えているとみなす余裕（pose_hash の丸めと同じ 1e-6）
+
+
+def extreme_curves(doc: Document, pose: SourcePose) -> list[str]:
+    """ポーズのうち、重みが 1 を超えるシェイプの名前（誇張。R-37）。補正除外に当たるものは焼かれないので数えない。"""
+    return [n for n, w in pose.curves.items() if w > 1.0 + EXTREME_EPS and not is_mirror_excluded(n, doc.exclude.curves)]
+
+
+def has_extreme(doc: Document, pose: SourcePose) -> bool:
+    """ポーズに重み 1 超のシェイプがあるか（あれば `_Ex` を焼く）。"""
+    return bool(extreme_curves(doc, pose))
+
+
+def clamp_extreme(pose: SourcePose) -> SourcePose:
+    """重みを 1 までに丸めたポーズの複製（誇張を除いた「通常の」形を焼くため）。ボーンはそのまま。"""
+    out = SourcePose()
+    out.curves = {n: min(w, 1.0) for n, w in pose.curves.items()}
+    out.bones = dict(pose.bones)
+    return out
+
+
+def needs_extreme(doc: Document, layer_index: int, rc: tuple[int, int]) -> bool:
+    """この点に `_Ex` を焼くか。
+    - その点のポーズに重み 1 超のシェイプがある
+    - または感情レイヤーで、差分ベイク（bake.differential）が有効、かつ Neutral の同じ位置の点に重み 1 超がある
+      （感情の差分は Neutral の通常 / 誇張それぞれを引いて焼くため、Neutral に誇張があると感情側にも誇張の差分が要る）
+    """
+    layer = doc.layers[layer_index]
+    pt = layer.points.get(rc)
+    if pt is None or pt.pose.is_empty() or not _in_grid(doc, rc):
+        return False
+    if has_extreme(doc, pt.pose):
+        return True
+    differential = doc.bake.differential if doc.bake is not None else True
+    if layer_index > 0 and differential:
+        npt = doc.layers[0].points.get(rc)
+        return npt is not None and has_extreme(doc, npt.pose)
+    return False
+
+
 def _where(li: Optional[int], doc: Document, rc: Optional[tuple[int, int]]) -> str:
     if li is None:
         return ""
@@ -217,6 +257,7 @@ def validate(
         add(Issue("asset_missing", SEVERITY_ERROR, "アセット名（asset）が空です。FC_<asset>_… の名前を作れません"))
     _check_grid(doc, scene, add)
     _check_layers(doc, add)
+    _check_layer_weights(doc, add)
 
     # --- 参照（シェイプ・ボーン）---
     curve_refs, bone_refs = _collect_refs(doc)
@@ -438,6 +479,31 @@ def _check_layers(doc: Document, add) -> None:
 _Loc = Optional[tuple[int, tuple[int, int]]]  # (layer index, (row, col))。作業セットなど点以外は None
 
 
+LAYER_WEIGHT_SOURCES = ("direct", "curve", "distance")
+
+
+def _check_layer_weights(doc: Document, add) -> None:
+    """重みの出どころ（layerWeights。R-35）: 存在しないレイヤー・知らない種類・距離の指定の不備。"""
+    if not doc.layer_weights:
+        return
+    names = {l.name for l in doc.layers}
+    for name, spec in doc.layer_weights.items():
+        if name not in names:
+            add(Issue("layer_weight_unknown_layer", SEVERITY_WARNING, f"重みの出どころの設定が、存在しないレイヤー「{name}」を指しています", name=name))
+            continue
+        src = spec.get("source", "curve")
+        if src not in LAYER_WEIGHT_SOURCES:
+            add(Issue("layer_weight_invalid", SEVERITY_WARNING, f"レイヤー「{name}」の重みの出どころ「{src}」は知らない種類です（直接 / カーブ / 距離）", name=name))
+            continue
+        if src != "distance":
+            continue
+        vals = [spec.get(k) for k in ("start", "end", "from", "to")]
+        if any(not isinstance(v, (int, float)) or isinstance(v, bool) or not math.isfinite(v) for v in vals):
+            add(Issue("layer_weight_invalid", SEVERITY_WARNING, f"レイヤー「{name}」の距離の設定（開始・終了・から・まで）に数値でないものがあります", name=name))
+        elif vals[0] < 0 or vals[1] < 0 or not (0.0 <= vals[2] <= 1.0 and 0.0 <= vals[3] <= 1.0):
+            add(Issue("layer_weight_invalid", SEVERITY_WARNING, f"レイヤー「{name}」の距離の設定が範囲外です（距離は 0 以上、重みは 0〜1）", name=name))
+
+
 def _collect_refs(doc: Document) -> tuple[dict[str, list[_Loc]], dict[str, list[_Loc]]]:
     """使われているシェイプ名・ボーン名 → 使われている場所。（基準ボーンは別に検査する）"""
     curves: dict[str, list[_Loc]] = {}
@@ -649,12 +715,14 @@ def _bake_candidates(doc: Document):
 def _check_bake(doc: Document, scene: SceneInfo, bake_state: Optional[Mapping[str, str]], add) -> None:
     if bake_state is None:
         return
+    targets = set(scene.targets) if scene.targets is not None else None
     for li, layer, rc, pt in _bake_candidates(doc):
         morph = naming.morph_name(doc.asset or "", layer.name, rc[0], rc[1])
         base = dict(layer=li, row=rc[0], col=rc[1], name=morph)
         if morph not in bake_state:
             add(Issue("point_unbaked", SEVERITY_INFO, f"未ベイクの点: {_where(li, doc, rc)}", **base))
-        elif scene.targets is not None and morph not in set(scene.targets):
+            continue
+        if targets is not None and morph not in targets:
             add(
                 Issue(
                     "baked_morph_missing",
@@ -663,7 +731,8 @@ def _check_bake(doc: Document, scene: SceneInfo, bake_state: Optional[Mapping[st
                     **base,
                 )
             )
-        elif bake_state[morph] != pose_hash(pt.pose):
+            continue
+        if bake_state[morph] != pose_hash(pt.pose):
             add(
                 Issue(
                     "point_changed_since_bake",
@@ -672,6 +741,22 @@ def _check_bake(doc: Document, scene: SceneInfo, bake_state: Optional[Mapping[st
                     **base,
                 )
             )
+            continue
+        # 誇張用 `_Ex`（重み 1 超）: 要るのに無い = 誇張を足す前に焼いた / `_Ex` が消えた
+        if needs_extreme(doc, li, rc):
+            ex = naming.morph_name(doc.asset or "", layer.name, rc[0], rc[1], extreme=True)
+            if ex not in bake_state or (targets is not None and ex not in targets) or bake_state[ex] != bake_state[morph]:
+                add(
+                    Issue(
+                        "point_changed_since_bake",
+                        SEVERITY_WARNING,
+                        f"誇張用シェイプ（重み 1 超の分）が未ベイクの点: {_where(li, doc, rc)}（再ベイクしてください）",
+                        layer=li,
+                        row=rc[0],
+                        col=rc[1],
+                        name=ex,
+                    )
+                )
 
 
 def _check_targets(doc: Document, scene: SceneInfo, add) -> None:
@@ -679,6 +764,7 @@ def _check_targets(doc: Document, scene: SceneInfo, add) -> None:
         return
     asset = doc.asset or ""
     live = {(layer.name, rc[0], rc[1]) for _li, layer, rc, _pt in _bake_candidates(doc)}
+    live_ex = {(layer.name, rc[0], rc[1]) for li, layer, rc, _pt in _bake_candidates(doc) if needs_extreme(doc, li, rc)}
     n_persp = len(doc.perspective.keys) if doc.perspective is not None else 0
     head = f"{naming.FC_PREFIX}{asset}_"
     for t in sorted(scene.targets):
@@ -689,9 +775,14 @@ def _check_targets(doc: Document, scene: SceneInfo, add) -> None:
         why = ""
         if p is None:
             orphan, why = True, "名前の規則に合いません"
-        elif p.kind in (naming.KIND_POINT, naming.KIND_POINT_EX):
+        elif p.kind == naming.KIND_POINT:
             if (p.layer, p.row, p.col) not in live:
                 orphan, why = True, "格子に対応する点がありません"
+        elif p.kind == naming.KIND_POINT_EX:
+            if (p.layer, p.row, p.col) not in live:
+                orphan, why = True, "格子に対応する点がありません"
+            elif (p.layer, p.row, p.col) not in live_ex:
+                orphan, why = True, "その点に重み 1 を超えるシェイプがありません（誇張が要らなくなりました）"
         elif p.kind == naming.KIND_PERSP:
             if (p.index or 0) >= n_persp:
                 orphan, why = True, "対応するパース補正のキーがありません"
