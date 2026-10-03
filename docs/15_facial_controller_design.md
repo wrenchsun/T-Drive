@@ -301,6 +301,7 @@ public sealed class FacialCorrectionRunner : MonoBehaviour {
 ```
 
 - 計算は `FacialCore`（静的関数・割り当てなし）。Runner は Unity の入出力だけ（座標変換 → Core → `SetBlendShapeWeight(index, w * 100)`）
+- 実装で決めたこと（2026-10-03）: 取り込み時に Unity の系へ変換して持つ（`forwardAxis`・`centerOffset`・距離フェードの距離 = m）。角度の優先は「角度を直接指定した評価 > 1 フレーム限りの上書き > 手動角度 > 視点」、視点の優先は「上書きの視点 > `viewerOverride` > メインカメラ」。距離フェードの距離は基準ボーンから測る。対象メッシュが見つからないときは 120 フレームごとに探し直す。`maxLod` は値を持つだけで未使用（LODGroup が無いと今の LOD を安く取れないため。F5 で検討）。可動域（`limits`）は FC_* の名前に対してだけ効く
 - 編集時プレビュー: `[ExecuteAlways]` にはせず、エディタ側のプレビュー用ドライバが `Evaluate(sceneViewCamera)` を呼ぶ（保存データを汚さない。プレビューを切ると 0 に戻す）
 - 表情の強さ = `intensityCurves`（無ければ作業セット）のシェイプの現在値の合計（LateUpdate 時点 = アニメーション適用後）
 

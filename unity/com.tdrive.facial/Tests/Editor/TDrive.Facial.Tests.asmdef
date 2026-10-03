@@ -1,7 +1,7 @@
 {
   "name": "TDrive.Facial.Tests",
   "rootNamespace": "TDrive.Facial.Tests",
-  "references": ["TDrive.Facial.Core", "UnityEngine.TestRunner", "UnityEditor.TestRunner"],
+  "references": ["TDrive.Facial.Core", "TDrive.Facial.Runtime", "TDrive.Facial.Editor", "UnityEngine.TestRunner", "UnityEditor.TestRunner"],
   "includePlatforms": ["Editor"],
   "excludePlatforms": [],
   "allowUnsafeCode": false,

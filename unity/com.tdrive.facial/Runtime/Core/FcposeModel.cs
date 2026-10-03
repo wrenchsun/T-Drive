@@ -1,0 +1,128 @@
+// .fcpose の素のデータ型（UnityEngine 非依存）。Python 版 core/model.py のうち、ランタイムが使う部分の写し。
+// 既定値は model.py と同じ（欠けたキーはこの既定値になる）。座標は meta の系のまま（変換は FacialSpace が受け持つ）。
+using System.Collections.Generic;
+
+namespace TDrive.Facial.Core
+{
+    public sealed class FcBone
+    {
+        public Vec3 T = new Vec3(0, 0, 0);
+        public Quat R = new Quat(0, 0, 0, 1); // [x, y, z, w]。正規化しない
+        public Vec3 S = new Vec3(1, 1, 1);
+    }
+
+    /// <summary>1 点分のポーズ。名前は大文字小文字を区別する。</summary>
+    public sealed class FcPose
+    {
+        public readonly Dictionary<string, double> Curves = new Dictionary<string, double>();
+        public readonly Dictionary<string, FcBone> Bones = new Dictionary<string, FcBone>();
+    }
+
+    public sealed class FcPoint
+    {
+        public int Row;
+        public int Col;
+        public bool IsKey;
+        public FcPose Pose = new FcPose();
+    }
+
+    public sealed class FcLayer
+    {
+        public string Name = "Neutral";
+        public string EmotionCurve = "";
+        public bool Enabled = true;
+        /// <summary>作った点だけ（読んだ順）。格子の外の点も保持する。</summary>
+        public readonly List<FcPoint> Points = new List<FcPoint>();
+
+        /// <summary>(row, col) の点。無ければ null。</summary>
+        public FcPoint FindPoint(int row, int col)
+        {
+            for (int i = 0; i < Points.Count; i++)
+                if (Points[i].Row == row && Points[i].Col == col) return Points[i];
+            return null;
+        }
+    }
+
+    public sealed class FcMeta
+    {
+        public string Unit = "cm";
+        public string UpAxis = "Z";
+        public string Handedness = "left";
+        public string Source = "";
+    }
+
+    public sealed class FcGrid
+    {
+        public double YawRange = 90.0;
+        public double PitchRange = 45.0;
+        public int Cols = 5;
+        public int Rows = 3;
+        public string BaseBone = "head";
+        public string ForwardAxis = "+X";
+        public Vec3 CenterOffset = new Vec3(0, 0, 0);
+        public double EdgeFade = 15.0;
+    }
+
+    public sealed class FcPolicy
+    {
+        public double ExpressionDampen = 0.5;
+        public double InterpSpeed = 10.0;
+        public double SnapAngle = 45.0;
+        public double FadeStart = 0.0; // 距離フェード（meta の長さの単位。開始 = 終了 = 0 で無効）
+        public double FadeEnd = 0.0;
+        public double GlobalAlpha = 1.0;
+    }
+
+    public sealed class FcQuality
+    {
+        public double Sharpness = 1.0;
+        public double StepFps = 0.0;
+        public double AngleEpsilon = 0.1;
+        public int MaxLod = 0;
+    }
+
+    public sealed class FcLimit
+    {
+        public double Min;
+        public double Max;
+    }
+
+    /// <summary>"format": "FacialCorrection"（全アセット）。T-Drive の追加キーは無ければ null / 既定値。</summary>
+    public sealed class FcDocument
+    {
+        public int Version = FcposeReader.SupportedVersion;
+        public FcMeta Meta = new FcMeta();
+        public FcGrid Grid = new FcGrid();
+        public FcPolicy Policy = new FcPolicy();
+        public readonly List<FcLayer> Layers = new List<FcLayer>();
+        public readonly List<string> WorkingCurves = new List<string>();
+        public readonly List<string> WorkingBones = new List<string>();
+        public readonly List<string> ExcludeCurves = new List<string>();
+        public readonly List<string> ExcludeBones = new List<string>();
+        public readonly List<string> IntensityCurves = new List<string>();
+        public string Profile = "";
+        // --- T-Drive の追加キー ---
+        public string Asset;                // null = JSON に無い
+        public string TargetMesh = "";
+        public readonly List<string> TargetExtraMeshes = new List<string>();
+        public readonly Dictionary<string, FcLimit> Limits = new Dictionary<string, FcLimit>();
+        public string MaterialMode = "none";
+        public FcQuality Quality = new FcQuality();
+    }
+
+    /// <summary>"format": "FacialPose"（1 点分のポーズ）。</summary>
+    public sealed class FcPoseDocument
+    {
+        public int Version = FcposeReader.SupportedVersion;
+        public FcMeta Meta = new FcMeta();
+        public FcPose Pose = new FcPose();
+    }
+
+    /// <summary>読んだ結果。Format に応じて Document / Pose のどちらかが入る。</summary>
+    public sealed class FcFile
+    {
+        public string Format;
+        public FcDocument Document;
+        public FcPoseDocument Pose;
+    }
+}

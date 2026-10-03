@@ -16,6 +16,7 @@
     <Compile Include="..\com.tdrive.facial\Runtime\Core\**\*.cs" Link="Core\%(Filename)%(Extension)" />
     <Compile Include="..\com.tdrive.facial\Tests\Editor\ConformanceTests.cs" Link="Tests\ConformanceTests.cs" />
     <Compile Include="..\com.tdrive.facial\Tests\Editor\MiniJson.cs" Link="Tests\MiniJson.cs" />
+    <Compile Include="..\com.tdrive.facial\Tests\Editor\FcposeCoreTests.cs" Link="Tests\FcposeCoreTests.cs" />
   </ItemGroup>
 
   <ItemGroup>
