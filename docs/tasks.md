@@ -146,7 +146,7 @@ FacialController（カメラ角度に応じた顔の補正。UE 版からの移�
 | U-15 | プロジェクト専用シェーダーの生成（マテリアルごとの機能の組み合わせ単位で、使わない機能のコード・プロパティ・パスを除いた `TDrive/Toon_<プロジェクト>/<組み合わせ>`、キーワードなし。docs/11 §3）+ 再生成の必要性の検証 | — | 3 | U-2 4-4 | MS2026 のキャラクターに必要な機能だけのシェーダーが生成され、D-Drive 互換の共通名は残る | ⬜ |
 | U-16 | 生成シェーダーと汎用シェーダーのパリティテスト | — | 1 | U-15 U-4 | 同じ Look で画素差が基準以内 | ⬜ |
 | U-14 | MS2026 への導入手順（git URL・PC_Renderer に Feature 追加・Prefab に ToonCharacter） | — | 0.5 | U-3 U-10 | MS2026 チームが手順どおりに導入できる（手順書 + マニュアル） | ⬜ |
-| U-21 | D-Drive 側への提案の文面（[17](17_ddrive_toon_materials.md) §5 の M-1〜M-9。D-Drive のリポジトリは読み取りのみなので、チケットの形にして渡す） | — | 0.5 | — | M-1〜M-9 が D-Drive のチケットの書式になっている | ⬜ |
+| U-21 | D-Drive 側への提案の文面（[17](17_ddrive_toon_materials.md) §5 の M-1〜M-9。D-Drive のリポジトリは読み取りのみなので、チケットの形にして渡す） | — | 0.5 | — | M-1〜M-9 が D-Drive のチケットの書式になっている | ✅ D-Drive 側で起票済み（FC-11〜FC-19。[17](17_ddrive_toon_materials.md) 冒頭） |
 | U-22 | D-Drive ブリッジの書き出しの決まり: 生成シェーダーに無い `_Toon*` を Specific から外す・色だけのマテリアルに白テクスチャ・変換表を `Assets/` に生成・取り込み設定（接線 = 取り込む / 頂点カラー・UV を保持 / ライトマップ UV なし）・マスクのリニア規則の案内（[17](17_ddrive_toon_materials.md) §3・§4） | — | 2 | U-1 | 書き出した MaterialData で D-Drive の検証に警告が出ない。マスクがリニアで取り込まれる | ⬜ |
 | U-23 | 検証（D-Drive の `IValidator`）: Renderer Feature の有無・スロットが `DDrive/Lit` に置き換わっていないか・マスクが sRGB になっていないか・T-Drive のキャラクターが自動取り込みの対象に入っていないか（[17](17_ddrive_toon_materials.md) §4 の罠） | — | 1.5 | U-22 | 罠 1〜3 の状態を作ると検証に出る | ⬜ |
 
@@ -228,7 +228,7 @@ FacialController（カメラ角度に応じた顔の補正。UE 版からの移�
 | FT-1 | `FacialCorrectionTrack` / `Clip` / `Mixer`（強さ・感情の重み・角度の固定・視点・カット補正・コマ打ち。クリップのブレンド。プレビュー後に元へ戻す） | R-36 | 3 | FU-3 | Timeline のスクラブと再生で補正が変わる。プレビューを抜けると元の値 | ⬜ |
 | FT-2 | D-Drive ブリッジ: バインドの補助（同じ役名の AnimationTrack）・検証（IValidator）・プール返却の確認テスト・D-Drive のカットシーンでのサンプル | — | 2.5 | FT-1 | MS2026 で `Cutscene.Play` → 補正が動く・シークとスキップに追従。D-Drive を変更していない | ⬜ |
 | FT-3 | Maya → Timeline: `.fctrack` の出力（プレビュー用ノードのキー）+ Unity 側で `.playable` にトラックを足す / 更新する | — | 3 | FT-2 F1-5 | Maya で打ったキーが Timeline のクリップ / カーブになる。再出力でデザイナーが足したトラックは残る | ⬜ |
-| FT-4 | D-Drive 側への提案の起票（チケット 7-8 の書き換え案・C-1〜C-9）※ D-Drive のリポジトリは読み取りのみなので、文面を用意して渡す | — | 0.5 | — | [16](16_ddrive_changes_for_facial.md) の内容が D-Drive のチケットの形になっている | ⬜ |
+| FT-4 | D-Drive 側への提案の起票（チケット 7-8 の書き換え案・C-1〜C-9）※ D-Drive のリポジトリは読み取りのみなので、文面を用意して渡す | — | 0.5 | — | [16](16_ddrive_changes_for_facial.md) の内容が D-Drive のチケットの形になっている | ✅ D-Drive 側で起票済み（D-Drive `docs/51_tdrive_integration.md`・`docs/11_tasks.md` FC-0〜FC-10、PR #86）。対応表は [16](16_ddrive_changes_for_facial.md) 冒頭 |
 
 ## Phase F5: UE 版の未実装項目
 

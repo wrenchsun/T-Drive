@@ -4,6 +4,11 @@
 - 仕様: [14](14_facial_controller_spec.md) §7、設計: [15](15_facial_controller_design.md) §5.5
 - ここに挙げる変更は **D-Drive 側のチケットとして起こす提案**。T-Drive 側は「変更なしでも動く」範囲で先に作る
 
+> **2026-10-03 追記: D-Drive 側で受け入れ済み。** D-Drive の main（`00028ba`、PR #86）で、チケット 7-8 は「T-Drive 版 FacialController（`com.tdrive.facial`）を使う。D-Drive 内に Facial 種別は作らない」に書き換えられ、
+> 本書と [17](17_ddrive_toon_materials.md) の提案は D-Drive のチケット **FC-0〜FC-20**（設計は D-Drive の `docs/51_tdrive_integration.md`、一覧は `docs/11_tasks.md` の FC 節）として起票された。実装は D-Drive 側で未着手（文書のみ）。
+> 番号の対応: **C-1〜C-9 → FC-1〜FC-9**、**doc17 の M-1〜M-9 → FC-11〜FC-19**（D-Drive 既存の M チケットと番号が衝突するため）、FC-10 = 「変更なしで動く」前提（§3 の A-1〜A-9 など）を D-Drive のテストで固定、FC-20 = `FC_` 接頭辞の予約とモデル取り込みが名前・ボーンを保つことの確認。
+> Unity 側の確認は、D-Drive のリポジトリのローカルブランチ `tdrive-facial`（push しない）に `com.tdrive.facial` をローカルパッケージとして入れて行う。
+
 ## 1. 結論
 
 | 区分 | 件数 | 内容 |

@@ -21,7 +21,7 @@ Maya 2026 用セルルック Look Development ツール。仕様は docs/（索�
   - シェーダーパラメータは `screen_line.set_param`（型を確かめる）経由
   - Qt の clicked / toggled に「必須引数 + 既定値付き引数」の lambda をつながない（`lambda *_, x=...:` にする）
   - `cmds.delete` に空になり得るリストを渡さない
-- 参照リポジトリ（D-Drive: C:\Users\yamag\wrench\unity\D-Drive、MS2026: C:\Users\yamag\wrench\unity\MS2026）は読み取りのみ
+- 参照リポジトリ: MS2026（C:\Users\yamag\wrench\unity\MS2026）は読み取りのみ。D-Drive（C:\Users\yamag\wrench\unity\D-Drive）は **ブランチを切ってローカルで作業**（main に直接コミットしない・push しない。Unity の確認用ブランチは `tdrive-facial`。2026-10-03）。FacialController_UE（C:\Users\yamag\wrench\ue\FacialController_UE）は読み取りのみ
 
 ## コマンド
 - テスト: `uv run --no-project --with pytest python -m pytest tests`

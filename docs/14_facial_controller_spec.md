@@ -416,8 +416,8 @@ Unity 側のブリッジが、D-Drive の作った `.playable` に `FacialCorrec
 
 | # | 事項 | 既定（確認が取れるまで） |
 |---|---|---|
-| Q1 | D-Drive のチケット 7-8（D-Drive 内に FacialController を移植する計画）との関係 | T-Drive 版を正とし、D-Drive 7-8 は「T-Drive 版を使う（ブリッジ + 最小の変更）」に書き換える提案（[16](16_ddrive_changes_for_facial.md) §2） |
-| Q2 | shizuku の利用規約（リポジトリへのコミット・マニュアル画像への使用） | コミットしない。マニュアルの画像は規約確認後に差し替え |
+| Q1 | D-Drive のチケット 7-8（D-Drive 内に FacialController を移植する計画）との関係 | **解決（2026-10-03）**: T-Drive 版を使う。D-Drive 側は 7-8 を書き換え、FC-0〜FC-20 を起票済み（[16](16_ddrive_changes_for_facial.md) 冒頭） |
+| Q2 | shizuku の利用規約（リポジトリへのコミット・マニュアル画像への使用） | **解決（2026-10-03）**: .gitignore で対応（リポジトリに入れない）。フェイシャル用のサンプルとして使う |
 | Q3 | Unity パッケージを Toon と分けるか | 分ける（`com.tdrive.facial`。Toon なしでも使える） |
 | Q4 | UE 版へ追加キー（§4.2）と `forwardAxis` の `±Z` を戻すか | 当面 T-Drive だけ。UE 版は読み取り専用で触らない |
 | Q5 | リップシンク（R-18）の範囲 | 対応表まで。優先度は最後 |
