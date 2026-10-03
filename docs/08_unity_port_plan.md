@@ -130,6 +130,7 @@ T-31〜T-39 はコンポーネント（例: `ToonFollowThrough` = 階層遅延�
 | 命名規約の検証 | `TDrive/Toon` のプロパティが D-Drive `MaterialCommonNaming` の共通名・描画ステート名と衝突しないことを検証 |
 
 - 互換の前提（[03](03_shader_spec.md) §7）: 共通チャンネルは D-Drive の規約名、固有パラメータは `_Toon` 接頭辞、Blend 帯（2000 / 2450 / 3000）+ RenderQueueOffset の考え方も同じ
+- **D-Drive では扱いにくいもの（キャラクター単位の設定・機能ごとの専用シェーダー・パスの有効 / 無効・インスタンスごとの値など）の解決法、気を付ける罠、D-Drive 側に実装したほうがいい機能は [17](17_ddrive_toon_materials.md)**（2026-10-03 調査）
 - ランタイムは D-Drive を使わない。D-Drive の `ModelData` から T-Drive のキャラクター Prefab を参照するのは自由（Prefab に `ToonCharacter` が付いていれば動く）
 
 ## 7. 事前に決めること
