@@ -75,6 +75,13 @@ namespace TDrive.Facial
         [Tooltip("true のとき、対象のメッシュがどのカメラにも映っていない間は計算しない")]
         public bool skipWhenNotVisible;
 
+        [Header("マテリアル出力")]
+        [Tooltip("マテリアルへ角度・感情の重みを渡す方式。「データに従う」= 取り込んだデータの material の指定どおり。Renderer ごとの MaterialPropertyBlock に書く（他のキャラクターと衝突しない）")]
+        public FacialMaterialOutputMode materialOutput = FacialMaterialOutputMode.FollowData;
+
+        [Tooltip("補正の対象メッシュのほかに、値を渡したい Renderer（まつ毛・眉など別メッシュ）")]
+        public Renderer[] materialTargets;
+
         // --- 診断（読み取り専用） ---
         public float CurrentYaw { get { return (float)_curYaw; } }
         public float CurrentPitch { get { return (float)_curPitch; } }
@@ -86,6 +93,8 @@ namespace TDrive.Facial
         public float LastScale { get { return (float)_lastScale; } }
         /// <summary>直近の評価で視点から角度を求められたか（手動・視点なしは false）。</summary>
         public bool HasValidAngles { get { return _hasPrev; } }
+
+        FacialMaterialOutput _matOut;
 
         sealed class ShapeBinding
         {
@@ -180,6 +189,7 @@ namespace TDrive.Facial
             _hasPrev = false;
             _hasRaw = false;
             _snapped = false;
+            if (_matOut != null) _matOut.Clear(); // マテリアルに渡した値も 0 へ
         }
 
         /// <summary>名前 → 番号の対応と対象・基準ボーンの解決をやり直す（Prefab の構造やメッシュを変えたとき）。</summary>
@@ -203,6 +213,30 @@ namespace TDrive.Facial
 
         /// <summary>解決した基準ボーン（無ければ null）。</summary>
         public Transform ResolvedBaseBone { get { EnsureCache(); return _baseResolved; } }
+
+        /// <summary>データと調整用アセットを合成した、今の実効の値（データが無ければ既定値）。</summary>
+        public FacialEffectiveParams EffectiveParams { get { return FacialCorrectionOverrides.Resolve(data, overrides); } }
+
+        /// <summary>直近の評価で書いたシェイプの名前と重み（0〜1、スムージング後）を output へ入れる（output は先に空にする）。</summary>
+        public void GetActiveWeights(List<MorphWeight> output)
+        {
+            output.Clear();
+            for (int i = 0; i < _last.Count; i++) output.Add(_last[i]);
+        }
+
+        /// <summary>マテリアル出力が有効か（Runner の指定とデータの material を合わせた結果）。</summary>
+        public bool MaterialOutputActive
+        {
+            get
+            {
+                switch (materialOutput)
+                {
+                    case FacialMaterialOutputMode.Off: return false;
+                    case FacialMaterialOutputMode.PropertyBlock: return true;
+                    default: return data != null && data.MaterialModeValue == FacialMaterialMode.PropertyBlock;
+                }
+            }
+        }
 
         /// <summary>感情の重みを 1 つ設定する（配列が足りなければ広げる）。</summary>
         public void SetEmotionWeight(int layer, float weight)
@@ -402,6 +436,14 @@ namespace TDrive.Facial
                 if (!b.written) { b.written = true; _written.Add(b); }
             }
             List<MorphWeight> t = _last; _last = _smoothed; _smoothed = t;
+
+            // 8 マテリアルへ（評価のたびに）
+            if (MaterialOutputActive)
+            {
+                if (_matOut == null) _matOut = new FacialMaterialOutput();
+                _matOut.Write(_targets, materialTargets, yaw, pitch, d.grid.yawRange, d.grid.pitchRange, scale, _emo, layerCount);
+            }
+            else if (_matOut != null && _matOut.WrittenCount > 0) _matOut.Clear();
         }
 
         static void WriteRaw(ShapeBinding b, float percent)

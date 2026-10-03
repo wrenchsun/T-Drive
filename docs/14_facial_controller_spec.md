@@ -248,7 +248,7 @@ UE 版が書き出す形（v2 §3.5、実装は UE 版 `FacialPoseJson.cpp`）:
 ### 6.1 取り込み
 
 - `.fcpose.json` → `FacialCorrectionData`（ScriptableObject）。ランタイムが使うのは格子・レイヤーの名前・方針だけの軽いデータ。ソースのポーズはエディタ専用の欄に保持（格子の閲覧用）
-- FBX: Blend Shape Normals の推奨設定を検証で確認。FC_* が格子どおりにそろっているかを検証
+- FBX: Blend Shape Normals の推奨設定（**Import**。Maya が計算した法線を使う）を検証で確認（違っていたら情報として知らせるだけで、自動では変えない）。FC_* が格子どおりにそろっているかを検証
 
 ### 6.2 ランタイム `FacialCorrectionRunner`
 

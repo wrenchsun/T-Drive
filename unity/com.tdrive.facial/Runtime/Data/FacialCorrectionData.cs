@@ -107,6 +107,9 @@ namespace TDrive.Facial
         [HideInInspector] public string sourceJson;
 #endif
 
+        /// <summary>materialMode を列挙型で（未知の文字列は None）。</summary>
+        public FacialMaterialMode MaterialModeValue { get { return FacialMaterialOutput.ParseMode(materialMode); } }
+
         /// <summary>格子の点の数（rows × cols）。</summary>
         public int PointCount { get { return Mathf.Max(0, grid.rows) * Mathf.Max(0, grid.cols); } }
 

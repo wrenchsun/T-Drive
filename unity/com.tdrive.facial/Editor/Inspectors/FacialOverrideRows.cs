@@ -1,0 +1,67 @@
+// 「調整」の行（Runner のインスペクターと FacialCorrectionOverrides のインスペクターで共用）。
+// 行ごとに「取り込んだ値 | 上書きのチェック | 上書きの値」。SerializedObject 経由なので Undo が効き、アセットの保存対象になる。
+using System;
+using UnityEditor;
+using UnityEngine;
+
+namespace TDrive.Facial.Editor
+{
+    public static class FacialOverrideRows
+    {
+        sealed class Row
+        {
+            public string label, tooltip, flag, value;
+            public Func<FacialEffectiveParams, float> get;
+            public bool hasMin;
+            public float min;
+            public string format;
+        }
+
+        static readonly Row[] Rows =
+        {
+            new Row { label = "全体の強さ", tooltip = "補正全体にかかる強さ（0〜1）。0 で補正なし", flag = "overrideGlobalAlpha", value = "globalAlpha", get = p => p.globalAlpha, format = "0.###" },
+            new Row { label = "追従の速さ", tooltip = "重みが目標へ追いつく速さ。大きいほど速い。0 以下 = 即時", flag = "overrideInterpSpeed", value = "interpSpeed", get = p => p.interpSpeed, hasMin = true, min = 0f, format = "0.##" },
+            new Row { label = "スナップの角度（度）", tooltip = "視点がこの角度より大きく飛んだら、カット切り替えとみなして即時に反映する", flag = "overrideSnapAngle", value = "snapAngle", get = p => p.snapAngle, hasMin = true, min = 0f, format = "0.##" },
+            new Row { label = "距離フェード 開始（m）", tooltip = "視点がこれより遠くなると補正が弱まり始める。開始 = 終了 = 0 で無効", flag = "overrideFadeStart", value = "fadeStart", get = p => p.fadeStart, hasMin = true, min = 0f, format = "0.###" },
+            new Row { label = "距離フェード 終了（m）", tooltip = "これより遠いと補正 0。開始以下なら距離フェードなし", flag = "overrideFadeEnd", value = "fadeEnd", get = p => p.fadeEnd, hasMin = true, min = 0f, format = "0.###" },
+            new Row { label = "表情での弱め具合", tooltip = "表情が強いとき補正を弱める度合い（0〜1）。0 = 弱めない", flag = "overrideExpressionDampen", value = "expressionDampen", get = p => p.expressionDampen, format = "0.###" },
+            new Row { label = "端のフェード（度）", tooltip = "格子の範囲の外側で、補正が 0 へ消えていく幅。0 以下 = 範囲外は即 0", flag = "overrideEdgeFade", value = "edgeFade", get = p => p.edgeFade, hasMin = true, min = 0f, format = "0.##" },
+            new Row { label = "シャープさ", tooltip = "キー角度の近くでキーのポーズそのものに寄せる度合い（既定 1）。※いまは未使用（F5 で有効になります）", flag = "overrideSharpness", value = "sharpness", get = p => p.sharpness, hasMin = true, min = 0.01f, format = "0.###" },
+            new Row { label = "コマ打ち fps", tooltip = "補正の更新を間引く fps（0 = 毎フレーム）。※いまは未使用（F5 で有効になります）", flag = "overrideStepFps", value = "stepFps", get = p => p.stepFps, hasMin = true, min = 0f, format = "0.##" },
+        };
+
+        /// <summary>行の一覧を描く。imported = 取り込んだ値（データが無ければ null で「—」）。値を変えたら true。</summary>
+        public static bool Draw(SerializedObject overrides, FacialEffectiveParams? imported)
+        {
+            overrides.Update();
+            EditorGUI.BeginChangeCheck();
+
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.Label("項目", EditorStyles.miniBoldLabel, GUILayout.Width(150));
+            GUILayout.Label("取り込み", EditorStyles.miniBoldLabel, GUILayout.Width(56));
+            GUILayout.Label("上書き", EditorStyles.miniBoldLabel);
+            EditorGUILayout.EndHorizontal();
+
+            for (int i = 0; i < Rows.Length; i++)
+            {
+                Row row = Rows[i];
+                SerializedProperty flag = overrides.FindProperty(row.flag);
+                SerializedProperty value = overrides.FindProperty(row.value);
+                if (flag == null || value == null) continue;
+                EditorGUILayout.BeginHorizontal();
+                GUILayout.Label(new GUIContent(row.label, row.tooltip), GUILayout.Width(150));
+                GUILayout.Label(imported.HasValue ? row.get(imported.Value).ToString(row.format) : "—", GUILayout.Width(56));
+                flag.boolValue = EditorGUILayout.ToggleLeft(new GUIContent("上書き", "チェックすると、右の値を使う（取り込んだ値は変わらない）"), flag.boolValue, GUILayout.Width(62));
+                using (new EditorGUI.DisabledScope(!flag.boolValue))
+                {
+                    EditorGUILayout.PropertyField(value, GUIContent.none);
+                    if (row.hasMin && value.floatValue < row.min) value.floatValue = row.min;
+                }
+                EditorGUILayout.EndHorizontal();
+            }
+            bool changed = EditorGUI.EndChangeCheck();
+            overrides.ApplyModifiedProperties(); // Undo に積まれ、アセットが dirty になる
+            return changed;
+        }
+    }
+}
