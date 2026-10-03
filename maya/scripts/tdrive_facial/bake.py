@@ -19,6 +19,9 @@ for 点: ポーズを当てる → P = 変形後の頂点 → D = P − N
   `FC_…_R{r}_C{c}_Ex` = 元のポーズの差分 − 丸めたポーズの差分（FC × 1 + Ex × 1 = 作った通りのポーズ）。
   感情レイヤー（差分ベイク）は通常・Ex のそれぞれから Neutral の同じ点の通常・Ex を引く。そのため Neutral の点に誇張があると、
   感情レイヤーの同じ位置の点にも Ex ができる（自分のポーズに 1 超が無くても。引いた分を打ち消すため）。誇張が要らない点の古い `_Ex` は消す
+- **パース補正（R-34）**: 空でないキーごとに、基準姿勢からの差分を `FC_<asset>_Persp_K{n}` に焼く（Neutral との差分にはしない。足し合わせなので）。
+  重みは 1 までに丸める（誇張用の分割はしない）。除外パターン・しきい値は点と同じ。空のキーはシェイプを作らない（あれば孤立として掃除する）。
+  `layers` / `points` / `persp_keys` のどれも指定しない（全部）ときは全キー、指定したときは `persp_keys` に挙げたキーだけ
 - 法線は焼かない
 """
 
@@ -57,6 +60,7 @@ class BakeReport:
     total_vertices: int = 0  # 全ターゲット・全メッシュの差分を持つ頂点の合計
     culled_vertices: int = 0  # しきい値で捨てた頂点の合計
     seconds: float = 0.0
+    perspective: list[str] = field(default_factory=list)  # 作った / 置き換えたパース補正のシェイプ（`Persp_K{n}`。created / replaced にも入っている）
     missing_curves: list[str] = field(default_factory=list)  # シーンに無くて飛ばしたシェイプ名
     missing_bones: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
@@ -72,8 +76,15 @@ class BakeReport:
         """誇張用（`_Ex`）として焼いたターゲットの数。"""
         return len(self.extreme)
 
+    @property
+    def perspective_count(self) -> int:
+        """パース補正のキーとして焼いたシェイプの数。"""
+        return len(self.perspective)
+
     def summary(self) -> str:
         ex = f"（うち誇張用 {len(self.extreme)}）" if self.extreme else ""
+        if self.perspective:
+            ex += f"（うちパース補正 {len(self.perspective)}）"
         return (
             f"ベイク: 作成 {len(self.created)} / 置き換え {len(self.replaced)}{ex} / 削除 {len(self.removed)}、"
             f"頂点 {self.total_vertices}（しきい値で捨てた {self.culled_vertices}）、{self.seconds:.2f} 秒"
@@ -119,6 +130,10 @@ def _bone_names(doc: Document) -> list[str]:
         for pt in layer.points.values():
             for b in pt.pose.bones:
                 names.setdefault(b, None)
+    if doc.perspective is not None:
+        for key in doc.perspective.keys:
+            for b in key.bones:
+                names.setdefault(b, None)
     return list(names)
 
 
@@ -143,6 +158,19 @@ def _jobs(
     return out
 
 
+def _persp_jobs(doc: Document, keys: Optional[Iterable[int]]) -> list[tuple[int, str, SourcePose]]:
+    """焼くパース補正のキー: (キーの番号, シェイプ名, ポーズ)。空でないキーだけ（keys が None なら全部）。"""
+    if doc.perspective is None:
+        return []
+    only = set(keys) if keys is not None else None
+    asset = doc.asset or ""
+    return [
+        (k, naming.perspective_name(asset, k), doc.perspective.keys[k].pose)
+        for k in validate.perspective_bake_keys(doc)
+        if only is None or k in only
+    ]
+
+
 def _sparse(delta: np.ndarray, threshold: float) -> tuple[np.ndarray, np.ndarray, int]:
     """(N, 3) の差分 → (残す頂点の番号, その差分, 捨てた頂点の数)。長さ < threshold を捨てる。"""
     length = np.linalg.norm(delta, axis=1)
@@ -152,7 +180,9 @@ def _sparse(delta: np.ndarray, threshold: float) -> tuple[np.ndarray, np.ndarray
     return idx, delta[idx], culled
 
 
-def _is_orphan(doc: Document, name: str, live: set[tuple[str, int, int]], live_ex: set[tuple[str, int, int]]) -> bool:
+def _is_orphan(
+    doc: Document, name: str, live: set[tuple[str, int, int]], live_ex: set[tuple[str, int, int]], persp_live: Optional[set[int]] = None
+) -> bool:
     """この asset の FC_* で、格子に対応する点が無いもの（`validate` の orphan_target と同じ判定）。
     誇張用の `_Ex` は、その点があって `validate.needs_extreme` のときだけ生きている。"""
     asset = doc.asset or ""
@@ -166,8 +196,9 @@ def _is_orphan(doc: Document, name: str, live: set[tuple[str, int, int]], live_e
     if p.kind == naming.KIND_POINT_EX:
         return (p.layer, p.row, p.col) not in live_ex
     if p.kind == naming.KIND_PERSP:
-        n_persp = len(doc.perspective.keys) if doc.perspective is not None else 0
-        return (p.index or 0) >= n_persp
+        if persp_live is None:
+            persp_live = set(validate.perspective_bake_keys(doc))
+        return (p.index or 0) not in persp_live  # キーが無い / 空のキー（シェイプは要らない）
     return False
 
 
@@ -181,16 +212,22 @@ def bake(
     layers: Optional[Iterable[int]] = None,
     points: Optional[Iterable[tuple[int, int, int]]] = None,
     progress: Optional[Progress] = None,
+    persp_keys: Optional[Iterable[int]] = None,
 ) -> BakeReport:
     """ドキュメントの点を `FC_*` ターゲットにする。
 
     layers: 焼くレイヤーの番号（None = 全部）。points: 焼く点 (レイヤー番号, row, col)（None = 全部）。
+    persp_keys: 焼くパース補正のキーの番号。None のとき、layers も points も None（全部）なら全キー、どちらかを指定していればキーは焼かない。
     孤立した FC_*（格子に対応する点が無いこの asset のもの）は、部分的な指定でも掃除する。
     progress(完了数, 全体数, ターゲット名) を点ごとに呼ぶ（任意）。
     """
     pose_apply.assert_maya_space(doc)
     meshes = _resolve_meshes(doc)
     jobs = _jobs(doc, layers, points)
+    if persp_keys is None and layers is None and points is None:
+        pjobs = _persp_jobs(doc, None)
+    else:
+        pjobs = _persp_jobs(doc, persp_keys if persp_keys is not None else [])
     rep = BakeReport(meshes=list(meshes))
     t0 = time.perf_counter()
     thr = _threshold(doc)
@@ -234,10 +271,11 @@ def bake(
                     rep.culled_vertices += cl
                 return out
 
+            n_jobs = len(jobs) + len(pjobs)
             for i, (li, lname, r, c, pose) in enumerate(jobs):
                 name = naming.morph_name(asset, lname, r, c)
                 if progress:
-                    progress(i, len(jobs), name)
+                    progress(i, n_jobs, name)
                 normal, ex = deltas(pose)
                 if li == 0:
                     neutral_cache[(r, c)] = (normal, ex)
@@ -251,8 +289,12 @@ def bake(
                 if validate.needs_extreme(doc, li, (r, c)):
                     zero = {m: np.zeros_like(normal[m]) for m in meshes}
                     results.append((naming.morph_name(asset, lname, r, c, extreme=True), pose, to_sparse(ex if ex is not None else zero)))
+            for j, (_k, name, pose) in enumerate(pjobs):  # パース補正: 基準姿勢との差分（重み 1 超は丸める。Neutral は引かない）
+                if progress:
+                    progress(len(jobs) + j, n_jobs, name)
+                results.append((name, pose, to_sparse(deform(validate.clamp_extreme(pose)))))
             if progress:
-                progress(len(jobs), len(jobs), "")
+                progress(n_jobs, n_jobs, "")
         finally:
             ref.restore()
         rep.warnings.extend(w for w in ref.warnings if w not in rep.warnings)
@@ -262,19 +304,22 @@ def bake(
         geo = {m: scene.geometry_index(nodes[m], m) for m in meshes}
         state = {m: scene.get_bake_state(nodes[m]) for m in meshes}
         excl = {m: scene.get_bake_exclude(nodes[m]) for m in meshes}
+        persp_names = {n for _k, n, _p in pjobs}
         sig = validate.exclude_signature(doc)  # 焼いた点ごとに、そのときの除外パターンを記録する（部分ベイクで他の点の記録を消さない）
         for name, pose, sparse in results:
             total = 0
             for m in meshes:
                 idx, d = sparse[m]
                 _, created = scene.write_target_delta(nodes[m], name, d, idx.tolist(), geo[m])
-                state[m][name] = validate.pose_hash(pose)
+                state[m][name] = validate.pose_hash(pose)  # パース補正のキーも pose_hash（= perspective_key_hash）
                 excl[m][name] = sig
                 total += len(idx)
                 if m == meshes[0]:
                     (rep.created if created else rep.replaced).append(name)
                     if name.endswith(naming.EXTREME_SUFFIX):
                         rep.extreme.append(name)
+                    if name in persp_names:
+                        rep.perspective.append(name)
             rep.vertex_counts[name] = total
             rep.total_vertices += total
             if total == 0:
@@ -284,8 +329,9 @@ def bake(
         live_pts = _live_points(doc)
         live = {(doc.layers[li].name, r, c) for li, r, c in live_pts}
         live_ex = {(doc.layers[li].name, r, c) for li, r, c in live_pts if validate.needs_extreme(doc, li, (r, c))}
+        persp_live = set(validate.perspective_bake_keys(doc))
         for m in meshes:
-            doomed = [t.alias for t in scene.list_curves(m, include_fc=True) if t.node == nodes[m] and _is_orphan(doc, t.alias, live, live_ex)]
+            doomed = [t.alias for t in scene.list_curves(m, include_fc=True) if t.node == nodes[m] and _is_orphan(doc, t.alias, live, live_ex, persp_live)]
             if doomed:
                 for n in scene.delete_targets(nodes[m], doomed):
                     state[m].pop(n, None)
@@ -301,7 +347,7 @@ def bake(
                 stale = [
                     t
                     for t in scene.target_indices(other)
-                    if naming.is_fc_name(t) and (t in written or _is_orphan(doc, t, live, live_ex))
+                    if naming.is_fc_name(t) and (t in written or _is_orphan(doc, t, live, live_ex, persp_live))
                 ]
                 if stale:
                     scene.delete_targets(other, stale)
@@ -325,6 +371,11 @@ def bake(
         cmds.undoInfo(closeChunk=True)
     rep.seconds = time.perf_counter() - t0
     return rep
+
+
+def bake_perspective_key(doc: Document, index: int, progress: Optional[Progress] = None) -> BakeReport:
+    """パース補正のキー 1 個だけ焼く（孤立した FC_* の掃除は `bake` と同じく行う）。"""
+    return bake(doc, points=[], persp_keys=[index], progress=progress)
 
 
 def bake_point(doc: Document, layer_index: int, row: int, col: int, progress: Optional[Progress] = None) -> BakeReport:

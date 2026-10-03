@@ -272,9 +272,7 @@ class ExportTab(QtWidgets.QWidget):
         """出力前の検証。エラー・未ベイク・ベイク後の変更があれば、その要約を返す（無ければ ""）。"""
         issues = self.session.validate()
         n_err = sum(1 for i in issues if i.severity == V.SEVERITY_ERROR)
-        n_unbaked = sum(1 for i in issues if i.code == "point_unbaked")
-        n_changed = sum(1 for i in issues if i.code == "point_changed_since_bake")
-        n_missing = sum(1 for i in issues if i.code == "baked_morph_missing")
+        n_unbaked, n_changed, n_missing, k_unbaked, k_changed, k_missing = export.count_bake_issues(issues)
         lines: list[str] = []
         if n_err:
             lines.append(f"エラーが {n_err} 件あります（検証タブで確認できます）")
@@ -284,6 +282,12 @@ class ExportTab(QtWidgets.QWidget):
             lines.append(f"ベイク後にポーズを変えた点が {n_changed} 点あります（FBX の形は古いままです）")
         if n_missing:
             lines.append(f"ベイクしたはずのシェイプが無い点が {n_missing} 点あります")
+        if k_unbaked:
+            lines.append(f"未ベイクのパース補正のキーが {k_unbaked} 個あります（そのキーの補正は FBX に入りません）")
+        if k_changed:
+            lines.append(f"ベイク後に変えたパース補正のキーが {k_changed} 個あります（FBX の形は古いままです）")
+        if k_missing:
+            lines.append(f"ベイクしたはずのシェイプが無いパース補正のキーが {k_missing} 個あります")
         return "\n".join(lines)
 
     # ============================================================ Unity 向け

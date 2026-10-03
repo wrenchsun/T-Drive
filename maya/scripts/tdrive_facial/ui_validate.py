@@ -80,12 +80,12 @@ class ValidateTab(QtWidgets.QWidget):
         row = QtWidgets.QHBoxLayout()
         self.rebake_stale_btn = QtWidgets.QPushButton("変更のある点だけベイク")
         self.rebake_stale_btn.setToolTip(
-            "未ベイク・ベイク後に変更・シェイプが消えた点だけを焼き直す（速い）。Neutral の点を焼くときは、感情レイヤーの同じ位置の点も一緒に焼き直します。"
+            "未ベイク・ベイク後に変更・シェイプが消えた点（とパース補正のキー）だけを焼き直す（速い）。Neutral の点を焼くときは、感情レイヤーの同じ位置の点も一緒に焼き直します。"
             "編集状態は先に抜けます"
         )
         self.rebake_stale_btn.clicked.connect(lambda *_: self.on_rebake_stale())
         self.rebake_btn = QtWidgets.QPushButton("全部ベイクし直す")
-        self.rebake_btn.setToolTip("全レイヤー・全点を焼き直す（未ベイク・変更ありの解消）。編集状態は先に抜けます")
+        self.rebake_btn.setToolTip("全レイヤー・全点とパース補正のキーを焼き直す（未ベイク・変更ありの解消）。編集状態は先に抜けます")
         self.rebake_btn.clicked.connect(lambda *_: self.on_rebake())
         row.addWidget(self.rebake_stale_btn)
         row.addWidget(self.rebake_btn)
@@ -145,10 +145,14 @@ class ValidateTab(QtWidgets.QWidget):
                     where = r.layer_name or f"L{r.layer}"
                     if r.row is not None and r.col is not None:
                         where += f" R{r.row} C{r.col}"
+                if r.key is not None and r.layer is None:
+                    where = f"パース補正 キー {r.key + 1}"
                 it = QtWidgets.QTreeWidgetItem([where, r.message, ""])
                 it.setToolTip(COL_MESSAGE, r.message)
                 if r.can_select_point:
                     it.setToolTip(COL_WHERE, "ダブルクリックでこの点へ移ります")
+                elif r.can_select_key:
+                    it.setToolTip(COL_WHERE, "ダブルクリックでこのパース補正のキーへ移ります")
                 top.addChild(it)
                 self._issue_of_item[id(it)] = r
                 if r.fix == "rename" and (r.kind, r.name) in self.choices:
@@ -266,9 +270,30 @@ class ValidateTab(QtWidgets.QWidget):
 
     def on_double_click(self, item: QtWidgets.QTreeWidgetItem) -> None:
         issue = self._issue_of_item.get(id(item))
-        if issue is None or not getattr(issue, "can_select_point", False):
+        if issue is None:
             return
-        self.go_to_issue(issue)
+        if getattr(issue, "can_select_point", False):
+            self.go_to_issue(issue)
+        elif getattr(issue, "can_select_key", False):
+            self.go_to_key(issue)
+
+    def go_to_key(self, issue) -> bool:
+        """問題のパース補正のキーを編集の対象にする（未保存の編集があれば確認する）。移れたら True。"""
+        s = self.session
+        try:
+            r = s.select_key(issue.key)
+            if r.status == SELECT_NEEDS_CONFIRM:
+                choice = self.ask_move_choice("編集中のポーズに未保存の変更があります。別のキーへ移る前に保存しますか？")
+                r = s.select_key(issue.key, choice=choice)
+        except Exception as exc:  # noqa: BLE001
+            self.show_status(str(exc), error=True)
+            lifecycle.report_error("検証タブからのキーの移動でエラー", traceback.format_exc())
+            return False
+        ok = r.status in (SELECT_SELECTED, "same_point")
+        self.show_status(
+            f"パース補正のキー {issue.key + 1} へ移りました（編集状態になっています）" if ok else (r.message or "移動できませんでした"), error=not ok
+        )
+        return ok
 
     def go_to_issue(self, issue) -> bool:
         """問題の点へ移る（レイヤーが違えばそのレイヤーを選んでから）。移れたら True。"""

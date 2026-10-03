@@ -9,7 +9,12 @@
 - MINOR: Python の公開モジュール名は転送モジュールで維持（`tdrive_toon.lifecycle` / `project` / `updater` / `ui_update` / `mcp_bridge` は `tdrive` に移したが、同じモジュールを返すので既存の import はそのまま動く）。Look・パラメータ契約に変更なし
 
 ### 追加
-- FacialController の基盤（F0-2 / F0-3。まだ画面からは使えない）: Maya 非依存の計算（角度 → 重み。UE 版 FacialCore の移植）、`.fcpose.json` の読み書き（UE 版互換 + 追加キー）、座標系の変換、スキーマ、UE 版・Unity と共通のテストデータ
+- **FacialController**（エディタ › FacialController タブ。マニュアル: docs/DesignerManual/facial.html）: カメラの角度に応じて顔を補正するデータを Maya で作り、Unity で再生する
+  - Maya: セットアップ / グリッド / ポーズ / シェイプ / レイヤー（感情）/ 検証 / 出力 の各タブ、自動生成（ミラー・補間）、ベイク（`FC_*` シェイプ）、カメラ連動のプレビュー、土台の表情、格子のサムネイル、シェイプ作成支援（この角度で彫る・左右に分ける・ミラー・中間形 / 誇張形・組み合わせ補正・別メッシュへ写す・整理）
+  - 品質（シャープさ・コマ打ち）、距離で決まるレイヤーの重み、誇張（1 を超える分を `_Ex` に焼き分け）、補正から除外、パース補正（距離 / 画角のキー）
+  - Unity パッケージ `unity/com.tdrive.facial`（Runner・調整値・プレビュー・グリッド・検証・Timeline のトラック・`.fctrack` の取り込み・D-Drive 連携）。D-Drive の更新ウィンドウから導入できる形式（`ddriveUpdate`、タグ = パッケージの版。docs/06）
+  - コードレビュー（docs/19）の修正: 編集中に保存してもファイルに元の姿勢が入る、ほか
+- FacialController の基盤（F0-2 / F0-3）: Maya 非依存の計算（角度 → 重み。UE 版 FacialCore の移植）、`.fcpose.json` の読み書き（UE 版互換 + 追加キー）、座標系の変換、スキーマ、UE 版・Unity と共通のテストデータ
 - サンプルモデル shizuku の取り込み手順（S-1。`tools/setup_sample_shizuku.py`。モデルはリポジトリに含めない）
 
 ### 変更

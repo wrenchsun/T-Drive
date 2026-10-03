@@ -32,6 +32,11 @@
 (2) `edit_guard()`、(3) `close` / 新しいシーン / シーンを開く前（PreFileNewOrOpened）/ ツールのリロード（lifecycle.on_reload）で抜ける。
 シーンが入れ替わっていたら（ノードの UUID が違う）元へ「戻さず」に捨てる（新しいシーンへ古い値を書かない）。
 
+## 編集の対象はパース補正のキーにもできる
+`select_key(n)` でキー n を編集の対象にする（格子の点の選択は外れ、`ctx.key_target = n`）。ポーズタブのスライダーはそのキーのポーズを編集し、
+`save_point` はキーのポーズへ保存する（未保存の編集があるときの「保存 / 破棄 / 取りやめ」は点・レイヤーと同じ）。
+シーンへ当たっているものは `applied_point`（点）/ `applied_key`（キー）。
+
 ## 土台の表情（シーンだけの下敷き。2026-10-03 の決定: 加算）
 `set_base_expression(名前, {シェイプ名: 重み})` / `clear_base_expression()`。ゲームでは表情アニメがシェイプを動かし、その上にベイクした
 FC_*（補正）が足される。シーンでもそれに合わせ、`_apply_buffer` が**土台の値 + ポーズの値**をシーンへ当てる
@@ -572,6 +577,8 @@ class FacialSession:
             ctx.active_layer = n - 1
         if ctx.selection is not None and not ctx.in_grid(*ctx.selection):
             ctx.selection = None
+        if ctx.key_target is not None and ctx.selected_key() is None:  # 元に戻す・やり直しでキーが無くなった
+            ctx.key_target = None
         if old_target != self._target_key(doc):
             self.end_edit(quiet=True)  # 対象メッシュが変わった: 基準姿勢は古い対象のもの
         ctx.notify_document_changed()
@@ -635,7 +642,7 @@ class FacialSession:
 
     def _saved_hash(self) -> Optional[str]:
         ctx = self._pres().ctx
-        if ctx.selection is None:
+        if not ctx.has_target:
             return None
         sp = ctx.saved_pose()
         return V.pose_hash(sp) if sp is not None else None
@@ -695,8 +702,15 @@ class FacialSession:
 
     @property
     def applied_point(self) -> Optional[tuple[int, int, int]]:
-        """シーンに今当たっているポーズの点 (レイヤー番号, row, col)。無ければ None。"""
-        return self._applied if self.editing else None
+        """シーンに今当たっているポーズの点 (レイヤー番号, row, col)。無ければ（キーが当たっているときも）None。"""
+        a = self._applied if self.editing else None
+        return a if a is not None and a[0] >= 0 else None
+
+    @property
+    def applied_key(self) -> Optional[int]:
+        """シーンに今当たっているポーズがパース補正のキーのとき、その番号。無ければ None。"""
+        a = self._applied if self.editing else None
+        return a[1] if a is not None and a[0] < 0 else None
 
     def _ref_alive(self) -> bool:
         ref = self._ref
@@ -729,6 +743,10 @@ class FacialSession:
         for layer in doc.layers:
             for pt in layer.points.values():
                 for b in pt.pose.bones:
+                    names.setdefault(b, None)
+        if doc.perspective is not None:
+            for key in doc.perspective.keys:
+                for b in key.bones:
                     names.setdefault(b, None)
         return list(names)
 
@@ -808,6 +826,7 @@ class FacialSession:
             "redo": [fcpose_io.to_dict(d) for d in self._redo],
             "active_layer": ctx.active_layer,
             "selection": list(ctx.selection) if ctx.selection is not None else None,
+            "key_target": ctx.selected_key(),
             "buffer": {"curves": curves, "bones": bones},
         }
 
@@ -825,8 +844,12 @@ class FacialSession:
         if n:
             ctx.set_active_layer(min(max(int(state.get("active_layer", 0)), 0), n - 1))
         sel = state.get("selection")
+        kt = state.get("key_target")
         if sel is not None and ctx.in_grid(int(sel[0]), int(sel[1])):
             ctx.set_selection((int(sel[0]), int(sel[1])))
+        elif kt is not None and doc.perspective is not None and 0 <= int(kt) < len(doc.perspective.keys):
+            ctx.set_key_target(int(kt))
+        if ctx.has_target:
             buf = state.get("buffer") or {}
             pose = fcpose_io._read_pose(buf.get("curves"), buf.get("bones"))
             self.pose.curves, self.pose.bones = pose.curves, pose.bones  # 保存していないスライダーの値
@@ -959,7 +982,7 @@ class FacialSession:
             raise FacialSessionError("編集状態に入っていません（begin_edit）")
         pres = self._pres()
         ctx = pres.ctx
-        if ctx.selection is None:
+        if not ctx.has_target:
             if self._base is None:
                 with _no_undo():
                     pose_apply.reset_to_reference(ref)
@@ -974,7 +997,9 @@ class FacialSession:
         with _no_undo():
             rep = pose_apply.apply_pose(ctx.doc, pose, ref)
         self._track_weights(ref, pose.curves)
-        if ctx.selection is None:
+        if ctx.selected_key() is not None:
+            self._applied = (-1, ctx.selected_key(), -1)  # キーが当たっている印（applied_key）
+        elif ctx.selection is None:
             self._applied = None
         else:
             li = min(max(ctx.active_layer, 0), len(ctx.doc.layers) - 1)
@@ -997,8 +1022,8 @@ class FacialSession:
         if not self.editing:
             raise FacialSessionError("編集状態に入っていません（begin_edit / select_point）")
         pres = self._pres()
-        if pres.ctx.selection is None:
-            return IngestReport(ok=False, code="no_point", message="点が選択されていません")
+        if not pres.ctx.has_target:
+            return IngestReport(ok=False, code="no_point", message="点（またはパース補正のキー）が選択されていません")
         wso = pres.pose.working_set_only if working_set_only is None else bool(working_set_only)
         assert self._ref is not None
         doc = pres.ctx.doc
@@ -1038,7 +1063,7 @@ class FacialSession:
         if self._base is None or not self.editing or self.presenters is None:
             return BaseState()
         ctx = self.presenters.ctx
-        pose = self.pose.pose_to_apply().curves if ctx.selection is not None else {}
+        pose = self.pose.pose_to_apply().curves if ctx.has_target else {}
         doc, prof = ctx.doc, self.profile
         lay = base_expr.layer(pose, self._base.curves, lambda n: profile_mod.effective_limit(doc, prof, n))
         return BaseState(
@@ -1124,6 +1149,50 @@ class FacialSession:
             self._apply_buffer()
         if move_camera and r.camera_jump:
             self.camera_to_point(row, col, camera)
+        return r
+
+    @scene_op
+    def select_key(
+        self,
+        index: int,
+        choice: Optional[str] = None,
+        move_camera: bool = False,
+        camera: Optional[str] = None,
+    ) -> SelectResult:
+        """パース補正のキーを編集の対象にし、そのキーのポーズをシーンへ当てる（編集状態に入っていなければ入る。格子の点の選択は外れる）。
+
+        未保存のポーズ編集があると `needs_confirm`（`select_point` と同じ。`choice="save" | "discard" | "cancel"` つきで繰り返す）。
+        move_camera=True: カメラを正面（Yaw 0 / Pitch 0）に置き、軸が距離ならキーの距離へ、画角ならキーの画角へ合わせる（`camera_to_key`）。"""
+        try:
+            return self._select_key(index, choice, move_camera, camera)
+        finally:
+            self._notify_state()
+
+    def _select_key(self, index: int, choice: Optional[str], move_camera: bool, camera: Optional[str]) -> SelectResult:
+        if self._sculpt is not None and choice != CONFIRM_CANCEL:
+            self.sculpt_end()
+        pres = self._pres()
+        was_editing = self.editing
+        self.begin_edit()
+        r = pres.perspective.select_key(index)
+        if r.status == SELECT_NEEDS_CONFIRM:
+            if choice is None:
+                return r
+            if choice == CONFIRM_SAVE:
+                self.save_point()
+                r = pres.perspective.select_key(index)
+                if r.status == SELECT_NEEDS_CONFIRM:  # 保存しても差が残る（丸めの差など）: 捨てて進む
+                    r = pres.perspective.confirm_select_key(CONFIRM_DISCARD)
+                r.saved = True
+            else:
+                return_early = choice == CONFIRM_CANCEL
+                r = pres.perspective.confirm_select_key(choice)
+                if return_early or r.status != SELECT_SELECTED:
+                    return r
+        if r.status == SELECT_SELECTED or (r.status == SELECT_SAME and (not was_editing or self._applied is None)):
+            self._apply_buffer()
+        if move_camera and r.camera_jump:
+            self.camera_to_key(index, camera)
         return r
 
     @scene_op
@@ -1630,11 +1699,15 @@ class FacialSession:
 
     def _sync_preview_exaggeration(self, value: float) -> None:
         """rig の `exaggeration` がキーも接続も無ければ、新しい既定値に合わせる（キーがあるときは触らない）。"""
+        self._sync_preview_default(preview_rig.EXAGGERATION_ATTR, value)
+
+    def _sync_preview_default(self, attr: str, value: float) -> None:
+        """rig の attr がキーも接続も無ければ、新しい既定値に合わせる（キーがあるときは触らない）。"""
         try:
             rig = preview_rig.find_rig(self.require().asset or "")
-            if rig is None or not cmds.attributeQuery(preview_rig.EXAGGERATION_ATTR, node=rig, exists=True):
+            if rig is None or not cmds.attributeQuery(attr, node=rig, exists=True):
                 return
-            plug = f"{rig}.{preview_rig.EXAGGERATION_ATTR}"
+            plug = f"{rig}.{attr}"
             if (cmds.keyframe(plug, query=True, keyframeCount=True) or 0) > 0 or cmds.listConnections(plug, source=True, destination=False):
                 return
             cmds.setAttr(plug, value)
@@ -1661,6 +1734,97 @@ class FacialSession:
         self.require()
         return self.layers.weight_source(index)
 
+    # ============================================================ パース補正（R-34。docs/14 §5.8b）
+    # 設定・キーの編集は Presenter（`session.perspective`）の変更系を包んだコマンド（Undo・古い FC_* の削除・プレビューの作り直しつき）。
+    @property
+    def perspective(self):
+        return self._pres().perspective
+
+    def key_label(self, index: int) -> str:
+        """パース補正のキーの呼び名（「パース補正のキー 1（30 cm）」。番号は 1 から。シェイプ名の K の番号は 0 から）。"""
+        pv = self.perspective.view()
+        row = pv.keys[index] if 0 <= index < len(pv.keys) else None
+        value = f"（{row.value:g} {pv.value_unit}）" if row is not None else ""
+        return f"パース補正のキー {index + 1}{value}"
+
+    def edit_target_label(self) -> str:
+        """今の編集の対象の呼び名（「パース補正のキー 1（30 cm）」「レイヤー「Neutral」 点 R1, C2」）。対象が無ければ ""。"""
+        if self.presenters is None:
+            return ""
+        ctx = self.presenters.ctx
+        k = ctx.selected_key()
+        if k is not None:
+            return self.key_label(k)
+        if ctx.selection is not None:
+            return f"レイヤー「{ctx.layer.name}」 点 R{ctx.selection[0]}, C{ctx.selection[1]}"
+        return ""
+
+    def perspective_view(self):
+        """画面用の表示（`PerspectiveView`）。"""
+        return self.perspective.view()
+
+    @undoable(notify=True)
+    def set_perspective_enabled(self, enabled: bool):
+        return self.perspective.set_enabled(enabled)
+
+    @undoable(notify=True)
+    def set_perspective_axis(self, axis: str):
+        return self.perspective.set_axis(axis)
+
+    @undoable(notify=True)
+    def set_perspective_strength(self, strength: float):
+        """パース補正の強さ（0〜1）。プレビューの rig の `perspective` がキーも接続も無ければ、その値も合わせる。"""
+        r = self.perspective.set_strength(strength)
+        if r.ok:
+            self._sync_preview_default(preview_rig.PERSPECTIVE_ATTR, float(strength))
+        return r
+
+    @undoable(notify=True)
+    def add_perspective_key(self, value: Optional[float] = None, pose: Optional[SourcePose] = None):
+        """キーを足す（value を省くと `suggest_value`）。ポーズは空か渡したもの。"""
+        p = self.perspective
+        return p.add_key(p.suggest_value() if value is None else value, pose)
+
+    @undoable(notify=True)
+    def set_perspective_key_value(self, index: int, value: float):
+        return self.perspective.set_value(index, value)
+
+    @undoable(notify=True)
+    def remove_perspective_key(self, index: int):
+        """キーを削除する（後ろのキーの番号が詰まる）。選んでいたキーなら編集の対象は外れる。いちばん後ろのシェイプはシーンから消える。"""
+        return self.perspective.remove_key(index)
+
+    @undoable(notify=True)
+    def set_perspective_key_pose(self, index: int, pose: SourcePose):
+        return self.perspective.set_key_pose(index, pose)
+
+    @undoable(notify=True)
+    def clear_perspective_key_pose(self, index: int):
+        return self.perspective.clear_key_pose(index)
+
+    def perspective_readout(self) -> str:
+        """プレビューの今のパース補正の軸の値の表示（"距離 45 cm" / "画角 40°"）。パース補正を配線していないときは ""。"""
+        rig = self.preview_rig_node()
+        if rig is None or self.presenters is None or not preview_rig.has_perspective_targets(self.doc.asset or ""):
+            return ""
+        try:
+            v = float(cmds.getAttr(f"{rig}.{preview_rig.OUT_PERSPECTIVE_ATTR}"))
+        except (RuntimeError, ValueError):
+            return ""
+        axis = self.doc.perspective.axis if self.doc.perspective is not None else "distance"
+        return f"画角 {v:.1f}°" if axis == "fov" else f"距離 {v:.0f} cm"
+
+    def perspective_axis_value(self, camera: Optional[str] = None) -> Optional[float]:
+        """今のカメラの軸の値（距離 = cm / 画角 = 度）。パース補正が無い・カメラが無いときは None。"""
+        doc = self.require()
+        axis = doc.perspective.axis if doc.perspective is not None else "distance"
+        try:
+            if axis == "fov":
+                return preview_rig.camera_fov(self.camera_transform(camera))
+            return preview_rig.view_distance(doc, camera)
+        except (preview_rig.PreviewRigError, FacialSessionError, RuntimeError):
+            return None
+
     # ============================================================ ベイク
     def bake_all(self, progress=None) -> bake_mod.BakeReport:
         """全レイヤー・全点を焼く。"""
@@ -1677,7 +1841,11 @@ class FacialSession:
         """1 レイヤー分を焼く。"""
         return self._bake([index], None, progress)
 
-    def _bake(self, layers, points, progress) -> bake_mod.BakeReport:
+    def bake_perspective_key(self, index: int, progress=None) -> bake_mod.BakeReport:
+        """パース補正のキー 1 個だけ焼く（空のキーは焼かず、古いシェイプがあれば掃除する）。"""
+        return self._bake(None, [], progress, persp_keys=[index])
+
+    def _bake(self, layers, points, progress, persp_keys=None) -> bake_mod.BakeReport:
         """編集状態を抜けてから焼く（ベイクだけを Maya の Undo の 1 区切りにするため。docs/15 §4.3）。戻したあと bake_state を取り直す。
 
         - Neutral の点を焼くときは、感情レイヤーの同じ位置の点も一緒に焼き直す（感情は Neutral との差分で焼くため）。報告の `notes` に書く
@@ -1690,7 +1858,7 @@ class FacialSession:
         warns = self._neutral_warnings(doc, involved)
         rebuilt: Optional[preview_rig.BuildReport] = None
         try:
-            report = bake_mod.bake(doc, layers=layers, points=points, progress=progress)
+            report = bake_mod.bake(doc, layers=layers, points=points, progress=progress, persp_keys=persp_keys)
         finally:
             self.refresh_scene(notify=True, call_listeners=False)
             rebuilt = self._sync_preview()
@@ -1726,32 +1894,54 @@ class FacialSession:
         return None, sorted(base | set(extra)), extra
 
     # ------------------------------------------------------------ 変更のある点だけベイク
-    STALE_CODES = ("point_unbaked", "point_changed_since_bake", "baked_morph_missing")
+    STALE_CODES = (
+        "point_unbaked",
+        "point_changed_since_bake",
+        "baked_morph_missing",
+        "perspective_key_unbaked",
+        "perspective_key_changed",
+    )
 
-    def stale_points(self) -> list[tuple[int, int, int]]:
-        """検証が「未ベイク」「ベイク後に変更」「ベイク済みのはずのシェイプが無い」と報告する点 (レイヤー番号, row, col)。
-        シーンの情報を取り直してから調べる（Document もシーンも変えない）。"""
+    def _stale_issues(self) -> list:
         doc = self.require()
         self.refresh_scene(notify=False)
         ctx = self.ctx
         issues = V.validate(doc, ctx.scene or V.SceneInfo(), ctx.profile, ctx.bake_state, ctx.bake_exclude)
+        return [i for i in issues if i.code in self.STALE_CODES]
+
+    def stale_points(self) -> list[tuple[int, int, int]]:
+        """検証が「未ベイク」「ベイク後に変更」「ベイク済みのはずのシェイプが無い」と報告する点 (レイヤー番号, row, col)。
+        シーンの情報を取り直してから調べる（Document もシーンも変えない）。パース補正のキーは `stale_perspective_keys`。"""
         out: list[tuple[int, int, int]] = []
-        for i in issues:
-            if i.code in self.STALE_CODES and i.layer is not None and i.row is not None and i.col is not None:
+        for i in self._stale_issues():
+            if i.layer is not None and i.row is not None and i.col is not None:
                 p = (i.layer, i.row, i.col)
                 if p not in out:
                     out.append(p)
         return sorted(out)
 
+    def stale_perspective_keys(self) -> list[int]:
+        """未ベイク・ベイク後に変更（番号が詰まった・除外を変えた）・シェイプが消えたパース補正のキーの番号。"""
+        return sorted({i.key for i in self._stale_issues() if i.key is not None})
+
     def bake_stale(self, progress=None) -> bake_mod.BakeReport:
-        """未ベイク・ベイク後に変更・シェイプが消えた点だけを焼く。Neutral の点が入っていれば、感情レイヤーの同じ位置の点も焼き直す
-        （`bake_point` / `bake_layer` と同じ）。対象が無ければ何も焼かず、`notes` にその旨を入れた空の報告を返す。"""
+        """未ベイク・ベイク後に変更・シェイプが消えた点（とパース補正のキー）だけを焼く。Neutral の点が入っていれば、感情レイヤーの同じ位置の点も
+        焼き直す（`bake_point` / `bake_layer` と同じ）。対象が無ければ何も焼かず、`notes` にその旨を入れた空の報告を返す。"""
         points = self.stale_points()
-        if not points:
+        keys = self.stale_perspective_keys()
+        if not points and not keys and not self._persp_orphans():
             rep = bake_mod.BakeReport()
-            rep.notes.append("焼き直す点はありません（未ベイク・変更あり・シェイプが消えた点が 0 個）")
+            rep.notes.append("焼き直す点はありません（未ベイク・変更あり・シェイプが消えた点・パース補正のキーが 0 個）")
             return rep
-        return self._bake(None, points, progress)
+        # 古いパース補正のシェイプ（キーを削除した・ポーズを空にした）だけが残っているときも、掃除のために走らせる
+        return self._bake(None, points, progress, persp_keys=keys)
+
+    def _persp_orphans(self) -> list[str]:
+        """対応するキーが無い / 空のキーのパース補正のシェイプ（`FC_<asset>_Persp_K{n}`）。再ベイクで掃除される。"""
+        doc = self.require()
+        ctx = self.ctx
+        issues = V.validate(doc, ctx.scene or V.SceneInfo(), ctx.profile, ctx.bake_state, ctx.bake_exclude)
+        return [i.name for i in issues if i.code == "orphan_target" and "_Persp_K" in i.name]
 
     @staticmethod
     def _involved_layers(doc: Document, layers, points) -> set[int]:
@@ -2266,7 +2456,7 @@ class FacialSession:
         """rig のアトリビュート（alpha / useManual / manualYaw / manualPitch / exaggeration / emotion_<Layer>）を設定する。
         キーが打ってある・他から駆動されているアトリビュートは変えられない（FacialSessionError）。設定した値を返す。"""
         rig = self._preview_rig_or_raise()
-        allowed = {*preview_rig.KEYABLE_FIXED, preview_rig.EXAGGERATION_ATTR, *preview_rig.emotion_attrs(self.doc).values()}
+        allowed = {*preview_rig.KEYABLE_FIXED, preview_rig.EXAGGERATION_ATTR, preview_rig.PERSPECTIVE_ATTR, *preview_rig.emotion_attrs(self.doc).values()}
         if name not in allowed:
             raise FacialSessionError(f"プレビューのアトリビュート「{name}」は変えられません")
         plug = f"{rig}.{name}"
@@ -2308,6 +2498,12 @@ class FacialSession:
         if cmds.attributeQuery(preview_rig.EXAGGERATION_ATTR, node=rig, exists=True):
             st.exaggeration, st.exaggeration_keyed = info(preview_rig.EXAGGERATION_ATTR)
         st.has_extreme = preview_rig.has_extreme_targets(doc.asset or "")
+        if cmds.attributeQuery(preview_rig.PERSPECTIVE_ATTR, node=rig, exists=True):
+            st.perspective, st.perspective_keyed = info(preview_rig.PERSPECTIVE_ATTR)
+        st.has_perspective = preview_rig.has_perspective_targets(doc.asset or "")
+        st.perspective_axis = doc.perspective.axis if doc.perspective is not None else "distance"
+        if st.has_perspective and cmds.attributeQuery(preview_rig.OUT_PERSPECTIVE_ATTR, node=rig, exists=True):
+            st.perspective_value = float(cmds.getAttr(f"{rig}.{preview_rig.OUT_PERSPECTIVE_ATTR}"))
         st.distance_layers = [doc.layers[i].name for i in preview_rig.distance_layers(doc)]
         if st.distance_layers and cmds.attributeQuery(preview_rig.OUT_DISTANCE_ATTR, node=rig, exists=True):
             st.out_distance = float(cmds.getAttr(f"{rig}.{preview_rig.OUT_DISTANCE_ATTR}"))
@@ -2606,6 +2802,13 @@ class FacialSession:
         if not self.grid.point_at(row, col):
             raise FacialSessionError(f"点 (R{row}, C{col}) は格子の外です")
         yaw, pitch = self.grid.angles_of(row, col)
+        self.camera_to_angles(yaw, pitch, camera, distance)
+        return yaw, pitch
+
+    def camera_to_angles(self, yaw: float, pitch: float, camera: Optional[str] = None, distance: Optional[float] = None) -> None:
+        """カメラを、基準ボーンの中心（centerOffset 込み）から (Yaw, Pitch) の方向・distance（cm。省くと今の距離）の位置へ動かして中心を向ける。"""
+        doc = self.require()
+        pose_apply.assert_maya_space(doc)
         center, q = self._grid_center()
         cam = self.camera_transform(camera)
         cam_dag = self._dag(cam)
@@ -2640,7 +2843,25 @@ class FacialSession:
                 cmds.setAttr(shapes[0] + ".centerOfInterest", om.MDistance(distance, om.MDistance.kCentimeters).asUnits(ui_len))
             except RuntimeError:
                 pass
-        return yaw, pitch
+
+    def camera_to_key(self, index: int, camera: Optional[str] = None) -> float:
+        """パース補正のキーの位置へカメラを動かす: 顔の正面（Yaw 0 / Pitch 0）に置き、軸が距離ならキーの距離（cm）へ、
+        画角（fov）なら今の距離のまま焦点距離をキーの縦の画角に合わせる（フィルムフィットは「縦」にそろえる）。
+        カメラの transform とレンズを書く（Maya の Undo に積まれる）。合わせた軸の値（cm / 度）を返す。"""
+        doc = self.require()
+        p = doc.perspective
+        if p is None or not 0 <= index < len(p.keys):
+            raise FacialSessionError("パース補正のキーが範囲外です")
+        value = float(p.keys[index].value)
+        if not V.perspective_value_ok(p.axis, value):
+            raise FacialSessionError(f"キーの値 {value:g} は{'画角' if p.axis == 'fov' else '距離'}として使えません")
+        cam = self.camera_transform(camera)
+        if p.axis == "fov":
+            self.camera_to_angles(0.0, 0.0, camera)  # 距離は今のまま
+            preview_rig.set_camera_fov(cam, value)
+        else:
+            self.camera_to_angles(0.0, 0.0, camera, distance=value)
+        return value
 
     # ============================================================ シーンの出来事（userSetup の scriptJob から）
     def on_before_scene_change(self) -> None:
@@ -2745,6 +2966,11 @@ class PreviewStatus:
     exaggeration: float = 1.0  # 誇張（`_Ex`）の強さ（rig の exaggeration）
     exaggeration_keyed: bool = False
     has_extreme: bool = False  # 配線している `_Ex` があるか（無いと誇張のスライダーは効かない）
+    perspective: float = 1.0  # パース補正の強さ（rig の perspective）
+    perspective_keyed: bool = False
+    has_perspective: bool = False  # 配線しているパース補正のシェイプがあるか（無いとスライダーは効かない）
+    perspective_axis: str = "distance"  # パース補正の軸
+    perspective_value: Optional[float] = None  # 今の軸の値（距離 cm / 画角 度）。パース補正を配線しているときだけ
     out_distance: Optional[float] = None  # カメラと格子の中心の距離（cm）。距離で重みを決めるレイヤーがあるときだけ
     distance_layers: list[str] = field(default_factory=list)  # 重みをカメラの距離で決めているレイヤー（emotion_ は使われない）
     emotions: list[tuple[str, str, float, bool]] = field(default_factory=list)  # (レイヤー名, rig のアトリビュート名, 値, キーあり)

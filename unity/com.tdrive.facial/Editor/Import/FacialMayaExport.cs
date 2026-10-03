@@ -1,6 +1,7 @@
 // 「Maya へ戻す」: 実効の調整値（取り込んだ値 + 調整用アセットの上書き）を、元の .fcpose の単位・キー名に戻して JSON にする。
 // FcposeConverter（取り込み）の逆変換。出すのは policy と quality（と、端のフェードを上書きしているときの grid.edgeFade）だけ（格子・ポーズ・シェイプは Unity では変えない）。
 // 長さ（距離フェード）は Unity の m → 元データの単位（cm など）。それ以外は単位なし。
+// パース補正の強さは、上書きしているときだけ perspective.strength として書く（.fcpose と同じキー名）。
 using System.Globalization;
 using System.Text;
 using TDrive.Facial.Core;
@@ -17,6 +18,9 @@ namespace TDrive.Facial.Editor
         public bool hasExaggeration;
         public double exaggeration;
         public int maxLod;
+        /// <summary>true のとき perspective.strength も書き出す（パース補正の強さを上書きしているときだけ）。</summary>
+        public bool hasPerspectiveStrength;
+        public double perspectiveStrength;
         /// <summary>true のとき grid.edgeFade も書き出す（端のフェードを上書きしているときだけ）。</summary>
         public bool hasEdgeFade;
         public double edgeFade;
@@ -57,6 +61,7 @@ namespace TDrive.Facial.Editor
                 maxLod = data != null ? data.quality.maxLod : 0,
                 edgeFade = p.edgeFade,
                 exaggeration = p.exaggeration,
+                perspectiveStrength = p.perspectiveStrength,
             };
         }
 
@@ -66,6 +71,7 @@ namespace TDrive.Facial.Editor
             FacialSourceTuning t = ToSource(data, FacialCorrectionOverrides.Resolve(data, overrides));
             t.hasEdgeFade = overrides != null && overrides.overrideEdgeFade; // 上書きしているときだけ grid を出す
             t.hasExaggeration = overrides != null && overrides.overrideExaggeration; // 誇張も上書きしているときだけ
+            t.hasPerspectiveStrength = overrides != null && overrides.overridePerspectiveStrength; // パース補正の強さも上書きしているときだけ
             return BuildJson(t);
         }
 
@@ -84,6 +90,12 @@ namespace TDrive.Facial.Editor
             {
                 sb.Append("  \"grid\": {\n");
                 sb.Append("    \"edgeFade\": ").Append(N(t.edgeFade)).Append("\n");
+                sb.Append("  },\n");
+            }
+            if (t.hasPerspectiveStrength)
+            {
+                sb.Append("  \"perspective\": {\n");
+                sb.Append("    \"strength\": ").Append(N(t.perspectiveStrength)).Append("\n");
                 sb.Append("  },\n");
             }
             sb.Append("  \"quality\": {\n");

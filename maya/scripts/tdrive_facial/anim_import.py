@@ -289,8 +289,8 @@ def pose_from_current_frame(
     """
     try:
         doc = session.require()
-        if session.ctx.selection is None:
-            return _fail("点が選択されていません（グリッドで点を選んでから読み込んでください）", "no_point")
+        if not session.ctx.has_target:
+            return _fail("点が選択されていません（グリッドで点（またはパース補正のキー）を選んでから読み込んでください）", "no_point")
         if session.editing:
             session.end_edit()
         meshes = _target_meshes(session)
@@ -400,8 +400,8 @@ def pose_from_unity_anim(
     """
     try:
         session.require()
-        if session.ctx.selection is None:
-            return _fail("点が選択されていません（グリッドで点を選んでから読み込んでください）", "no_point")
+        if not session.ctx.has_target:
+            return _fail("点が選択されていません（グリッドで点（またはパース補正のキー）を選んでから読み込んでください）", "no_point")
         try:
             clip = _clip_of(anim_path)
         except unity_anim.UnityAnimError as exc:

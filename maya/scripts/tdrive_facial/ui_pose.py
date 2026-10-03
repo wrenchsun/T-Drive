@@ -506,6 +506,8 @@ class PoseTab(QtWidgets.QWidget):
         row = QtWidgets.QHBoxLayout()
         self.btn_save = QtWidgets.QPushButton("保存（この点をキーにする）")
         self.btn_save.setToolTip("編集中のポーズをこの点へ保存します。この点はキー（緑）になります。全部 0 のポーズを保存すると点が消えます")
+        self._save_text = self.btn_save.text()
+        self._save_tip = self.btn_save.toolTip()
         self.btn_save.clicked.connect(self.on_save)
         self.btn_reload = QtWidgets.QPushButton("読み直す")
         self.btn_reload.setToolTip("編集中の値を捨てて、保存してあるポーズを読み直します")
@@ -709,10 +711,10 @@ class PoseTab(QtWidgets.QWidget):
     def _sync_edit_state(self) -> None:
         if not self.has_doc():
             return
-        sel = self.session.ctx.selection
+        sel = self.session.ctx.has_target  # 格子の点か、パース補正のキー
         self._sync_note(sel)
         # 取り込みは編集状態（基準姿勢）でだけできる
-        self.btn_capture.setEnabled(sel is not None and self.session.editing)
+        self.btn_capture.setEnabled(sel and self.session.editing)
         st = self.session.base_state()
         base = st.name
         self.base_label.setText(f"「{base}」" if base else "なし")
@@ -756,7 +758,7 @@ class PoseTab(QtWidgets.QWidget):
         self.base_only_list.setVisible(open_)
 
     def _sync_note(self, selection) -> None:
-        if selection is not None and not self.session.editing:
+        if selection and not self.session.editing:
             self.note.setText("今はシーンにこのポーズが当たっていません。スライダーを動かすと、シーンを基準姿勢にして当て直します。")
         else:
             self.note.setText("")
@@ -820,22 +822,33 @@ class PoseTab(QtWidgets.QWidget):
         self._curve_rows.clear()
         self._bone_rows.clear()
 
-    def _header_html(self, selection, layer: str, dirty: bool) -> str:
+    def key_label(self, index: int) -> str:
+        return self.session.key_label(index)
+
+    def _header_html(self, selection, layer: str, dirty: bool, key: Optional[int] = None) -> str:
+        mark = f" <span style='color:{DIRTY_COLOR}; font-weight:bold;'>[未保存]</span>" if dirty else ""
+        if key is not None:
+            return f"<b>編集の対象:</b> {self.key_label(key)}{mark}"
         if selection is None:
-            return "グリッドで点を選んでください（グリッドタブで点をクリックすると、その点のポーズをここで編集できます）"
+            return "グリッドで点を選んでください（グリッドタブで点をクリックすると、その点のポーズをここで編集できます。パース補正のキーを選んでも編集できます）"
         r, c = selection
         yaw, pitch = self.session.grid.angles_of(r, c)
-        mark = f" <span style='color:{DIRTY_COLOR}; font-weight:bold;'>[未保存]</span>" if dirty else ""
         return f"<b>編集中:</b> レイヤー「{layer}」 点 R{r}, C{c}（Yaw {yaw:.1f}° / Pitch {pitch:.1f}°）{mark}"
 
     def _sync_header(self, view: PoseView) -> None:
-        self.header.setText(self._header_html(view.selection, view.layer, view.dirty))
-        self._sync_note(view.selection)
+        self.header.setText(self._header_html(view.selection, view.layer, view.dirty, view.key_index))
+        self._sync_note(view.selection is not None or view.key_index is not None)
 
     def _sync_controls(self, view: PoseView) -> None:
         ed = view.can_edit
         self.body.setEnabled(ed)
         self.btn_save.setEnabled(view.can_save)
+        if view.key_index is not None:  # 編集の対象がパース補正のキー
+            self.btn_save.setText("保存（このキーのポーズにする）")
+            self.btn_save.setToolTip("編集中のポーズを、選んでいるパース補正のキーへ保存します。全部 0 のポーズを保存すると「補正なし」のキーになります（キーは消えません）")
+        else:
+            self.btn_save.setText(self._save_text)
+            self.btn_save.setToolTip(self._save_tip)
         self.btn_reload.setEnabled(ed)
         self.btn_zero.setEnabled(ed)
         self.btn_mirror.setEnabled(view.can_mirror)
@@ -923,7 +936,7 @@ class PoseTab(QtWidgets.QWidget):
         """自分の操作のあと: 見出しの [未保存] だけを更新する（行は作り直さない）。"""
         if self.has_doc():
             ctx = self.session.ctx
-            self.header.setText(self._header_html(ctx.selection, ctx.layer.name, self.session.pose.dirty))
+            self.header.setText(self._header_html(ctx.selection, ctx.layer.name, self.session.pose.dirty, ctx.selected_key()))
 
     # ------------------------------------------------------------------ 共通
     def _run(self, label: str, fn: Callable[[], object]):
@@ -1187,8 +1200,9 @@ class PoseTab(QtWidgets.QWidget):
     # --- 書き出し / 読み込み（ファイルの選択は差し替えられる）---
     def default_export_path(self) -> str:
         d = self.session.doc
-        sel = self.session.ctx.selection
-        stem = f"{self.session.ctx.layer.name}_R{sel[0]}_C{sel[1]}" if sel else "pose"
+        ctx = self.session.ctx
+        sel = ctx.selection
+        stem = f"{ctx.layer.name}_R{sel[0]}_C{sel[1]}" if sel else f"Persp_K{ctx.selected_key()}" if ctx.selected_key() is not None else "pose"
         return str(Path(project.root()) / "facial" / (d.asset or "untitled") / "poses" / f"{stem}.fcpose.json")
 
     def choose_export_path(self, default: str) -> str:

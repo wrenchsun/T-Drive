@@ -10,7 +10,9 @@
 - [プレビューを作る / 作り直す] [消す]: rig（`tdFacialPreview_<asset>`）と式を作る・消す。編集中でも使える（セッションが一度抜けて戻る）
 - [補正あり / なし]: A/B 比較（rig の enable）
 - カメラ: モデルパネルのカメラ + 「今のビューのカメラ」。プレビューがあれば、選ぶとすぐつなぎ替える
-- 強さ（alpha）・誇張（exaggeration）・感情の重み（レイヤーごと）: rig のアトリビュートを動かす。キーが打ってあるものは動かせない（「キーあり」と出す）
+- 強さ（alpha）・誇張（exaggeration）・パース補正（perspective）・感情の重み（レイヤーごと）: rig のアトリビュートを動かす。キーが打ってあるものは動かせない（「キーあり」と出す）
+  - パース補正: 広角で寄ったときの奥行きの補正の強さ。パース補正のシェイプ（`Persp_K{n}`）を配線していないときは動かせない。
+    今の軸の値（カメラの距離 cm / 縦の画角 度）は角度の表示の横に出る
   - 誇張: 重み 1 を超えるポーズをベイクしてできる `_Ex` シェイプ（誇張用）の効き具合。`_Ex` が無いときは動かせない
   - 重みをカメラの距離で決めているレイヤーは、感情のスライダーを動かせない（距離で決まる）。距離は角度の表示の横に出る
 - 手動の角度: カメラを使わず Yaw / Pitch を数値で指定する（角度を決め打ちで確かめる）
@@ -169,6 +171,16 @@ class PreviewGroup(QtWidgets.QGroupBox):
         self.ex_value = QtWidgets.QLabel()
         self.ex_slider.valueChanged.connect(partial(self.on_slider, "exaggeration"))
         self._watch_drag(self.ex_slider)
+        self.persp_label = QtWidgets.QLabel("パース補正")
+        self.persp_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        self.persp_slider.setRange(0, SLIDER_STEPS)
+        self.persp_slider.setToolTip(
+            "パース補正の強さ（0 = 補正なし、1 = 作った通り）。広角で寄ったときの奥行きを押さえる補正で、カメラの距離 / 画角に応じて動きます。"
+            "ベイク済みのパース補正のキーがプレビューに入っていないときは動かせません"
+        )
+        self.persp_value = QtWidgets.QLabel()
+        self.persp_slider.valueChanged.connect(partial(self.on_slider, "perspective"))
+        self._watch_drag(self.persp_slider)
 
         # 手動の角度
         row = QtWidgets.QHBoxLayout()
@@ -330,6 +342,9 @@ class PreviewGroup(QtWidgets.QGroupBox):
         self._set_slider(self.ex_slider, self.ex_value, st.exaggeration, st.exaggeration_keyed, live and st.has_extreme)
         if exists and not st.has_extreme:
             self.ex_value.setText(f"{st.exaggeration:.2f}（誇張用のシェイプなし）")
+        self._set_slider(self.persp_slider, self.persp_value, st.perspective, st.perspective_keyed, live and st.has_perspective)
+        if exists and not st.has_perspective:
+            self.persp_value.setText(f"{st.perspective:.2f}（パース補正のシェイプなし）")
         for name, attr, value, keyed in st.emotions:
             label, slider, vl = self._emotion_rows[attr]
             self._set_slider(slider, vl, value, keyed, live)
@@ -356,7 +371,10 @@ class PreviewGroup(QtWidgets.QGroupBox):
         self.sliders.addWidget(self.ex_label, 1, 0)
         self.sliders.addWidget(self.ex_slider, 1, 1)
         self.sliders.addWidget(self.ex_value, 1, 2)
-        for i, (name, attr, _v, _k) in enumerate(st.emotions, start=2):
+        self.sliders.addWidget(self.persp_label, 2, 0)
+        self.sliders.addWidget(self.persp_slider, 2, 1)
+        self.sliders.addWidget(self.persp_value, 2, 2)
+        for i, (name, attr, _v, _k) in enumerate(st.emotions, start=3):
             by_distance = name in st.distance_layers
             label = QtWidgets.QLabel(f"感情 {name}")
             slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
@@ -395,6 +413,9 @@ class PreviewGroup(QtWidgets.QGroupBox):
             self.angle_label.setText("")
             return
         text = f"使っている角度: Yaw {yaw:.1f}° / Pitch {pitch:.1f}°"
+        persp = self.session.perspective_readout()
+        if persp:
+            text += " / " + persp
         try:
             if cmds.attributeQuery("outDistance", node=rig, exists=True):  # 距離で重みを決めるレイヤーがあるとき
                 text += f" / 距離 {cmds.getAttr(f'{rig}.outDistance'):.0f} cm"
@@ -442,7 +463,10 @@ class PreviewGroup(QtWidgets.QGroupBox):
             self._call("キーの削除", s.preview_clear_keys)
             rep = self._call("プレビューの作成", lambda: s.preview_build(self._camera_choice())) or rep
         self.refresh()
-        msg = f"プレビューを作りました（ターゲット {rep.targets} 本）"
+        msg = f"プレビューを作りました（ターゲット {rep.targets} 本"
+        if rep.perspective_targets:
+            msg += f"、パース補正 {rep.perspective_targets} 本"
+        msg += "）"
         if rep.targets == 0:
             msg += "。配線するシェイプがありません（ベイクしてから作り直してください）"
         if rep.warnings:
@@ -477,7 +501,15 @@ class PreviewGroup(QtWidgets.QGroupBox):
             return
         v = pos / SLIDER_STEPS
         got = self._call("値の設定", lambda: self.session.preview_set_attr(attr, v))
-        label = self.alpha_value if attr == "alpha" else self.ex_value if attr == "exaggeration" else self._emotion_rows[attr][2]
+        label = (
+            self.alpha_value
+            if attr == "alpha"
+            else self.ex_value
+            if attr == "exaggeration"
+            else self.persp_value
+            if attr == "perspective"
+            else self._emotion_rows[attr][2]
+        )
         if got is not None:
             label.setText(f"{got:.2f}")
 

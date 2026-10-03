@@ -9,7 +9,7 @@
 <body>
 <nav class="breadcrumb"><a href="Readme.html">トップ</a> › <a href="facial.html">FacialController</a> › 出力と Unity</nav>
 <h1>出力と Unity</h1>
-<p class="lastupdate">最終更新日: 2026-10-03</p>
+<p class="lastupdate">最終更新日: 2026-10-04</p>
 
 <p>Maya で作った補正を Unity に渡し、ゲームの中で動かすまでの手順です。</p>
 <div class="warn"><strong>確認中:</strong> Unity 側の部品は動作テストを通っていますが、<strong>Maya が出力した実際のファイルを Unity に置いての通し確認は、まだ終わっていません</strong>。うまくいかないときは<a href="troubleshooting.html#facial">困ったとき</a>を見て、状況を開発者に伝えてください。</div>
@@ -80,6 +80,7 @@
 <tr><td>カット補正（ポーズ / ポーズの重み）</td><td>このクリップの間だけ、1 点のポーズ（<span class="path">.fcpose</span> から取り込んだもの）を足します。ショットごとの手直し用です。元のデータは変わらず、クリップが終わると元に戻ります</td></tr>
 <tr><td>コマ打ち（コマ打ちを使う / fps）</td><td>オンにすると、このクリップの間だけ補正の更新をこの fps に間引きます（0 = 毎フレーム）。更新の間は前の重みのまま止まります</td></tr>
 <tr><td>誇張（誇張を使う / 0〜1）</td><td>オンにすると、このクリップの間だけ誇張用シェイプ（<code>FC_…_Ex</code>）の強さを変えます。オフのときは、<span class="path">.fctrack</span> に入っている誇張の動き（Maya で打ったキー）に従います。1 = 作った通り、0 = 誇張なし。誇張用シェイプの無いキャラクターでは変わりません</td></tr>
+<tr><td>パース補正（パース補正を使う / 強さ 0〜1）</td><td>オンにすると、このクリップの間だけパース補正の強さを変えます。1 = 作った通り、0 = 補正なし。オフのときは、<span class="path">.fctrack</span> に入っているパース補正の動きに従います</td></tr>
 </table>
 <ul>
 <li><strong>クリップが重なっている所は、なめらかにブレンドされます</strong></li>
@@ -130,6 +131,7 @@
 <tr><td>シャープさ</td><td>1 = そのまま。大きいほど、キーの角度のそばでキーのポーズそのものに寄ります</td></tr>
 <tr><td>コマ打ち fps</td><td>補正の更新をこの回数 / 秒に間引きます（0 = 毎フレーム）</td></tr>
 <tr><td>誇張（0〜1）</td><td>誇張用シェイプ（<code>FC_…_Ex</code>）の強さ。1 = 作った通り、0 = 誇張なし</td></tr>
+<tr><td>パース補正の強さ（0〜1）</td><td>広角で寄ったときの補正の強さ。0 = 補正なし、1 = 作った通り。Runner の「状態」に、今の距離（または画角）が出ます。軸が画角のキャラクターは、視点にカメラが無いと補正が掛かりません（インスペクターのプレビューの仮の視点など）</td></tr>
 </table>
 
 <h2>Unity でできないこと</h2>
@@ -141,7 +143,7 @@
 <h2 id="soon">準備中の機能</h2>
 <table>
 <tr><th>機能</th><th>状態</th></tr>
-<tr><td>パース補正・部位別の強さ・LOD1 以降へのベイク・リップシンク</td><td><span class="soon">準備中</span></td></tr>
+<tr><td>部位別の強さ・LOD1 以降へのベイク・リップシンク</td><td><span class="soon">準備中</span></td></tr>
 <tr><td>Maya のターンテーブル</td><td><span class="soon">準備中</span></td></tr>
 </table>
 <p>シェイプタブ・アニメから読み込む・他のデータからコピー・Timeline のトラック・デバッグ表示は、使えます（<a href="facial.html#now">今できること</a>）。</p>

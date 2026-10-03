@@ -51,6 +51,7 @@ from .core.presenters import (
 )
 from .session import FacialSessionError
 from .ui import YAW_MINUS_HELP, YAW_PLUS_HELP  # noqa: F401  再公開（ui_setup が ui_grid から読む）
+from .ui_persp import PerspectiveGroup
 from .ui_preview import PreviewGroup
 
 POLL_MS = 100  # カメラの角度を読む間隔（約 10 回 / 秒）
@@ -544,11 +545,12 @@ class GridTab(QtWidgets.QWidget):
         self.btn_clear_layer = QtWidgets.QPushButton("レイヤーをクリア")
         self.btn_clear_layer.setToolTip("今のレイヤーの点を全部消します")
         self.btn_clear_layer.clicked.connect(self.on_clear_layer)
-        for w in (self.btn_generate, self.all_layers, self.btn_unkey, self.btn_clear, self.btn_clear_layer):
+        for w in (self.btn_generate, self.all_layers, self.btn_unkey, self.btn_clear):
             row.addWidget(w)
         row.addStretch(1)
         g.addLayout(row)
-        row = QtWidgets.QHBoxLayout()
+        row = QtWidgets.QHBoxLayout()  # 幅 400〜480 px で横にはみ出さないよう、2 行目へ
+        row.addWidget(self.btn_clear_layer)
         self.btn_copy_from = QtWidgets.QPushButton("他のデータからコピー…")
         self.btn_copy_from.setToolTip("別の FacialController のデータ（.fcpose.json）から、ポーズをこのデータへコピーします（全レイヤー・作業セットだけ・キーだけを選べます）")
         self.btn_copy_from.clicked.connect(lambda *_: self.on_copy_from())
@@ -562,17 +564,17 @@ class GridTab(QtWidgets.QWidget):
         g = QtWidgets.QVBoxLayout(box)
         row = QtWidgets.QHBoxLayout()
         self.btn_bake_all = QtWidgets.QPushButton("ベイク（全部）")
-        self.btn_bake_all.setToolTip("全レイヤー・全部の点を焼きます。Maya の元に戻す（Ctrl+Z）1 回で戻せます")
+        self.btn_bake_all.setToolTip("全レイヤー・全部の点と、パース補正のキーを焼きます。Maya の元に戻す（Ctrl+Z）1 回で戻せます")
         self.btn_bake_all.clicked.connect(self.on_bake_all)
         self.btn_bake_point = QtWidgets.QPushButton("ベイク（この点）")
-        self.btn_bake_point.setToolTip("選んでいる点だけ焼きます")
+        self.btn_bake_point.setToolTip("選んでいる点（パース補正のキーを選んでいるときはそのキー）だけ焼きます")
         self.btn_bake_point.clicked.connect(self.on_bake_point)
         self.btn_bake_layer = QtWidgets.QPushButton("ベイク（このレイヤー）")
         self.btn_bake_layer.setToolTip("今のレイヤーの点だけ焼きます")
         self.btn_bake_layer.clicked.connect(self.on_bake_layer)
         self.btn_bake_stale = QtWidgets.QPushButton("ベイク（変更のある点）")
         self.btn_bake_stale.setToolTip(
-            "未ベイク・ベイク後に変更・シェイプが消えた点だけ焼きます（速い）。Neutral の点を焼くときは、感情レイヤーの同じ位置の点も一緒に焼き直します"
+            "未ベイク・ベイク後に変更・シェイプが消えた点（とパース補正のキー）だけ焼きます（速い）。Neutral の点を焼くときは、感情レイヤーの同じ位置の点も一緒に焼き直します"
         )
         self.btn_bake_stale.clicked.connect(self.on_bake_stale)
         for w in (self.btn_bake_stale, self.btn_bake_all):
@@ -590,6 +592,9 @@ class GridTab(QtWidgets.QWidget):
         self.report.setPlaceholderText("ベイクの結果がここに出ます")
         g.addWidget(self.report)
         v.addWidget(box)
+
+        self.persp = PerspectiveGroup(session, move_camera=lambda: self.move_camera.isChecked())
+        v.addWidget(self.persp)
 
         self.preview = PreviewGroup(session)
         v.addWidget(self.preview)
@@ -710,6 +715,7 @@ class GridTab(QtWidgets.QWidget):
         self._poll_camera(force=True)
         self.canvas.updateGeometry()
         self.canvas.update()
+        self.persp.refresh()
         self.preview.refresh()
 
     def _sync_controls(self) -> None:
@@ -744,7 +750,7 @@ class GridTab(QtWidgets.QWidget):
         self.btn_bake_all.setEnabled(can_bake)
         self.btn_bake_layer.setEnabled(can_bake)
         self.btn_bake_stale.setEnabled(can_bake)
-        self.btn_bake_point.setEnabled(can_bake and pa[ACTION_BAKE_POINT])
+        self.btn_bake_point.setEnabled(can_bake and (pa[ACTION_BAKE_POINT] or s.ctx.selected_key() is not None))
 
     # ------------------------------------------------------------------ サムネイル（任意の表示）
     def thumb_for(self, row: int, col: int) -> Optional[QtGui.QPixmap]:
@@ -1019,8 +1025,12 @@ class GridTab(QtWidgets.QWidget):
 
     def on_bake_point(self) -> None:
         sel = self.session.ctx.selection if self.has_doc() else None
+        key = self.session.ctx.selected_key() if self.has_doc() else None
+        if sel is None and key is not None:  # 編集の対象がパース補正のキー
+            self._bake(f"パース補正のキー {key + 1}", lambda s: s.bake_perspective_key(key))
+            return
         if sel is None:
-            self.set_status("点が選ばれていません", error=True)
+            self.set_status("点（またはパース補正のキー）が選ばれていません", error=True)
             return
         self._bake("この点", lambda s: s.bake_point(sel[0], sel[1]))
 
@@ -1056,6 +1066,8 @@ class GridTab(QtWidgets.QWidget):
             lines.append(n)
         if report.extreme:
             lines.append(f"誇張用のシェイプ（重み 1 を超えたポーズの分 _Ex）: {len(report.extreme)} 個")
+        if getattr(report, "perspective", None):
+            lines.append(f"パース補正のシェイプ（FC_…_Persp_K）: {len(report.perspective)} 個")
         if report.empty:
             lines.append(f"差分が残らなかった点（空のシェイプ）: {len(report.empty)} 個")
         if report.missing_curves:
@@ -1125,6 +1137,7 @@ class GridTab(QtWidgets.QWidget):
         self._unsub = []
         if self._on_session_changed in self.session.listeners:
             self.session.listeners.remove(self._on_session_changed)
+        self.persp.detach()
         if self.preview.on_state in self.session.state_listeners:
             self.session.state_listeners.remove(self.preview.on_state)
         self.preview.detach()

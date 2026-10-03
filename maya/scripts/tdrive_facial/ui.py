@@ -350,7 +350,9 @@ class HeaderBar(QtWidgets.QWidget):
         self.edit_btn.setChecked(editing)
         self.edit_btn.blockSignals(False)
         if editing:
-            self.edit_state.setText("<b>編集中</b> = シーンが基準姿勢になっています（オフで元の姿勢に戻ります）")
+            key = s.presenters.ctx.selected_key()
+            target = f"（編集の対象: {s.key_label(key)}）" if key is not None else ""
+            self.edit_state.setText(f"<b>編集中</b>{target} = シーンが基準姿勢になっています（オフで元の姿勢に戻ります）")
             self.edit_state.setStyleSheet(WARN_STYLE)
         else:
             self.edit_state.setText("編集していません（シーンはそのままです）")

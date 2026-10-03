@@ -177,6 +177,7 @@ class EditContext(Observable):
         self.scene = scene
         self.active_layer = 0
         self.selection: Optional[tuple[int, int]] = None
+        self.key_target: Optional[int] = None  # 編集の対象がパース補正のキーのとき、その番号（このとき selection は None）
         self.clipboard: Optional[SourcePose] = None
         self.pose: Optional["PosePresenter"] = None  # PosePresenter が自分で登録する
 
@@ -192,8 +193,23 @@ class EditContext(Observable):
         g = self.doc.grid
         return 0 <= row < g.rows and 0 <= col < g.cols
 
+    @property
+    def has_target(self) -> bool:
+        """編集の対象（格子の点かパース補正のキー）がある。"""
+        return self.selection is not None or self.key_target is not None
+
+    def selected_key(self) -> Optional[int]:
+        """編集の対象のパース補正のキーの番号（範囲外・キーが無ければ None）。"""
+        p = self.doc.perspective
+        k = self.key_target
+        return k if p is not None and k is not None and 0 <= k < len(p.keys) else None
+
     def saved_pose(self) -> Optional[SourcePose]:
-        """選択中の点の保存済みポーズ（点が無ければ空のポーズ。選択が無ければ None）。"""
+        """編集の対象の保存済みポーズ（点が無ければ空のポーズ。対象が無ければ None）。対象がキーならそのキーのポーズの複製。"""
+        k = self.selected_key()
+        if k is not None:
+            key = self.doc.perspective.keys[k]
+            return SourcePose(curves=dict(key.curves), bones=copy.deepcopy(key.bones))
         if self.selection is None:
             return None
         p = self.layer.points.get(self.selection)
@@ -206,6 +222,7 @@ class EditContext(Observable):
         self.doc = doc
         self.active_layer = 0
         self.selection = None
+        self.key_target = None
         self._emit("document")
 
     def set_bake_state(self, bake_state: Optional[dict[str, str]]) -> None:
@@ -232,6 +249,13 @@ class EditContext(Observable):
 
     def set_selection(self, selection: Optional[tuple[int, int]]) -> None:
         self.selection = selection
+        self.key_target = None  # 点を選ぶ（外す）と、キーの対象は外れる
+        self._emit("selection")
+
+    def set_key_target(self, index: Optional[int]) -> None:
+        """編集の対象をパース補正のキーにする（None で外す）。格子の点の選択は外れる。"""
+        self.key_target = index
+        self.selection = None
         self._emit("selection")
 
     def set_active_layer(self, index: int) -> None:
@@ -243,6 +267,8 @@ class EditContext(Observable):
         self._emit("clipboard")
 
     def _selected_signature(self) -> Optional[tuple]:
+        if self.selected_key() is not None:
+            return ("key", id(self.doc.perspective.keys[self.key_target]), V.pose_hash(self.saved_pose() or SourcePose()))
         if self.selection is None:
             return None
         return (self.active_layer, self.selection, V.pose_hash(self.saved_pose() or SourcePose()))
@@ -499,12 +525,13 @@ class SelectResult:
     ユーザーに聞いて `confirm_select` / `confirm_set_active` を呼ぶ（UE 版の YesNoCancel）。"""
 
     status: str
-    kind: str = "point"  # "point" | "layer"
+    kind: str = "point"  # "point" | "layer" | "key"
     row: Optional[int] = None  # point: 切り替え先（needs_confirm のときは保留中の点）/ layer: 今の選択
     col: Optional[int] = None
     layer: Optional[int] = None
     yaw: Optional[float] = None  # 点の角度（カメラ移動用）
     pitch: Optional[float] = None
+    index: Optional[int] = None  # kind = "key": パース補正のキーの番号
     camera_jump: bool = False  # ビューはカメラをこの点へ動かし、点のポーズをシーンへ当てる
     saved: bool = False  # 確認で「保存」してから切り替えた
     message: str = ""
@@ -963,6 +990,7 @@ class BoneRow:
 class PoseView:
     selection: Optional[tuple[int, int]]
     layer: str
+    key_index: Optional[int]  # 編集の対象がパース補正のキーのときその番号（このとき selection は None）
     dirty: bool
     status_text: str  # "" または " [未保存]"（UE 版の見出しと同じ）
     can_edit: bool
@@ -1026,6 +1054,9 @@ class PosePresenter(Observable):
         sp = self.ctx.saved_pose()
         if sp is None:
             return None
+        if self.ctx.selected_key() is not None:  # キーはレイヤーに属さない
+            k = self.ctx.doc.perspective.keys[self.ctx.selected_key()]
+            return (k, None, V.pose_hash(sp))  # キーは番号でなくオブジェクトで見る（削除で番号が詰まっても同じキーなら読み直さない）
         return (self.ctx.layer, self.ctx.selection, V.pose_hash(sp))
 
     @staticmethod
@@ -1046,8 +1077,10 @@ class PosePresenter(Observable):
         return self._base_pose is not None and not poses_equal(SourcePose(self.curves, self.bones), self._base_pose)
 
     def _on_ctx(self, event: str) -> None:
-        if event in ("selection", "active_layer"):
-            # 切り替えの確認は呼ぶ側（GridPresenter / LayerPresenter）が済ませている。「破棄」を選んだ場合はここで捨てる
+        if event == "active_layer" and self.ctx.selected_key() is not None:
+            pass  # キーを編集中にレイヤーを切り替えても、編集中の値はそのまま
+        elif event in ("selection", "active_layer"):
+            # 切り替えの確認は呼ぶ側（GridPresenter / PerspectivePresenter / LayerPresenter）が済ませている。「破棄」を選んだ場合はここで捨てる
             if self._was_dirty():
                 self.discard_count += 1
             self._load()
@@ -1067,7 +1100,8 @@ class PosePresenter(Observable):
 
     @property
     def has_point(self) -> bool:
-        return self.ctx.selection is not None
+        """編集の対象（格子の点かパース補正のキー）がある。"""
+        return self.ctx.has_target
 
     @property
     def dirty(self) -> bool:
@@ -1099,7 +1133,7 @@ class PosePresenter(Observable):
 
     def _need_point(self) -> Optional[PoseResult]:
         if not self.has_point:
-            return _fail("no_point", "点が選択されていません", PoseResult)
+            return _fail("no_point", "点（またはパース補正のキー）が選択されていません", PoseResult)
         return None
 
     def set_curve(self, name: str, value: float) -> PoseResult:
@@ -1196,6 +1230,14 @@ class PosePresenter(Observable):
         if bad:
             return bad
         ctx = self.ctx
+        k = ctx.selected_key()
+        if k is not None:  # 対象がパース補正のキー: そのキーのポーズへ（空でも消さない。空のキーは「補正なし」）
+            pose = self.trimmed()
+            changed = not poses_equal(ctx.saved_pose() or SourcePose(), pose)
+            with ctx.edit():
+                key = ctx.doc.perspective.keys[k]
+                key.curves, key.bones = pose.curves, pose.bones
+            return PoseResult(message="キーのポーズを保存しました" if changed else "キーのポーズは変わっていません")
         rc = ctx.selection
         assert rc is not None
         pose = self.trimmed()
@@ -1423,6 +1465,7 @@ class PosePresenter(Observable):
         return PoseView(
             selection=ctx.selection,
             layer=ctx.layer.name,
+            key_index=ctx.selected_key(),
             dirty=dirty,
             status_text=" [未保存]" if dirty else "",
             can_edit=self.has_point,
@@ -1585,7 +1628,7 @@ class LayerPresenter(Observable):
             return SelectResult(SELECT_INVALID, "layer", sel[0], sel[1], index, message="レイヤーが範囲外です")
         if index == ctx.active_layer:
             return SelectResult(SELECT_SAME, "layer", sel[0], sel[1], index)
-        if ctx.pose is not None and ctx.pose.dirty:
+        if ctx.pose is not None and ctx.pose.dirty and ctx.selected_key() is None:  # キーの編集はレイヤーに関係しない
             self.pending = index
             return SelectResult(
                 SELECT_NEEDS_CONFIRM,
@@ -1855,6 +1898,7 @@ class PerspectiveView:
     suggested_value: float  # 「キーを足す」の初期値の提案
     remove_note: str
     summary: str
+    selected: Optional[int] = None  # 編集の対象のキーの番号
 
 
 @dataclass
@@ -1871,11 +1915,66 @@ class PerspectivePresenter(Observable):
     def __init__(self, ctx: EditContext) -> None:
         super().__init__()
         self.ctx = ctx
+        self.pending: Optional[int] = None  # 未保存の編集があって確認待ちのキー
         ctx.subscribe(self._on_ctx)
 
     def _on_ctx(self, event: str) -> None:
-        if event in ("document", "bake", "scene"):
+        if event in ("document", "bake", "scene", "selection"):
             self._emit("perspective")
+
+    # --- 編集の対象（キーを選ぶ）---
+
+    @property
+    def selected(self) -> Optional[int]:
+        """編集の対象のキーの番号（無ければ None）。"""
+        return self.ctx.selected_key()
+
+    def select_key(self, index: int) -> SelectResult:
+        """キーを編集の対象にする（格子の点の選択は外れる）。別の対象の編集中のポーズに未保存の変更があれば needs_confirm
+        （点と同じ。`confirm_select_key` で答える）。同じキーを選び直しても編集中の値は保つ。"""
+        bad = self._range(index)
+        if bad:
+            return SelectResult(SELECT_INVALID, "key", index=index, message=bad.message)
+        ctx = self.ctx
+        if ctx.selected_key() == index:
+            return SelectResult(SELECT_SAME, "key", index=index, camera_jump=True)
+        if ctx.pose is not None and ctx.pose.dirty:
+            self.pending = index
+            return SelectResult(
+                SELECT_NEEDS_CONFIRM,
+                "key",
+                index=index,
+                message="未保存のポーズ編集があります。保存 / 破棄 / 取りやめのどれかを選んでください",
+            )
+        self.pending = None
+        ctx.set_key_target(index)
+        return SelectResult(SELECT_SELECTED, "key", index=index, camera_jump=True)
+
+    def confirm_select_key(self, choice: str) -> SelectResult:
+        """needs_confirm への答え。choice = "save" / "discard" / "cancel"。"""
+        ctx = self.ctx
+        if self.pending is None:
+            return SelectResult(SELECT_INVALID, "key", message="確認待ちのキーがありません")
+        index = self.pending
+        if choice == CONFIRM_CANCEL:
+            self.pending = None
+            self._emit("perspective")
+            return SelectResult(SELECT_CANCELLED, "key", index=ctx.selected_key(), message="切り替えを取りやめました")
+        if choice not in (CONFIRM_SAVE, CONFIRM_DISCARD):
+            return SelectResult(SELECT_INVALID, "key", index=index, message=f"未知の答え: {choice!r}")
+        saved = False
+        if choice == CONFIRM_SAVE and ctx.pose is not None:
+            saved = ctx.pose.save().ok
+        self.pending = None
+        if self._range(index):  # 保存の途中でキーが無くなった
+            return SelectResult(SELECT_INVALID, "key", index=index, message="パース補正のキーが範囲外です")
+        ctx.set_key_target(index)
+        return SelectResult(SELECT_SELECTED, "key", index=index, camera_jump=True, saved=saved)
+
+    def deselect_key(self) -> None:
+        """編集の対象のキーを外す（編集中の値は捨てる。呼ぶ側が先に確認する）。"""
+        if self.ctx.key_target is not None:
+            self.ctx.set_key_target(None)
 
     @property
     def doc(self) -> Document:
@@ -2006,8 +2105,14 @@ class PerspectivePresenter(Observable):
         last = naming.perspective_name(self.doc.asset or "", n_before - 1) if self.doc.asset else ""
         known = _known_morphs(self.ctx)
         stale = [last] if last and known is not None and last in known else []
-        with self.ctx.edit():
+        ctx = self.ctx
+        target = ctx.key_target
+        with ctx.edit():
+            if target is not None:  # 選んでいたキーが消えた / 後ろのキーの番号が詰まった（先に合わせる。編集中の値は同じキーなら残る）
+                ctx.key_target = None if target == index else (target - 1 if target > index else target)
             del p.keys[index]
+        if target == index:
+            ctx.set_key_target(None)  # 選んでいたキーを消した: 対象なし（編集中の値は消える）
         later = n_before - 1 - index
         msg = f"パース補正のキー（値 {value:g}）を削除しました"
         if later > 0:
@@ -2137,6 +2242,7 @@ class PerspectivePresenter(Observable):
             suggested_value=self.suggest_value(),
             remove_note=PERSPECTIVE_REMOVE_NOTE,
             summary=summary,
+            selected=self.selected,
         )
 
 
@@ -2165,6 +2271,8 @@ class IssueRow:
     kind: str  # "curve" | "bone" | ""（改名・削除の対象の種類）
     fix: str  # "rename"（候補で改名）| "remove"（参照を消す）| "none"
     can_select_point: bool  # row / col があり、点へ移動できる
+    key: Optional[int] = None  # パース補正のキーの番号（キーの問題のとき）
+    can_select_key: bool = False  # key があり、そのキーを編集の対象にできる
 
 
 @dataclass
@@ -2317,6 +2425,8 @@ class ValidationPresenter(Observable):
                     kind=kind,
                     fix=fix,
                     can_select_point=i.layer is not None and i.row is not None and i.col is not None,
+                    key=i.key,
+                    can_select_key=i.key is not None and doc.perspective is not None and 0 <= i.key < len(doc.perspective.keys),
                 )
             )
         groups = [

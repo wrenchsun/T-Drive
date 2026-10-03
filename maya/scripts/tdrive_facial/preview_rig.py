@@ -36,6 +36,13 @@ tdFacialPreview_<asset>.（enable / alpha / useManual / manualYaw / manualPitch 
   d = カメラと格子の中心（基準ボーン + 中心のずらし）の距離（cm）。**`emotion_<Layer>` は使わない（無視する）**: アトリビュートは残る（キー・値は壊さない）が効かない。
   d は `outDistance`（距離のレイヤーがあるときだけ作る）に出る。手動の角度（useManual）でも距離はカメラから測る。スムージングなどは掛けない
 
+- **パース補正**（`doc.perspective` が有効で、焼いた `FC_<asset>_Persp_K{n}` があるときだけ式に入る。無いときは式が従来と同一）:
+  軸の値 $px（distance = カメラと格子の中心の距離 cm（`$dist`）/ fov = カメラの縦の画角。rig の `camFocal` / `camFilm` に
+  カメラの focalLength / verticalFilmAperture をつないで式で求める）から、キーの重みを `evaluate.perspective_weights` と同じ式で混ぜ、
+  `FC_…_Persp_K{n}` の weight = キーの重み × rig の `perspective`（0〜1、キーが打てる。初期値 = `perspective.strength`）× alpha × enable × 表情での弱め。
+  **角度の端のフェードは掛けない**（Unity と同じ。パース補正は格子の外でも効く）。軸の値は `outPerspective` に出る。
+  キーの値・軸は式に埋め込むので、変えると古い印（作り直し）になる
+
 評価コスト: 式の長さは「配線するターゲットの数 + 軸の数」にほぼ比例し、毎評価で O(ターゲット数)。数百ターゲットでも数 ms（smoke の SMOKE INFO）。
 """
 
@@ -68,6 +75,11 @@ KEYABLE_FIXED = ("alpha", "useManual", "manualYaw", "manualPitch")
 FADE_EPSILON = evaluate.KINDA_SMALL_NUMBER  # evaluate_correction の「範囲の外」の判定
 EXAGGERATION_ATTR = "exaggeration"  # 誇張（_Ex）の強さ 0〜1（キーが打てる。KEYABLE_FIXED には入れないが、キーがあれば export.read_fctrack が `exaggeration` カーブとして .fctrack に出す）
 OUT_DISTANCE_ATTR = "outDistance"  # カメラと格子の中心の距離（cm。距離で重みを決めるレイヤーがあるときだけ作る）
+PERSPECTIVE_ATTR = "perspective"  # パース補正の強さ 0〜1（キーが打てる。キーがあれば export.read_fctrack が `perspective` カーブとして .fctrack に出す）
+OUT_PERSPECTIVE_ATTR = "outPerspective"  # パース補正の軸の値（距離 cm / 画角 度。パース補正を配線したときだけ作る）
+CAM_FOCAL_ATTR = "camFocal"  # 画角の軸のとき、カメラの focalLength をつなぐ（式がカメラの値を読むため）
+CAM_FILM_ATTR = "camFilm"  # 同 verticalFilmAperture（インチ）
+FILM_FIT_VERTICAL = 2  # camera.filmFit の「縦」（Fill 0 / Horizontal 1 / Vertical 2 / Overscan 3）
 
 
 class PreviewRigError(RuntimeError):
@@ -222,6 +234,44 @@ def view_distance(doc: Document, camera: Optional[str] = None) -> float:
     return math.sqrt((c.x - t.x - off[0]) ** 2 + (c.y - t.y - off[1]) ** 2 + (c.z - t.z - off[2]) ** 2)
 
 
+def _camera_shape(cam: str) -> str:
+    shapes = cmds.listRelatives(cam, shapes=True, type="camera", fullPath=True) or []
+    if not shapes:
+        raise PreviewRigError(f"カメラ {cam} のシェイプが見つかりません")
+    return shapes[0]
+
+
+def fov_from_lens(focal_length_mm: float, vertical_film_aperture_inch: float) -> float:
+    """縦の画角[度]（フィルムの縦の大きさと焦点距離から。フィルムフィットは見ない）。"""
+    return math.degrees(2.0 * math.atan((vertical_film_aperture_inch * 25.4 * 0.5) / max(focal_length_mm, 0.001)))
+
+
+def focal_from_fov(fov_deg: float, vertical_film_aperture_inch: float) -> float:
+    """`fov_from_lens` の逆（縦の画角[度] → 焦点距離 mm）。"""
+    return (vertical_film_aperture_inch * 25.4 * 0.5) / math.tan(math.radians(fov_deg) * 0.5)
+
+
+def camera_fov(camera: Optional[str] = None) -> float:
+    """カメラの縦の画角[度]（focalLength と verticalFilmAperture から。プレビューの式と同じ）。"""
+    shape = _camera_shape(camera_transform(camera))
+    return fov_from_lens(float(cmds.getAttr(shape + ".focalLength")), float(cmds.getAttr(shape + ".verticalFilmAperture")))
+
+
+def set_camera_fov(camera: str, fov_deg: float) -> float:
+    """カメラの焦点距離を、縦の画角が fov_deg[度]になるように書く（フィルムフィットは「縦」にそろえる。そうしないとビューに映る縦の画角が
+    フィルムの値とずれる）。Maya の Undo に積まれる。設定した画角を返す。レンズの範囲外・つながっている属性は PreviewRigError。"""
+    if not (math.isfinite(fov_deg) and 0.0 < fov_deg < 180.0):
+        raise PreviewRigError(f"画角 {fov_deg:g} 度は使えません（0 より大きく 180 より小さい度）")
+    shape = _camera_shape(camera_transform(camera))
+    focal = focal_from_fov(fov_deg, float(cmds.getAttr(shape + ".verticalFilmAperture")))
+    try:
+        cmds.setAttr(shape + ".focalLength", focal)
+        cmds.setAttr(shape + ".filmFit", FILM_FIT_VERTICAL)
+    except RuntimeError as e:
+        raise PreviewRigError(f"カメラのレンズを画角 {fov_deg:g} 度にできません（焦点距離 {focal:.1f} mm。レンズの範囲外か、アニメーション・接続でロックされています）") from e
+    return camera_fov(camera)
+
+
 def distance_spec(doc: Document, layer_index: int) -> Optional[dict]:
     """レイヤーの重みをカメラの距離で決めるときの {"start", "end", "from", "to"}（数値）。そうでなければ None。Neutral は常に None。"""
     if layer_index <= 0 or layer_index >= len(doc.layers) or not doc.layer_weights:
@@ -250,6 +300,12 @@ def has_extreme_targets(asset: str) -> bool:
     return rig is not None and any(a.endswith(naming.EXTREME_SUFFIX) for a in _read_json(rig, TARGETS_ATTR, {}))
 
 
+def has_perspective_targets(asset: str) -> bool:
+    """rig が配線しているパース補正のシェイプ（`Persp_K{n}`）があるか。"""
+    rig = find_rig(asset)
+    return rig is not None and any(naming.is_fc_name(a) and "_Persp_K" in a for a in _read_json(rig, TARGETS_ATTR, {}))
+
+
 # ---------------------------------------------------------------------------
 # 配線の計画（データ → expression の文字列）
 # ---------------------------------------------------------------------------
@@ -266,6 +322,13 @@ class _Target:
 
 
 @dataclass
+class _PerspTarget:
+    alias: str
+    index: int  # キーの番号（シェイプの番号 K{n}）
+    plugs: list[str] = field(default_factory=list)
+
+
+@dataclass
 class _Plan:
     asset: str
     joint: str
@@ -279,9 +342,12 @@ class _Plan:
     template: str  # @RIG@ / @CAM@ / @HEAD@ を含む expression
     signature: str
     skipped: list[str] = field(default_factory=list)  # 他から接続されていて配線しなかった weight
+    persp: list[_PerspTarget] = field(default_factory=list)  # 配線するパース補正のシェイプ
+    persp_axis: str = "distance"
+    persp_values: list[float] = field(default_factory=list)  # 全キーの value（配列の順 = シェイプの番号。空のキーも。重みの計算に使う）
 
     def plug_map(self) -> dict[str, list[str]]:
-        return {t.alias: list(t.plugs) for t in (*self.targets, *self.ex_targets)}
+        return {t.alias: list(t.plugs) for t in (*self.targets, *self.ex_targets, *self.persp)}
 
 
 def _f(v: float) -> str:
@@ -351,6 +417,66 @@ def _collect_targets(doc: Document, meshes: Sequence[str]) -> tuple[list[_Target
     return targets, {li: attrs.get(li, "") for li in sorted({t.layer for t in targets})}, ex_targets
 
 
+def _collect_persp(doc: Document, meshes: Sequence[str]) -> list[_PerspTarget]:
+    """シーンにある `FC_<asset>_Persp_K{n}`（パース補正が有効で、n のキーが空でなく、同じ値のキーの先頭のとき）。"""
+    p = doc.perspective
+    if p is None or not p.enabled or not p.keys:
+        return []
+    asset = doc.asset or ""
+    prefix = doc.sculpt_shapes.prefix if doc.sculpt_shapes is not None else naming.DEFAULT_SCULPT_PREFIX
+    rep_of: dict[float, int] = {}
+    for i, k in enumerate(p.keys):
+        if math.isfinite(k.value) and k.value not in rep_of:
+            rep_of[k.value] = i
+    found: dict[str, _PerspTarget] = {}
+    for mesh in meshes:
+        for ref in scene_mod.fc_targets(mesh, prefix):
+            parsed = naming.parse_name(ref.alias, asset)
+            if parsed is None or parsed.kind != naming.KIND_PERSP:
+                continue
+            i = parsed.index or 0
+            if not (0 <= i < len(p.keys)) or p.keys[i].is_empty() or rep_of.get(p.keys[i].value) != i:
+                continue
+            t = found.setdefault(ref.alias, _PerspTarget(ref.alias, i))
+            if ref.plug not in t.plugs:
+                t.plugs.append(ref.plug)
+    return sorted(found.values(), key=lambda t: t.index)
+
+
+def _persp_lines(axis: str, values: Sequence[float], wired: Sequence[_PerspTarget]) -> list[str]:
+    """パース補正の式（`evaluate.perspective_weights` と同じ混ぜ方）。$dist は呼ぶ側が定義する。"""
+    rep_of: dict[float, int] = {}
+    for i, v in enumerate(values):
+        if math.isfinite(v) and v not in rep_of:
+            rep_of[v] = i
+    order = sorted(rep_of)
+    L: list[str] = []
+    if axis == "fov":
+        L.append(f"float $px = rad_to_deg(2.0 * atan((@RIG@.{CAM_FILM_ATTR} * 25.4 * 0.5) / max(@RIG@.{CAM_FOCAL_ATTR}, 0.001)));")
+    else:
+        L.append("float $px = $dist;")
+    L.append(f"@RIG@.{OUT_PERSPECTIVE_ATTR} = $px;")
+    L.append("float $gP = @RIG@.alpha * $damp;")
+    L.append("if (@RIG@.enable == 0) $gP = 0.0;")
+    m = len(order)
+    for t in wired:
+        v = values[t.index]
+        pos = order.index(v)
+        if m == 1:
+            w = "1.0"
+        elif pos == 0:
+            w = f"clamp(0.0, 1.0, ({_f(order[1])} - $px) / ({_f(order[1] - order[0])}))"
+        elif pos == m - 1:
+            w = f"clamp(0.0, 1.0, ($px - {_f(order[m - 2])}) / ({_f(order[m - 1] - order[m - 2])}))"
+        else:
+            lo, hi = order[pos - 1], order[pos + 1]
+            w = f"min(clamp(0.0, 1.0, ($px - {_f(lo)}) / ({_f(v - lo)})), clamp(0.0, 1.0, ({_f(hi)} - $px) / ({_f(hi - v)})))"
+        L.append(f"float $pw{t.index} = {w};")
+        for plug in t.plugs:
+            L.append(f"{plug} = $pw{t.index} * @RIG@.{PERSPECTIVE_ATTR} * $gP;")
+    return L
+
+
 def _intensity_plugs(doc: Document, meshes: Sequence[str]) -> list[str]:
     names = list(doc.intensity_curves) or list(doc.working_set.curves)
     plugs: list[str] = []
@@ -383,6 +509,17 @@ def _plan(doc: Document, own_nodes: Iterable[str] = ()) -> _Plan:
                 free.append(p)
         t.plugs = free
     targets = [t for t in targets if t.plugs]
+    persp = _collect_persp(doc, meshes)
+    for t in persp:
+        free = []
+        for pl in t.plugs:
+            srcs = cmds.listConnections(pl, source=True, destination=False) or []
+            if any(sr not in own for sr in srcs):
+                skipped.append(pl)
+            else:
+                free.append(pl)
+        t.plugs = free
+    persp = [t for t in persp if t.plugs]
     layer_attrs = {li: layer_attrs[li] for li in sorted({t.layer for t in targets})}
     # 誇張: 基になる FC_…（同じレイヤー・行・列）が配線されるものだけ（evaluate_correction と同じ。基が無い点の Ex は鳴らさない）
     base_keys = {(t.layer, t.row, t.col) for t in targets}
@@ -453,8 +590,10 @@ def _plan(doc: Document, own_nodes: Iterable[str] = ()) -> _Plan:
             L.append(f"float $wc{c} = (($c0 == {c}) ? (1.0 - $fc) : 0.0) + (($c1 == {c}) ? $fc : 0.0);")
         for r in sorted({t.row for t in wired}):
             L.append(f"float $wr{r} = (($r0 == {r}) ? (1.0 - $fr) : 0.0) + (($r1 == {r}) ? $fr : 0.0);")
-    if distance:
+    persp_axis = doc.perspective.axis if doc.perspective is not None else "distance"
+    if distance or (persp and persp_axis != "fov"):
         L.append("float $dist = sqrt($dx * $dx + $dy * $dy + $dz * $dz);")
+    if distance:
         L.append(f"@RIG@.{OUT_DISTANCE_ATTR} = $dist;")
     for li, attr in layer_attrs.items():
         if li == 0:
@@ -483,11 +622,17 @@ def _plan(doc: Document, own_nodes: Iterable[str] = ()) -> _Plan:
     for t in ex_targets:
         for p in t.plugs:
             L.append(f"{p} = {corner_weight(t)} * $gL{t.layer} * @RIG@.{EXAGGERATION_ATTR};")
+    persp_values = [float(k.value) for k in doc.perspective.keys] if persp and doc.perspective is not None else []
+    if persp:  # パース補正（無いときは何も足さない = 式は従来と同一）
+        L += _persp_lines(persp_axis, persp_values, persp)
     template = "\n".join(L) + "\n"
+    plug_by_alias = {t.alias: t.plugs for t in (*wired, *persp)}
     sig = hashlib.sha1(
-        (template + "|" + joint + "|" + "|".join(f"{k}={','.join(v)}" for k, v in sorted({t.alias: t.plugs for t in wired}.items()))).encode("utf-8")
+        (template + "|" + joint + "|" + "|".join(f"{k}={','.join(v)}" for k, v in sorted(plug_by_alias.items()))).encode("utf-8")
     ).hexdigest()[:16]
-    return _Plan(doc.asset, joint, targets, ex_targets, sharp, distance, layer_attrs, inten, dampen, template, sig, skipped)
+    return _Plan(
+        doc.asset, joint, targets, ex_targets, sharp, distance, layer_attrs, inten, dampen, template, sig, skipped, persp, persp_axis, persp_values
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -505,9 +650,12 @@ class BuildReport:
     expression_chars: int
     warnings: list[str] = field(default_factory=list)
     extreme_targets: int = 0  # 配線した誇張用（_Ex）の数（targets には含めない）
+    perspective_targets: int = 0  # 配線したパース補正のシェイプの数（targets には含めない）
 
     def summary(self) -> str:
         ex = f"、誇張 {self.extreme_targets}" if self.extreme_targets else ""
+        if self.perspective_targets:
+            ex += f"、パース補正 {self.perspective_targets}"
         return f"プレビュー: {self.rig}（ターゲット {self.targets}{ex}、式 {self.expression_chars} 文字）"
 
 
@@ -518,7 +666,7 @@ def _add_attr(rig: str, name: str, **kw) -> bool:
     return True
 
 
-def _create_attrs(rig: str, doc: Document) -> None:
+def _create_attrs(rig: str, doc: Document, plan: Optional[_Plan] = None) -> None:
     if _add_attr(rig, PREVIEW_ONLY_ATTR, attributeType="bool", defaultValue=True):
         cmds.setAttr(f"{rig}.{PREVIEW_ONLY_ATTR}", True)
     for a in (ASSET_ATTR, CREATED_ATTR, TARGETS_ATTR, SIGNATURE_ATTR):
@@ -531,16 +679,35 @@ def _create_attrs(rig: str, doc: Document) -> None:
     if _add_attr(rig, EXAGGERATION_ATTR, attributeType="double", minValue=0.0, maxValue=1.0, defaultValue=1.0, keyable=True):
         q = doc.quality
         cmds.setAttr(f"{rig}.{EXAGGERATION_ATTR}", evaluate.clamp(q.exaggeration if q is not None else 1.0, 0.0, 1.0))
+    if _add_attr(rig, PERSPECTIVE_ATTR, attributeType="double", minValue=0.0, maxValue=1.0, defaultValue=1.0, keyable=True):
+        p = doc.perspective
+        cmds.setAttr(f"{rig}.{PERSPECTIVE_ATTR}", evaluate.clamp(p.strength if p is not None else 1.0, 0.0, 1.0))
     _add_attr(rig, "useManual", attributeType="bool", defaultValue=False, keyable=True)
     _add_attr(rig, "manualYaw", attributeType="double", defaultValue=0.0, keyable=True)
     _add_attr(rig, "manualPitch", attributeType="double", defaultValue=0.0, keyable=True)
     for _, attr in emotion_attrs(doc).items():
         _add_attr(rig, attr, attributeType="double", minValue=0.0, maxValue=1.0, defaultValue=0.0, keyable=True)
-    for a in ("outYaw", "outPitch", *((OUT_DISTANCE_ATTR,) if distance_layers(doc) else ())):
+    wired_persp = plan is not None and bool(plan.persp)
+    if wired_persp and plan.persp_axis == "fov":  # 画角の軸: カメラのレンズの値を読む入れ物
+        for a in (CAM_FOCAL_ATTR, CAM_FILM_ATTR):
+            _add_attr(rig, a, attributeType="double", defaultValue=1.0)
+    for a in ("outYaw", "outPitch", *((OUT_DISTANCE_ATTR,) if distance_layers(doc) else ()), *((OUT_PERSPECTIVE_ATTR,) if wired_persp else ())):
         if _add_attr(rig, a, attributeType="double", defaultValue=0.0):
             cmds.setAttr(f"{rig}.{a}", edit=True, channelBox=True)
     for a in ("tx", "ty", "tz", "rx", "ry", "rz", "sx", "sy", "sz", "v"):
         cmds.setAttr(f"{rig}.{a}", edit=True, lock=True, keyable=False, channelBox=False)
+
+
+def _connect_lens(rig: str, cam: str) -> None:
+    """画角の軸のとき、カメラの focalLength / verticalFilmAperture を rig の camFocal / camFilm へつなぐ（つなぎ直す）。入れ物が無ければ何もしない。"""
+    if not cmds.attributeQuery(CAM_FOCAL_ATTR, node=rig, exists=True):
+        return
+    shape = _camera_shape(cam)
+    for src_attr, dst_attr in (("focalLength", CAM_FOCAL_ATTR), ("verticalFilmAperture", CAM_FILM_ATTR)):
+        dst = f"{rig}.{dst_attr}"
+        for src in cmds.listConnections(dst, source=True, destination=False, plugs=True) or []:
+            cmds.disconnectAttr(src, dst)
+        cmds.connectAttr(f"{shape}.{src_attr}", dst, force=True)
 
 
 def _helper_nodes(rig: str) -> list[str]:
@@ -624,7 +791,7 @@ def _build_ex(doc: Document, camera: Optional[str], created: list[str]) -> Build
         created.append(rig)
         if rig != rig_name(asset):  # 同じ名前の別のノードがある（つけた名前と違う名前になった）: あとで見つけられないので止める
             raise PreviewRigError(f"{rig_name(asset)} という名前の別のノードがあるため、プレビューを作れません（その名前を変えてください）")
-    _create_attrs(rig, doc)
+    _create_attrs(rig, doc, plan)
     cam_dm = cmds.createNode("decomposeMatrix", name=f"{rig}_camDM")
     created.append(cam_dm)
     head_dm = cmds.createNode("decomposeMatrix", name=f"{rig}_headDM")
@@ -634,6 +801,7 @@ def _build_ex(doc: Document, camera: Optional[str], created: list[str]) -> Build
     for src in cmds.listConnections(f"{rig}.camera", source=True, destination=False, plugs=True) or []:
         cmds.disconnectAttr(src, f"{rig}.camera")
     cmds.connectAttr(f"{cam}.message", f"{rig}.camera", force=True)
+    _connect_lens(rig, cam)
     text = plan.template.replace("@RIG@", rig).replace("@CAM@", cam_dm).replace("@HEAD@", head_dm)
     expr = cmds.expression(string=text, name=f"{rig}_expr", alwaysEvaluate=False, unitConversion="none")
     created.append(expr)
@@ -643,7 +811,7 @@ def _build_ex(doc: Document, camera: Optional[str], created: list[str]) -> Build
     cmds.setAttr(f"{rig}.{ASSET_ATTR}", asset, type="string")
     warnings = [f"{p} は他から接続されているため配線しませんでした" for p in plan.skipped]
     return BuildReport(
-        rig, expr, plan.signature, len(plan.targets), [doc.layers[i].name for i in plan.layer_attrs], len(text), warnings, len(plan.ex_targets)
+        rig, expr, plan.signature, len(plan.targets), [doc.layers[i].name for i in plan.layer_attrs], len(text), warnings, len(plan.ex_targets), len(plan.persp)
     )
 
 
@@ -703,6 +871,7 @@ def set_camera(asset: str, camera: Optional[str] = None) -> str:
     for src in cmds.listConnections(f"{rig}.camera", source=True, destination=False, plugs=True) or []:
         cmds.disconnectAttr(src, f"{rig}.camera")
     cmds.connectAttr(f"{cam}.message", f"{rig}.camera", force=True)
+    _connect_lens(rig, cam)
     return cam
 
 
@@ -747,6 +916,8 @@ def evaluate_python(
     use_manual: Optional[bool] = None,
     exaggeration: Optional[float] = None,
     distance: Optional[float] = None,
+    perspective_strength: Optional[float] = None,
+    fov: Optional[float] = None,
 ) -> dict:
     """rig と同じ計算を core.evaluate で行う。戻り: {"yaw", "pitch", "distance", "weights": {ターゲット名: 重み}}（配線される全ターゲット。`_Ex` と 0 も含む）。
 
@@ -754,6 +925,9 @@ def evaluate_python(
     （感情 0・alpha = policy.globalAlpha・enable・カメラから・exaggeration = quality.exaggeration）。表情での弱めはシーンの今の blendShape の重みを読む。
     距離で重みを決めるレイヤーは emotions を無視し、距離 d（省くとカメラと格子の中心の距離）から `layer_weight_from_distance` で決める。
     sharpness は doc.quality から。
+    パース補正は、軸が distance なら distance（省くとカメラから）、fov なら fov[度]（省くとカメラの縦の画角）から重みを求め、
+    perspective_strength（省くと rig の `perspective`、無ければ doc の強さ）× alpha × enable × 表情での弱め（角度の端のフェードは掛けない）で
+    配線されている `Persp_K{n}` に入れる。戻りの "axis_value" = 使った軸の値。
     """
     pose_apply.assert_maya_space(doc)
     asset = doc.asset or ""
@@ -776,8 +950,10 @@ def evaluate_python(
         yaw, pitch = view_angles(doc, camera)
     if exaggeration is None:
         exaggeration = float(rig_attr(EXAGGERATION_ATTR, doc.quality.exaggeration if doc.quality is not None else 1.0))
-    if plan.distance and distance is None:
+    if (plan.distance or (plan.persp and plan.persp_axis != "fov")) and distance is None:
         distance = view_distance(doc, camera)
+    if plan.persp and plan.persp_axis == "fov" and fov is None:
+        fov = camera_fov(camera)
     attrs = emotion_attrs(doc)
     g = doc.grid
     shape = evaluate.GridShape(g.yaw_range, g.pitch_range, g.cols, g.rows, g.edge_fade)
@@ -799,7 +975,7 @@ def evaluate_python(
         corner = [names.get((li, r, c)) for r in range(g.rows) for c in range(g.cols)]
         ex_corner = [ex_names.get((li, r, c)) for r in range(g.rows) for c in range(g.cols)] if ex_names else None
         layers.append(evaluate.LayerEvalInput(corner, w, layer.enabled, ex_corner))
-    out = {t.alias: 0.0 for t in (*plan.targets, *plan.ex_targets)}
+    out = {t.alias: 0.0 for t in (*plan.targets, *plan.ex_targets, *plan.persp)}
     scale = float(alpha) if enable else 0.0
     if plan.intensity_plugs:
         s = sum(float(cmds.getAttr(p)) for p in plan.intensity_plugs)
@@ -807,7 +983,16 @@ def evaluate_python(
     sharp = doc.quality.sharpness if doc.quality is not None else 1.0
     for mw in evaluate.evaluate_correction(shape, layers, yaw, pitch, sharp, evaluate.clamp(float(exaggeration), 0.0, 1.0)):
         out[mw.morph_name] = out.get(mw.morph_name, 0.0) + mw.weight * scale
-    return {"yaw": yaw, "pitch": pitch, "distance": distance, "weights": out}
+    axis_value = None
+    if plan.persp:
+        if perspective_strength is None:
+            perspective_strength = float(rig_attr(PERSPECTIVE_ATTR, doc.perspective.strength if doc.perspective is not None else 1.0))
+        axis_value = fov if plan.persp_axis == "fov" else distance
+        wired = {t.alias for t in plan.persp}
+        for name, w in evaluate.perspective_morph_weights(doc, float(distance) if distance is not None else float("nan"), fov, perspective_strength, scale).items():
+            if name in wired:
+                out[name] = w
+    return {"yaw": yaw, "pitch": pitch, "distance": distance, "weights": out, "axis_value": axis_value}
 
 
 # ---------------------------------------------------------------------------

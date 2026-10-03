@@ -127,6 +127,25 @@ def _blend_nodes(meshes: list[str]) -> list[str]:
     return nodes
 
 
+def count_bake_issues(issues) -> tuple[int, int, int, int, int, int]:
+    """検証の結果から (未ベイクの点, ベイク後に変更の点, シェイプが無い点, 未ベイクのキー, ベイク後に変更のキー, シェイプが無いキー)。
+    キー = パース補正のキー（問題の `key` が付いているもの）。"""
+    n = [0] * 6
+    for i in issues:
+        is_key = i.key is not None
+        if i.code == "point_unbaked":
+            n[0] += 1
+        elif i.code == "point_changed_since_bake":
+            n[1] += 1
+        elif i.code == "baked_morph_missing":
+            n[5 if is_key else 2] += 1
+        elif i.code == "perspective_key_unbaked":
+            n[3] += 1
+        elif i.code == "perspective_key_changed":
+            n[4] += 1
+    return tuple(n)  # type: ignore[return-value]
+
+
 def _bake_warnings(doc: Document) -> list[str]:
     try:
         face = scene_mod.resolve_mesh(doc.target.mesh)  # type: ignore[union-attr]
@@ -134,15 +153,19 @@ def _bake_warnings(doc: Document) -> list[str]:
     except (ValueError, RuntimeError):
         return ["検証できませんでした（対象メッシュを確かめてください）"]
     out: list[str] = []
-    n_unbaked = sum(1 for i in issues if i.code == "point_unbaked")
-    n_changed = sum(1 for i in issues if i.code == "point_changed_since_bake")
-    n_missing = sum(1 for i in issues if i.code == "baked_morph_missing")
+    n_unbaked, n_changed, n_missing, k_unbaked, k_changed, k_missing = count_bake_issues(issues)
     if n_unbaked:
         out.append(f"未ベイクの点が {n_unbaked} 点あります（その点の補正は FBX に入りません。ベイクしてから出力してください）")
     if n_changed:
         out.append(f"ベイク後にポーズを変えた点が {n_changed} 点あります（FBX の形は古いままです。ベイクし直してください）")
     if n_missing:
         out.append(f"ベイクの記録はあるのにシェイプが無い点が {n_missing} 点あります")
+    if k_unbaked:
+        out.append(f"未ベイクのパース補正のキーが {k_unbaked} 個あります（そのキーの補正は FBX に入りません。ベイクしてから出力してください）")
+    if k_changed:
+        out.append(f"ベイク後に変えたパース補正のキーが {k_changed} 個あります（FBX の形は古いままです。キーを削除したあとの番号の詰まりも含みます。ベイクし直してください）")
+    if k_missing:
+        out.append(f"ベイクの記録はあるのにシェイプが無いパース補正のキーが {k_missing} 個あります")
     n_orphan = sum(1 for i in issues if i.code == "orphan_target")
     if n_orphan:
         out.append(f"データに無い補正シェイプ（FC_*）が {n_orphan} 個シーンに残っています（元に戻す・やり直すの取り残しなど。そのまま FBX に入ります。ベイクすると掃除されます）")
@@ -409,6 +432,7 @@ def read_fctrack(
     fps = float(frame_rate) if frame_rate else frame_rate_of_scene()
     attrs: dict[str, str] = {name: name for name in preview_rig.KEYABLE_FIXED}
     attrs[preview_rig.EXAGGERATION_ATTR] = "exaggeration"  # 誇張の強さ（キーがあるときだけ出る）
+    attrs[preview_rig.PERSPECTIVE_ATTR] = "perspective"  # パース補正の強さ（同じくキーがあるときだけ出る）
     for li, attr in preview_rig.emotion_attrs(doc).items():
         attrs[attr] = fctrack_mod.emotion_curve_name(doc.layers[li].name)
     curves: dict[str, list[fctrack_mod.Key]] = {}
@@ -420,7 +444,7 @@ def read_fctrack(
         keys, bad = _animated_keys(f"{rig}.{attr}", start, end)
         if not keys:
             continue
-        if curve == "exaggeration":
+        if curve in ("exaggeration", "perspective"):
             keys = [(t, min(1.0, max(0.0, v))) for t, v in keys]  # 0〜1 に収める
         curves[curve] = [((t - start) / fps, v) for t, v in keys]
         if bad and not tangent_warned:
