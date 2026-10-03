@@ -53,6 +53,7 @@ from . import bake as bake_mod
 from . import pose_apply
 from . import preview_rig
 from . import scene as scene_mod
+from . import shapes
 from .core import evaluate, fcpose_io, naming, space
 from .core import profile as profile_mod
 from .core import validate as V
@@ -184,6 +185,7 @@ class FacialSession:
         self._ref: Optional[scene_mod.Reference] = None
         self._ref_uuids: dict[str, list[str]] = {}
         self._applied: Optional[tuple[int, int, int]] = None
+        self._sculpt: Optional[SculptState] = None  # 「この角度で彫る」の最中（shapes.py。docs/14 §5.6）
 
     # ------------------------------------------------------------ 状態
     @property
@@ -672,6 +674,7 @@ class FacialSession:
         self._ref = None
         self._ref_uuids = {}
         self._applied = None
+        self._sculpt = None  # シーンが入れ替わった: 彫りの状態も捨てる（新しいシーンの blendShape には触らない）
 
     def _bone_names(self, doc: Document) -> list[str]:
         names: dict[str, None] = {}
@@ -710,6 +713,14 @@ class FacialSession:
         ref = self._ref
         if ref is None:
             return
+        if self._sculpt is not None:  # 彫り中に抜けるときは、先にスカルプト対象を解除する（quiet でなければポーズへの記録まで）
+            try:
+                self.sculpt_end(save=not quiet)
+            except Exception:  # noqa: BLE001
+                self._sculpt = None
+                if not quiet:
+                    raise
+                lifecycle.report_error("彫りを終えられませんでした", traceback.format_exc(), once=False)
         try:
             if ref.active and self._ref_alive():
                 ref.restore()
@@ -748,7 +759,15 @@ class FacialSession:
             pose_apply.reset_to_reference(ref)
             self._applied = None
             return None
-        rep = pose_apply.apply_pose(ctx.doc, pres.pose.pose_to_apply(), ref)
+        pose = pres.pose.pose_to_apply()
+        for name in pose.curves:  # 編集中に作られた / Undo で戻ったターゲットの重みも、編集を抜けるとき 0 へ戻す対象にする
+            ref._curve_cache.pop(name, None)
+        rep = pose_apply.apply_pose(ctx.doc, pose, ref)
+        for name in pose.curves:
+            for plug in scene_mod.reference_curve_plugs(ref, name):
+                if plug not in ref.weight_plugs:
+                    ref.weight_plugs.append(plug)
+                    ref._saved_weights[plug] = 0.0
         li = min(max(ctx.active_layer, 0), len(ctx.doc.layers) - 1)
         self._applied = (li, ctx.selection[0], ctx.selection[1])
         self.last_apply = rep
@@ -800,6 +819,8 @@ class FacialSession:
             self._notify_state()
 
     def _select_point(self, row: int, col: int, choice: Optional[str], move_camera: bool, camera: Optional[str]) -> SelectResult:
+        if self._sculpt is not None and choice != CONFIRM_CANCEL:
+            self.sculpt_end()  # 点を移る前に、彫りを終えて今の点へ記録する
         pres = self._pres()
         was_editing = self.editing
         self.begin_edit()
@@ -833,6 +854,8 @@ class FacialSession:
             self._notify_state()
 
     def _set_active_layer(self, index: int, choice: Optional[str]) -> SelectResult:
+        if self._sculpt is not None and choice != CONFIRM_CANCEL:
+            self.sculpt_end()
         pres = self._pres()
         r = pres.layers.set_active(index)
         if r.status == SELECT_NEEDS_CONFIRM:
@@ -1310,6 +1333,359 @@ class FacialSession:
         if 0 not in involved and pending(0):
             out.append("Neutral に未ベイク / 変更ありの点があります。感情レイヤーだけ焼くと Neutral との差分がずれるため、Neutral も焼いてください")
         return out
+
+    # ============================================================ シェイプ作成支援（shapes.py。docs/14 §5.6）
+    # 画面はここだけを呼ぶ。シーンを変える道具はどれも Maya の Undo 1 回（shapes 側の undo_chunk）。Document を変えるもの（ポーズへの記録・
+    # 参照の削除・可動域）は @undoable でエディタ内 Undo に積む。終わったらシーンの情報を取り直して通知する（他のタブ・検証が新しいターゲットを見られる）。
+
+    def shape_ctx(self, create: bool = False) -> Optional[shapes.ShapeCtx]:
+        """道具が働く先（顔メッシュ・blendShape）。無ければ None（create=True なら blendShape は作り、メッシュが無ければ ShapeError）。"""
+        doc = self.require()
+        try:
+            return shapes.make_ctx(doc, create=create)
+        except shapes.ShapeError:
+            if create:
+                raise
+            return None
+
+    def _shape_ctx_or_raise(self) -> shapes.ShapeCtx:
+        ctx = self.shape_ctx(create=True)
+        assert ctx is not None
+        return ctx
+
+    def shape_list(self) -> list[shapes.ShapeInfo]:
+        """顔メッシュの blendShape のターゲット一覧（タグ付き）。メッシュ・blendShape が無ければ空。"""
+        ctx = self.shape_ctx(create=False)
+        return shapes.list_shapes(ctx) if ctx is not None else []
+
+    def _shape_done(self) -> None:
+        self.refresh_scene(notify=True, call_listeners=False)
+        self._changed(dirty=False)
+
+    def _shape_run(self, fn, *args, **kwargs) -> shapes.ShapeResult:
+        """道具を実行して、終わったらシーンの情報を取り直す。ShapeError はそのまま投げる（取り直しはする）。"""
+        try:
+            return fn(*args, **kwargs)
+        finally:
+            self._shape_done()
+
+    # --- この角度で彫る（F2-1）---
+    @property
+    def sculpting(self) -> Optional["SculptState"]:
+        """彫りの最中の状態（無ければ None）。"""
+        return self._sculpt if self.editing else None
+
+    def _register_weight(self, node: str, idx: int) -> None:
+        """編集中に作ったターゲットの weight を、基準姿勢の記録へ足す（編集を抜けるとき 0 へ戻す）。"""
+        ref = self._ref
+        plug = scene_mod.weight_plug(node, idx)
+        if ref is not None and plug not in ref.weight_plugs:
+            ref.weight_plugs.append(plug)
+            ref._saved_weights[plug] = 0.0
+
+    def sculpt_target_name(self) -> Optional[str]:
+        """選択中の点の彫り用ターゲット名 `fcs_<layer>_R{r}_C{c}`（点が選ばれていなければ None）。"""
+        doc = self.require()
+        ctx = self._pres().ctx
+        if ctx.selection is None:
+            return None
+        li = min(max(ctx.active_layer, 0), len(doc.layers) - 1)
+        prefix = doc.sculpt_shapes.prefix if doc.sculpt_shapes is not None else naming.DEFAULT_SCULPT_PREFIX
+        return naming.sculpt_name(doc.layers[li].name, ctx.selection[0], ctx.selection[1], prefix)
+
+    def sculpt_begin(self) -> shapes.ShapeResult:
+        """選択中の点の「この角度で彫る」を始める: その点のポーズを当てた編集状態で、`fcs_<layer>_R{r}_C{c}`（重み 1）を Maya のスカルプト対象にする。
+
+        頭が基準姿勢でないポーズでは始められない（ShapeError）。点のポーズへの記録は `sculpt_end`。"""
+        doc = self.require()
+        pres = self._pres()
+        if self._sculpt is not None and self.editing:
+            raise shapes.ShapeError("既に彫っています。「彫り終わる」を押してから、次を始めてください", "busy")
+        if pres.ctx.selection is None:
+            raise shapes.ShapeError("格子の点を選んでください（グリッドタブで点をクリック）", "no_point")
+        sc = self._shape_ctx_or_raise()
+        name = self.sculpt_target_name()
+        assert name is not None
+        was_editing = self.editing
+        try:
+            ref = self.begin_edit()
+            self._apply_buffer()
+            shapes.check_head_at_reference(doc, ref, pres.pose.pose_to_apply().bones)
+            with shapes.undo_chunk("tdFacialSculptBegin"):
+                idx, created = shapes.sculpt_prepare(sc, name)
+                self._register_weight(sc.node, idx)
+                curve = scene_mod.curve_name(sc.node, name)
+                ref._curve_cache.pop(curve, None)
+                pres.pose.set_curve(curve, 1.0)  # 編集中の値に入れておく（当て直しても重み 1 が残る）。保存は sculpt_end
+                self._apply_buffer()
+                tool = shapes.sculpt_enter(sc, name)
+        except shapes.ShapeError:
+            if not was_editing:
+                self.end_edit(quiet=True)
+            raise
+        except BaseException:
+            self.end_edit(quiet=True)
+            raise
+        layer_i = min(max(pres.ctx.active_layer, 0), len(doc.layers) - 1)
+        self._sculpt = SculptState(name, sc.node, idx, "point", (layer_i, *pres.ctx.selection), created, sc.mesh, tool)
+        self._shape_done()
+        res = shapes.ShapeResult(message=f"{name} を彫れます（Maya のスカルプト / 移動ツールで形を作ってください）")
+        (res.created if created else res.replaced).append(name)
+        res.notes.append("終わったら「彫り終わる」を押すと、この点のポーズに記録されます")
+        return res
+
+    def sculpt_begin_combo(self, name: str) -> shapes.ShapeResult:
+        """組み合わせ補正 `fcs_combo_*` を彫る: 基準姿勢で駆動元の 2 つのシェイプを 1 にして、そのターゲットをスカルプト対象にする。"""
+        self.require()
+        if self._sculpt is not None and self.editing:
+            raise shapes.ShapeError("既に彫っています。「彫り終わる」を押してから、次を始めてください", "busy")
+        sc = self._shape_ctx_or_raise()
+        drivers = shapes.combo_drivers(sc, name)
+        if len(drivers) < 2:
+            raise shapes.ShapeError(f"{name} は組み合わせ補正ではありません", "not_combo")
+        was_editing = self.editing
+        try:
+            ref = self.begin_edit()
+            pose_apply.reset_to_reference(ref)
+            table = scene_mod.target_indices(sc.node)
+            for d in drivers:
+                cmds.setAttr(scene_mod.weight_plug(sc.node, table[d]), 1.0)
+            self._applied = None
+            with shapes.undo_chunk("tdFacialSculptBegin"):
+                idx, _created = shapes.sculpt_prepare(sc, name)
+                tool = shapes.sculpt_enter(sc, name)
+        except shapes.ShapeError:
+            if not was_editing:
+                self.end_edit(quiet=True)
+            raise
+        except BaseException:
+            self.end_edit(quiet=True)
+            raise
+        self._sculpt = SculptState(name, sc.node, idx, "combo", None, False, sc.mesh, tool, was_editing)
+        self._shape_done()
+        return shapes.ShapeResult(message=f"{name} を彫れます（{' と '.join(drivers)} を 1 にしています）", replaced=[name])
+
+    def sculpt_end(self, save: bool = True) -> shapes.ShapeResult:
+        """彫りを終える: スカルプト対象を解除し、差分の無い頂点を捨てる。点の彫りなら、`fcs_*` = 1 をその点のポーズに記録して保存する
+        （点がキーになる。何も彫っていなければ作ったターゲットを消して何も記録しない）。save=False は解除と整理だけ。"""
+        st = self._sculpt
+        if st is None:
+            raise shapes.ShapeError("彫っていません", "not_sculpting")
+        self._sculpt = None  # 先に外す（保存の途中で end_edit が呼ばれても二重にならないように）
+        sc = self._shape_ctx_or_raise()
+        res = shapes.ShapeResult()
+        pres = self._pres()
+        curve = scene_mod.curve_name(st.node, st.name)
+        with shapes.undo_chunk("tdFacialSculptEnd"):
+            shapes.sculpt_exit(sc)
+            remaining = shapes.finish_sculpt(sc, st.name)
+            nothing = remaining == 0 and st.created and st.kind == "point"
+            if nothing:
+                self._remove_target_now(sc, [st.name])
+        if st.kind == "combo":
+            res.message = f"{st.name} の彫りを終えました（頂点 {remaining}）"
+            res.replaced.append(st.name)
+            if st.was_editing and self.editing:
+                self._reapply_safely()  # 駆動元を 1 にしていたのをやめ、選択中の点のポーズを当て直す
+            elif self.editing:
+                self.end_edit(quiet=True)
+        elif nothing:
+            if pres.ctx.selection is not None:
+                pres.pose.remove_curve(curve)
+            res.message = "何も彫らなかったので、作った彫り用シェイプを消しました（ポーズは変えていません）"
+            res.removed.append(st.name)
+        else:
+            res.message = f"{st.name} の彫りを終えました（頂点 {remaining}）"
+            res.replaced.append(st.name)
+            same_point = st.layer_row_col is not None and pres.ctx.selection == st.layer_row_col[1:]
+            if save and same_point:
+                pres.pose.set_curve(curve, 1.0)
+                self.save_point()
+                res.notes.append(f"点のポーズに「{curve} = 1」を記録して保存しました。ベイクすると FC_* に含まれます")
+            elif not save:
+                res.notes.append("ポーズへは記録していません（編集状態を抜けたため）。もう一度「この角度で彫る」を押すと記録できます")
+        res.stats = {"vertices": remaining}
+        self._shape_done()
+        return res
+
+    def _remove_target_now(self, sc: shapes.ShapeCtx, names: Sequence[str]) -> list[str]:
+        """fcs_* / FC_* のターゲットをシーンから消し、基準姿勢の記録・作った印・bake_state からも外す。"""
+        table = scene_mod.target_indices(sc.node)
+        plugs = [scene_mod.weight_plug(sc.node, table[n]) for n in names if n in table]
+        gone = shapes.delete_shapes(sc, names)
+        self._forget_plugs(plugs)
+        state = scene_mod.get_bake_state(sc.node)
+        if any(n in state for n in gone):
+            for n in gone:
+                state.pop(n, None)
+            scene_mod.set_bake_state(sc.node, state)
+        return gone
+
+    @undoable(notify=True, reapply=False)
+    def _strip_pose_refs(self, names: Iterable[str]) -> CommandResult:
+        """ポーズ・作業セットから、これらのシェイプへの参照（`bs.name` / `name`）を取り除く。"""
+        doc = self.require()
+        keys = set(names)
+
+        def hit(k: str) -> bool:
+            return k in keys or ("." in k and k.split(".", 1)[1] in keys)
+
+        n = 0
+        for layer in doc.layers:
+            for pt in layer.points.values():
+                for k in [k for k in pt.pose.curves if hit(k)]:
+                    del pt.pose.curves[k]
+                    n += 1
+        doc.working_set.curves = [k for k in doc.working_set.curves if not hit(k)]
+        return CommandResult(message=f"ポーズから参照を {n} 個取り除きました")
+
+    def sculpt_delete(self, names: Iterable[str]) -> shapes.ShapeResult:
+        """彫り用シェイプ（`fcs_*`・組み合わせ補正を含む）を消し、ポーズ・作業セットからの参照も取り除く。シーン側は Maya の Undo 1 回、
+        ポーズ側はエディタ内 Undo で戻せる。`fcs_*` 以外が入っていたら何も消さずに ShapeError。"""
+        names = list(dict.fromkeys(names))
+        sc = self._shape_ctx_or_raise()
+        bad = [n for n in names if not naming.is_sculpt_name(n, sc.prefix)]
+        if bad:
+            raise shapes.ShapeError(f"{sc.prefix}* 以外は消せません: {bad}", "not_sculpt")
+        if self._sculpt is not None and self._sculpt.name in names:
+            self.sculpt_end(save=False)
+        res = shapes.ShapeResult()
+        table = scene_mod.target_indices(sc.node)
+        for n in names:  # 編集中に重み 1 のまま消すと、Maya の Undo で戻したとき重み 1 が残る。先に 0 にしておく（Undo の対象にはしない）
+            plug = scene_mod.weight_plug(sc.node, table[n]) if n in table else None
+            if plug and not cmds.listConnections(plug, source=True, destination=False):
+                cmds.setAttr(plug, 0.0)
+        try:
+            with shapes.undo_chunk("tdFacialSculptDelete"):  # ターゲットを消す + 当て直し = Maya の Undo 1 回
+                res.removed = self._remove_target_now(sc, names)
+                if self.editing and self._pres().ctx.selection is not None:
+                    for n in names:
+                        self.pose.remove_curve(scene_mod.curve_name(sc.node, n))
+                self._strip_pose_refs(names)
+                self._reapply_safely()
+        finally:
+            self._shape_done()
+        res.message = f"彫り用シェイプ {len(res.removed)} 個を消しました（ポーズからの参照も外しました）"
+        return res
+
+    # --- ポーズをシェイプにする（F2-3a）---
+    def shape_from_pose(self, name: str, add_to_working_set: bool = False, capture_scene: bool = False) -> shapes.ShapeResult:
+        """編集中のポーズ（選択中の点の編集中の値）を、新しいターゲット 1 本にする（`bake.pose_to_shape`。元のターゲットは上書きしない）。
+        capture_scene=True なら、先にシーンの今の状態（Shape Editor・ジョイントの動き）を編集中の値へ取り込む（編集状態のとき）。"""
+        doc = self.require()
+        pres = self._pres()
+        shapes.check_new_name(name)
+        if capture_scene:
+            if not self.editing:
+                raise shapes.ShapeError("シーンから取り込むには編集状態（ヘッダーの「編集」）に入ってください", "not_editing")
+            rep = self.capture_from_scene()
+            if not rep.ok:
+                raise shapes.ShapeError(rep.message or "シーンから取り込めませんでした", rep.code)
+        pose = pres.pose.pose_to_apply()
+        if pose.is_empty():
+            raise shapes.ShapeError("ポーズが空です。格子の点を選んでスライダー・ボーンを動かすか、「シーンの今の状態を取り込む」にしてください", "empty_pose")
+        sc = self._shape_ctx_or_raise()
+        try:
+            with shapes.undo_chunk("tdFacialPoseToShape"):  # 作る + 「作ったもの」の印 = Undo 1 回
+                brep = bake_mod.pose_to_shape(doc, pose, name)
+                shapes.add_made(sc, [name])
+        except bake_mod.BakeError as e:
+            raise shapes.ShapeError(str(e), "bake") from e
+        finally:
+            self._shape_done()
+        res = shapes.ShapeResult(
+            message=f"ポーズを新しいシェイプ {name} にしました（頂点 {brep.vertex_counts.get(name, 0)}）",
+            created=list(brep.created),
+            replaced=list(brep.replaced),
+            warnings=list(brep.warnings),
+        )
+        res.stats = {"vertices": brep.vertex_counts.get(name, 0), "culled": brep.culled_vertices}
+        if brep.empty:
+            res.warnings.append("差分が 1 つも残りませんでした（空のシェイプ）")
+        if add_to_working_set:
+            self.add_to_working_set(curves=[scene_mod.curve_name(sc.node, name)])
+        self._shape_done()
+        return res
+
+    # --- 左右・ミラー・中間・誇張・組み合わせ（F2-2 / F2-3）---
+    def shape_split_lr(
+        self, src: str, name_l: str, name_r: str, width: float = 1.0, centre: float = 0.0, overwrite_originals: bool = False
+    ) -> shapes.ShapeResult:
+        return self._shape_run(shapes.split_lr, self._shape_ctx_or_raise(), src, name_l, name_r, width, centre, overwrite_originals)
+
+    def shape_mirror(
+        self,
+        src: str,
+        dst: Optional[str] = None,
+        tolerance: float = 0.05,
+        allow_unmatched: bool = False,
+        overwrite_originals: bool = False,
+        centre: float = 0.0,
+    ) -> shapes.ShapeResult:
+        """対応が取れない頂点があると、その頂点をビューポートで選択したうえで `shapes.AsymmetryStop` を投げる（allow_unmatched=True で続ける）。"""
+        return self._shape_run(shapes.mirror_shape, self._shape_ctx_or_raise(), src, dst, centre, tolerance, allow_unmatched, overwrite_originals)
+
+    def shape_inbetween(self, name: str, weight: float, confirm_original: bool = False) -> shapes.ShapeResult:
+        return self._shape_run(shapes.add_inbetween, self._shape_ctx_or_raise(), name, weight, confirm_original)
+
+    @undoable(notify=True, reapply=False)
+    def set_limit(self, curve: str, lo: float, hi: float) -> CommandResult:
+        """シェイプの可動域（`limits`）を 1 件置く。誇張（R-37）の準備に使う。"""
+        doc = self.require()
+        limits = dict(doc.limits or {})
+        limits[curve] = (float(lo), float(hi))
+        doc.limits = limits
+        return CommandResult(message=f"{curve} の可動域を {lo:g}〜{hi:g} にしました")
+
+    def shape_exaggerate(self, name: str) -> shapes.ShapeResult:
+        """誇張形 `<name>_Ex` を作り、`name` の可動域を 0〜2 にする（R-37 の準備。評価は F5）。"""
+        sc = self._shape_ctx_or_raise()
+        res = self._shape_run(shapes.make_exaggeration, sc, name)
+        self.set_limit(scene_mod.curve_name(sc.node, name), 0.0, 2.0)
+        return res
+
+    def shape_combo(self, a: str, b: str) -> shapes.ShapeResult:
+        return self._shape_run(shapes.create_combo, self._shape_ctx_or_raise(), a, b)
+
+    # --- 別メッシュへ写す（F2-4）---
+    def shape_transfer_plan(self, names: Sequence[str], dest_mesh: str) -> shapes.TransferPlan:
+        return shapes.plan_transfer(self._shape_ctx_or_raise(), names, dest_mesh)
+
+    def shape_transfer(self, names: Sequence[str], dest_mesh: str, overwrite: Iterable[str] = ()) -> shapes.ShapeResult:
+        return self._shape_run(shapes.transfer_shapes, self._shape_ctx_or_raise(), names, dest_mesh, overwrite)
+
+    # --- 整理（F2-5）---
+    def shape_clean(self, names: Sequence[str], threshold: float, confirm_original: bool = False) -> shapes.ShapeResult:
+        return self._shape_run(shapes.clean_micro, self._shape_ctx_or_raise(), names, threshold, confirm_original)
+
+    def shape_audit(self) -> shapes.Audit:
+        sc = self.shape_ctx(create=False)
+        return shapes.audit(sc, self.require()) if sc is not None else shapes.Audit()
+
+    def shape_missing_standard(self) -> list[str]:
+        sc = self.shape_ctx(create=False)
+        return shapes.missing_standard(sc, self.profile) if sc is not None else []
+
+    def shape_delete(self, names: Iterable[str]) -> shapes.ShapeResult:
+        """`FC_*` / `fcs_*` のターゲットを消す（それ以外が入っていたら何も消さずに ShapeError）。`fcs_*` はポーズからの参照も外す。"""
+        names = list(dict.fromkeys(names))
+        sc = self._shape_ctx_or_raise()
+        bad = [n for n in names if not (naming.is_fc_name(n) or naming.is_sculpt_name(n, sc.prefix))]
+        if bad:
+            raise shapes.ShapeError(f"FC_* / {sc.prefix}* 以外は消せません: {bad}", "protected")
+        sculpt = [n for n in names if naming.is_sculpt_name(n, sc.prefix)]
+        fcs = [n for n in names if naming.is_fc_name(n)]
+        res = shapes.ShapeResult()
+        if sculpt:
+            res.removed.extend(self.sculpt_delete(sculpt).removed)
+        if fcs:
+            try:
+                with shapes.undo_chunk("tdFacialDeleteShapes"):
+                    res.removed.extend(self._remove_target_now(sc, fcs))
+            finally:
+                self._shape_done()
+        res.message = f"{len(res.removed)} 個のシェイプを消しました"
+        return res
 
     # ============================================================ 検証
     def validate(self):
@@ -1847,6 +2223,21 @@ class T20ImportResult(CommandResult):
     skipped: list[str] = field(default_factory=list)  # 取り込まなかったものと理由
     existing: list[str] = field(default_factory=list)  # 既にキーがあるので上書きしなかった点（overwrite=True で上書き）
     warnings: list[str] = field(default_factory=list)
+
+
+@dataclass
+class SculptState:
+    """「この角度で彫る」の最中の状態。"""
+
+    name: str  # 彫っているターゲット名
+    node: str
+    index: int
+    kind: str  # "point"（点の fcs_*）| "combo"（組み合わせ補正）
+    layer_row_col: Optional[tuple[int, int, int]]  # point のとき (レイヤー番号, row, col)
+    created: bool  # この彫りで新しく作ったターゲットか
+    mesh: str
+    tool: bool  # Sculpt Geometry ツールを有効にしたか（バッチでは False）
+    was_editing: bool = True  # 始める前から編集状態だったか（組み合わせ補正を終えたとき、編集状態へ戻すか抜けるかの判断）
 
 
 @dataclass

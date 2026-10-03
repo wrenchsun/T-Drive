@@ -291,11 +291,36 @@ def resolve_curve(name: str, mesh: str) -> Optional[CurveRef]:
     return None
 
 
-def list_curves(mesh: str, include_fc: bool = False) -> list[CurveRef]:
-    """メッシュの全 blendShape のターゲット一覧（ノード順 → 番号順）。include_fc=False で FC_* を除く。"""
+def driven_indices(node: str) -> set[int]:
+    """combinationShape（組み合わせ補正。docs/14 §5.6）に重みを駆動されているターゲットの番号。"""
+    out: set[int] = set()
+    # connections=True は (自分の plug, 相手の plug) の並びで返る
+    conns = cmds.listConnections(node, source=True, destination=False, plugs=True, connections=True, type="combinationShape") or []
+    table = None
+    for dst in conns[0::2]:
+        m = _WEIGHT_INDEX.search(dst)
+        if m:
+            out.add(int(m.group(1)))
+            continue
+        if table is None:  # エイリアスの名前（`bs.fcs_combo_...`）で返ってくる
+            table = target_indices(node)
+        idx = table.get(dst.split(".", 1)[-1])
+        if idx is not None:
+            out.add(idx)
+    return out
+
+
+def list_curves(mesh: str, include_fc: bool = False, include_driven: bool = False) -> list[CurveRef]:
+    """メッシュの全 blendShape のターゲット一覧（ノード順 → 番号順）。include_fc=False で FC_* を除く。
+
+    include_driven=False で、combinationShape に駆動されているもの（組み合わせ補正。ポーズから動かせない）も除く。
+    """
     out: list[CurveRef] = []
     for n in blend_shapes(mesh):
+        driven = set() if include_driven else driven_indices(n)
         for alias, idx in sorted(target_indices(n).items(), key=lambda kv: kv[1]):
+            if idx in driven:
+                continue
             if include_fc or not naming.is_fc_name(alias):
                 out.append(CurveRef(n, idx, alias))
     return out
@@ -588,7 +613,10 @@ def _enter(ref: Reference, extra_joints: Iterable[str]) -> None:
         nodes = blend_shapes(m)
         ref.nodes_by_mesh[m] = nodes
         for n in nodes:
+            driven = driven_indices(n)  # 組み合わせ補正の出力: 切り離さない・0 にしない（元の重みが 0 なら自然に 0 になり、入力のシェイプを動かせば追従する）
             for idx in _all_indices(n):
+                if idx in driven:
+                    continue
                 plug = weight_plug(n, idx)
                 if plug in ref.weight_plugs:
                     continue
@@ -712,6 +740,45 @@ def write_target_delta(
     return idx, created
 
 
+def item_plug(node: str, group: int, item: int = DELTA_ITEM, geo: int = 0) -> str:
+    """inputTargetItem[item] の plug（item = 5000 + 重み × 1000。6000 = 重み 1 の形、それ未満は中間形）。"""
+    return f"{node}.inputTarget[{geo}].inputTargetGroup[{group}].inputTargetItem[{item}]"
+
+
+def item_numbers(node: str, target: str, geo: int = 0) -> list[int]:
+    """ターゲットが持つ inputTargetItem の番号（中間形 + 6000）。ターゲットが無ければ空。"""
+    idx = target_indices(node).get(target)
+    if idx is None:
+        return []
+    return sorted(cmds.getAttr(f"{node}.inputTarget[{geo}].inputTargetGroup[{idx}].inputTargetItem", multiIndices=True) or [])
+
+
+def read_item_delta(node: str, target: str, item: int, geo: int = 0) -> Optional[tuple[list[int], np.ndarray]]:
+    """`read_target_delta` の、item を指定できる版（中間形の読み取り用）。"""
+    idx = target_indices(node).get(target)
+    if idx is None:
+        return None
+    plug = item_plug(node, idx, item, geo)
+    pts = cmds.getAttr(plug + ".inputPointsTarget") or []
+    comps = _expand_components(cmds.getAttr(plug + ".inputComponentsTarget"))
+    return comps, np.array([p[:3] for p in pts], dtype=np.float64).reshape(-1, 3)
+
+
+def write_item_delta(node: str, target: str, item: int, deltas: np.ndarray, components: Sequence[int], geo: int = 0) -> None:
+    """既にあるターゲットの inputTargetItem[item]（中間形など）の差分を直接書く。ターゲットが無ければ ValueError。"""
+    idx = target_indices(node).get(target)
+    if idx is None:
+        raise ValueError(f"ターゲット {target} が {node} にありません")
+    comps = [int(c) for c in components]
+    arr = np.asarray(deltas, dtype=np.float64).reshape(-1, 3)
+    if len(comps) != len(arr):
+        raise ValueError("components と deltas の数が違います")
+    plug = item_plug(node, idx, item, geo)
+    cmds.setAttr(plug + ".inputPointsTarget", len(arr), *[(float(x), float(y), float(z), 1.0) for x, y, z in arr], type="pointArray")
+    ranges = _compress_components(comps)
+    cmds.setAttr(plug + ".inputComponentsTarget", len(ranges), *ranges, type="componentList")
+
+
 def delete_targets(node: str, names: Iterable[str], sculpt_prefix: str = naming.DEFAULT_SCULPT_PREFIX) -> list[str]:
     """ターゲットを消す。**`FC_*` / `fcs_*`（sculpt_prefix）だけ**。それ以外の名前が 1 つでも入っていたら何も消さずに ValueError。
 
@@ -727,6 +794,9 @@ def delete_targets(node: str, names: Iterable[str], sculpt_prefix: str = naming.
         idx = table.get(n)
         if idx is None:
             continue
+        combos = list(dict.fromkeys(cmds.listConnections(weight_plug(node, idx), source=True, destination=False, type="combinationShape") or []))
+        if combos:
+            cmds.delete(combos)  # 組み合わせ補正の節（このターゲット専用）
         cmds.aliasAttr(f"{node}.{n}", remove=True)
         for g in cmds.getAttr(node + ".inputTarget", multiIndices=True) or []:
             if idx in (cmds.getAttr(f"{node}.inputTarget[{g}].inputTargetGroup", multiIndices=True) or []):
