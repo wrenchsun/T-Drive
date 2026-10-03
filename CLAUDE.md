@@ -9,6 +9,7 @@ Maya 2026 用セルルック Look Development ツール。仕様は docs/（索�
 
 ## 守ること
 - **デザイナーマニュアル（docs/DesignerManual/*.html）をこまめに更新する**: デザイナーが触る機能を追加・変更したら、同じコミットで該当ページ・「今できること」の表・最終更新日・スクリーンショット（images/）を直す。準備中の機能は `<span class="soon">準備中</span>` で明示し、実装と食い違う記述を残さない
+- **人による確認項目リストを一緒に作る**: 機能を追加・変更したら、人が操作して確かめる項目を同じコミットで確認項目リスト（docs/10 = ルック、docs/18 = FacialController・Unity ほか）に足す。「自動」欄にはテストで確認済みの範囲を書き、見た目・操作感など人の判断が要るものは未確認のまま残す
 - **D-Drive MaterialData に適合**: Look 定義は Common / Specific / RenderQueueOffset に落ちる形。固有パラメータは `_Toon` 接頭辞（D-Drive の予約名と衝突させない）
 - シェーダーの式は `shaders/ToonCore.hlsl` の 1 か所だけに書く（Maya .fx と Unity .shader は include するラッパー）
 - パラメータ契約（maya/scripts/tdrive_toon/params.py）・頂点カラー割当・Look スキーマの削除/改名は MAJOR。追加は MINOR（docs/06）

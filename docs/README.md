@@ -20,6 +20,7 @@
 | 17 | [17_ddrive_toon_materials.md](17_ddrive_toon_materials.md) | D-Drive では扱いにくい Toon マテリアル（何が扱いにくいか・T-Drive 側の解決法・罠と避け方・D-Drive 側に実装したほうがいい機能 M-1〜M-9） |
 | 12 | [12_substance_painter.md](12_substance_painter.md) | Substance Painter の扱い（検討メモ・確認待ち） |
 | 10 | [10_manual_verification_2026-09-28.md](10_manual_verification_2026-09-28.md) | 人による確認項目（Phase 1〜4） |
+| 18 | [18_manual_verification_facial.md](18_manual_verification_facial.md) | 人による確認項目（FacialController・2 段タブ・shizuku・Unity。チケットごとに追記） |
 | — | [tasks.md](tasks.md) | 優先順位順のチケット一覧 |
 | — | [DesignerManual/Readme.html](DesignerManual/Readme.html) | **デザイナーマニュアル**（HTML。デザイナー向けの使い方） |
 
