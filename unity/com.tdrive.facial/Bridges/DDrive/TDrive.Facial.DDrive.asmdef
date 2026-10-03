@@ -1,16 +1,17 @@
 {
   "name": "TDrive.Facial.DDrive",
   "rootNamespace": "TDrive.Facial.DDrive",
-  "references": ["TDrive.Facial.Core", "TDrive.Facial.Runtime", "DDrive.Runtime"],
+  "references": ["TDrive.Facial.Core", "TDrive.Facial.Runtime", "TDrive.Facial.Timeline", "DDrive.Foundation", "DDrive.Runtime", "Unity.Timeline"],
   "includePlatforms": [],
   "excludePlatforms": [],
   "allowUnsafeCode": false,
   "overrideReferences": false,
   "precompiledReferences": [],
   "autoReferenced": true,
-  "defineConstraints": ["TDRIVE_FACIAL_DDRIVE"],
+  "defineConstraints": ["TDRIVE_FACIAL_DDRIVE", "TDRIVE_FACIAL_TIMELINE"],
   "versionDefines": [
-    { "name": "com.ddrive.core", "expression": "1.0.0", "define": "TDRIVE_FACIAL_DDRIVE" }
+    { "name": "com.ddrive.core", "expression": "1.0.0", "define": "TDRIVE_FACIAL_DDRIVE" },
+    { "name": "com.unity.timeline", "expression": "1.0.0", "define": "TDRIVE_FACIAL_TIMELINE" }
   ],
   "noEngineReferences": false
 }

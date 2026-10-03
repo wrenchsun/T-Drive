@@ -1,7 +1,7 @@
 {
   "name": "TDrive.Facial.Timeline",
   "rootNamespace": "TDrive.Facial.Timeline",
-  "references": ["TDrive.Facial.Runtime", "Unity.Timeline"],
+  "references": ["TDrive.Facial.Core", "TDrive.Facial.Runtime", "Unity.Timeline"],
   "includePlatforms": [],
   "excludePlatforms": [],
   "allowUnsafeCode": false,

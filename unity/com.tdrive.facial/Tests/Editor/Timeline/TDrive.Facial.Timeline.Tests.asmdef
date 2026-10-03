@@ -1,0 +1,16 @@
+{
+  "name": "TDrive.Facial.Timeline.Tests",
+  "rootNamespace": "TDrive.Facial.Tests.Timeline",
+  "references": ["TDrive.Facial.Core", "TDrive.Facial.Runtime", "TDrive.Facial.Timeline", "TDrive.Facial.Tests", "Unity.Timeline", "UnityEngine.TestRunner", "UnityEditor.TestRunner"],
+  "includePlatforms": ["Editor"],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": true,
+  "precompiledReferences": ["nunit.framework.dll"],
+  "autoReferenced": false,
+  "defineConstraints": ["UNITY_INCLUDE_TESTS", "TDRIVE_FACIAL_TIMELINE"],
+  "versionDefines": [
+    { "name": "com.unity.timeline", "expression": "1.0.0", "define": "TDRIVE_FACIAL_TIMELINE" }
+  ],
+  "noEngineReferences": false
+}

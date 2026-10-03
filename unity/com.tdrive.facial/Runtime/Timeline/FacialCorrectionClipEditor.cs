@@ -1,0 +1,71 @@
+// Timeline のクリップのインスペクター（デザイナー向けの日本語ラベル）。編集時のみ。
+// 値は FacialCorrectionBehaviour（テンプレート）。ラベルとツールチップだけを日本語にした表示で、保存される内容は変わらない。
+#if UNITY_EDITOR
+using UnityEditor;
+using UnityEngine;
+
+namespace TDrive.Facial.Timeline
+{
+    [CustomEditor(typeof(FacialCorrectionClip))]
+    public sealed class FacialCorrectionClipEditor : UnityEditor.Editor
+    {
+        public override void OnInspectorGUI()
+        {
+            serializedObject.Update();
+            SerializedProperty t = serializedObject.FindProperty("template");
+            if (t == null) { DrawDefaultInspector(); return; }
+
+            EditorGUILayout.HelpBox("重なったクリップは重みでブレンドされます。クリップが無い間は、Runner の設定どおりの通常の補正です。", MessageType.None);
+
+            Section("強さ");
+            Toggle(t, "useAlpha", "強さを使う", "オンのとき、下の「強さ」で補正全体を弱める / 切る");
+            using (new EditorGUI.DisabledScope(!t.FindPropertyRelative("useAlpha").boolValue))
+                Field(t, "alpha", "強さ（0〜1）", "補正全体に掛ける倍率。0 でこのクリップの間は補正なし");
+
+            Section("感情の重み");
+            Field(t, "emotions", "感情の重み（レイヤー名と重み）", "表情に合わせた補正の切り替え。レイヤー名は Runner のデータのレイヤー名と同じ綴りにする。書いていないレイヤーは Runner の値のまま");
+
+            Section("角度の固定");
+            Toggle(t, "fixAngles", "角度を固定する", "オンのとき、カメラの位置に関わらず下の Yaw / Pitch を補正の角度として使う（決め構図用）");
+            using (new EditorGUI.DisabledScope(!t.FindPropertyRelative("fixAngles").boolValue))
+            {
+                Field(t, "yaw", "Yaw（度）", "キャラクターの正面 = 0、カメラがキャラクターから見て左で正");
+                Field(t, "pitch", "Pitch（度）", "カメラが上（ふかん）で正");
+            }
+
+            Section("視点");
+            Field(t, "viewer", "視点（空 = 既定）", "補正の基準にするカメラなどの Transform（シーン内のオブジェクト）。空なら Runner の設定・メインカメラに従う");
+
+            Section("カット補正");
+            Field(t, "pose", "ポーズ", "このクリップの間だけ加算するポーズ（.fcpose から取り込んだもの）。元のデータは書き換わらない。空なら使わない");
+            Field(t, "poseWeight", "ポーズの重み（0〜1）", "カット補正の重み");
+
+            Section("コマ打ち（準備中）");
+            EditorGUILayout.HelpBox("準備中: 値は保存して Runner へ渡しますが、Runner は F5 まで使いません。", MessageType.Info);
+            Toggle(t, "useStepFps", "コマ打ちを使う（準備中）", "オンのとき、このクリップの間だけ補正の更新 fps を変える");
+            using (new EditorGUI.DisabledScope(!t.FindPropertyRelative("useStepFps").boolValue))
+                Field(t, "stepFps", "fps（準備中）", "補正の更新 fps（0 = 毎フレーム）");
+
+            serializedObject.ApplyModifiedProperties();
+        }
+
+        static void Section(string title)
+        {
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField(title, EditorStyles.boldLabel);
+        }
+
+        static void Field(SerializedProperty parent, string name, string label, string tooltip)
+        {
+            SerializedProperty p = parent.FindPropertyRelative(name);
+            if (p != null) EditorGUILayout.PropertyField(p, new GUIContent(label, tooltip), true);
+        }
+
+        static void Toggle(SerializedProperty parent, string name, string label, string tooltip)
+        {
+            SerializedProperty p = parent.FindPropertyRelative(name);
+            if (p != null) p.boolValue = EditorGUILayout.ToggleLeft(new GUIContent(label, tooltip), p.boolValue);
+        }
+    }
+}
+#endif

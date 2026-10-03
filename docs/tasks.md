@@ -216,8 +216,8 @@ FacialController（カメラ角度に応じた顔の補正。UE 版からの移�
 | FU-3 | `FacialCorrectionRunner`（視点の解決・重み・表情での弱め・距離フェード・スムージング / スナップ・LOD / 非表示の打ち切り・シェイプ番号の事前解決・OnDisable で戻す） | R-10 R-11 R-12 R-28 R-29 | 3.5 | FU-2 | shizuku でカメラを回すと Maya のプレビューと同じ重み（数値一致）。プールへ返すと FC_* が 0 | ✅ `Runtime/FacialCorrectionRunner.cs`（LateUpdate・視点の解決・スナップ / スムージング・表情での弱め・距離フェード・OnDisable で戻す・1 フレーム限りの上書き `PushOverride`・毎フレームの割り当て 0）。Unity の EditMode テスト 252 件通過（合成メッシュ）。LOD の打ち切り（`maxLod`）は値を持つだけで未使用。shizuku でも確認（FBX のシェイプ名は `bs.FC_…` になるため、名前の解決を「完全一致 → `.` + 名前」の順に修正）。再生しての見た目は人の確認待ち |
 | FU-4 | マテリアル出力（MaterialPropertyBlock: `_FC_Angles` / `_FC_Emotion*`） | R-14 | 1 | FU-3 | 対象の Renderer にだけ値が入る（2 体で衝突しない） | ✅ `Runtime/FacialMaterialOutput.cs`（`_FC_Angles` / `_FC_Emotion0…` を MaterialPropertyBlock へ。グローバルには書かない。Runner の `materialOutput` で指定も可） |
 | FU-5 | エディタ: プレビュー（Scene ビューのカメラ・A/B・ターンテーブル）・格子ビューア・検証 | R-01 R-30 R-31 | 3 | FU-3 | 再生せずに補正を確認でき、抜けると元に戻る。FC_* の不足が検証に出る | ✅ プレビュー（`Editor/Preview/FacialPreviewDriver.cs`: Scene ビューのカメラ / ターンテーブル / 角度指定・A/B。保存・再生・再コンパイル・終了の前に重みを戻す。シーンを汚さない）・格子ビューア（`Editor/Grid/`、メニュー T-Drive/Facial/グリッド）・検証（`Editor/Validation/FacialValidation.cs`）。計算はテスト済み、ウィンドウの見た目とカメラの動きは人の確認待ち |
-| FU-6 | 簡単なパラメータ調整: `FacialCorrectionOverrides`・Runner のインスペクター・JSON への書き出し（Maya へ戻す） | — | 1.5 | FU-3 | 強さ・追従などを変えて保存 → 取り込み直しても残る → 書き出した値を Maya で読める | ✅ Runner / Data / Overrides のインスペクター（状態・調整・感情の重み・視点・検証）、調整用アセットの作成、Maya へ戻す JSON の書き出し（`policy` / `quality`。**端のフェード（`grid.edgeFade`）は未対応** → 次の修正で追加） |
-| FU-7 | デバッグ表示（HUD・3D 表示） | R-27 | 1 | FU-3 | 角度・重み・スナップが実行中に見える | ⬜ |
+| FU-6 | 簡単なパラメータ調整: `FacialCorrectionOverrides`・Runner のインスペクター・JSON への書き出し（Maya へ戻す） | — | 1.5 | FU-3 | 強さ・追従などを変えて保存 → 取り込み直しても残る → 書き出した値を Maya で読める | ✅ Runner / Data / Overrides のインスペクター（状態・調整・感情の重み・視点・検証）、調整用アセットの作成、Maya へ戻す JSON の書き出し（`policy` / `quality`。端のフェード（`grid.edgeFade`）も上書きしているときは書き出す） |
+| FU-7 | デバッグ表示（HUD・3D 表示） | R-27 | 1 | FU-3 | 角度・重み・スナップが実行中に見える | ✅ `Runtime/FacialDebugOverlay.cs`（レベル 0 切 / 1 HUD / 2 HUD + 3D 表示）。見た目は人の確認待ち |
 | FU-8 | マニュアル（Unity での使い方・調整できる値・取り込み設定） | — | 1 | FU-6 | — | ✅ `facial-export.html` に Unity での使い方・調整できる値・準備中の一覧（Unity の画面の画像は無し） |
 
 ## Phase FT: TimeLine / D-Drive 連携
@@ -226,8 +226,8 @@ FacialController（カメラ角度に応じた顔の補正。UE 版からの移�
 
 | # | チケット | 要件 | 日数 | 依存 | 受け入れ条件 | 状態 |
 |---|---|---|---|---|---|---|
-| FT-1 | `FacialCorrectionTrack` / `Clip` / `Mixer`（強さ・感情の重み・角度の固定・視点・カット補正・コマ打ち。クリップのブレンド。プレビュー後に元へ戻す） | R-36 | 3 | FU-3 | Timeline のスクラブと再生で補正が変わる。プレビューを抜けると元の値 | ⬜ |
-| FT-2 | D-Drive ブリッジ: バインドの補助（同じ役名の AnimationTrack）・検証（IValidator）・プール返却の確認テスト・D-Drive のカットシーンでのサンプル | — | 2.5 | FT-1 | MS2026 で `Cutscene.Play` → 補正が動く・シークとスキップに追従。D-Drive を変更していない | ⬜ |
+| FT-1 | `FacialCorrectionTrack` / `Clip` / `Mixer`（強さ・感情の重み・角度の固定・視点・カット補正・コマ打ち。クリップのブレンド。プレビュー後に元へ戻す） | R-36 | 3 | FU-3 | Timeline のスクラブと再生で補正が変わる。プレビューを抜けると元の値 | ✅ `Runtime/Timeline/`（FacialCorrectionTrack / Clip / Mixer。強さ・感情の重み・角度の固定（部分的な重なりはカメラ角度と補間）・視点・カット補正（ポーズを加算、終わると元に戻る）。再生していないスクラブでも補正が見える）。コマ打ちは値を渡すだけ（F5）。Timeline のテスト 16 件。Timeline ウィンドウでの操作感は人の確認待ち |
+| FT-2 | D-Drive ブリッジ: バインドの補助（同じ役名の AnimationTrack）・検証（IValidator）・プール返却の確認テスト・D-Drive のカットシーンでのサンプル | — | 2.5 | FT-1 | MS2026 で `Cutscene.Play` → 補正が動く・シークとスキップに追従。D-Drive を変更していない | ✅ `Bridges/DDrive/`（`<役名>_Facial` → 同じ役名の AnimationTrack のバインド先・D-Drive の検証 `TD-FACIAL-001〜005`）。プール返却はインスタンスが無効化されるので Runner が FC_* を戻す（追加の処理は不要）。D-Drive は変更していない。`Cutscene.Play` での再生は人の確認待ち |
 | FT-3 | Maya → Timeline: `.fctrack` の出力（プレビュー用ノードのキー）+ Unity 側で `.playable` にトラックを足す / 更新する | — | 3 | FT-2 F1-5 | Maya で打ったキーが Timeline のクリップ / カーブになる。再出力でデザイナーが足したトラックは残る | ⬜ |
 | FT-4 | D-Drive 側への提案の起票（チケット 7-8 の書き換え案・C-1〜C-9）※ D-Drive のリポジトリは読み取りのみなので、文面を用意して渡す | — | 0.5 | — | [16](16_ddrive_changes_for_facial.md) の内容が D-Drive のチケットの形になっている | ✅ D-Drive 側で起票済み（D-Drive `docs/51_tdrive_integration.md`・`docs/11_tasks.md` FC-0〜FC-10、PR #86）。対応表は [16](16_ddrive_changes_for_facial.md) 冒頭 |
 

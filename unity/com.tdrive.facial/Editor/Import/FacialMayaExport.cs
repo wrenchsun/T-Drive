@@ -1,5 +1,5 @@
 // 「Maya へ戻す」: 実効の調整値（取り込んだ値 + 調整用アセットの上書き）を、元の .fcpose の単位・キー名に戻して JSON にする。
-// FcposeConverter（取り込み）の逆変換。出すのは policy と quality だけ（格子・ポーズ・シェイプは Unity では変えない）。
+// FcposeConverter（取り込み）の逆変換。出すのは policy と quality（と、端のフェードを上書きしているときの grid.edgeFade）だけ（格子・ポーズ・シェイプは Unity では変えない）。
 // 長さ（距離フェード）は Unity の m → 元データの単位（cm など）。それ以外は単位なし。
 using System.Globalization;
 using System.Text;
@@ -14,6 +14,9 @@ namespace TDrive.Facial.Editor
         public double expressionDampen, interpSpeed, snapAngle, fadeStart, fadeEnd, globalAlpha;
         public double sharpness, stepFps, angleEpsilon;
         public int maxLod;
+        /// <summary>true のとき grid.edgeFade も書き出す（端のフェードを上書きしているときだけ）。</summary>
+        public bool hasEdgeFade;
+        public double edgeFade;
     }
 
     public static class FacialMayaExport
@@ -49,13 +52,16 @@ namespace TDrive.Facial.Editor
                 stepFps = p.stepFps,
                 angleEpsilon = data != null ? data.quality.angleEpsilon : 0.1,
                 maxLod = data != null ? data.quality.maxLod : 0,
+                edgeFade = p.edgeFade,
             };
         }
 
-        /// <summary>data と上書きから、Maya が読める JSON（policy / quality だけ。.fcpose と同じキー名）を作る。</summary>
+        /// <summary>data と上書きから、Maya が読める JSON（policy / quality と、端のフェードを上書きしているときの grid.edgeFade。.fcpose と同じキー名）を作る。</summary>
         public static string BuildJson(FacialCorrectionData data, FacialCorrectionOverrides overrides)
         {
-            return BuildJson(ToSource(data, FacialCorrectionOverrides.Resolve(data, overrides)));
+            FacialSourceTuning t = ToSource(data, FacialCorrectionOverrides.Resolve(data, overrides));
+            t.hasEdgeFade = overrides != null && overrides.overrideEdgeFade; // 上書きしているときだけ grid を出す
+            return BuildJson(t);
         }
 
         public static string BuildJson(FacialSourceTuning t)
@@ -69,6 +75,12 @@ namespace TDrive.Facial.Editor
             sb.Append("    \"fade\": [").Append(N(t.fadeStart)).Append(", ").Append(N(t.fadeEnd)).Append("],\n");
             sb.Append("    \"globalAlpha\": ").Append(N(t.globalAlpha)).Append("\n");
             sb.Append("  },\n");
+            if (t.hasEdgeFade)
+            {
+                sb.Append("  \"grid\": {\n");
+                sb.Append("    \"edgeFade\": ").Append(N(t.edgeFade)).Append("\n");
+                sb.Append("  },\n");
+            }
             sb.Append("  \"quality\": {\n");
             sb.Append("    \"sharpness\": ").Append(N(t.sharpness)).Append(",\n");
             sb.Append("    \"stepFps\": ").Append(N(t.stepFps)).Append(",\n");

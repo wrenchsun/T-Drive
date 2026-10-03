@@ -302,7 +302,7 @@ namespace TDrive.Facial.Editor
             }
             using (new EditorGUI.DisabledScope(r.data == null))
             {
-                if (GUILayout.Button(new GUIContent("Maya へ戻す JSON を書き出す…", "今の調整値（policy / quality）を、元データの単位に戻して JSON に書く。Maya で読み込めます")))
+                if (GUILayout.Button(new GUIContent("Maya へ戻す JSON を書き出す…", "今の調整値（policy / quality。端のフェードを上書きしているときは grid.edgeFade も）を、元データの単位に戻して JSON に書く。Maya で読み込めます")))
                     ExportJson(r);
             }
         }

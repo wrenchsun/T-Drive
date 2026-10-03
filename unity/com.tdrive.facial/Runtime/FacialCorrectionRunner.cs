@@ -25,7 +25,25 @@ namespace TDrive.Facial
         public float[] emotionWeights;
         /// <summary>視点の Transform。null = 上書きなし。</summary>
         public Transform viewer;
+        /// <summary>
+        /// hasManualAngles のとき、手動の角度へ寄せる割合（0〜1）。ライブ（視点・コンポーネントの手動）の角度との間を補間する。
+        /// 0 は「指定なし」とみなして 1（完全に手動）として扱う（この欄を足す前の呼び出しと同じ結果にするため）。
+        /// </summary>
+        public float manualAngleBlend;
+        /// <summary>カット補正（R-36）: このフレームだけ加算するポーズ。null = なし。曲線はシェイプの重みへ、ボーンはローカルの変形へ加算される。</summary>
+        public FacialPoseAsset pose;
+        /// <summary>pose に掛ける重み（0〜1）。0 以下 = 加算しない。</summary>
+        public float poseWeight;
+        /// <summary>true のとき stepFps を渡す。準備中: Runner は F5 まで使わない（値は保持するだけ）。</summary>
+        public bool hasStepFps;
+        public float stepFps;
     }
+
+    /// <summary>直近の評価で使った視点の出どころ（診断・デバッグ表示用）。</summary>
+    public enum FacialViewerSource { None, Override, Component, Parameter, MainCamera }
+
+    /// <summary>直近の評価で使った角度の出どころ（診断・デバッグ表示用）。</summary>
+    public enum FacialAngleSource { None, Viewer, ComponentManual, OverrideManual, Blended, Explicit }
 
     [DefaultExecutionOrder(10000)] // Animator・D-Drive の AnimManager（Update）より後
     [DisallowMultipleComponent]
@@ -94,6 +112,20 @@ namespace TDrive.Facial
         /// <summary>直近の評価で視点から角度を求められたか（手動・視点なしは false）。</summary>
         public bool HasValidAngles { get { return _hasPrev; } }
 
+        /// <summary>直近の評価で使った視点（無ければ null）。</summary>
+        public Transform LastViewer { get { return _lastViewer; } }
+        /// <summary>直近の評価で使った視点の出どころ。</summary>
+        public FacialViewerSource LastViewerSource { get { return _lastViewerSource; } }
+        /// <summary>直近の評価で使った角度の出どころ。</summary>
+        public FacialAngleSource LastAngleSource { get { return _lastAngleSource; } }
+        /// <summary>有効な Runner の一覧（デバッグ表示用。読み取り専用）。</summary>
+        public static IReadOnlyList<FacialCorrectionRunner> ActiveRunners { get { return Active; } }
+
+        static readonly List<FacialCorrectionRunner> Active = new List<FacialCorrectionRunner>(8);
+        Transform _lastViewer;
+        FacialViewerSource _lastViewerSource;
+        FacialAngleSource _lastAngleSource;
+
         FacialMaterialOutput _matOut;
 
         sealed class ShapeBinding
@@ -151,6 +183,26 @@ namespace TDrive.Facial
         bool _hasPending;
         FacialFrameOverride _pending;
 
+        // カット補正（ポーズの加算）。戻し方: 前回書いた値と今の値が同じときだけ元へ戻す（アニメーションが書き直していたら触らない）
+        sealed class PoseCache
+        {
+            public SkinnedMeshRenderer[] shapeRenderers = new SkinnedMeshRenderer[0];
+            public int[] shapeIndices = new int[0];
+            public float[] shapeValues = new float[0];
+            public Transform[] boneTransforms = new Transform[0];
+            public FacialPoseBone[] bones = new FacialPoseBone[0];
+        }
+        struct PoseShapeSave { public SkinnedMeshRenderer renderer; public int index; public float original, applied; }
+        struct PoseBoneSave
+        {
+            public Transform t;
+            public Vector3 pos, scale, aPos, aScale;
+            public Quaternion rot, aRot;
+        }
+        readonly Dictionary<FacialPoseAsset, PoseCache> _poseCache = new Dictionary<FacialPoseAsset, PoseCache>();
+        readonly List<PoseShapeSave> _poseShapes = new List<PoseShapeSave>(16);
+        readonly List<PoseBoneSave> _poseBones = new List<PoseBoneSave>(16);
+
         // ---------------------------------------------------------------- 公開 API
 
         /// <summary>次の LateUpdate（または EvaluateNow）だけ有効な上書きを渡す。使われたら消える。</summary>
@@ -172,9 +224,10 @@ namespace TDrive.Facial
             Step(deltaTime, null, true, yawDeg, pitchDeg);
         }
 
-        /// <summary>書いた FC_ シェイプをすべて 0 に戻し、計算の状態も捨てる（次の評価はスナップ）。FC_ 以外には触らない。</summary>
+        /// <summary>書いた FC_ シェイプをすべて 0 に戻し、計算の状態も捨てる（次の評価はスナップ）。カット補正（ポーズの加算）も元へ戻す。</summary>
         public void ResetWeights()
         {
+            RestorePose(); // カット補正で加算した分も元へ
             for (int i = 0; i < _written.Count; i++)
             {
                 ShapeBinding b = _written[i];
@@ -260,10 +313,12 @@ namespace TDrive.Facial
         {
             _built = false; // 有効化のたびに引き直す
             _warnedBase = false;
+            if (!Active.Contains(this)) Active.Add(this);
         }
 
         void OnDisable()
         {
+            Active.Remove(this);
             ResetWeights(); // 書いた FC_ を 0 に戻す（プールへ返すときも）
         }
 
@@ -285,12 +340,27 @@ namespace TDrive.Facial
 
         void Step(float deltaTime, Transform viewerParam, bool explicitAngles, double explicitYaw, double explicitPitch)
         {
+            RestorePose(); // 前回のカット補正を戻してから評価する（加算が積もらない）
+
             // 外からの上書きは 1 回で消す
             FacialFrameOverride ov = _pending;
             bool hadOverride = _hasPending;
             _pending = default(FacialFrameOverride);
             _hasPending = false;
 
+            StepCore(deltaTime, viewerParam, explicitAngles, explicitYaw, explicitPitch, ref ov, hadOverride);
+
+            // カット補正は FC_ の書き込みのあと（= アニメーションのあと）に加算する
+            if (hadOverride && ov.pose != null && ov.poseWeight > 0f && data != null)
+            {
+                EnsureCache();
+                ApplyPose(ov.pose, Mathf.Min(1f, ov.poseWeight));
+            }
+        }
+
+        void StepCore(float deltaTime, Transform viewerParam, bool explicitAngles, double explicitYaw, double explicitPitch,
+            ref FacialFrameOverride ov, bool hadOverride)
+        {
             FacialCorrectionData d = data;
             if (d == null || d.layers == null || d.layers.Length == 0)
             {
@@ -304,40 +374,66 @@ namespace TDrive.Facial
 
             // 1 視点: 手動の角度 > 指定した Transform > メインカメラ
             Transform viewer = null;
-            if (hadOverride && ov.viewer != null) viewer = ov.viewer;
-            else if (viewerOverride != null) viewer = viewerOverride;
-            else if (viewerParam != null) viewer = viewerParam;
+            FacialViewerSource viewerSource = FacialViewerSource.None;
+            if (hadOverride && ov.viewer != null) { viewer = ov.viewer; viewerSource = FacialViewerSource.Override; }
+            else if (viewerOverride != null) { viewer = viewerOverride; viewerSource = FacialViewerSource.Component; }
+            else if (viewerParam != null) { viewer = viewerParam; viewerSource = FacialViewerSource.Parameter; }
             else
             {
                 Camera cam = Camera.main;
-                if (cam != null) viewer = cam.transform;
+                if (cam != null) { viewer = cam.transform; viewerSource = FacialViewerSource.MainCamera; }
             }
+            _lastViewer = viewer;
+            _lastViewerSource = viewerSource;
 
-            // 2 角度
+            // 2 角度: 直接指定 > 上書きの手動（manualAngleBlend < 1 ならライブとの補間）> コンポーネントの手動 > 視点
             double yaw, pitch;
-            if (explicitAngles) { yaw = explicitYaw; pitch = explicitPitch; }
-            else if (hadOverride && ov.hasManualAngles) { yaw = ov.yaw; pitch = ov.pitch; }
-            else if (useManualAngles) { yaw = manualYaw; pitch = manualPitch; }
+            if (explicitAngles) { yaw = explicitYaw; pitch = explicitPitch; _lastAngleSource = FacialAngleSource.Explicit; }
             else
             {
-                if (viewer == null) return; // 視点が無いときは何もしない（前回の状態を保つ）
-                Transform bone = _baseResolved;
-                if (bone == null)
+                bool manualOv = hadOverride && ov.hasManualAngles;
+                float blend = manualOv ? (ov.manualAngleBlend > 0f ? Mathf.Min(1f, ov.manualAngleBlend) : 1f) : 0f;
+                bool haveLive = false;
+                double liveYaw = 0.0, livePitch = 0.0;
+                FacialAngleSource liveSource = FacialAngleSource.None;
+                if (!manualOv || blend < 1f)
                 {
-                    if (!_warnedBase)
+                    if (useManualAngles) { liveYaw = manualYaw; livePitch = manualPitch; haveLive = true; liveSource = FacialAngleSource.ComponentManual; }
+                    else if (viewer != null)
                     {
-                        _warnedBase = true;
-                        Debug.LogWarning("[FacialCorrectionRunner] 基準ボーン '" + d.grid.baseBone + "' が見つかりません。角度を計算できないので補正を掛けません（手動の角度なら動きます）: " + name, this);
+                        Transform bone = _baseResolved;
+                        if (bone != null)
+                        {
+                            Vector3 hp = bone.position;
+                            Quaternion hr = bone.rotation;
+                            Vector3 vp = viewer.position;
+                            Vector3 co = d.grid.centerOffset;
+                            FacialSpace.ComputeViewAnglesInSpace(UnityToCanonical,
+                                new Vec3(hp.x, hp.y, hp.z), new Quat(hr.x, hr.y, hr.z, hr.w), _forwardAxis,
+                                new Vec3(vp.x, vp.y, vp.z), new Vec3(co.x, co.y, co.z), out liveYaw, out livePitch);
+                            haveLive = true;
+                            liveSource = FacialAngleSource.Viewer;
+                        }
+                        else if (!manualOv)
+                        {
+                            if (!_warnedBase)
+                            {
+                                _warnedBase = true;
+                                Debug.LogWarning("[FacialCorrectionRunner] 基準ボーン '" + d.grid.baseBone + "' が見つかりません。角度を計算できないので補正を掛けません（手動の角度なら動きます）: " + name, this);
+                            }
+                            return; // フェイルソフト
+                        }
                     }
-                    return; // フェイルソフト
+                    else if (!manualOv) return; // 視点が無いときは何もしない（前回の状態を保つ）
                 }
-                Vector3 hp = bone.position;
-                Quaternion hr = bone.rotation;
-                Vector3 vp = viewer.position;
-                Vector3 co = d.grid.centerOffset;
-                FacialSpace.ComputeViewAnglesInSpace(UnityToCanonical,
-                    new Vec3(hp.x, hp.y, hp.z), new Quat(hr.x, hr.y, hr.z, hr.w), _forwardAxis,
-                    new Vec3(vp.x, vp.y, vp.z), new Vec3(co.x, co.y, co.z), out yaw, out pitch);
+                if (!manualOv) { yaw = liveYaw; pitch = livePitch; _lastAngleSource = liveSource; }
+                else if (!haveLive || blend >= 1f) { yaw = ov.yaw; pitch = ov.pitch; _lastAngleSource = FacialAngleSource.OverrideManual; }
+                else
+                {
+                    yaw = liveYaw + blend * FacialCore.NormalizeAxis(ov.yaw - liveYaw);
+                    pitch = livePitch + blend * (ov.pitch - livePitch);
+                    _lastAngleSource = FacialAngleSource.Blended;
+                }
             }
             _curYaw = yaw;
             _curPitch = pitch;
@@ -455,6 +551,133 @@ namespace TDrive.Facial
             }
         }
 
+        // ---------------------------------------------------------------- カット補正（R-36）
+
+        /// <summary>ポーズが指すボーンの Transform を output へ入れる（Timeline の GatherProperties 用。output は先に空にする）。</summary>
+        public void GetPoseBoneTransforms(FacialPoseAsset pose, List<Transform> output)
+        {
+            output.Clear();
+            if (pose == null || data == null) return;
+            EnsureCache();
+            PoseCache pc = GetPoseCache(pose);
+            for (int i = 0; i < pc.boneTransforms.Length; i++)
+                if (pc.boneTransforms[i] != null) output.Add(pc.boneTransforms[i]);
+        }
+
+        /// <summary>ポーズの曲線が指すブレンドシェイプ（対象メッシュと番号）を返す（Timeline の GatherProperties 用）。</summary>
+        public void GetPoseShapeTargets(FacialPoseAsset pose, List<SkinnedMeshRenderer> renderers, List<int> indices)
+        {
+            renderers.Clear();
+            indices.Clear();
+            if (pose == null || data == null) return;
+            EnsureCache();
+            PoseCache pc = GetPoseCache(pose);
+            for (int i = 0; i < pc.shapeRenderers.Length; i++) { renderers.Add(pc.shapeRenderers[i]); indices.Add(pc.shapeIndices[i]); }
+        }
+
+        PoseCache GetPoseCache(FacialPoseAsset pose)
+        {
+            PoseCache pc;
+            if (_poseCache.TryGetValue(pose, out pc)) return pc;
+            pc = new PoseCache();
+            var rs = new List<SkinnedMeshRenderer>();
+            var ix = new List<int>();
+            var vs = new List<float>();
+            if (pose.curves != null && _targets.Count > 0)
+            {
+                var index = new FacialShapeIndex[_targets.Count];
+                for (int t = 0; t < _targets.Count; t++) index[t] = new FacialShapeIndex(_targetMeshes[t]);
+                for (int c = 0; c < pose.curves.Length; c++)
+                {
+                    string nm = pose.curves[c].name;
+                    if (string.IsNullOrEmpty(nm)) continue;
+                    for (int t = 0; t < _targets.Count; t++)
+                    {
+                        int idx = index[t].Find(nm); // 完全一致 → 末尾一致（FC_ と同じ名前の規則）
+                        if (idx >= 0) { rs.Add(_targets[t]); ix.Add(idx); vs.Add(pose.curves[c].value); }
+                    }
+                }
+            }
+            pc.shapeRenderers = rs.ToArray();
+            pc.shapeIndices = ix.ToArray();
+            pc.shapeValues = vs.ToArray();
+
+            if (pose.bones != null && pose.bones.Length > 0)
+            {
+                var bt = new List<Transform>();
+                var bd = new List<FacialPoseBone>();
+                var all = new List<Transform>();
+                GetComponentsInChildren(true, all);
+                for (int b = 0; b < pose.bones.Length; b++)
+                {
+                    string nm = pose.bones[b].name;
+                    if (string.IsNullOrEmpty(nm)) continue;
+                    for (int k = 0; k < all.Count; k++)
+                        if (string.Equals(all[k].name, nm, StringComparison.Ordinal)) { bt.Add(all[k]); bd.Add(pose.bones[b]); break; }
+                }
+                pc.boneTransforms = bt.ToArray();
+                pc.bones = bd.ToArray();
+            }
+            _poseCache[pose] = pc;
+            return pc;
+        }
+
+        void ApplyPose(FacialPoseAsset pose, float weight)
+        {
+            PoseCache pc = GetPoseCache(pose);
+            for (int i = 0; i < pc.shapeRenderers.Length; i++)
+            {
+                SkinnedMeshRenderer r = pc.shapeRenderers[i];
+                if (r == null) continue;
+                float cur = r.GetBlendShapeWeight(pc.shapeIndices[i]);
+                float applied = cur + weight * pc.shapeValues[i] * 100f; // 加算（Unity は 0〜100）
+                r.SetBlendShapeWeight(pc.shapeIndices[i], applied);
+                _poseShapes.Add(new PoseShapeSave { renderer = r, index = pc.shapeIndices[i], original = cur, applied = applied });
+            }
+            for (int i = 0; i < pc.boneTransforms.Length; i++)
+            {
+                Transform t = pc.boneTransforms[i];
+                if (t == null) continue;
+                FacialPoseBone b = pc.bones[i];
+                Quaternion dq = b.rotation;
+                if (dq.x == 0f && dq.y == 0f && dq.z == 0f && dq.w == 0f) dq = Quaternion.identity; // 未設定
+                Vector3 ds = b.scale;
+                if (ds == Vector3.zero) ds = Vector3.one; // 未設定
+                var save = new PoseBoneSave { t = t, pos = t.localPosition, rot = t.localRotation, scale = t.localScale };
+                // 位置は足す・回転は親空間で掛ける・スケールは掛ける（いずれも weight で薄める）
+                save.aPos = save.pos + b.position * weight;
+                save.aRot = Quaternion.Slerp(Quaternion.identity, dq, weight) * save.rot;
+                save.aScale = Vector3.Scale(save.scale, Vector3.Lerp(Vector3.one, ds, weight));
+                t.localPosition = save.aPos;
+                t.localRotation = save.aRot;
+                t.localScale = save.aScale;
+                _poseBones.Add(save);
+            }
+        }
+
+        void RestorePose()
+        {
+            if (_poseShapes.Count == 0 && _poseBones.Count == 0) return;
+            for (int i = _poseShapes.Count - 1; i >= 0; i--)
+            {
+                PoseShapeSave sv = _poseShapes[i];
+                if (sv.renderer == null) continue;
+                // 今の値が自分の書いた値のときだけ戻す（アニメーションが書き直していたら、その値を尊重する）
+                if (Mathf.Abs(sv.renderer.GetBlendShapeWeight(sv.index) - sv.applied) < 1e-3f)
+                    sv.renderer.SetBlendShapeWeight(sv.index, sv.original);
+            }
+            _poseShapes.Clear();
+            for (int i = _poseBones.Count - 1; i >= 0; i--)
+            {
+                PoseBoneSave sv = _poseBones[i];
+                if (sv.t == null) continue;
+                if ((sv.t.localPosition - sv.aPos).sqrMagnitude < 1e-10f) sv.t.localPosition = sv.pos;
+                if (Mathf.Abs(Quaternion.Dot(sv.t.localRotation, sv.aRot)) > 0.999999f) sv.t.localRotation = sv.rot;
+                if ((sv.t.localScale - sv.aScale).sqrMagnitude < 1e-10f) sv.t.localScale = sv.scale;
+            }
+            _poseBones.Clear();
+        }
+
         // ---------------------------------------------------------------- 名前 → 番号の事前解決
 
         void EnsureCache()
@@ -494,6 +717,7 @@ namespace TDrive.Facial
         void Rebuild()
         {
             ResetWeights(); // 古い対応で書いた分を先に戻す
+            _poseCache.Clear();
             _bindings.Clear();
             _written.Clear();
             _missing.Clear();

@@ -131,8 +131,25 @@ namespace TDrive.Facial.Tests
             Assert.AreEqual("bs.unknown", unknown[0].ShapeName);
             List<FacialIssue> ignored = Of(issues, FacialIssueKind.LimitIgnored);
             Assert.AreEqual(1, ignored.Count);
-            Assert.AreEqual("bs.other", ignored[0].ShapeName);
+            StringAssert.Contains("bs.other", ignored[0].Message);
+            StringAssert.StartsWith("可動域の指定のうち 1 件は", ignored[0].Message);
             Assert.AreEqual(FacialIssueSeverity.Info, ignored[0].Severity);
+        }
+
+        [Test]
+        public void RepeatedLimitIgnoredCollapsesIntoOneSummary()
+        {
+            _rig = new FacialTestRig(true);
+            for (int i = 0; i < 6; i++) _rig.AddShape("bs.extra" + i);
+            var l = new List<FacialLimitEntry>();
+            for (int i = 0; i < 6; i++) l.Add(new FacialLimitEntry { name = "bs.extra" + i, min = 0, max = 1 });
+            _rig.data.limits = l.ToArray();
+            List<FacialIssue> ignored = Of(FacialValidation.Run(_rig.runner), FacialIssueKind.LimitIgnored);
+            Assert.AreEqual(1, ignored.Count);
+            StringAssert.Contains("6 件は FC_ 以外のシェイプ向けのため Unity では使われません", ignored[0].Message);
+            StringAssert.Contains("bs.extra0", ignored[0].Message);
+            StringAssert.Contains("bs.extra2", ignored[0].Message);
+            StringAssert.DoesNotContain("bs.extra5", ignored[0].Message); // 先頭の数件だけ
         }
 
         [Test]

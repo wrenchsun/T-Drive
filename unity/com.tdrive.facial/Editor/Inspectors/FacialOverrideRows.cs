@@ -26,8 +26,8 @@ namespace TDrive.Facial.Editor
             new Row { label = "距離フェード 終了（m）", tooltip = "これより遠いと補正 0。開始以下なら距離フェードなし", flag = "overrideFadeEnd", value = "fadeEnd", get = p => p.fadeEnd, hasMin = true, min = 0f, format = "0.###" },
             new Row { label = "表情での弱め具合", tooltip = "表情が強いとき補正を弱める度合い（0〜1）。0 = 弱めない", flag = "overrideExpressionDampen", value = "expressionDampen", get = p => p.expressionDampen, format = "0.###" },
             new Row { label = "端のフェード（度）", tooltip = "格子の範囲の外側で、補正が 0 へ消えていく幅。0 以下 = 範囲外は即 0", flag = "overrideEdgeFade", value = "edgeFade", get = p => p.edgeFade, hasMin = true, min = 0f, format = "0.##" },
-            new Row { label = "シャープさ", tooltip = "キー角度の近くでキーのポーズそのものに寄せる度合い（既定 1）。※いまは未使用（F5 で有効になります）", flag = "overrideSharpness", value = "sharpness", get = p => p.sharpness, hasMin = true, min = 0.01f, format = "0.###" },
-            new Row { label = "コマ打ち fps", tooltip = "補正の更新を間引く fps（0 = 毎フレーム）。※いまは未使用（F5 で有効になります）", flag = "overrideStepFps", value = "stepFps", get = p => p.stepFps, hasMin = true, min = 0f, format = "0.##" },
+            new Row { label = "シャープさ（準備中）", tooltip = "キー角度の近くでキーのポーズそのものに寄せる度合い（既定 1）。準備中: いまは使われません（F5 で有効になります）。値は保存され、Maya へ戻す JSON にも入ります", flag = "overrideSharpness", value = "sharpness", get = p => p.sharpness, hasMin = true, min = 0.01f, format = "0.###" },
+            new Row { label = "コマ打ち fps（準備中）", tooltip = "補正の更新を間引く fps（0 = 毎フレーム）。準備中: いまは使われません（F5 で有効になります）。値は保存され、Maya へ戻す JSON にも入ります", flag = "overrideStepFps", value = "stepFps", get = p => p.stepFps, hasMin = true, min = 0f, format = "0.##" },
         };
 
         /// <summary>行の一覧を描く。imported = 取り込んだ値（データが無ければ null で「—」）。値を変えたら true。</summary>

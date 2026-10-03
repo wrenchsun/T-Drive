@@ -113,6 +113,23 @@ namespace TDrive.Facial.Tests
         }
 
         [Test]
+        public void ExportedJsonHasGridEdgeFadeOnlyWhenOverridden()
+        {
+            FacialCorrectionData d = Import(Doc("cm", Tuning));
+            FacialCorrectionOverrides o = NewOverrides();
+            o.edgeFade = 7f; // フラグが無いので出ない
+            var none = (Dictionary<string, object>)MiniJson.Parse(FacialMayaExport.BuildJson(d, o));
+            CollectionAssert.AreEquivalent(new[] { "policy", "quality" }, none.Keys);
+
+            o.overrideEdgeFade = true;
+            var on = (Dictionary<string, object>)MiniJson.Parse(FacialMayaExport.BuildJson(d, o));
+            CollectionAssert.AreEquivalent(new[] { "policy", "quality", "grid" }, on.Keys);
+            var grid = (Dictionary<string, object>)on["grid"];
+            CollectionAssert.AreEquivalent(new[] { "edgeFade" }, grid.Keys);
+            Assert.AreEqual(7.0, (double)grid["edgeFade"], 1e-4);
+        }
+
+        [Test]
         public void OverridesRoundTripThroughExportAndReimport()
         {
             FacialCorrectionData d = Import(Doc("cm", Tuning));

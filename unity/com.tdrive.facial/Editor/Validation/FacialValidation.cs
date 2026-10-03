@@ -46,6 +46,9 @@ namespace TDrive.Facial.Editor
         /// <summary>Blend Shape Normals の推奨。Maya が法線を再計算して FBX に入れるので、そのまま読み込む（docs/14 §5.7・§6.1）。</summary>
         public const ModelImporterNormals RecommendedBlendShapeNormals = ModelImporterNormals.Import;
 
+        /// <summary>LimitIgnored の要約に名前を出す件数。</summary>
+        const int LimitIgnoredNamesShown = 3;
+
         /// <summary>Runner の解決結果（対象メッシュ・基準ボーン）で検証する。</summary>
         public static List<FacialIssue> Run(FacialCorrectionRunner runner)
         {
@@ -136,6 +139,8 @@ namespace TDrive.Facial.Editor
                         "表情の強さに使うシェイプ '" + nm + "' がメッシュにありません（表情での弱めに数えられません）", nm, null);
             }
             FacialLimitEntry[] limits = data.limits ?? new FacialLimitEntry[0];
+            int ignoredCount = 0;
+            string ignoredNames = "";
             for (int i = 0; i < limits.Length; i++)
             {
                 string nm = limits[i].name;
@@ -145,9 +150,16 @@ namespace TDrive.Facial.Editor
                     Add(issues, FacialIssueSeverity.Warning, FacialIssueKind.LimitUnknownShape,
                         "可動域の指定にあるシェイプ '" + nm + "' が、データにもメッシュにもありません", nm, null);
                 else if (!expectedShapes.Contains(nm))
-                    Add(issues, FacialIssueSeverity.Info, FacialIssueKind.LimitIgnored,
-                        "可動域の指定 '" + nm + "' は補正のシェイプ（FC_*）ではないので、Unity では使われません", nm, null);
+                {
+                    // 件数が多いので 1 件にまとめる（先頭の数件だけ名前を出す）
+                    if (ignoredCount < LimitIgnoredNamesShown) ignoredNames += (ignoredCount > 0 ? ", " : "") + nm;
+                    ignoredCount++;
+                }
             }
+            if (ignoredCount > 0)
+                Add(issues, FacialIssueSeverity.Info, FacialIssueKind.LimitIgnored,
+                    "可動域の指定のうち " + ignoredCount + " 件は FC_ 以外のシェイプ向けのため Unity では使われません（" + ignoredNames
+                    + (ignoredCount > LimitIgnoredNamesShown ? " ほか" : "") + "）", null, null);
 
             // --- FBX の取り込み設定（変更はしない。報告だけ） ---
             if (renderers != null)
