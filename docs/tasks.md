@@ -171,7 +171,7 @@ FacialController（カメラ角度に応じた顔の補正。UE 版からの移�
 | F0-1 | 殻 `tdrive`（2 段タブ「Toon / FacialController」・メニュー「T-Drive」・共通モジュールの移動と転送モジュール・ドッキング位置の引き継ぎ）。Toon の挙動は変えない | — | 2.5 | — | 既存のテストが全部通る。エディタを開くと 1 段目に Toon と FacialController（空のパネル）が並ぶ。古いドッキング位置から開ける。マニュアル（画面構成）更新 | ✅ |
 | F0-2 | `tdrive_facial.core`: データクラス・計算（evaluate / view angles / 端のフェード / 表情での弱め / 距離フェード / スムージング）+ 共通のテストデータ（UE の 11 件を写す） | R-12 | 2 | — | pytest で全ケースが許容誤差 1e-4 で一致。maya を import していない | ✅ `tdrive_facial/core/{model,evaluate,naming}.py`。共通のテストデータ `tests/facial/conformance/`（UE の 11 件すべて + Python 版で起こした追加ケース。書式は README） |
 | F0-3 | `.fcpose.json` の読み書き・スキーマ（`schema/fcpose.schema.json`）・追加キー・未知キーの保持・座標系の変換（`space.py`）・`±Z` の前方軸 | JSON | 2 | F0-2 | UE 版の実ファイルを読んで書くと意味が同じ。Maya ⇔ UE ⇔ Unity の座標の往復テストが通る | ✅ `core/{fcpose_io,space}.py`・`schema/fcpose.schema.json`。UE 版の実ファイルと全体形式の往復が一致。欠けたキーは UE 版の既定値で読む |
-| F0-4 | 自動生成（ミラー + IDW / 最近傍）・格子サイズ変更時の引き継ぎ・データ間のコピー（キーの再サンプル） | R-02 R-09 | 1.5 | F0-2 | テストデータ（autofill）が一致。ミラーで接尾辞の入れ替えとボーンの鏡映が正しい | ⬜ |
+| F0-4 | 自動生成（ミラー + IDW / 最近傍）・格子サイズ変更時の引き継ぎ・データ間のコピー（キーの再サンプル） | R-02 R-09 | 1.5 | F0-2 | テストデータ（autofill）が一致。ミラーで接尾辞の入れ替えとボーンの鏡映が正しい | ✅ `core/autofill.py`（generate_from_keys / interpolate_pose_at_angles / resize_grid / copy_from / mirror_pose）。テストデータ `conformance/autofill.json`（書式は README_autofill.md）。格子サイズ変更は UE 版と違い角度で引き継ぐ |
 | F0-5 | 命名規則プロファイル（プリセット 4 種・読み書き・ミラー規則と可動域の自動適用）+ 検証・似た名前の候補・一括改名 + 名前の規則（`naming.py`） | R-15 R-16 R-31 | 2 | F0-3 | プロファイルを選ぶと mirror / limits が入る。存在しない名前・大小違いを検出し、改名を一括で適用できる | ⬜ |
 | F0-6 | 画面の状態（Presenter 4 種）と遷移のテストデータ | R-01 R-04 R-11 | 1.5 | F0-4 F0-5 | 操作列 → 状態のテストが通る（Qt なし） | ⬜ |
 

@@ -47,7 +47,7 @@ def test_every_file_has_kind_description_and_cases():
         assert {"kind", "description", "cases"} <= set(data), fname
         assert isinstance(data["cases"], list) and data["cases"], fname
         kinds.add(data["kind"])
-    assert kinds == {"evaluate", "view_angles", "scalar", "smooth", "convert"}
+    assert kinds == {"evaluate", "view_angles", "scalar", "smooth", "convert", "autofill"}
 
 
 def test_case_names_are_unique_per_file_and_sources_are_marked():
