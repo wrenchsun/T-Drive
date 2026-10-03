@@ -28,7 +28,7 @@ from PySide6 import QtCore, QtWidgets
 from tdrive import lifecycle
 
 from .session import FacialSessionError
-from .ui import DIM_STYLE, WARN_STYLE, ask_yes_no
+from .ui import DIM_STYLE, WARN_STYLE, YAW_PLUS_HELP, ask_yes_no
 
 CURRENT_VIEW = "今のビューのカメラ"
 SLIDER_STEPS = 100
@@ -165,6 +165,8 @@ class PreviewGroup(QtWidgets.QGroupBox):
         self.manual_check.toggled.connect(self.on_manual_toggled)
         self.manual_yaw = self._angle_spin("Yaw", -180.0, 180.0)
         self.manual_pitch = self._angle_spin("Pitch", -90.0, 90.0)
+        self.manual_yaw.setToolTip("カメラの代わりに使う左右の角度。" + YAW_PLUS_HELP)
+        self.manual_pitch.setToolTip("カメラの代わりに使う上下の角度（+Pitch = 上から見る）")
         self.manual_yaw.valueChanged.connect(partial(self.on_manual_angle, "manualYaw"))
         self.manual_pitch.valueChanged.connect(partial(self.on_manual_angle, "manualPitch"))
         row.addWidget(self.manual_check)
@@ -172,6 +174,10 @@ class PreviewGroup(QtWidgets.QGroupBox):
         row.addWidget(self.manual_pitch)
         row.addStretch(1)
         v.addLayout(row)
+        self.manual_hint = QtWidgets.QLabel("Yaw: " + YAW_PLUS_HELP)  # 手動の角度の向き（グリッドタブの「カメラの角度」と同じ言い方）
+        self.manual_hint.setWordWrap(True)
+        self.manual_hint.setStyleSheet(DIM_STYLE)
+        v.addWidget(self.manual_hint)
 
         row = QtWidgets.QHBoxLayout()
         self.btn_keys = QtWidgets.QPushButton("キーに焼く…")

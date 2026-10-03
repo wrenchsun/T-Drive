@@ -131,6 +131,22 @@
 <td>そのシェイプの左右の名前が、モデルで合っていません（綴りが左右で違うなど）。左右反転できないだけで、補正は動きます。名前をそろえるか、セットアップタブの<strong>反転しないもの</strong>に入れてください（<a href="facial-layers.html#validate">検証</a>）</td>
 </tr>
 <tr>
+<td>シェイプタブで「この角度で彫る」が押せない、または始まらない</td>
+<td>次を確認してください。(1) <strong>グリッドで点を選んでいない</strong> → グリッドタブで点をクリックする（「選択中の点の彫り用シェイプ」と出ていれば押せます） (2) すでに彫っている途中 → 先に<strong>彫り終わる</strong> (3) その点のポーズが<strong>頭のボーンを動かしている</strong> → 頭を動かしたポーズでは彫れません。頭は基準姿勢のままにしてください（<a href="facial-shapes.html#sculpt">シェイプ</a>）</td>
+</tr>
+<tr>
+<td>ミラーを押したら、頂点が選択されて止まった</td>
+<td>左右で位置が合わない頂点があるためです。選択された頂点をビューポートで見て、左右対称になるように直してください。直さずに進めたいときは「それでも続けますか」で続けられます（その頂点は 0 のままになります）。わずかなずれなら、「ミラーの許容誤差」を少し大きくする方法もあります（<a href="facial-shapes.html">シェイプ</a>）</td>
+</tr>
+<tr>
+<td>土台の表情を当てたら、スライダーの値と見た目が違う</td>
+<td>土台の表情は、ポーズの値に<strong>足されて</strong>シーンに当たるためです（ゲームでも同じ足し算になります）。スライダーはポーズ自身の値で、土台ぶんは横の<strong>「+…（土台）」</strong>に出ます。合計が動かせる範囲を超えた行は警告の色になります。土台を消したいときは<strong>外す</strong>を押してください（<a href="facial-pose.html#base-expression">ポーズ</a>）</td>
+</tr>
+<tr>
+<td>Timeline の「Facial Correction」トラックを置いたのに、補正が変わらない</td>
+<td>(1) トラックが<strong>キャラクターに結ばれているか</strong>（Animator を結ぶ。D-Drive では Binding の Target を SameAsTrack にするか、トラック名を「&lt;役名&gt;_Facial」に） (2) キャラクターに <strong>Facial Correction Runner</strong> が付いていて、データが入っているか (3) D-Drive の検証に <code>TD-FACIAL-001</code>〜<code>005</code> が出ていないか（意味は<a href="facial-export.html#ddrive">出力と Unity</a>） (4) クリップの外は通常の補正に戻ります。クリップの範囲内か (5) 感情レイヤー名の綴り（大文字・小文字も区別）。直らなければ状況を開発者に伝えてください（Timeline の実際のカットシーンでの確認は、まだ終わっていません）</td>
+</tr>
+<tr>
 <td>Unity で補正が出ない</td>
 <td>(1) FBX に <code>FC_</code> で始まるシェイプが入っているか（Maya の出力タブで「FBX に入った FC_*」の数を確認）(2) Runner の<strong>状態</strong>の「足りないシェイプ」が 0 か (3) Runner の<strong>検証</strong>のエラー・警告 (4) データ・基準ボーンが設定されているか (5) 補正が弱くなっていないか（全体の強さ・距離フェード）。直らなければ Maya で出し直してください（<a href="facial-export.html#unity">出力と Unity</a>）</td>
 </tr>

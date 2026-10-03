@@ -711,6 +711,8 @@ def _check_targets(doc: Document, scene: SceneInfo, add) -> None:
         used = {n for _li, _layer, _rc, pt in _iter_points(doc) for n in pt.pose.curves}
         used |= set(doc.working_set.curves)
         for t in sorted(scene.targets):
+            if naming.is_combo_name(t, prefix):  # 組み合わせ補正は 2 つのシェイプで駆動される（ポーズからは使わない）ので「未使用」ではない
+                continue
             if naming.is_sculpt_name(t, prefix) and not any(u == t or u.endswith("." + t) for u in used):
                 add(
                     Issue(

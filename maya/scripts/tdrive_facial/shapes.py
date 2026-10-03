@@ -45,12 +45,12 @@ from maya import cmds
 from maya.api import OpenMaya as om
 
 from . import scene
-from .core import naming
+from .core import naming, space
 from .core import profile as profile_mod
 from .core.model import Document
 
 MADE_ATTR = "tdFacialMadeShapes"  # blendShape ノードの文字列アトリビュート（JSON: このツールで作ったターゲット名の一覧）
-COMBO_INFIX = "combo_"  # fcs_combo_<a>__<b>
+COMBO_INFIX = naming.COMBO_INFIX  # fcs_combo_<a>__<b>
 EPS = 1e-7  # cm。これ未満の差分は「差分なし」（書き込みの下限）
 PRUNE_AFTER_SCULPT = 1e-6  # cm。彫り終わりに捨てる下限
 HEAD_EPS_T = 1e-4
@@ -167,7 +167,6 @@ def undo_chunk(name: str):
         cmds.undoInfo(closeChunk=True)
 
 
-_AXIS = {"X": 0, "Y": 1, "Z": 2}
 
 
 def make_ctx(doc: Document, create: bool = True) -> ShapeCtx:
@@ -189,7 +188,7 @@ def make_ctx(doc: Document, create: bool = True) -> ShapeCtx:
         prefix=doc.sculpt_shapes.prefix if doc.sculpt_shapes is not None else naming.DEFAULT_SCULPT_PREFIX,
         suffix_l=doc.mirror.suffix_l or "_L",
         suffix_r=doc.mirror.suffix_r or "_R",
-        axis=_AXIS.get((doc.mirror.bone_axis or "X").upper(), 0),
+        axis=space.mirror_axis_index(doc.mirror.bone_axis),
         threshold=doc.bake.delta_threshold if doc.bake is not None else 0.001,
     )
 
@@ -506,17 +505,18 @@ def split_lr(
 ) -> ShapeResult:
     """左右一体のシェイプ src を `name_l` / `name_r` に分ける（src は変えない）。L + R = src（中間形も同じ重みで分ける）。
 
-    顔の左右の軸（鏡映の軸。既定 X）はオブジェクト空間の基準姿勢の頂点の位置で見る（頭の向きは考えない: 今は X = 顔の左右と仮定）。
+    顔の左右の軸は文書の鏡映の軸（`doc.mirror.bone_axis`。既定 X）で、メッシュのオブジェクト空間の基準姿勢の頂点の位置で見る
+    （頭の向きは考えない: メッシュの軸が顔の左右に合っている前提）。
     +軸の側が L。width は中央のぼかし幅（cm。中央 ± width/2 で smoothstep）。
     """
+    if src not in scene.target_indices(ctx.node):
+        raise ShapeError(f"シェイプ {src} がありません", "no_target")
+    if name_l == name_r or src in (name_l, name_r):
+        raise ShapeError("左・右の名前は、元の名前とも互いにも別にしてください", "bad_name")
+    res = ShapeResult()
+    made = set(ctx.made())
+    rep = [_dest_check(ctx, n, overwrite_originals, made) for n in (name_l, name_r)]
     with undo_chunk("tdFacialSplitLR"):
-        if src not in scene.target_indices(ctx.node):
-            raise ShapeError(f"シェイプ {src} がありません", "no_target")
-        if name_l == name_r or src in (name_l, name_r):
-            raise ShapeError("左・右の名前は、元の名前とも互いにも別にしてください", "bad_name")
-        res = ShapeResult()
-        made = set(ctx.made())
-        rep = [_dest_check(ctx, n, overwrite_originals, made) for n in (name_l, name_r)]
         rp = rest if rest is not None else rest_points(ctx.mesh)
         wl = side_weights(rp[:, ctx.axis], centre, width)
         counts = {}
@@ -527,7 +527,8 @@ def split_lr(
             (res.replaced if was else res.created).append(n)
         res.message = f"{src} を {name_l} / {name_r} に分けました（中央のぼかし {width:g} cm）"
         res.stats = {"width": width, "centre": centre, "axis": "XYZ"[ctx.axis], "counts": counts}
-        res.notes.append("顔の左右はメッシュのオブジェクト空間の X（+X = L）として分けています")
+        ax = "XYZ"[ctx.axis]
+        res.notes.append(f"顔の左右はメッシュのオブジェクト空間の {ax}（+{ax} = L）として分けています（セットアップタブの「ボーンの反転軸」）")
         return res
 
 
@@ -627,16 +628,16 @@ def mirror_shape(
     dst を省くと、鏡映の名前規則（`profile.mirror_name`）で決める（`smile_L` → `smile_R`）。対応が取れない頂点があるときは、その頂点を
     ビューポートで選択して AsymmetryStop で止める（allow_unmatched=True のときだけ、対応の無い頂点は 0 のまま進める）。
     """
+    if src not in scene.target_indices(ctx.node):
+        raise ShapeError(f"シェイプ {src} がありません", "no_target")
+    dst = dst or profile_mod.mirror_name(src, ctx.suffix_l, ctx.suffix_r)
+    if dst == src:
+        raise ShapeError(
+            f"{src} は名前の末尾が {ctx.suffix_l} / {ctx.suffix_r} ではないため、反対側の名前を決められません（相手の名前を指定してください）",
+            "not_sided",
+        )
+    was = _dest_check(ctx, dst, overwrite_originals)
     with undo_chunk("tdFacialMirror"):
-        if src not in scene.target_indices(ctx.node):
-            raise ShapeError(f"シェイプ {src} がありません", "no_target")
-        dst = dst or profile_mod.mirror_name(src, ctx.suffix_l, ctx.suffix_r)
-        if dst == src:
-            raise ShapeError(
-                f"{src} は名前の末尾が {ctx.suffix_l} / {ctx.suffix_r} ではないため、反対側の名前を決められません（相手の名前を指定してください）",
-                "not_sided",
-            )
-        was = _dest_check(ctx, dst, overwrite_originals)
         rp = rest if rest is not None else rest_points(ctx.mesh)
         sm = symmetry_map(ctx.mesh, rp, ctx.axis, centre, tolerance)
         res = ShapeResult()
@@ -682,11 +683,11 @@ def add_inbetween(
 
     元からあるシェイプへは confirm_original=True のときだけ。既に同じ重みの中間形があれば置き換える。
     """
+    if name not in scene.target_indices(ctx.node):
+        raise ShapeError(f"シェイプ {name} がありません", "no_target")
+    if tag_of(ctx, name) == TAG_ORIGINAL and not confirm_original:
+        raise ShapeError(f"{name} は元からあるシェイプです。中間形を足すと、元のシェイプの動きが変わります（確認が必要です）", "original_needs_confirm")
     with undo_chunk("tdFacialInbetween"):
-        if name not in scene.target_indices(ctx.node):
-            raise ShapeError(f"シェイプ {name} がありません", "no_target")
-        if tag_of(ctx, name) == TAG_ORIGINAL and not confirm_original:
-            raise ShapeError(f"{name} は元からあるシェイプです。中間形を足すと、元のシェイプの動きが変わります（確認が必要です）", "original_needs_confirm")
         item = inbetween_item(weight)
         d = delta if delta is not None else current_delta(ctx, exclude_own=name)
         had = item in scene.item_numbers(ctx.node, name, ctx.geo)
@@ -704,13 +705,13 @@ def make_exaggeration(ctx: ShapeCtx, name: str, delta: Optional[np.ndarray] = No
 
     つまり `_Ex` は「name を 1 にした形に足す分」。可動域の上限を 2 に開く設定は呼ぶ側（session.set_limit）が行う。
     """
+    if name not in scene.target_indices(ctx.node):
+        raise ShapeError(f"シェイプ {name} がありません", "no_target")
+    if name.endswith(naming.EXTREME_SUFFIX):
+        raise ShapeError("誇張形（_Ex）の誇張形は作れません", "bad_name")
+    ex = name + naming.EXTREME_SUFFIX
+    was = _dest_check(ctx, ex, False)
     with undo_chunk("tdFacialExaggerate"):
-        if name not in scene.target_indices(ctx.node):
-            raise ShapeError(f"シェイプ {name} がありません", "no_target")
-        if name.endswith(naming.EXTREME_SUFFIX):
-            raise ShapeError("誇張形（_Ex）の誇張形は作れません", "bad_name")
-        ex = name + naming.EXTREME_SUFFIX
-        was = _dest_check(ctx, ex, False)
         base = dense_delta(ctx, name, ctx.nverts, ctx.geo)
         cur = delta if delta is not None else current_delta(ctx, exclude_own=name)
         n = _write_dense(ctx, ex, cur - base)
@@ -748,23 +749,23 @@ def create_combo(ctx: ShapeCtx, a: str, b: str) -> ShapeResult:
 
     Maya の combinationShape ノードで駆動する（ポーズからは直接動かさない）。ベイクは結果を FC_* に焼くので Unity へは持ち出さない。
     """
+    table = scene.target_indices(ctx.node)
+    for n in (a, b):
+        if n not in table:
+            raise ShapeError(f"シェイプ {n} がありません", "no_target")
+    if a == b:
+        raise ShapeError("別々の 2 つのシェイプを選んでください", "bad_name")
+    driven = scene.driven_indices(ctx.node)
+    for n in (a, b):
+        if table[n] in driven:
+            raise ShapeError(f"{n} は組み合わせ補正なので、駆動元にはできません", "bad_name")
+        if naming.is_fc_name(n):
+            raise ShapeError(f"{n} は焼いたシェイプ（FC_）なので、駆動元にはできません", "bad_name")
+    name = combo_name(ctx, a, b)
+    check_new_name(name)
+    if name in table:
+        raise ShapeError(f"{name} は既にあります（彫り直すなら「組み合わせ補正を彫る」）", "exists")
     with undo_chunk("tdFacialCombo"):
-        table = scene.target_indices(ctx.node)
-        for n in (a, b):
-            if n not in table:
-                raise ShapeError(f"シェイプ {n} がありません", "no_target")
-        if a == b:
-            raise ShapeError("別々の 2 つのシェイプを選んでください", "bad_name")
-        driven = scene.driven_indices(ctx.node)
-        for n in (a, b):
-            if table[n] in driven:
-                raise ShapeError(f"{n} は組み合わせ補正なので、駆動元にはできません", "bad_name")
-            if naming.is_fc_name(n):
-                raise ShapeError(f"{n} は焼いたシェイプ（FC_）なので、駆動元にはできません", "bad_name")
-        name = combo_name(ctx, a, b)
-        check_new_name(name)
-        if name in table:
-            raise ShapeError(f"{name} は既にあります（彫り直すなら「組み合わせ補正を彫る」）", "exists")
         idx, _ = sculpt_prepare(ctx, name, zero=True)
         cmds.combinationShape(blendShape=ctx.node, combinationTargetIndex=idx, driverTargetIndex=[table[a], table[b]], combineMethod=0)
         for n in cmds.listConnections(scene.weight_plug(ctx.node, idx), source=True, destination=False, type="combinationShape") or []:
@@ -878,22 +879,22 @@ def transfer_shapes(
     写し先に同じ名前があるものは、overwrite に入れたものだけ上書きする（元からあるものは名前を overwrite に入れる＝確認済み、の意味）。
     入れていなければ飛ばして `notes` に出す。
     """
+    plan = plan_transfer(ctx, names, dest_mesh)
+    over = set(overwrite)
+    dest = plan.dest_mesh
+    thr = ctx.threshold if threshold is None else threshold
+    res = ShapeResult()
+    todo = []
+    for n in names:
+        if n not in scene.target_indices(ctx.node):
+            res.warnings.append(f"{n} は顔メッシュにないので飛ばしました")
+        elif n in plan.collisions and n not in over:
+            res.notes.append(f"{n} は写し先に同じ名前があるので飛ばしました")
+        else:
+            todo.append(n)
+    if not todo:
+        raise ShapeError("写せるシェイプがありません（名前の衝突・選択なし）。" + " ".join(res.notes), "nothing")
     with undo_chunk("tdFacialTransfer"):
-        plan = plan_transfer(ctx, names, dest_mesh)
-        over = set(overwrite)
-        dest = plan.dest_mesh
-        thr = ctx.threshold if threshold is None else threshold
-        res = ShapeResult()
-        todo = []
-        for n in names:
-            if n not in scene.target_indices(ctx.node):
-                res.warnings.append(f"{n} は顔メッシュにないので飛ばしました")
-            elif n in plan.collisions and n not in over:
-                res.notes.append(f"{n} は写し先に同じ名前があるので飛ばしました")
-            else:
-                todo.append(n)
-        if not todo:
-            raise ShapeError("写せるシェイプがありません（名前の衝突・選択なし）。" + " ".join(res.notes), "nothing")
         dnode = plan.dest_node or scene.primary_blend_shape(dest, create=True)
         dctx = ShapeCtx(dest, dnode, scene.geometry_index(dnode, dest), scene.vertex_count(dest), ctx.prefix, ctx.suffix_l, ctx.suffix_r, ctx.axis, ctx.threshold)
         deltas: dict[str, dict[int, np.ndarray]] = {}
@@ -932,9 +933,9 @@ def transfer_shapes(
 
 def clean_micro(ctx: ShapeCtx, names: Sequence[str], threshold: float, confirm_original: bool = False) -> ShapeResult:
     """差分の長さが threshold（cm）未満の頂点を捨てる（中間形も）。元からあるシェイプは confirm_original=True のときだけ。"""
+    if threshold <= 0:
+        raise ShapeError("しきい値は 0 より大きくしてください", "bad_threshold")
     with undo_chunk("tdFacialCleanMicro"):
-        if threshold <= 0:
-            raise ShapeError("しきい値は 0 より大きくしてください", "bad_threshold")
         res = ShapeResult()
         made = set(ctx.made())
         total = 0
@@ -1016,15 +1017,16 @@ def missing_standard(ctx: ShapeCtx, profile) -> list[str]:
     """プロファイルの標準シェイプのうち、顔メッシュの blendShape に無いもの。"""
     if profile is None:
         return []
-    return profile_mod.missing_standard_curves(profile, list(scene.target_indices(ctx.node)))
+    # Setup / 検証と同じ規則（完全名 `<ノード>.<ターゲット>` で照合。ノード名なしの標準シェイプはどのノードのターゲットにも一致）
+    return profile_mod.missing_standard_curves(profile, [scene.curve_name(ctx.node, t) for t in scene.target_indices(ctx.node)])
 
 
 def delete_shapes(ctx: ShapeCtx, names: Sequence[str]) -> list[str]:
     """`FC_*` / `fcs_*` のターゲットを消す（それ以外が入っていたら何も消さずに ValueError。組み合わせ補正の節も消える）。"""
+    bad = [n for n in names if not (naming.is_fc_name(n) or naming.is_sculpt_name(n, ctx.prefix))]
+    if bad:
+        raise ValueError(f"FC_* / {ctx.prefix}* 以外のターゲットは消せません: {bad}")
     with undo_chunk("tdFacialDeleteShapes"):
-        bad = [n for n in names if not (naming.is_fc_name(n) or naming.is_sculpt_name(n, ctx.prefix))]
-        if bad:
-            raise ValueError(f"FC_* / {ctx.prefix}* 以外のターゲットは消せません: {bad}")
         # 要素を消すだけでは、Undo で戻したときに差分の中身が戻らない（Maya の removeMultiInstance の Undo は子の値を戻さない）。
         # 先に中身を空にしておくと、その setAttr の Undo が中身を戻す
         table = scene.target_indices(ctx.node)

@@ -70,6 +70,14 @@ def is_sculpt_name(name: str, prefix: str = DEFAULT_SCULPT_PREFIX) -> bool:
     return isinstance(name, str) and bool(prefix) and name.startswith(prefix)
 
 
+COMBO_INFIX = "combo_"  # 組み合わせ補正 `fcs_combo_<a>__<b>`（シェイプタブが作る。2 つのシェイプの積で駆動されるのでポーズからは使われない）
+
+
+def is_combo_name(name: str, prefix: str = DEFAULT_SCULPT_PREFIX) -> bool:
+    """組み合わせ補正（`<prefix>combo_…`）か。"""
+    return is_sculpt_name(name, prefix) and name.startswith(prefix + COMBO_INFIX)
+
+
 def parse_name(name: str, asset: Optional[str] = None) -> Optional[ParsedName]:
     """`FC_*` の名前を分解する。規則に合わなければ None。
 

@@ -378,7 +378,23 @@ def clamp_pose(pose: SourcePose, doc: Optional[Document], profile: Optional[Nami
     return out
 
 
+def curve_matches(entry: str, available: Iterable[str]) -> bool:
+    """プロファイルの標準シェイプ 1 件が、シーンのシェイプ名（`<ノード>.<ターゲット>`）にあるか。
+
+    規則（Setup / 検証 / シェイプタブで共通）: ノード名つきの項目（`bs.jawOpen`）は完全一致、ノード名なしの項目（`jawOpen`）はどのノードの
+    同じ名前のターゲットにも一致する（大文字小文字は区別）。`available` にノード名の無い名前（`jawOpen`）が混じっていてもそのターゲットとして数える。
+    """
+    have = set(available)
+    if entry in have:
+        return True
+    if "." in entry:
+        return False
+    return any(a.partition(".")[2] == entry for a in have if "." in a)
+
+
 def missing_standard_curves(profile: NamingProfile, available_names: Iterable[str]) -> list[str]:
-    """プロファイルの標準シェイプのうち、モデルに無いもの（一覧の順。大文字小文字を区別）。"""
+    """プロファイルの標準シェイプのうち、モデルに無いもの（一覧の順。大文字小文字を区別）。
+
+    available_names は `<ノード>.<ターゲット>` の名前（`curve_matches` の規則）。"""
     have = set(available_names)
-    return [n for n in profile.standard_curves if n not in have]
+    return [n for n in profile.standard_curves if not curve_matches(n, have)]

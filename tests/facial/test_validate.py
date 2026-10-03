@@ -507,6 +507,16 @@ def test_sculpt_unused():
     assert "sculpt_unused" not in codes(run())
 
 
+def test_sculpt_unused_ignores_combo_shapes():
+    """組み合わせ補正 `fcs_combo_*`（シェイプタブが作る。2 つのシェイプで駆動される）は「どのポーズからも使われていない」に数えない。"""
+    doc = make_doc()
+    scene = make_scene(doc)
+    scene.targets = {MORPH, "fcs_combo_smile_L__mouth_open", "fcs_Neutral_R0_C0"}
+    got = [i.name for i in run(doc, scene, bake=None) if i.code == "sculpt_unused"]
+    assert got == ["fcs_Neutral_R0_C0"]
+    assert naming.is_combo_name("fcs_combo_a__b") and not naming.is_combo_name("fcs_Neutral_R0_C0") and not naming.is_combo_name("FC_combo_a")
+
+
 def test_target_empty():
     doc = make_doc()
     scene = make_scene(doc)

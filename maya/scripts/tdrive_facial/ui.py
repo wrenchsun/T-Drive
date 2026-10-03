@@ -46,6 +46,10 @@ NO_PROFILE = "（なし）"
 WARN_STYLE = "color: #f0a040;"
 DIM_STYLE = "color: #9aa6b8;"
 
+# Yaw の向きの言い方（セットアップ・グリッド・ポーズ・プレビューのヒントはこれに合わせる。Unity の格子ウィンドウは「左 = −Yaw（カメラが右）」で同じ意味）
+YAW_PLUS_HELP = "+Yaw = キャラクターの左側から見る（カメラがキャラクターの左）"
+YAW_MINUS_HELP = "−Yaw = キャラクターの右側から見る（カメラがキャラクターの右）"
+
 # (キー, タブ名, クラス名)。モジュール名は ui_<キー>
 TAB_SPECS = (
     ("setup", "セットアップ", "SetupTab"),

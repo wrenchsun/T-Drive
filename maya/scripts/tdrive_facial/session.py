@@ -31,6 +31,18 @@
 重み・接続へ戻す。**シーンを基準姿勢のまま放置しない**ため、(1) シーンを触るメソッドは例外で必ず編集状態を抜ける、
 (2) `edit_guard()`、(3) `close` / 新しいシーン / シーンを開く前（PreFileNewOrOpened）/ ツールのリロード（lifecycle.on_reload）で抜ける。
 シーンが入れ替わっていたら（ノードの UUID が違う）元へ「戻さず」に捨てる（新しいシーンへ古い値を書かない）。
+
+## 土台の表情（シーンだけの下敷き。2026-10-03 の決定: 加算）
+`set_base_expression(名前, {シェイプ名: 重み})` / `clear_base_expression()`。ゲームでは表情アニメがシェイプを動かし、その上にベイクした
+FC_*（補正）が足される。シーンでもそれに合わせ、`_apply_buffer` が**土台の値 + ポーズの値**をシーンへ当てる
+（土台だけのシェイプは土台の値、ポーズだけのシェイプはポーズの値）。
+
+- 可動域（`profile.effective_limit`）を超えても**丸めずに**当てる（blendShape の重みは 1 を超えられる）。超えたシェイプは `base_state().over_limit`
+  に出る（画面が警告する）
+- シェイプの重みだけ（ボーンは土台に含まない）。ポーズのバッファにも文書にも入らない（シーンだけ）
+- `capture_from_scene` は土台を引く（ポーズの値 = シーンの値 − 土台の値）。「取り込む → 保存 → 当て直す」が土台つきでも元に戻る
+- ベイク・出力には入らない（ベイクは編集状態を抜けて、自分で基準姿勢に入る）。編集状態を抜ける（`end_edit`）・閉じる・新しいシーン・
+  リロードで外れる。点・レイヤーの切り替え、`_edit_suspended`（プレビューの作り直しなど）では残る
 """
 
 from __future__ import annotations
@@ -54,7 +66,7 @@ from . import pose_apply
 from . import preview_rig
 from . import scene as scene_mod
 from . import shapes
-from .core import evaluate, fcpose_io, naming, space
+from .core import autofill, base_expr, evaluate, fcpose_io, naming, space
 from .core import profile as profile_mod
 from .core import validate as V
 from .core.model import (
@@ -177,6 +189,7 @@ class FacialSession:
         self.converted_from: Optional[dict[str, Any]] = None  # 変換して開いたときの元の meta
         self.source_path: Optional[Path] = None  # 開いた元のファイル（変換して開いたとき、上書きしない元）
         self.last_apply: Optional[pose_apply.ApplyReport] = None  # 直近の「点のポーズをシーンへ当てた」結果
+        self.last_apply_error: str = ""  # 直近の `import_pose_curves` で、読んだ値をシーンへ当てられなかったときの理由
         self.edit_warnings: list[str] = []  # 基準姿勢に入ったときの警告（バインドポーズが無い等）
         self._path_confirmed = False  # False: 一度も保存・開いていない既定の保存先（既存のファイルを黙って上書きしない）
         self._undo: list[Document] = []
@@ -186,6 +199,8 @@ class FacialSession:
         self._ref_uuids: dict[str, list[str]] = {}
         self._applied: Optional[tuple[int, int, int]] = None
         self._sculpt: Optional[SculptState] = None  # 「この角度で彫る」の最中（shapes.py。docs/14 §5.6）
+        self._base: Optional[BaseExpression] = None  # 土台の表情（シーンだけの下敷き。モジュールの docstring「土台の表情」）
+        self.last_capture_base_ignored: list[str] = []  # 直近の `capture_from_scene` で、土台のとおりだったので取り込まなかったシェイプ
 
     # ------------------------------------------------------------ 状態
     @property
@@ -674,6 +689,7 @@ class FacialSession:
         self._ref = None
         self._ref_uuids = {}
         self._applied = None
+        self._base = None
         self._sculpt = None  # シーンが入れ替わった: 彫りの状態も捨てる（新しいシーンの blendShape には触らない）
 
     def _bone_names(self, doc: Document) -> list[str]:
@@ -735,6 +751,7 @@ class FacialSession:
             self._ref = None
             self._ref_uuids = {}
             self._applied = None
+            self._base = None  # 土台の表情は編集状態の間だけ（シーンの重みは上で元へ戻った）
         if not quiet and sync_preview and self._preview_pending:
             self._sync_preview()
         self._notify_state()
@@ -748,28 +765,84 @@ class FacialSession:
         finally:
             self.end_edit(quiet=True)
 
+    def _layered_pose(self, pose: SourcePose) -> SourcePose:
+        """ポーズに土台の表情を足した、シーンへ当てる形。土台が無ければそのまま。"""
+        base = self._base.curves if self._base is not None else {}
+        if not base:
+            return pose
+        doc = self.require()
+        prof = self.profile
+        lay = base_expr.layer(pose.curves, base, lambda n: profile_mod.effective_limit(doc, prof, n))
+        return SourcePose(curves=lay.weights, bones=pose.bones)
+
+    @staticmethod
+    def _track_weights(ref: scene_mod.Reference, names: Iterable[str]) -> None:
+        """当てたシェイプの重みを、編集を抜けるとき 0 へ戻す対象（基準姿勢の記録）に入れる（編集中に作られたターゲットも）。"""
+        for name in names:
+            for plug in scene_mod.reference_curve_plugs(ref, name):
+                if plug not in ref.weight_plugs:
+                    ref.weight_plugs.append(plug)
+                    ref._saved_weights[plug] = 0.0
+
+    @contextlib.contextmanager
+    def pose_scope(self):
+        """`with session.pose_scope() as apply:` — 点のポーズを一時的にシーンへ当てる（サムネイルなど、見るだけの処理用）。
+
+        `apply(layer_index, row, col)` は、基準姿勢にその点のポーズだけを当てる（土台の表情は当たらない。点が空なら基準姿勢）。
+        **選択中の点・編集中の値（未保存の編集も）・土台の表情・文書には触らない**。with を抜けると、入る前の状態へ戻す:
+        編集状態にいなかったなら基準姿勢を抜けてシーンを元へ（`end_edit`）、いたなら編集中の値 + 土台をもう一度当てる。
+        彫っている最中は使えない（FacialSessionError）。"""
+        doc = self.require()
+        if self._sculpt is not None and self.editing:
+            raise FacialSessionError("彫っている最中は使えません（「彫り終わる」を押してから）")
+        was = self.editing
+        ref = self.begin_edit()
+
+        def apply(layer_index: int, row: int, col: int) -> None:
+            d = self.require()
+            pt = d.layers[layer_index].points.get((row, col))
+            pose = pt.pose if pt is not None else SourcePose()
+            pose_apply.apply_pose(d, pose, ref)
+            self._track_weights(ref, pose.curves)
+            self._applied = None  # シーンに当たっているのは選択中の点のポーズではなくなった
+
+        try:
+            yield apply
+        finally:
+            try:
+                if was and self.presenters is not None and self.editing:
+                    self._apply_buffer()
+                else:
+                    self.end_edit(quiet=True)
+            except Exception:  # noqa: BLE001  後片付けで落とさない（シーンを基準姿勢のまま残さない）
+                self.end_edit(quiet=True)
+                lifecycle.report_error("一時的に当てたポーズを元へ戻せませんでした（編集状態を抜けました）", traceback.format_exc(), once=False)
+
     def _apply_buffer(self) -> Optional[pose_apply.ApplyReport]:
-        """PosePresenter の編集中の値（= 選択中の点のポーズ）をシーンへ当てる。選択が無ければ基準へ戻す。"""
+        """PosePresenter の編集中の値（= 選択中の点のポーズ）+ 土台の表情をシーンへ当てる。選択も土台も無ければ基準へ戻す。"""
         ref = self._ref
         if ref is None:
             raise FacialSessionError("編集状態に入っていません（begin_edit）")
         pres = self._pres()
         ctx = pres.ctx
         if ctx.selection is None:
-            pose_apply.reset_to_reference(ref)
-            self._applied = None
-            return None
-        pose = pres.pose.pose_to_apply()
+            if self._base is None:
+                pose_apply.reset_to_reference(ref)
+                self._applied = None
+                return None
+            pose = SourcePose()
+        else:
+            pose = pres.pose.pose_to_apply()
+        pose = self._layered_pose(pose)
         for name in pose.curves:  # 編集中に作られた / Undo で戻ったターゲットの重みも、編集を抜けるとき 0 へ戻す対象にする
             ref._curve_cache.pop(name, None)
         rep = pose_apply.apply_pose(ctx.doc, pose, ref)
-        for name in pose.curves:
-            for plug in scene_mod.reference_curve_plugs(ref, name):
-                if plug not in ref.weight_plugs:
-                    ref.weight_plugs.append(plug)
-                    ref._saved_weights[plug] = 0.0
-        li = min(max(ctx.active_layer, 0), len(ctx.doc.layers) - 1)
-        self._applied = (li, ctx.selection[0], ctx.selection[1])
+        self._track_weights(ref, pose.curves)
+        if ctx.selection is None:
+            self._applied = None
+        else:
+            li = min(max(ctx.active_layer, 0), len(ctx.doc.layers) - 1)
+            self._applied = (li, ctx.selection[0], ctx.selection[1])
         self.last_apply = rep
         return rep
 
@@ -792,10 +865,77 @@ class FacialSession:
             return IngestReport(ok=False, code="no_point", message="点が選択されていません")
         wso = pres.pose.working_set_only if working_set_only is None else bool(working_set_only)
         assert self._ref is not None
-        pose = pose_apply.capture_pose(pres.ctx.doc, self._ref, working_set_only=wso)
-        rep = pres.pose.ingest(pose.curves, pose.bones, replace=True, working_set_only=wso)
+        doc = pres.ctx.doc
+        pose = pose_apply.capture_pose(doc, self._ref, working_set_only=wso)
+        curves = pose.curves
+        self.last_capture_base_ignored = []
+        base = self._base.curves if self._base is not None else {}
+        if base:  # 土台を引く（ポーズの値 = シーンの値 − 土台の値）。除外・作業セットの外のシェイプは触らず、編集中の値を残す
+            ws = set(doc.working_set.curves) if wso and doc.working_set.curves else None
+            skip = [n for n in base if n in doc.exclude.curves or (ws is not None and n not in ws)]
+            curves, self.last_capture_base_ignored = base_expr.subtract(pose.curves, base, skip=skip)
+            for n in skip:
+                if n in pres.pose.curves:
+                    curves[n] = pres.pose.curves[n]
+        rep = pres.pose.ingest(curves, pose.bones, replace=True, working_set_only=wso)
         self._notify_state()
         return rep
+
+    # ------------------------------------------------------------ 土台の表情（モジュールの docstring）
+    @property
+    def base_expression_name(self) -> str:
+        """有効な土台の表情の名前。無ければ ""（編集状態を抜けると外れる）。"""
+        return self._base.name if self._base is not None and self.editing else ""
+
+    @property
+    def base_expression_curves(self) -> dict[str, float]:
+        """土台の表情の重み（シーンのシェイプ名 → 重み）。無ければ空。"""
+        return dict(self._base.curves) if self._base is not None and self.editing else {}
+
+    def base_state(self) -> "BaseState":
+        """土台とポーズの今の重なり（画面の表示用）。土台が無ければ空の BaseState。"""
+        if self._base is None or not self.editing or self.presenters is None:
+            return BaseState()
+        ctx = self.presenters.ctx
+        pose = self.pose.pose_to_apply().curves if ctx.selection is not None else {}
+        doc, prof = ctx.doc, self.profile
+        lay = base_expr.layer(pose, self._base.curves, lambda n: profile_mod.effective_limit(doc, prof, n))
+        return BaseState(
+            name=self._base.name,
+            curves=dict(self._base.curves),
+            shared=lay.shared,
+            base_only=lay.base_only,
+            over_limit=lay.over_limit,
+        )
+
+    @scene_op
+    def set_base_expression(self, name: str, curves: dict[str, float]) -> "BaseState":
+        """土台の表情を当てる（シーンだけ。編集状態に入り、土台 + 編集中のポーズをシーンへ当てる）。すでにあれば置き換える。
+        curves はシーンのシェイプ名 → 重み（`anim_import.resolve_curve_weights` で照合したもの）。0 の値は捨てる。全部 0 なら FacialSessionError。"""
+        self.require()
+        weights = {str(n): float(w) for n, w in curves.items() if abs(float(w)) > pose_apply.THRESHOLD_W}
+        if not weights:
+            raise FacialSessionError("土台にできるシェイプがありません（全部 0 です）")
+        prev = self._base
+        self.begin_edit()
+        self._base = BaseExpression(str(name) or "土台", weights)
+        try:
+            self._apply_buffer()
+        except BaseException:
+            self._base = prev
+            raise  # scene_op が編集状態を抜ける（土台も外れる）
+        self._notify_state()
+        return self.base_state()
+
+    def clear_base_expression(self, reapply: bool = True) -> bool:
+        """土台の表情を外す。あったら True。編集中なら、編集中のポーズだけをシーンへ当て直す（reapply=False で当て直さない）。"""
+        if self._base is None:
+            return False
+        self._base = None
+        if reapply and self.presenters is not None and self.editing:
+            self._reapply_safely()
+        self._notify_state()
+        return True
 
     @scene_op
     def select_point(
@@ -925,6 +1065,66 @@ class FacialSession:
             self._apply_buffer()
         self._notify_state()
         return rep
+
+    @scene_op
+    def import_pose_curves(
+        self,
+        curves: dict[str, float],
+        bones: Optional[dict] = None,
+        *,
+        replace: bool = True,
+        working_set_only: bool = False,
+        keep_bones: bool = False,
+        apply: bool = True,
+    ) -> IngestReport:
+        """読んだ値（アニメ・今のフレームから `anim_import` が作った、シーンのシェイプ名 → 重み / ボーンのずれ）を編集中の値へ入れ、
+        apply=True ならシーンへ当てる（編集状態に入る）。保存はしない。keep_bones=True は編集中のボーンをそのまま残す（置き換えで消さない）。
+        読み込み自体が失敗したら（ok=False）編集中の値は変わらない。シーンへ当てられなかったときは `last_apply_error` に理由を残す（読み込みは成功）。"""
+        self.last_apply_error = ""
+        pres = self._pres()
+        new_bones = copy.deepcopy(pres.pose.bones) if keep_bones else dict(bones or {})
+        rep = pres.pose.ingest(curves, new_bones, replace=replace, working_set_only=working_set_only)
+        if rep.ok and apply:
+            try:
+                self.apply_buffer_to_scene()
+            except Exception as exc:  # noqa: BLE001  読み込み自体は成功。シーンへ当てられなかっただけ
+                self.last_apply_error = str(exc)
+                lifecycle.report_error("読み込んだポーズをシーンへ当てられませんでした", traceback.format_exc(), once=False)
+        self._notify_state()
+        return rep
+
+    @undoable
+    def copy_from_document(
+        self,
+        src: Document,
+        flags: Iterable[str] = ("keys_only",),
+        src_layer_index: Optional[int] = None,
+        dst_layer_index: Optional[int] = None,
+    ) -> autofill.CopyReport:
+        """別のデータ（Document）からポーズをコピーする（`autofill.copy_from`。F1-7）。1 回の呼び出し = 1 つの元に戻す。
+        flags は "all_layers" / "working_set_only" / "keys_only" の組み合わせ。src_layer_index を省くと宛先のレイヤーと同じ名前（無ければ 0 番）、
+        dst_layer_index を省くとアクティブレイヤー。宛先の点は非キーとして上書きする。ValueError / IndexError は呼び出し側へ（文書は元へ戻る）。"""
+        dst = self.require()
+        mode = autofill.parse_copy_mode(list(flags))  # ValueError: 知らない旗
+        di = self.ctx.active_layer if dst_layer_index is None else dst_layer_index
+        di = min(max(di, 0), len(dst.layers) - 1)
+        if src_layer_index is None:
+            dst_name = dst.layers[di].name
+            src_layer_index = next((i for i, layer in enumerate(src.layers) if layer.name == dst_name), 0)
+        with self.ctx.edit():  # 抜けたら "document" を通知し、選択中の点が変わっていれば編集中の値を読み直す
+            return autofill.copy_from(src, self.doc, set(mode), src_layer_index, di)
+
+    def copy_from_file(
+        self,
+        path: str | Path,
+        flags: Iterable[str] = ("keys_only",),
+        src_layer_index: Optional[int] = None,
+        dst_layer_index: Optional[int] = None,
+    ) -> autofill.CopyReport:
+        """別のデータ（.fcpose.json）からコピーする（`copy_from_document` と同じ。読めなければ FcposeError / OSError / ValueError）。"""
+        self.require()
+        src = fcpose_io.load_document(path)
+        return self.copy_from_document(src, flags, src_layer_index, dst_layer_index)
 
     def export_pose_file(self, path: str | Path) -> Optional[Path]:
         """編集中のポーズを単独ポーズのファイルに書く。空なら書かずに None。"""
@@ -1551,12 +1751,12 @@ class FacialSession:
             self.sculpt_end(save=False)
         res = shapes.ShapeResult()
         table = scene_mod.target_indices(sc.node)
-        for n in names:  # 編集中に重み 1 のまま消すと、Maya の Undo で戻したとき重み 1 が残る。先に 0 にしておく（Undo の対象にはしない）
-            plug = scene_mod.weight_plug(sc.node, table[n]) if n in table else None
-            if plug and not cmds.listConnections(plug, source=True, destination=False):
-                cmds.setAttr(plug, 0.0)
         try:
-            with shapes.undo_chunk("tdFacialSculptDelete"):  # ターゲットを消す + 当て直し = Maya の Undo 1 回
+            with shapes.undo_chunk("tdFacialSculptDelete"):  # 重みを 0 にする + ターゲットを消す + 当て直し = Maya の Undo 1 回（検証は上で済んでいる）
+                for n in names:  # 編集中に重み 1 のまま消すと、Maya の Undo で戻したとき重み 1 が残る。先に 0 にしておく（同じ区切りの中）
+                    plug = scene_mod.weight_plug(sc.node, table[n]) if n in table else None
+                    if plug and not cmds.listConnections(plug, source=True, destination=False):
+                        cmds.setAttr(plug, 0.0)
                 res.removed = self._remove_target_now(sc, names)
                 if self.editing and self._pres().ctx.selection is not None:
                     for n in names:
@@ -1740,6 +1940,7 @@ class FacialSession:
     def _edit_suspended(self):
         """編集状態にいれば一度抜け、終わったら入り直して編集中の値を当て直す（基準姿勢のままでは出来ない処理のため）。"""
         was = self.editing
+        base = self._base if was else None  # 土台の表情は抜けると外れるので、入り直すときに戻す
         if was:
             self.end_edit(sync_preview=False)
         try:
@@ -1748,6 +1949,7 @@ class FacialSession:
             if was and self.presenters is not None:
                 try:
                     self.begin_edit()
+                    self._base = base
                     self._apply_buffer()
                 except Exception:  # noqa: BLE001
                     self.end_edit(quiet=True)
@@ -2223,6 +2425,29 @@ class T20ImportResult(CommandResult):
     skipped: list[str] = field(default_factory=list)  # 取り込まなかったものと理由
     existing: list[str] = field(default_factory=list)  # 既にキーがあるので上書きしなかった点（overwrite=True で上書き）
     warnings: list[str] = field(default_factory=list)
+
+
+@dataclass
+class BaseExpression:
+    """土台の表情（シーンだけの下敷き）。名前と、シーンのシェイプ名 → 重み。"""
+
+    name: str
+    curves: dict[str, float]
+
+
+@dataclass
+class BaseState:
+    """土台とポーズの今の重なり。name が "" なら土台は無い。"""
+
+    name: str = ""
+    curves: dict[str, float] = field(default_factory=dict)  # 土台の重み
+    shared: dict[str, float] = field(default_factory=dict)  # ポーズにも値があるシェイプ → 土台の値
+    base_only: list[str] = field(default_factory=list)  # ポーズの値が 0 のシェイプ（土台の値だけが当たる）
+    over_limit: dict[str, float] = field(default_factory=dict)  # 土台と合わせて可動域を超えたシェイプ → シーンに当てた値
+
+    @property
+    def active(self) -> bool:
+        return bool(self.name)
 
 
 @dataclass

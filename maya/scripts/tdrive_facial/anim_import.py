@@ -1,16 +1,16 @@
 """アニメ・他のデータからの読み込み（Maya 依存。docs/14 §5.3 / §5.4、チケット F2-7・F1-7 の残り）。
 
-画面（ui_pose / ui_grid）はここの関数を呼ぶだけ。`FacialSession` の公開 API（`checkpoint` / `pose.ingest` / `apply_buffer_to_scene` /
-`begin_edit` / `state_listeners` / `undoable`）だけを使い、session.py は触らない。のちに session.py のコマンドへ移すもの:
+画面（ui_pose / ui_grid）はここの関数を呼ぶ。ここは「読んで照合する」層（Unity の .anim・今のフレーム → シーンのシェイプ名・ボーンのずれ）で、
+**編集中の値・シーン・文書を変える部分は `FacialSession` のコマンド**（2026-10-03 に session.py へ移した）:
 
-- `pose_from_current_frame` / `pose_from_unity_anim` → `session.import_pose_from_anim(...)`（編集中の値へ入れて当てる）
-- `set_base_expression` / `clear_base_expression` + 取り込みの除外 → session が「土台の表情」を持ち、`_apply_buffer` の最後に重ねる
-  （今は `state_listeners` で、通知のたびに重ねている）。`capture_from_scene` が土台のシェイプを除く
-- `copy_from_file` → `session.copy_from_file(...)`（`@undoable` のコマンド。ここでは `session.undoable` を直接かけている）
+- `pose_from_current_frame` / `pose_from_unity_anim` → 読んだ値を `session.import_pose_curves(...)`（編集中の値へ入れて当てる）へ渡す
+- `set_base_expression` / `clear_base_expression` / `base_expression_*` → `session.set_base_expression` 等（土台の表情は session が持つ）
+- `capture_from_scene` → `session.capture_from_scene`（土台を引く）。ここは `CaptureResult` に包む薄い関数
+- `copy_from_file` → `session.copy_from_file`（`@undoable` のコマンド）
 
 ## 現在のフレームを読む（`pose_from_current_frame`）
 アニメが付いたシーン（ブレンドシェイプの重みにキー、ジョイントにキーが付いている）の今のフレームの状態を、編集中のポーズへ読み込む。
-編集状態（基準姿勢）に入る**前**の姿勢を読むので、編集中なら先に編集状態を抜ける（シーンはもとのアニメの状態に戻る）。
+編集状態（基準姿勢）に入る**前**の姿勢を読むので、編集中なら先に編集状態を抜ける（シーンはもとのアニメの状態に戻る。土台の表情も外れる）。
 基準姿勢はバインドポーズ（`scene.enter_reference_pose`）。読んだあとシーンは変わらない（時刻も元に戻す）。
 
 ## Unity の `.anim` を読む（`pose_from_unity_anim`）
@@ -22,24 +22,17 @@
   **Unity のボーンのローカル軸が Maya のジョイントの軸と同じ向きの並べ替えで対応する前提**（FBX 経由でそろった骨格）
 
 ## 土台の表情（`set_base_expression` / `clear_base_expression`）
-「この表情のとき補正がどう見えるか」を確かめるための、**シーンだけに当てる下敷き**。編集中のポーズにも文書にも入らない。
-
-- 当てるのは**シェイプの重みだけ**（ボーンは当てない）。編集状態（基準姿勢）の間だけ有効で、編集状態を抜ける（`end_edit`）と土台は外れる
-  （シーンの重みは編集を始める前の値に戻る）。設定すると編集状態に入る
-- 点を切り替えるなどでポーズを当て直されても、`session.state_listeners` の通知で重ね直す。**同じシェイプが編集中のポーズにもあれば、ポーズの値が優先**
-  （土台の値ではなくポーズの値がシーンに出る）
-- 取り込み: 土台が有効なときの「シーンから取り込む」は `capture_from_scene`（この関数）を使い、土台のシェイプを取り込まない
-  （編集中のポーズにあるそのシェイプの値は残す）
-- 外すのは `clear_base_expression`（編集中なら編集中のポーズだけを当て直す）。パネルを閉じる・ツールのリロードでも外れる
+「この表情のとき補正がどう見えるか」を確かめるための、**シーンだけに当てる下敷き**。ポーズにも文書にも入らない。
+**ポーズの値に足して**当てる（共通のシェイプは 土台 + ポーズ。可動域を超えても丸めず、`BaseExpressionReport.over_limit` で報告）。
+詳細は `session.py` の docstring「土台の表情」と `core/base_expr.py`。ここでは .anim / 重みの辞書 → シーンのシェイプ名への照合だけをする。
 """
 
 from __future__ import annotations
 
-import copy
 import traceback
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Mapping, Optional, Sequence, Union
+from typing import Mapping, Optional, Sequence, Union
 
 from maya import cmds
 
@@ -89,6 +82,7 @@ class BaseExpressionReport:
     unmatched: list[str] = field(default_factory=list)
     locked: list[str] = field(default_factory=list)  # 値を書けなかった（つながっている・ロック）
     warnings: list[str] = field(default_factory=list)
+    over_limit: dict[str, float] = field(default_factory=dict)  # 土台 + ポーズが可動域を超えたシェイプ → シーンに当てた値
 
 
 @dataclass
@@ -241,10 +235,8 @@ def _finish_ingest(
     keep_bones: bool,
     apply: bool,
 ) -> AnimImportReport:
-    pres = session.pose
-    if keep_bones:  # ボーンを読まなかったときは、編集中のボーンの値をそのまま残す（置き換えで消さない）
-        bones = copy.deepcopy(pres.bones)
-    ing = pres.ingest(curves, bones, replace=replace, working_set_only=working_set_only)
+    """読んだ値を編集中の値へ入れて（必要なら）シーンへ当てる = `session.import_pose_curves`（コマンド）。"""
+    ing = session.import_pose_curves(curves, bones, replace=replace, working_set_only=working_set_only, keep_bones=keep_bones, apply=apply)
     rep.ingest = ing
     if not ing.ok:
         rep.ok = False
@@ -255,12 +247,8 @@ def _finish_ingest(
     rep.bones_set = 0 if keep_bones else ing.bones_set
     rep.ignored = list(ing.ignored)
     rep.clamped = list(ing.clamped)
-    if apply:
-        try:
-            session.apply_buffer_to_scene()
-        except Exception as exc:  # noqa: BLE001  読み込み自体は成功。シーンへ当てられなかっただけ
-            rep.warnings.append(f"シーンへ当てられませんでした: {exc}")
-            lifecycle.report_error("アニメから読み込んだポーズをシーンへ当てられませんでした", traceback.format_exc(), once=False)
+    if session.last_apply_error:
+        rep.warnings.append(f"シーンへ当てられませんでした: {session.last_apply_error}")
     return rep
 
 
@@ -448,67 +436,13 @@ def pose_from_unity_anim(
 # ---------------------------------------------------------------------------
 
 
-@dataclass
-class _BaseState:
-    name: str
-    weights: dict[str, float]
-    listener: Callable[[], None]
-
-
-_BASES: dict[int, _BaseState] = {}  # id(session) → 土台の表情
-
-
 def base_expression_name(session) -> str:
     """有効な土台の表情の名前。無ければ ""（編集状態を抜けていれば土台も無い）。"""
-    st = _BASES.get(id(session))
-    if st is None or session.presenters is None or not session.editing:
-        return ""
-    return st.name
+    return session.base_expression_name
 
 
 def base_expression_curves(session) -> dict[str, float]:
-    st = _BASES.get(id(session))
-    return dict(st.weights) if st is not None else {}
-
-
-def _drop_state(session) -> Optional[_BaseState]:
-    st = _BASES.pop(id(session), None)
-    if st is not None and st.listener in session.state_listeners:
-        session.state_listeners.remove(st.listener)
-    return st
-
-
-def _apply_base_weights(session, st: _BaseState) -> list[str]:
-    """編集中のシーンに、土台のシェイプの重みを重ねる（編集中のポーズに同じシェイプがあれば、そちらを優先）。書けなかった plug を返す。"""
-    ref = session.begin_edit()  # 編集中なので、基準姿勢の記録が返るだけ
-    own = session.pose.pose_to_apply().curves if session.ctx.selection is not None else {}
-    locked: list[str] = []
-    for name, w in st.weights.items():
-        if name in own:
-            continue
-        for plug in scene_mod.reference_curve_plugs(ref, name):
-            try:
-                if abs(cmds.getAttr(plug) - w) > 1e-9:
-                    cmds.setAttr(plug, float(w))
-            except RuntimeError:
-                locked.append(plug)
-    return locked
-
-
-def _make_listener(session) -> Callable[[], None]:
-    def on_state() -> None:
-        st = _BASES.get(id(session))
-        if st is None:
-            return
-        try:
-            if session.presenters is None or not session.editing:  # 編集状態を抜けた / データを閉じた: 土台も外れる
-                _drop_state(session)
-                return
-            _apply_base_weights(session, st)
-        except Exception:  # noqa: BLE001  土台の重ね直しの不具合で編集を止めない
-            lifecycle.report_error("土台の表情を重ねられませんでした", traceback.format_exc())
-
-    return on_state
+    return session.base_expression_curves
 
 
 def set_base_expression(
@@ -521,7 +455,7 @@ def set_base_expression(
     """土台の表情を当てる（シーンへの下敷き。モジュールの docstring「土台の表情」）。
 
     source: Unity の `.anim` のパス（`time` 秒の値）/ `AnimClip` / {シェイプ名: 重み}。編集状態に入る（基準姿勢の上に土台を重ねる）。
-    編集中のポーズ・文書は変えない。すでに土台があれば置き換える。"""
+    編集中のポーズ・文書は変えない。すでに土台があれば置き換える。ポーズの値に足して当てる。"""
     try:
         session.require()
         meshes = _target_meshes(session)
@@ -543,76 +477,38 @@ def set_base_expression(
         weights = {n: w for n, w in weights.items() if abs(w) > pose_apply.THRESHOLD_W}
         if not weights:
             return BaseExpressionReport(ok=False, message="土台にできるシェイプがありませんでした（このモデルに無い名前か、全部 0 です）", unmatched=unmatched)
+        try:
+            state = session.set_base_expression(label, weights)
+        except session_mod.FacialSessionError as exc:
+            return BaseExpressionReport(ok=False, message=str(exc), name=label)
+        except Exception as exc:  # noqa: BLE001
+            lifecycle.report_error("土台の表情を当てられませんでした", traceback.format_exc(), once=False)
+            return BaseExpressionReport(ok=False, message=f"土台の表情を当てられませんでした: {exc}", name=label)
     except session_mod.FacialSessionError as exc:
         return BaseExpressionReport(ok=False, message=str(exc))
-
-    clear_base_expression(session, reapply=False)
-    st = _BaseState(label, weights, _make_listener(session))
-    _BASES[id(session)] = st
-    session.state_listeners.append(st.listener)
-    try:
-        session.apply_buffer_to_scene()  # 編集状態に入り、編集中のポーズを当てる → 通知で土台が重なる
-        locked = _apply_base_weights(session, st)  # 通知で重なっているはずだが、結果をここで確かめる
-    except Exception as exc:  # noqa: BLE001
-        _drop_state(session)
-        lifecycle.report_error("土台の表情を当てられませんでした", traceback.format_exc(), once=False)
-        return BaseExpressionReport(ok=False, message=f"土台の表情を当てられませんでした: {exc}", name=label)
-    msg = f"土台の表情「{label}」を当てました（シェイプ {len(weights)} 本）。編集を終えると外れます"
+    last = session.last_apply
+    locked = list(last.locked) if last is not None else []
+    msg = f"土台の表情「{label}」を当てました（シェイプ {len(weights)} 本）。ポーズの値に足して表示します。編集を終えると外れます"
     if unmatched:
         msg += f"。このモデルに無いシェイプ {len(unmatched)} 本は当てていません"
+    if state.over_limit:
+        msg += f"。土台と合わせて可動域を超えているシェイプ {len(state.over_limit)} 本（" + "、".join(sorted(state.over_limit)[:5]) + ("…" if len(state.over_limit) > 5 else "") + "）"
     return BaseExpressionReport(
-        message=msg, name=label, applied=sorted(weights), unmatched=unmatched, locked=locked, warnings=warnings
+        message=msg, name=label, applied=sorted(weights), unmatched=unmatched, locked=locked, warnings=warnings,
+        over_limit=dict(state.over_limit),
     )
 
 
 def clear_base_expression(session, reapply: bool = True) -> bool:
     """土台の表情を外す。あったら True。編集中なら編集中のポーズだけをシーンへ当て直す（reapply=False で当て直さない）。"""
-    st = _drop_state(session)
-    if st is None:
-        return False
-    if reapply:
-        try:
-            if session.presenters is not None and session.editing:
-                session.apply_buffer_to_scene()
-        except Exception:  # noqa: BLE001  後片付けで落とさない
-            lifecycle.report_error("土台の表情を外したあと、シーンへ当て直せませんでした", traceback.format_exc(), once=False)
-    return True
+    return session.clear_base_expression(reapply=reapply)
 
 
 def capture_from_scene(session, working_set_only: Optional[bool] = None) -> CaptureResult:
-    """「シーンから取り込む」。土台の表情が有効なら、土台のシェイプは取り込まない（編集中のポーズにあるその値は残す）。
-    土台が無ければ `session.capture_from_scene` と同じ。"""
-    st = _BASES.get(id(session))
-    if st is None or not session.editing:
-        return CaptureResult(session.capture_from_scene(working_set_only=working_set_only))
-    pres = session.pose
-    if session.ctx.selection is None:
-        return CaptureResult(IngestReport(ok=False, code="no_point", message="点が選択されていません"))
-    wso = pres.working_set_only if working_set_only is None else bool(working_set_only)
-    ref = session.begin_edit()
-    pose = pose_apply.capture_pose(session.require(), ref, working_set_only=wso)
-    ignored = sorted(n for n in pose.curves if n in st.weights)
-    curves = {n: w for n, w in pose.curves.items() if n not in st.weights}
-    for n in st.weights:  # 土台のシェイプは、編集中のポーズの値をそのまま残す
-        if n in pres.curves:
-            curves[n] = pres.curves[n]
-    rep = pres.ingest(curves, pose.bones, replace=True, working_set_only=wso)
-    return CaptureResult(rep, ignored)
-
-
-def _clear_all_bases() -> None:
-    """ツールのリロード前: 土台の記録と通知の購読を外す（シーンは session 側の後片付けが元へ戻す）。"""
-    for sid, st in list(_BASES.items()):
-        _BASES.pop(sid, None)
-        try:
-            cur = session_mod.current()
-            if st.listener in cur.state_listeners:
-                cur.state_listeners.remove(st.listener)
-        except Exception:  # noqa: BLE001
-            pass
-
-
-lifecycle.on_reload(_clear_all_bases)
+    """「シーンから取り込む」。土台の表情が有効なら、`session.capture_from_scene` が土台の値を引く（ポーズの値 = シーンの値 − 土台の値）。
+    base_ignored は、土台のとおり（変化なし）だったので取り込まなかった土台のシェイプ。"""
+    rep = session.capture_from_scene(working_set_only=working_set_only)
+    return CaptureResult(rep, list(session.last_capture_base_ignored))
 
 
 # ---------------------------------------------------------------------------
@@ -627,15 +523,15 @@ def copy_from_file(
     src_layer_index: Optional[int] = None,
     dst_layer_index: Optional[int] = None,
 ) -> CopyFileResult:
-    """別の FacialController のデータ（.fcpose.json）からポーズをコピーする（`autofill.copy_from`。F1-7 の画面の残り）。
+    """別の FacialController のデータ（.fcpose.json）からポーズをコピーする（`session.copy_from_file` = `@undoable` のコマンド）。
 
     mode_flags: "all_layers"（名前が同じレイヤー同士。宛先に無ければ新規作成）/ "working_set_only"（宛先の作業セットの名前だけ）/
     "keys_only"（ソースのキーだけ。省くとソースの自動生成の点も）の組み合わせ。座標系が違えばボーンのずれを変換する。
     1 つのレイヤーだけのとき: src_layer_index を省くと宛先のアクティブレイヤーと同じ名前（無ければ 0 番）、dst_layer_index を省くとアクティブレイヤー。
-    宛先の点は**非キーとして上書き**する（宛先にあったキーも上書き）。1 回の呼び出し = 1 つの元に戻す（`session.undoable`）。
+    宛先の点は**非キーとして上書き**する（宛先にあったキーも上書き）。1 回の呼び出し = 1 つの元に戻す。
     コピーは点のポーズを書き換えるだけで、点が空になることは無いので、消すべき古い FC_* は出ない。シーンのベイクは変更のある点を焼き直す。"""
     try:
-        dst = session.require()
+        session.require()
         try:
             flags = sorted(autofill.parse_copy_mode(mode_flags))
         except ValueError as exc:
@@ -645,18 +541,8 @@ def copy_from_file(
         except (fcpose_io.FcposeError, OSError, ValueError) as exc:
             return CopyFileResult(ok=False, message=f"ファイルを読めませんでした: {exc}", source=str(src_path))
         name = Path(str(src_path)).name
-        di = session.ctx.active_layer if dst_layer_index is None else dst_layer_index
-        di = min(max(di, 0), len(dst.layers) - 1)
-        if src_layer_index is None:
-            dst_name = dst.layers[di].name
-            src_layer_index = next((i for i, l in enumerate(src.layers) if l.name == dst_name), 0)
-
-        def _do(sess):
-            with sess.ctx.edit():  # 抜けたら "document" を通知し、選択中の点が変わっていれば編集中の値を読み直す
-                return autofill.copy_from(src, sess.doc, set(flags), src_layer_index, di)
-
         try:
-            rep = session_mod.undoable(_do)(session)
+            rep = session.copy_from_document(src, flags, src_layer_index, dst_layer_index)
         except (ValueError, IndexError) as exc:
             return CopyFileResult(ok=False, message=f"コピーできませんでした: {exc}", source=name, flags=flags)
         return CopyFileResult(ok=True, message=_copy_message(name, rep, flags), source=name, flags=flags, report=rep)

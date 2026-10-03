@@ -245,6 +245,7 @@ UE 版が書き出す形（v2 §3.5、実装は UE 版 `FacialPoseJson.cpp`）:
 ## 6. Unity（ランタイム・プレビュー・簡単な調整）
 
 パッケージ `unity/com.tdrive.facial`（T-Drive リポジトリ内。Toon のパッケージとは別、同じバージョン・同じタグで配布。D-Drive に依存しない）。
+Unity のメニューは **Tools › T-Drive › …** に置く（メニューバーに「T-Drive」というタブは作らない。D-Drive の Tools › D-Drive と同じ並び。2026-10-03 決定）。部品の追加メニュー（Add Component › T-Drive）とアセット作成メニュー（Create › T-Drive）はそのまま。
 
 ### 6.1 取り込み
 

@@ -41,6 +41,8 @@ OK_STYLE = "color: #9aa6b8;"
 ERR_STYLE = "color: #ff8a80;"
 EDITED_STYLE = "color: #f0c060; font-weight: bold;"  # 0 でない / 恒等でない行（Toon の「上書き中」と同じ色）
 MISSING_STYLE = "color: #ff8a80;"
+WARN_STYLE = "color: #ffb74d; font-weight: bold;"  # 土台と合わせて可動域を超えた行
+BASE_STYLE = "color: #7f8ba0; font-size: 11px;"  # 「+0.60（土台）」
 DIRTY_COLOR = "#ff9f1c"
 LABEL_WIDTH = 150
 T_RANGE = 1000.0  # 平行移動の欄の範囲（cm）
@@ -118,9 +120,32 @@ class _CurveRowWidgets:
         self.slider.valueChanged.connect(self._on_slider)
         self.spin.valueChanged.connect(self._on_spin)
         self.reset_btn.clicked.connect(self._on_reset)
+        self.base_label = QtWidgets.QLabel()  # 「+0.60（土台）」: 土台の表情がこのシェイプに足している値（ポーズの値とは別）
+        self.base_label.setStyleSheet(BASE_STYLE)
+        self.base_label.setVisible(False)
+        self._edited = False
+        self._missing = False
+        self._over: Optional[float] = None
+        self._tips: list[str] = [row.name]
 
     def widgets(self) -> list[QtWidgets.QWidget]:
-        return [self.label, self.slider, self.spin, self.reset_btn]
+        return [self.label, self.slider, self.spin, self.reset_btn, self.base_label]
+
+    def set_base(self, base: Optional[float], over: Optional[float]) -> None:
+        """土台の表情の値（なければ None）と、土台と合わせて可動域を超えたときの合計（なければ None）を表示する。"""
+        self._over = over
+        if base is None:
+            self.base_label.setVisible(False)
+            self.base_label.setText("")
+            self.base_label.setStyleSheet(BASE_STYLE)
+        else:
+            self.base_label.setText(f"{base:+.2f}（土台）")
+            self.base_label.setStyleSheet(WARN_STYLE if over is not None else BASE_STYLE)
+            self.base_label.setVisible(True)
+        tip = f"土台と合わせて可動域を超えています（{over:.2f}）" if over is not None else ""
+        self.base_label.setToolTip(tip or ("土台の表情が足している値です。シーンにはポーズの値にこれを足して当たります（データには入りません）" if base is not None else ""))
+        self.label.setToolTip(" / ".join(self._tips + ([tip] if tip else [])))
+        self._restyle()
 
     def _to_slider(self, v: float) -> int:
         return int(round((v - self.lo) / (self.hi - self.lo) * SLIDER_STEPS)) if self.hi > self.lo else 0
@@ -149,7 +174,13 @@ class _CurveRowWidgets:
         self.set_style(abs(v) > 1e-4, False)
 
     def set_style(self, edited: bool, missing: bool) -> None:
-        self.label.setStyleSheet(MISSING_STYLE if missing else (EDITED_STYLE if edited else ""))
+        self._edited, self._missing = edited, missing
+        self._restyle()
+
+    def _restyle(self) -> None:
+        self.label.setStyleSheet(
+            MISSING_STYLE if self._missing else (WARN_STYLE if self._over is not None else (EDITED_STYLE if self._edited else ""))
+        )
 
     def show(self, value: float) -> None:
         for w, fn in ((self.spin, lambda: self.spin.setValue(value)), (self.slider, lambda: self.slider.setValue(self._to_slider(value)))):
@@ -166,7 +197,8 @@ class _CurveRowWidgets:
         tips.append(f"範囲 {row.lo:g} 〜 {row.hi:g}" + ("" if row.explicit_limit else "（既定）"))
         if not row.in_working_set:
             tips.append("作業セットの外")
-        self.label.setToolTip(" / ".join(tips))
+        self._tips = tips
+        self.label.setToolTip(" / ".join(tips + ([f"土台と合わせて可動域を超えています（{self._over:.2f}）"] if self._over is not None else [])))
 
 
 class _BoneRowWidgets:
@@ -361,7 +393,9 @@ class BaseExpressionDialog(QtWidgets.QDialog):
         self.setWindowTitle("土台の表情を選ぶ")
         self.setMinimumWidth(380)
         v = QtWidgets.QVBoxLayout(self)
-        v.addWidget(QtWidgets.QLabel("表情のアニメ（Unity の .anim）の値を、シーンへ下敷きとして当てます。編集中のポーズには入りません"))
+        lbl = QtWidgets.QLabel("表情のアニメ（Unity の .anim）の値を、下敷きとして当てます。ポーズの値に足して表示され、データには入りません")
+        lbl.setWordWrap(True)
+        v.addWidget(lbl)
         self.path_row = _PathRow(self, start_dir)
         self.time = QtWidgets.QDoubleSpinBox()
         self.time.setRange(0.0, 100000.0)
@@ -418,7 +452,8 @@ lifecycle.on_reload(_detach_all)
 class PoseTab(QtWidgets.QWidget):
     """ポーズタブ。`refresh()` で全部描き直し、`detach()` で通知の購読をやめる。"""
 
-    _BASE_TIP = "表情のアニメ（Unity の .anim）の値をシーンへ下敷きとして当て、その表情のときのポーズを確かめます。編集中のポーズには入りません。シェイプだけで、編集を終えると外れます"
+    _BASE_HINT = "表情を下敷きとして当てます。ポーズの値に足して表示されます（データには入りません）"
+    _BASE_TIP = "表情のアニメ（Unity の .anim）の値を下敷きとして当て、その表情のときの補正を確かめます。ポーズの値に足してシーンに出ます（ゲームと同じ）。データには入りません。シェイプだけで、編集を終えると外れます"
     _CAPTURE_TIP = "Maya のシェイプエディタ・チャンネルボックス・回転 / 移動ツールで動かした値を、編集中のポーズへ取り込みます。取り込んだあと「保存」で点に書きます"
 
     def __init__(self, session) -> None:
@@ -433,6 +468,8 @@ class PoseTab(QtWidgets.QWidget):
         self._curve_sig: Optional[tuple] = None
         self._bone_sig: Optional[tuple] = None
         self._curve_rows: dict[str, _CurveRowWidgets] = {}
+        self._base_hidden: list[str] = []
+        self._base_over: dict[str, float] = {}
         self._bone_rows: dict[str, _BoneRowWidgets] = {}
         self._bone_group = QtWidgets.QButtonGroup(self)
         self._bone_group.setExclusive(True)
@@ -525,10 +562,15 @@ class PoseTab(QtWidgets.QWidget):
         row.addWidget(self.btn_base_pick)
         row.addWidget(self.btn_base_clear)
         av.addLayout(row)
-        self.base_note = QtWidgets.QLabel("土台の表情はシーンだけに当てる確認用の下敷きです。ポーズには入らず、編集を終えると外れます")
+        self.base_note = QtWidgets.QLabel(self._BASE_HINT)
         self.base_note.setWordWrap(True)
         self.base_note.setStyleSheet(OK_STYLE)
         av.addWidget(self.base_note)
+        self.base_warn = QtWidgets.QLabel()  # 土台と合わせて可動域を超えたシェイプ
+        self.base_warn.setWordWrap(True)
+        self.base_warn.setStyleSheet(WARN_STYLE)
+        self.base_warn.setVisible(False)
+        av.addWidget(self.base_warn)
         bl.addWidget(box)
 
         # シェイプ
@@ -552,6 +594,19 @@ class PoseTab(QtWidgets.QWidget):
         self.curve_grid = QtWidgets.QGridLayout()
         self.curve_grid.setColumnStretch(1, 1)
         cv.addLayout(self.curve_grid)
+        # 土台の表情だけにあるシェイプ（このタブの行に出ていないもの）: 読み取り専用の折りたたみ。何が当たっているかを見えるようにする
+        self.base_only_btn = QtWidgets.QToolButton()
+        self.base_only_btn.setCheckable(True)
+        self.base_only_btn.setToolButtonStyle(QtCore.Qt.ToolButtonTextOnly)
+        self.base_only_btn.setStyleSheet("QToolButton { border: none; color: #9aa6b8; text-align: left; }")
+        self.base_only_btn.toggled.connect(lambda *_: self._sync_base_only())
+        self.base_only_list = QtWidgets.QLabel()
+        self.base_only_list.setWordWrap(True)
+        self.base_only_list.setStyleSheet(BASE_STYLE)
+        self.base_only_list.setVisible(False)
+        self.base_only_btn.setVisible(False)
+        cv.addWidget(self.base_only_btn)
+        cv.addWidget(self.base_only_list)
         bl.addWidget(self.curve_box)
 
         # ボーン
@@ -640,12 +695,47 @@ class PoseTab(QtWidgets.QWidget):
         self._sync_note(sel)
         # 取り込みは編集状態（基準姿勢）でだけできる
         self.btn_capture.setEnabled(sel is not None and self.session.editing)
-        base = anim_import.base_expression_name(self.session)
+        st = self.session.base_state()
+        base = st.name
         self.base_label.setText(f"「{base}」" if base else "なし")
         self.btn_base_clear.setEnabled(bool(base))
+        self._sync_base_rows(st)
         self.btn_capture.setToolTip(
             self._CAPTURE_TIP if self.session.editing else "編集状態（ヘッダーの「編集」か、グリッドで点をクリック）のときだけ使えます。" + self._CAPTURE_TIP
         )
+
+    def _sync_base_rows(self, st) -> None:
+        """土台の表情の表示（行の「+0.60（土台）」・可動域の警告・「土台の表情だけのシェイプ」）。行は作り直さず、ラベルと色だけを更新する。"""
+        for name, w in self._curve_rows.items():
+            if st.active and name in st.curves:
+                w.set_base(st.curves[name], st.over_limit.get(name))
+            else:
+                w.set_base(None, None)
+        hidden = [n for n in st.curves if n not in self._curve_rows] if st.active else []
+        self._base_hidden = sorted(hidden)
+        self._base_over = dict(st.over_limit)
+        if st.active and st.over_limit:
+            items = "、".join(f"{n}（{v:.2f}）" for n, v in sorted(st.over_limit.items())[:6])
+            more = "…" if len(st.over_limit) > 6 else ""
+            self.base_warn.setText(f"土台と合わせて可動域を超えているシェイプ {len(st.over_limit)} 本: {items}{more}")
+            self.base_warn.setVisible(True)
+        else:
+            self.base_warn.setVisible(False)
+        self._sync_base_only(st)
+
+    def _sync_base_only(self, st=None) -> None:
+        names = getattr(self, "_base_hidden", [])
+        if not names:
+            self.base_only_btn.setVisible(False)
+            self.base_only_list.setVisible(False)
+            return
+        curves = self.session.base_expression_curves
+        open_ = self.base_only_btn.isChecked()
+        self.base_only_btn.setText(("▼ " if open_ else "▶ ") + f"土台の表情だけのシェイプ（{len(names)} 本）")
+        self.base_only_btn.setToolTip("一覧に出ていないシェイプのうち、土台の表情が当てているもの（読み取り専用）:\n" + "\n".join(f"{n}  {curves.get(n, 0.0):+.2f}" for n in names))
+        self.base_only_list.setText("、".join(f"{n} {curves.get(n, 0.0):+.2f}" for n in names))
+        self.base_only_btn.setVisible(True)
+        self.base_only_list.setVisible(open_)
 
     def _sync_note(self, selection) -> None:
         if selection is not None and not self.session.editing:
@@ -756,8 +846,16 @@ class PoseTab(QtWidgets.QWidget):
                 for col, widget in enumerate(w.widgets()):
                     self.curve_grid.addWidget(widget, i, col)
             self._curve_sig = sig
+        st = self.session.base_state()
         for row in view.curves:
-            self._curve_rows[row.name].refresh(row)
+            w = self._curve_rows[row.name]
+            if st.active and row.name in st.curves:  # 先に土台を入れておく（refresh のツールチップに可動域の警告を含めるため）
+                w._over = st.over_limit.get(row.name)
+            else:
+                w._over = None
+            w.refresh(row)
+            w.set_base(st.curves.get(row.name) if st.active else None, w._over)
+        self._sync_base_rows(st)
         note = f"編集した値: {view.edited_curves} 本"
         if view.hidden_curves:
             note += f"（作業セットの外に 0 でない値が {view.hidden_curves} 本あります。「作業セットだけ」を切ると見えます）"
@@ -1049,7 +1147,12 @@ class PoseTab(QtWidgets.QWidget):
         if res is None:
             return
         self.set_status(res.message, error=not res.ok)
-        self.status.setToolTip(("このモデルに無いシェイプ: " + "、".join(res.unmatched)) if res.unmatched else "")
+        tips = []
+        if res.unmatched:
+            tips.append("このモデルに無いシェイプ: " + "、".join(res.unmatched))
+        if res.over_limit:
+            tips.append("土台と合わせて可動域を超えているシェイプ: " + "、".join(f"{n}（{v:.2f}）" for n, v in sorted(res.over_limit.items())))
+        self.status.setToolTip("\n".join(tips))
         self._sync_edit_state()
         self.refresh()
 

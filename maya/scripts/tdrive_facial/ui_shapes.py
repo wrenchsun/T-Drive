@@ -15,6 +15,7 @@ from PySide6 import QtCore, QtWidgets
 from tdrive import lifecycle
 
 from . import scene, shapes
+from .core import space
 from .session import FacialSessionError
 from .ui import DIM_STYLE, WARN_STYLE, ask_yes_no, warn
 
@@ -137,7 +138,9 @@ class ShapesTab(QtWidgets.QWidget):
         # --- 左右に分ける・ミラー
         g = QtWidgets.QGroupBox("左右に分ける・ミラー")
         gv = QtWidgets.QVBoxLayout(g)
-        gv.addWidget(_hint("左右一体のシェイプを _L / _R に分けます（顔の左右はメッシュの X。+X が L。足すと元の形）。ミラーは _L から _R（または逆）を作る / 更新します。対応が取れない頂点があると選択して止まります"))
+        self.split_hint = _hint("")
+        gv.addWidget(self.split_hint)
+        self._sync_split_hint(None)
         form = QtWidgets.QFormLayout()
         self.name_l = QtWidgets.QLineEdit()
         self.name_r = QtWidgets.QLineEdit()
@@ -260,9 +263,18 @@ class ShapesTab(QtWidgets.QWidget):
     def selected_names(self) -> list[str]:
         return [i.data(QtCore.Qt.UserRole) for i in self.list.selectedItems()]
 
+    def _sync_split_hint(self, doc) -> None:
+        """左右に分ける・ミラーの案内。顔の左右の軸は文書の「ボーンの反転軸」（セットアップタブ。既定 X）で、+の側が L。"""
+        ax = space.mirror_axis_text(doc.mirror.bone_axis if doc is not None else "X")
+        self.split_hint.setText(
+            f"左右一体のシェイプを _L / _R に分けます（顔の左右はメッシュの {ax} 軸。+{ax} が L。足すと元の形。軸はセットアップタブの「ボーンの反転軸」）。"
+            "ミラーは _L から _R（または逆）を作る / 更新します。対応が取れない頂点があると選択して止まります"
+        )
+
     def refresh(self) -> None:
         s = self.session
         has = s.presenters is not None
+        self._sync_split_hint(s.doc)
         self.no_doc.setVisible(not has)
         self.body.setEnabled(has)
         if not has:

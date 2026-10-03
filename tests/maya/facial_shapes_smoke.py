@@ -79,6 +79,7 @@ def run() -> None:
     from tdrive_facial import export, pose_apply, scene, shapes
     from tdrive_facial import session as S
     from tdrive_facial.core import fcpose_io, naming
+    from tdrive_facial.core import profile as profile_mod
     from tdrive_facial.core.model import BoneOffset, GridPoint, SourcePose
 
     tmp = Path(tempfile.mkdtemp(prefix="tdrive_shapes_"))
@@ -275,6 +276,43 @@ def run() -> None:
     check("左右: 幅を広げると中央の領域が広がる", int(np.count_nonzero(np.linalg.norm(D("mo4_R"), axis=1) > 0)) > int(np.count_nonzero(np.linalg.norm(R, axis=1) > 0)))
     check("左右: 元からあるシェイプ名への分割は断る", _raises_code(lambda: shapes.split_lr(sc, "mouth_open", "smile_L", "x_R"), "exists_original") and np.allclose(D("smile_L"), orig_delta["smile_L"]))
     check("左右: 作ったシェイプ名なら置き換えられる", "mouth_open_L" in shapes.split_lr(sc, "mouth_open", "mouth_open_L", "mouth_open_R", width=1.0).replaced)
+    # 失敗した道具は Maya の Undo に空の区切りを残さない（検証を区切りの外で済ませる）
+    last_undo = cmds.undoInfo(query=True, undoName=True)
+    check("Undo の区切り: 成功した道具は区切りを残す（前提。検出が空振りでないことの確認）", last_undo == "tdFacialSplitLR", f"{last_undo!r}")
+    failures = [
+        lambda: shapes.split_lr(sc, "no_such_shape", "x_L", "x_R"),
+        lambda: shapes.split_lr(sc, "mouth_open", "same", "same"),
+        lambda: shapes.split_lr(sc, "mouth_open", "smile_L", "x_R"),
+        lambda: shapes.mirror_shape(sc, "mouth_open"),
+        lambda: shapes.add_inbetween(sc, "no_such_shape", 0.5),
+        lambda: shapes.make_exaggeration(sc, "no_such_shape"),
+        lambda: shapes.create_combo(sc, "mouth_open", "mouth_open"),
+        lambda: shapes.clean_micro(sc, ["mouth_open"], 0.0),
+        lambda: shapes.delete_shapes(sc, ["mouth_open"]),
+    ]
+    stayed = []
+    for i, fn in enumerate(failures):
+        try:
+            fn()
+            stayed.append(f"{i}: 失敗しなかった")
+        except (shapes.ShapeError, ValueError):
+            if cmds.undoInfo(query=True, undoName=True) != last_undo:
+                stayed.append(f"{i}: 区切りが残った {cmds.undoInfo(query=True, undoName=True)!r}")
+    check("Undo の区切り: 検証で失敗した道具は Maya の Undo に区切りを残さない", not stayed, "; ".join(stayed))
+    # 顔の左右の軸は文書の鏡映の軸（既定 X）。Z にすると +Z 側が L（頂点の位置は Z で見る）
+    s.set_mirror(bone_axis="Z")
+    sc_z = shapes.make_ctx(s.doc)
+    rp_z = shapes.rest_points(sc.mesh)
+    rz = shapes.split_lr(sc_z, "mouth_open", "mz_L", "mz_R", width=0.0, rest=rp_z)
+    dz_l, dz_r = D("mz_L"), D("mz_R")
+    zl = np.nonzero(np.linalg.norm(dz_l, axis=1) > 1e-9)[0]
+    zr = np.nonzero(np.linalg.norm(dz_r, axis=1) > 1e-9)[0]
+    check("左右の軸: 文書の鏡映の軸（Z）で分ける（+Z の頂点だけが L・−Z だけが R）・メモにも軸が出る",
+          sc_z.axis == 2 and rz.stats["axis"] == "Z" and len(zl) > 0 and bool(np.all(rp_z[zl, 2] >= 0)) and bool(np.all(rp_z[zr, 2] <= 0)) and any("Z（+Z = L）" in n for n in rz.notes),
+          f"{sc_z.axis} {rz.stats.get('axis')} {rz.notes}")
+    shapes.remove_made(sc_z.node, scene.delete_targets(sc_z.node, ["mz_L", "mz_R"], sculpt_prefix="mz_"))
+    s.set_mirror(bone_axis="X")
+    check("左右の軸: 戻すと X", shapes.make_ctx(s.doc).axis == 0)
     check("左右: 名前の規則（_LR を外す）", shapes.base_name("smile_LR") == "smile" and shapes.base_name("brow_up") == "brow_up")
     originals_intact("左右")
 
@@ -477,6 +515,19 @@ def run() -> None:
     s.apply_profile("arkit52")
     miss = s.shape_missing_standard()
     check("整理: プロファイルの標準シェイプの不足が出る", "jawOpen" in miss and "mouth_open" not in miss)
+    # 標準シェイプの照合規則が 3 か所（Setup / 検証 / シェイプタブ）で同じ: 完全名 `<ノード>.<ターゲット>`・ノード名なしの項目はどのノードのターゲットにも一致
+    prof = s.profile
+    saved_std = list(prof.standard_curves)
+    prof.standard_curves = ["mouth_open", "bs.smile_L", "jawOpen", "bs.nope", "other.mouth_open"]  # shizuku 風（ノード名 `bs.`）と bare の混在
+    want = ["jawOpen", "bs.nope", "other.mouth_open"]
+    s.refresh_scene()
+    setup_side = profile_mod.missing_standard_curves(prof, s.scene.curves)  # Setup タブ・検証が使う呼び出し
+    shape_side = s.shape_missing_standard()  # シェイプタブ
+    issues = s.validate()
+    valid_side = [i.name for i in issues if i.code == "profile_standard_missing"]
+    check("標準シェイプの照合: Setup・シェイプタブ・検証で同じ結果（bs. つきは完全一致・bare はどのノードにも一致）",
+          setup_side == shape_side == want and sorted(valid_side) == sorted(want), f"{setup_side} / {shape_side} / {valid_side}")
+    prof.standard_curves = saved_std
     originals_intact("整理")
 
     # ============================================================ 出力: fcs_ は Unity の FBX に入らない

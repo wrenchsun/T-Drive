@@ -6,7 +6,9 @@
 確かめること（tdrive_facial.anim_import とポーズタブ・グリッドタブのダイアログ）:
   - Unity の .anim（このスモークが書く合成のファイル）→ ポーズ（シェイプ・ボーン・未対応の報告・置き換え / 足す・作業セットだけ）
   - 今のフレーム（アニメの付いたシーン）→ ポーズ。読んだあとシーン（姿勢・時刻・接続）は変わらない
-  - 土台の表情: シーンに当たる・ポーズに入らない・取り込まれない・点を切り替えても残る・編集を終えると外れる
+  - 土台の表情（加算。2026-10-03）: シーンに「土台 + ポーズ」が当たる・可動域を超えても丸めず報告する・ポーズ / 文書には入らない・
+    取り込みは土台を引く（取り込む → 保存 → 当て直すが元に戻る）・点を切り替えても残る・編集を終えると外れる・ベイクに入らない
+    ・ポーズタブに「+0.60（土台）」と警告が出る
   - 他のデータからコピー: 旗の組み合わせごと・元に戻す
   - 任意（assets/shizuku/facial_anims があるときだけ。ファイルはコピーも保存もしない）: 実データの .anim が全部読める・shizuku.mb（開くだけ）へ読み込む
 ファイルはすべて一時フォルダ（プロジェクトのルートもそこへ向ける）。
@@ -323,19 +325,94 @@ def run() -> None:
     s.reload_pose()
     s.select_point(1, 0)  # キー: smile_R 1.0 / brow_up 0.5（土台と同じシェイプをポーズが持つ）
     pump()
-    check("土台: 点を切り替えても残る・同じシェイプはポーズの値が優先", abs(cmds.getAttr(f"{bs}.smile_R") - 1.0) < 1e-4 and abs(cmds.getAttr(f"{bs}.brow_up") - 0.5) < 1e-4 and anim_import.base_expression_name(s) == "base_happy")
+    # ※ 2026-10-03 に挙動が変わった（以前: 同じシェイプはポーズの値が優先 → 今: 土台 + ポーズの合計をそのまま当てる）
+    check("土台: 点を切り替えても残る・同じシェイプは土台 + ポーズの合計が当たる（smile_R 0.7+1.0・brow_up 0.9+0.5。丸めない）",
+          abs(cmds.getAttr(f"{bs}.smile_R") - 1.7) < 1e-4 and abs(cmds.getAttr(f"{bs}.brow_up") - 1.4) < 1e-4 and anim_import.base_expression_name(s) == "base_happy",
+          f"{cmds.getAttr(bs + '.smile_R')} {cmds.getAttr(bs + '.brow_up')}")
+    st = s.base_state()
+    check("土台: 可動域（0〜1）を超えたシェイプが報告される（smile_R 1.7・brow_up 1.4）・共通のシェイプは shared に土台の値",
+          set(st.over_limit) == {"bs.smile_R", "bs.brow_up"} and abs(st.over_limit["bs.smile_R"] - 1.7) < 1e-6 and set(st.shared) == {"bs.smile_R", "bs.brow_up"}
+          and abs(st.shared["bs.smile_R"] - 0.7) < 1e-6, f"{st}")
+    pose.flush()
+    rows = pose._curve_rows
+    check("ポーズタブ: 行は今までどおりポーズの値を出し、「+0.70（土台）」の小さなラベルが付く",
+          abs(rows["bs.smile_R"].spin.value() - 1.0) < 1e-6 and rows["bs.smile_R"].base_label.text() == "+0.70（土台）" and not rows["bs.smile_R"].base_label.isHidden()
+          and "bs.mouth_open" in rows and rows["bs.mouth_open"].base_label.isHidden(), f"{rows['bs.smile_R'].base_label.text()}")
+    check("ポーズタブ: 可動域を超えた行は警告の色・ツールチップに「土台と合わせて可動域を超えています（1.70）」",
+          "ffb74d" in rows["bs.smile_R"].label.styleSheet() and "土台と合わせて可動域を超えています（1.70）" in rows["bs.smile_R"].base_label.toolTip()
+          and "土台と合わせて可動域を超えています（1.70）" in rows["bs.smile_R"].label.toolTip() and "ffb74d" not in rows["bs.mouth_open"].label.styleSheet())
+    check("ポーズタブ: 可動域を超えたシェイプの一覧が土台の行の下に出る", not pose.base_warn.isHidden() and "bs.smile_R" in pose.base_warn.text(), pose.base_warn.text())
+    check("ポーズタブ: 土台の説明文", pose.base_note.text() == "表情を下敷きとして当てます。ポーズの値に足して表示されます（データには入りません）", pose.base_note.text())
     s.select_point(0, 2)  # キー: mouth_open 0.3 / eye_L（smile_R・brow_up は持たない）
     pump()
     check("土台: ポーズが持たないシェイプは土台の値に戻る", abs(cmds.getAttr(f"{bs}.smile_R") - 0.7) < 1e-4 and abs(cmds.getAttr(f"{bs}.brow_up") - 0.9) < 1e-4 and abs(cmds.getAttr(f"{bs}.mouth_open") - 0.3) < 1e-4)
-    s.set_curve("bs.smile_R", 0.2)  # スライダー相当: ポーズの値が勝つ
-    check("土台: スライダーで同じシェイプを動かすとポーズの値が出る", abs(cmds.getAttr(f"{bs}.smile_R") - 0.2) < 1e-4)
+    s.set_curve("bs.smile_R", 0.2)  # スライダー相当: 土台に足される
+    check("土台: スライダーで同じシェイプを動かすと土台に足した値が出る（0.7+0.2。可動域内なので警告なし）",
+          abs(cmds.getAttr(f"{bs}.smile_R") - 0.9) < 1e-4 and "bs.smile_R" not in s.base_state().over_limit)
     s.set_curve("bs.smile_R", 0.0)
-    check("土台: 0 に戻すと土台の値が出る", abs(cmds.getAttr(f"{bs}.smile_R") - 0.7) < 1e-4)
+    check("土台: 0 に戻すと土台の値だけが出る", abs(cmds.getAttr(f"{bs}.smile_R") - 0.7) < 1e-4)
     s.reload_pose()
     layer_sel = s.set_active_layer(1)
     pump()
     check("土台: レイヤーを切り替えても残る", layer_sel is not None and abs(cmds.getAttr(f"{bs}.brow_up") - 0.9) < 1e-4, f"{cmds.getAttr(bs + '.brow_up')}")
     s.set_active_layer(0)
+
+    # ---- 取り込み → 保存 → 当て直し（土台つき）で元に戻る
+    s.select_point(1, 0)  # ポーズ: smile_R 1.0 / brow_up 0.5（土台 smile_R 0.7 / brow_up 0.9）
+    pump()
+    cmds.setAttr(f"{bs}.smile_R", 1.3)  # スライダーを動かした相当: ポーズ 0.6 + 土台 0.7
+    cmds.setAttr(f"{bs}.brow_up", 1.4 + 0.0)  # ポーズ 0.5 + 土台 0.9 のまま
+    cmds.setAttr(f"{bs}.smile_L", 0.35)  # 土台に無いシェイプ
+    res = anim_import.capture_from_scene(s, working_set_only=False)
+    check("土台つきの取り込み: シーンの値 − 土台の値がポーズの値になる（smile_R 0.6・brow_up 0.5・smile_L 0.35）",
+          res.report.ok and abs(s.pose.curves.get("bs.smile_R", 0) - 0.6) < 1e-4 and abs(s.pose.curves.get("bs.brow_up", 0) - 0.5) < 1e-4
+          and abs(s.pose.curves.get("bs.smile_L", 0) - 0.35) < 1e-4, f"{s.pose.curves}")
+    s.save_point()
+    saved = dict(s.doc.layers[0].points[(1, 0)].pose.curves)
+    check("土台つきの保存: 点には土台を含まない値が書かれる", abs(saved.get("bs.smile_R", 0) - 0.6) < 1e-4 and abs(saved.get("bs.smile_L", 0) - 0.35) < 1e-4 and "bs.mouth_open" not in saved, f"{saved}")
+    s.select_point(0, 2)
+    s.select_point(1, 0)  # 当て直し
+    check("土台つきの当て直し: 元のシーンの値に戻る（smile_R 1.3 = 可動域を超えても丸めない・smile_L 0.35）",
+          abs(cmds.getAttr(f"{bs}.smile_R") - 1.3) < 1e-4 and abs(cmds.getAttr(f"{bs}.smile_L") - 0.35) < 1e-4 and abs(cmds.getAttr(f"{bs}.brow_up") - 1.4) < 1e-4,
+          f"{cmds.getAttr(bs + '.smile_R')} {cmds.getAttr(bs + '.smile_L')}")
+    # 土台のシェイプが変わっていなければ取り込まない（土台のまま）
+    s.select_point(0, 2)
+    res = anim_import.capture_from_scene(s, working_set_only=False)
+    check("土台つきの取り込み: 土台のとおりのシェイプは取り込まず、報告に出る",
+          "bs.smile_R" not in s.pose.curves and "bs.brow_up" not in s.pose.curves and set(res.base_ignored) == {"bs.smile_R", "bs.brow_up"}, f"{s.pose.curves} {res.base_ignored}")
+    s.undo()  # 保存を戻す（文書を元へ）
+    s.select_point(1, 0)
+
+    # ---- ベイクに土台は入らない（土台を当てた状態で焼いても、無い状態と同じ FC_ の差分）
+    import numpy as np
+
+    def fc_deltas() -> dict:
+        out = {}
+        for t in scene.fc_targets(ids["face"]):
+            d = scene.read_target_delta(t.node, t.alias)
+            out[t.alias] = None if d is None else (list(d[0]), np.round(d[1], 6))
+        return out
+
+    face_name = ids["face"]
+    s.clear_base_expression()
+    s.end_edit()
+    rep_a = s.bake_point(1, 2)
+    plain = fc_deltas()
+    cmds.undo()  # ベイクを戻す（Maya の Undo 1 区切り）
+    anim_import.set_base_expression(s, {"bs.smile_R": 0.7, "bs.brow_up": 0.9, "bs.mouth_open": 0.4})
+    check("ベイク前提: 土台が当たっている（選択中の点 (1,0) の smile_R 1.0 に土台 0.7 が足される）", s.editing and abs(cmds.getAttr(f"{bs}.smile_R") - 1.7) < 1e-4)
+    rep_b = s.bake_point(1, 2)
+    based = fc_deltas()
+    same = set(plain) == set(based) and len(plain) > 0 and all(
+        (plain[k] is None and based[k] is None) or (plain[k] is not None and based[k] is not None and plain[k][0] == based[k][0] and np.allclose(plain[k][1], based[k][1], atol=1e-5))
+        for k in plain
+    )
+    check("ベイク: 土台の表情を当てて焼いても、無いときと同じ FC_* の差分（土台は焼かれない）", same and len(rep_b.created) == len(rep_a.created), f"{sorted(plain)} {sorted(based)}")
+    check("ベイク: 焼いたあと、FC_* の重みは 0 でシーンに土台は残らない（編集状態を抜けて土台も外れる）",
+          s.base_expression_name == "" and not s.editing and all(abs(cmds.getAttr(t.plug)) < 1e-9 for t in scene.fc_targets(face_name)) and abs(cmds.getAttr(f"{bs}.smile_R")) < 1e-9)
+    cmds.undo()
+    s.select_point(0, 2)
+    anim_import.set_base_expression(s, base_anim)
     pose.btn_base_clear.click()
     pump()
     check("土台: 外す → 土台のシェイプが 0 に戻り、ポーズのシェイプは残る・ラベルは「なし」",
@@ -347,7 +424,7 @@ def run() -> None:
     check("土台: 重みの辞書からも当てられる（編集状態に入る）", res.ok and s.editing and abs(cmds.getAttr(f"{bs}.smile_R") - 0.6) < 1e-4, res.message)
     s.end_edit()
     pump()
-    check("土台: 編集を終えるとシーンから外れ、記録も消える", abs(cmds.getAttr(f"{bs}.smile_R")) < 1e-9 and anim_import.base_expression_name(s) == "" and pose.base_label.text() == "なし" and not any(k == id(s) for k in anim_import._BASES))
+    check("土台: 編集を終えるとシーンから外れ、記録も消える", abs(cmds.getAttr(f"{bs}.smile_R")) < 1e-9 and anim_import.base_expression_name(s) == "" and pose.base_label.text() == "なし" and not s.base_expression_curves and not s.base_state().active)
     # パネルを閉じると外れる
     anim_import.set_base_expression(s, {"bs.brow_up": 0.4})
     check("土台: 設定", s.editing and anim_import.base_expression_name(s) == "土台")
@@ -357,7 +434,7 @@ def run() -> None:
     res = anim_import.set_base_expression(s, {"bs.no_such": 1.0})
     check("土台: 当てられるシェイプが無ければ失敗（今の土台は変えない）", not res.ok and abs(cmds.getAttr(f"{bs}.smile_R") - 0.5) < 1e-4 and len(s.state_listeners) == n_listeners, res.message)
     pose.detach()
-    check("土台: パネルを閉じる（detach）と外れ、通知の購読も残らない", anim_import.base_expression_name(s) == "" and abs(cmds.getAttr(f"{bs}.smile_R")) < 1e-9 and not anim_import._BASES)
+    check("土台: パネルを閉じる（detach）と外れる", anim_import.base_expression_name(s) == "" and abs(cmds.getAttr(f"{bs}.smile_R")) < 1e-9 and not s.base_expression_curves)
     s.end_edit()
     pose = ui_pose.PoseTab(s)  # 以降のために作り直す
 

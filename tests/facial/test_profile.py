@@ -373,6 +373,17 @@ def test_missing_standard_curves_is_case_sensitive_and_ordered():
     assert P.missing_standard_curves(prof, []) == ["bs.a", "bs.B", "bs.c"]
 
 
+def test_missing_standard_curves_node_prefix_rule():
+    """ノード名つき（`bs.jawOpen`）は完全一致、ノード名なし（`jawOpen`）はどのノードのターゲットにも一致する（Setup / 検証 / シェイプタブ共通）。"""
+    prof = P.NamingProfile(name="p", standard_curves=["jawOpen", "bs.mouthSmile", "other.eyeBlink", "missingOne"])
+    have = ["bs.jawOpen", "bs.mouthSmile", "bs.eyeBlink"]
+    assert P.missing_standard_curves(prof, have) == ["other.eyeBlink", "missingOne"]
+    assert P.missing_standard_curves(prof, ["blendShape1.jawOpen"]) == ["bs.mouthSmile", "other.eyeBlink", "missingOne"]
+    assert P.curve_matches("bs.jawOpen", ["blendShape1.jawOpen"]) is False
+    assert P.curve_matches("jawopen", ["bs.jawOpen"]) is False
+    assert P.curve_matches("jawOpen", ["jawOpen"]) is True  # ターゲット名だけが渡されても、ノード名なしの項目には一致する
+
+
 # ---------------------------------------------------------------------------
 # ミラーの名前（UE 版と同じ規則）
 # ---------------------------------------------------------------------------

@@ -438,3 +438,11 @@ def test_view_angles_in_space_handles_no_rotation_and_center_offset():
     assert (round(y0, 9), round(p0, 9)) == (0, 0)
     _, p1 = sp.compute_view_angles_in_space(sp.MAYA, [0, 150, 0], None, "+Z", [0, 150, 100], (0, 10, 0))
     assert p1 == pytest.approx(-math.degrees(math.atan2(10, 100)))
+
+
+def test_mirror_axis_index():
+    """シェイプ道具（左右に分ける・ミラー）が使う顔の左右の軸: 文書の鏡映の軸。空・不正は X。"""
+    assert sp.mirror_axis_index("X") == 0 and sp.mirror_axis_index("Y") == 1 and sp.mirror_axis_index("Z") == 2
+    assert sp.mirror_axis_index("z") == 2 and sp.mirror_axis_index(" y ") == 1
+    assert sp.mirror_axis_index("") == 0 and sp.mirror_axis_index("W") == 0 and sp.mirror_axis_index(None) == 0
+    assert sp.mirror_axis_text("Z") == "Z" and sp.mirror_axis_text("bogus") == "X"

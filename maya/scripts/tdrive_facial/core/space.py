@@ -336,3 +336,16 @@ def compute_view_angles_in_space(
     fwd = cv.direction(fwd_vec)
     forward_yaw = math.degrees(math.atan2(fwd[1], fwd[0]))
     return evaluate.compute_view_angles(cv.position(center), forward_yaw, cv.position(viewer_pos))
+
+
+def mirror_axis_index(axis: str, default: int = 0) -> int:
+    """鏡映の軸名（`doc.mirror.bone_axis`。"X" / "Y" / "Z"、大文字小文字は問わない）→ 軸の番号（0 / 1 / 2）。空・不正なら default（X）。
+
+    左右に分ける・ミラーのシェイプ道具が、顔の左右の軸として使う（Maya の系の文書では、メッシュのオブジェクト空間の同じ軸。+軸の側が L）。"""
+    return {"X": 0, "Y": 1, "Z": 2}.get(str(axis or "").strip().upper(), default)
+
+
+def mirror_axis_text(axis: str) -> str:
+    """表示用の軸名（"X" / "Y" / "Z"）。`mirror_axis_index` と同じ規則（不正なら X）。"""
+    return "XYZ"[mirror_axis_index(axis)]
+

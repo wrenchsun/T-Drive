@@ -9,6 +9,9 @@
   **Maya のコールバックは使わない**（タブが見えているときだけ動く。`detach()` で止める）
 - 点をクリック → `session.select_point`（その角度へカメラを動かし、ポーズをシーンへ当てる）。未保存の編集があれば確認する
 - ボタンは押した操作だけをする。ベイクのボタンは**ベイクだけ**（Maya の Undo 1 回で戻る。docs/15 §4.3）
+- 任意のサムネイル（F2-6）: 「サムネイルを表示」（既定オフ）で、ポーズのある点のセルにその角度から見た顔の小さな画像を敷く（ラベルの後ろ）。
+  画像は「サムネイルを作り直す」で作る（`thumbnails.capture`。一時カメラ + playblast。ユーザーのカメラ・選択・編集中の値は動かさない）。
+  置き場所は一時フォルダ。ポーズが変わった点の古い画像は出さない（鍵が違う）。ビューポートが無い環境では作れない旨を出すだけ
 """
 
 from __future__ import annotations
@@ -23,6 +26,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from tdrive import lifecycle, project
 
 from . import anim_import
+from . import thumbnails
 from .core.presenters import (
     ACTION_BAKE_POINT,
     ACTION_CAMERA_TO_POINT,
@@ -46,6 +50,7 @@ from .core.presenters import (
     GridView,
 )
 from .session import FacialSessionError
+from .ui import YAW_MINUS_HELP, YAW_PLUS_HELP  # noqa: F401  再公開（ui_setup が ui_grid から読む）
 from .ui_preview import PreviewGroup
 
 POLL_MS = 100  # カメラの角度を読む間隔（約 10 回 / 秒）
@@ -64,9 +69,7 @@ MARKER_COLOR = QtGui.QColor("#ff3b30")  # 今のカメラ（赤）
 OK_STYLE = "color: #9aa6b8;"
 ERR_STYLE = "color: #ff8a80;"
 
-# Yaw の向きの言い方（セットアップ・ポーズ・プレビューのヒントもこれに合わせる。Unity の格子ウィンドウは「左 = −Yaw（カメラが右）」で同じ意味）
-YAW_PLUS_HELP = "+Yaw = キャラクターの左側から見る（カメラがキャラクターの左）"
-YAW_MINUS_HELP = "−Yaw = キャラクターの右側から見る（カメラがキャラクターの右）"
+# Yaw の向きの言い方は ui.py（プレビューのヒントも同じ文言を使うため。ここから再公開）
 
 AXIS_HELP = (
     "横 = Yaw（左の端 = −Yaw、中央 = 正面、右の端 = +Yaw）。" + YAW_PLUS_HELP + "、" + YAW_MINUS_HELP + "\n"
@@ -250,6 +253,19 @@ class GridCanvas(QtWidgets.QWidget):
                 p.setPen(QtCore.Qt.NoPen)
                 p.setBrush(fill)
                 p.drawRoundedRect(r, 4, 4)
+                pix = self._tab.thumb_for(row, col)
+                if pix is not None and not pix.isNull():  # 顔の画像をセルに敷く（ラベル・枠はその上）。状態の色は縁に残す
+                    inner = r.adjusted(2, 2, -2, -2)
+                    path = QtGui.QPainterPath()
+                    path.addRoundedRect(inner, 3, 3)
+                    p.save()
+                    p.setClipPath(path)
+                    scaled = pix.scaled(inner.size().toSize(), QtCore.Qt.KeepAspectRatioByExpanding, QtCore.Qt.SmoothTransformation)
+                    p.drawPixmap(
+                        QtCore.QPointF(inner.center().x() - scaled.width() / 2.0, inner.center().y() - scaled.height() / 2.0), scaled
+                    )
+                    p.fillRect(inner, QtGui.QColor(0, 0, 0, 60))  # ラベルが読めるよう少し暗くする
+                    p.restore()
                 if pv.frame in (FRAME_UNBAKED, FRAME_CHANGED):
                     pen = QtGui.QPen(FRAME_UNBAKED_COLOR if pv.frame == FRAME_UNBAKED else FRAME_CHANGED_COLOR, 2)
                     if pv.frame == FRAME_UNBAKED:
@@ -258,8 +274,16 @@ class GridCanvas(QtWidgets.QWidget):
                     p.setBrush(QtCore.Qt.NoBrush)
                     p.drawRoundedRect(r.adjusted(4, 4, -4, -4), 2, 2)
                 if r.width() >= 40 and r.height() >= 26:
-                    p.setPen(QtGui.QColor(255, 255, 255, 190))
-                    p.drawText(r, QtCore.Qt.AlignCenter, f"R{row} C{col}")
+                    label = f"R{row} C{col}"
+                    if pix is not None and not pix.isNull():  # 画像の上でも読めるよう影を付ける
+                        p.setPen(QtGui.QColor(0, 0, 0, 200))
+                        lab = r.adjusted(0, 0, 0, -7)  # 下の枠（未ベイクの破線など）に重ならない高さ
+                        p.drawText(lab.translated(1, 1), QtCore.Qt.AlignBottom | QtCore.Qt.AlignHCenter, label)
+                        p.setPen(QtGui.QColor(255, 255, 255, 235))
+                        p.drawText(lab, QtCore.Qt.AlignBottom | QtCore.Qt.AlignHCenter, label)
+                    else:
+                        p.setPen(QtGui.QColor(255, 255, 255, 190))
+                        p.drawText(r, QtCore.Qt.AlignCenter, label)
                 if pv.selected:
                     p.setPen(QtGui.QPen(SELECT_COLOR, 3))
                     p.setBrush(QtCore.Qt.NoBrush)
@@ -448,6 +472,10 @@ class GridTab(QtWidgets.QWidget):
         self._unsub: list[Callable[[], None]] = []
         self._tracking = False
         self._detached = False
+        self._thumb_map: dict[tuple[int, int], QtGui.QPixmap] = {}  # (row, col) → サムネイル（アクティブレイヤー。表示中だけ読む）
+        self._pix_cache: dict[str, QtGui.QPixmap] = {}  # ファイルのパス（鍵つきの名前なので中身は変わらない）→ QPixmap
+        self.thumb_render = None  # サムネイルの描き方の差し替え（None = playblast。テスト用）
+        self.thumb_report: Optional[thumbnails.ThumbReport] = None
 
         # 縦に長いのでスクロールできるようにする（プレビューの箱が下に付く）
         outer = QtWidgets.QVBoxLayout(self)
@@ -469,6 +497,18 @@ class GridTab(QtWidgets.QWidget):
         self.move_camera.setChecked(True)
         self.move_camera.setToolTip("点をクリックしたとき、その角度へカメラを動かします（顔の基準ボーンを見る位置）。切ると、ポーズだけをシーンへ当てます")
         row.addWidget(self.move_camera)
+        self.show_thumbs = QtWidgets.QCheckBox("サムネイルを表示")
+        self.show_thumbs.setToolTip(
+            "ポーズのある点のセルに、その角度から見た顔の小さな画像を敷きます（任意）。画像は「サムネイルを作り直す」で作ります。ポーズを変えた点の古い画像は出ません"
+        )
+        self.show_thumbs.toggled.connect(lambda *_: self.on_thumbs_toggled())
+        row.addWidget(self.show_thumbs)
+        self.btn_thumbs = QtWidgets.QPushButton("サムネイルを作り直す")
+        self.btn_thumbs.setToolTip(
+            "今のレイヤーの、ポーズのある点それぞれの顔の画像を作り直します。一時のカメラで撮るので、今のカメラ・選択・編集中の値は動きません（数秒かかります）"
+        )
+        self.btn_thumbs.clicked.connect(lambda *_: self.on_rebuild_thumbs())
+        row.addWidget(self.btn_thumbs)
         row.addStretch(1)
         self.camera_label = QtWidgets.QLabel()
         self.camera_label.setToolTip("今のビューのカメラが、顔から見て Yaw / Pitch どの角度にいるか。カメラを回すと赤い点が追従します。" + YAW_PLUS_HELP)
@@ -635,6 +675,7 @@ class GridTab(QtWidgets.QWidget):
             return
         self._pending = False
         self._sync_controls()
+        self._reload_thumbs()
         self.canvas.update()
 
     def flush(self) -> None:
@@ -665,6 +706,7 @@ class GridTab(QtWidgets.QWidget):
         if not self.has_doc():
             self._angles = None
         self._sync_controls()
+        self._reload_thumbs()
         self._poll_camera(force=True)
         self.canvas.updateGeometry()
         self.canvas.update()
@@ -673,7 +715,7 @@ class GridTab(QtWidgets.QWidget):
     def _sync_controls(self) -> None:
         doc = self.has_doc()
         self.canvas.setEnabled(doc)
-        for w in (self.move_camera, self.all_layers):
+        for w in (self.move_camera, self.all_layers, self.show_thumbs, self.btn_thumbs):
             w.setEnabled(doc)
         if not doc:
             self.title.setText("データが開かれていません")
@@ -703,6 +745,73 @@ class GridTab(QtWidgets.QWidget):
         self.btn_bake_layer.setEnabled(can_bake)
         self.btn_bake_stale.setEnabled(can_bake)
         self.btn_bake_point.setEnabled(can_bake and pa[ACTION_BAKE_POINT])
+
+    # ------------------------------------------------------------------ サムネイル（任意の表示）
+    def thumb_for(self, row: int, col: int) -> Optional[QtGui.QPixmap]:
+        """セル (row, col) に敷くサムネイル。表示がオフ・画像が無い・古い（ポーズが変わった）なら None。"""
+        if not self.show_thumbs.isChecked():
+            return None
+        return self._thumb_map.get((row, col))
+
+    def load_thumbnails(self) -> dict[tuple[int, int], QtGui.QPixmap]:
+        """アクティブレイヤーの、今のポーズに合うサムネイルを読む（鍵が違う古いファイルは読まない）。差し替えられる（テスト用）。"""
+        out: dict[tuple[int, int], QtGui.QPixmap] = {}
+        if not self.has_doc():
+            return out
+        s = self.session
+        li = min(max(s.ctx.active_layer, 0), len(s.doc.layers) - 1)
+        for (r, c), pt in s.doc.layers[li].points.items():
+            if pt.pose.is_empty():
+                continue
+            path = thumbnails.current_thumb(s, li, r, c)
+            if path is None:
+                continue
+            key = str(path)
+            pix = self._pix_cache.get(key)
+            if pix is None:
+                pix = QtGui.QPixmap(key)
+                if pix.isNull():
+                    continue
+                if len(self._pix_cache) > 400:
+                    self._pix_cache.clear()
+                self._pix_cache[key] = pix
+            out[(r, c)] = pix
+        return out
+
+    def _reload_thumbs(self) -> None:
+        if not self.show_thumbs.isChecked() or not self.has_doc():
+            self._thumb_map = {}
+            return
+        try:
+            self._thumb_map = self.load_thumbnails()
+        except Exception:  # noqa: BLE001  サムネイルの不具合で格子の表示を止めない
+            self._thumb_map = {}
+            lifecycle.report_error("サムネイルを読めませんでした", traceback.format_exc())
+
+    def on_thumbs_toggled(self) -> None:
+        self._reload_thumbs()
+        if self.show_thumbs.isChecked() and self.has_doc() and not self._thumb_map:
+            self.set_status("サムネイルがまだありません（または古くなっています）。「サムネイルを作り直す」で作ります")
+        self.canvas.update()
+
+    def on_rebuild_thumbs(self) -> None:
+        if not self.has_doc():
+            return
+        self.set_status("サムネイルを作っています…")
+        QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
+        try:
+            rep = thumbnails.capture(self.session, render=self.thumb_render)
+        except Exception as exc:  # noqa: BLE001  capture は例外を出さない作りだが、念のため
+            rep = thumbnails.ThumbReport(ok=False, message=f"サムネイルを作れませんでした: {exc}")
+            lifecycle.report_error("グリッドタブ: サムネイルの作成", traceback.format_exc(), once=False)
+        finally:
+            QtWidgets.QApplication.restoreOverrideCursor()
+        self.thumb_report = rep
+        if rep.made and not self.show_thumbs.isChecked():
+            self.show_thumbs.setChecked(True)  # 作ったら見えるようにする（toggled で読み込まれる）
+        self._reload_thumbs()
+        self.canvas.update()
+        self.set_status(rep.message, error=not rep.ok)
 
     # ------------------------------------------------------------------ カメラの追従
     def start_tracking(self) -> None:

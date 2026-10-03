@@ -175,6 +175,8 @@ def run() -> None:
     pv.manual_yaw.setValue(45.0)
     pump()
     check("プレビュー: 手動角度（Yaw 45°）が rig に入り、角度の表示も変わる", abs(cmds.getAttr("tdFacialPreview_mini.manualYaw") - 45.0) < 1e-6 and cmds.getAttr("tdFacialPreview_mini.useManual") and "Yaw 45.0°" in pv.angle_label.text(), pv.angle_label.text())
+    from tdrive_facial.ui import YAW_PLUS_HELP
+    check("プレビュー: 手動の角度に Yaw の向きの説明（グリッドタブと同じ文言）が付く", YAW_PLUS_HELP in pv.manual_hint.text() and YAW_PLUS_HELP in pv.manual_yaw.toolTip(), pv.manual_hint.text())
     pv.manual_check.setChecked(False)
     # スライダーのドラッグ中は全体を描き直さない
     refreshed: list[int] = []

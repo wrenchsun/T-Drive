@@ -54,7 +54,7 @@
 <tr><td>感情の重み</td><td>感情レイヤーごとの重み（0〜1）と<strong>ミュート</strong>（オンで 0 として扱う）</td></tr>
 <tr><td>視点</td><td>補正の角度を決める視点（空ならメインカメラ）。<strong>手動の角度を使う</strong>をオンにすると、Yaw / Pitch を直接指定できます</td></tr>
 <tr><td>マテリアル出力（任意）</td><td>マテリアルへ角度・感情の重みを渡します。使わなければそのままで構いません</td></tr>
-<tr><td>検証</td><td>エラー / 警告 / 情報の件数と内容。シェイプの過不足・基準ボーン・取り込み設定などを確認します。「もう一度検証する」で取り直し</td></tr>
+<tr><td>検証</td><td>エラー / 警告 / 情報の件数と内容。シェイプの過不足・基準ボーン・取り込み設定などを確認します。「もう一度検証する」で取り直し。「可動域の指定のうち ○ 件は FC_ 以外のシェイプ向けのため Unity では使われません」という警告は、件数が多くても<strong>1 件にまとまって</strong>出ます（Unity は <code>FC_</code> のシェイプだけを動かすため、故障ではありません）</td></tr>
 <tr><td>ボタン</td><td><strong>FC_* を 0 に戻す</strong> / <strong>キャッシュを作り直す</strong>（メッシュやボーンを変えたとき）/ <strong>Maya へ戻す JSON を書き出す…</strong></td></tr>
 </table>
 
@@ -62,10 +62,56 @@
 <p>Runner の「調整」で<strong>調整用アセットを作る…</strong>を押して保存場所を決めると、値を変えて保存できます。取り込んだデータは変わらず、<strong>.fcpose を取り込み直しても調整は残ります</strong>。「上書き」にチェックを入れた行だけが使われます。Ctrl+Z で戻せます。</p>
 
 <h3>グリッドのウィンドウ</h3>
-<p>メニュー <strong>T-Drive › Facial › グリッド</strong> で開きます。Runner（またはデータ）を選ぶと、Maya のグリッドタブと同じ向き（上がふかん・左が −Yaw）で格子を表示します。緑 = キー / 水色 = 自動生成 / 灰 = 無し / 赤い枠 = メッシュに <code>FC_</code> のシェイプが無い / 赤い点 = 今の角度。<strong>点をクリック</strong>すると、Scene ビューのカメラがその角度へ動き、プレビューが始まります。「固定」で表示対象を固定、「プレビュー」でオン / オフ、レイヤーも切り替えられます。</p>
+<p>メニュー <strong>Tools › T-Drive › Facial › グリッド</strong> で開きます。Runner（またはデータ）を選ぶと、Maya のグリッドタブと同じ向き（上がふかん・左が −Yaw）で格子を表示します。緑 = キー / 水色 = 自動生成 / 灰 = 無し / 赤い枠 = メッシュに <code>FC_</code> のシェイプが無い / 赤い点 = 今の角度。<strong>点をクリック</strong>すると、Scene ビューのカメラがその角度へ動き、プレビューが始まります。「固定」で表示対象を固定、「プレビュー」でオン / オフ、レイヤーも切り替えられます。</p>
 
 <h3>Maya へ戻す JSON</h3>
-<p>Unity で調整した値を Maya に持ち帰りたいときは、<strong>Maya へ戻す JSON を書き出す…</strong>を使います。強さ・追従などの値が JSON に出ます（<strong>端のフェードは入りません</strong>。Maya のセットアップタブで変えてください）。</p>
+<p>Unity で調整した値を Maya に持ち帰りたいときは、<strong>Maya へ戻す JSON を書き出す…</strong>を使います。強さ・追従などの値が JSON に出ます。<strong>端のフェード</strong>も、Unity で「上書き」にしているときは JSON に入ります（上書きしていないときは入りません。そのときは Maya のセットアップタブの値が使われます）。</p>
+
+<h2 id="timeline">Timeline で補正を動かす</h2>
+<div class="warn"><strong>確認中:</strong> Timeline のトラックは実装済みで、時刻を指定して値を調べるテストは通っています。ただし、<strong>実際のカットシーンで人が操作して確かめることは、まだ終わっていません</strong>（Timeline ウィンドウの操作感、再生中のシーク・スキップ・一時停止での挙動など）。うまくいかないときは開発者に伝えてください。</div>
+<p>カットシーンの演出で、補正の強さや感情の重み、角度を時間に沿って変えられます。Timeline に <strong>「Facial Correction」</strong>のトラックを足し、その上にクリップ <strong>「補正」</strong>を置きます。トラックは、キャラクターの Animator に結びます（キャラクターの子に Runner があれば、それが使われます）。</p>
+<h3>クリップ「補正」の項目</h3>
+<table>
+<tr><th>項目</th><th>意味</th></tr>
+<tr><td>強さを使う / 強さ（0〜1）</td><td>オンにすると、このクリップの間、補正全体の強さを弱める・切る。0 で補正なし</td></tr>
+<tr><td>感情の重み</td><td>感情レイヤーの名前と重みの組。書いていないレイヤーは Runner の値のまま。<strong>名前は、補正データのレイヤー名と同じ綴り</strong>にします（大文字・小文字も区別します）</td></tr>
+<tr><td>角度を固定する / Yaw / Pitch</td><td>オンにすると、カメラの位置に関係なく、ここで決めた角度で補正します（決め構図用）。Yaw はキャラクターの正面が 0 で、カメラがキャラクターから見て左にあると正。Pitch はカメラが上（ふかん）で正</td></tr>
+<tr><td>視点</td><td>補正の基準にするカメラなど。空なら、Runner の設定（なければメインカメラ）に従います</td></tr>
+<tr><td>カット補正（ポーズ / ポーズの重み）</td><td>このクリップの間だけ、1 点のポーズ（<span class="path">.fcpose</span> から取り込んだもの）を足します。ショットごとの手直し用です。元のデータは変わらず、クリップが終わると元に戻ります</td></tr>
+<tr><td>コマ打ち <span class="soon">準備中</span></td><td>欄はありますが、まだ効きません</td></tr>
+</table>
+<ul>
+<li><strong>クリップが重なっている所は、なめらかにブレンドされます</strong></li>
+<li><strong>クリップの外では、通常の補正</strong>（Runner の設定どおり）に戻ります</li>
+<li>再生していなくても、Timeline ウィンドウでスクラブ（時間を動かす）すると、補正の変化が見えます。プレビューをやめると、シェイプとボーンは元の値に戻ります</li>
+<li id="fctrack"><strong>Maya で打ったキーを Timeline に取り込む（<span class="path">.fctrack</span>）</strong>: Maya の出力タブで書き出した <span class="path">&lt;ショット&gt;__&lt;モデル&gt;.fctrack</span> を、D-Drive のカットシーンの置き場所（<span class="path">Assets/SourceAssets/Cutscene/&lt;分類&gt;/</span>）に置くと、そのカットシーンの Timeline に「&lt;モデル&gt;_Facial(auto)」というトラックが自動で入り、強さ・感情の重み・角度の固定が Maya のキーどおりに動きます。先に同じショットの FBX を取り込んでおいてください。置き直すと「(auto)」のトラックだけが更新され、手で足したトラックやクリップは残ります。クリップに手で入れた値は、取り込んだキーより優先されます。反映されないときは、.fctrack を選んで <strong>Tools › T-Drive › Facial › .fctrack を Timeline に反映し直す</strong> を実行します。<strong>実際のカットシーンでの確認はこれから（確認中）</strong>です</li><li><strong>D-Drive のプールで使うキャラクター</strong>: モデルの Prefab に「Facial Model Instance Bridge」も付けてください（Runner のインスペクターのボタンで追加できます）。出し直したキャラクターにも補正が正しく掛かります</li>
+</ul>
+
+<h3 id="ddrive">D-Drive のカットシーンで使うとき</h3>
+<p>D-Drive のカットシーンに Facial Correction のトラックを足すときは、<strong>トラックを正しいキャラクターに結ぶ</strong>のが大事です。方法は 2 つあります。</p>
+<ol>
+<li><strong>基本: Binding の Target を「SameAsTrack」にする</strong> — カットシーンの Bindings に Facial のトラックを足し、Target を <strong>SameAsTrack</strong> にして、キャラクターのアニメーショントラックと同じ相手を指定します。これで、2 つのトラックが同じキャラクターに結ばれます</li>
+<li><strong>トラック名で自動的に結ぶ</strong> — トラックの名前を <strong>「&lt;役名&gt;_Facial」</strong>にします（例: 役名が <code>Hero</code> なら <code>Hero_Facial</code>）。Binding を書かなくても、<strong>同じ役名のキャラクターのアニメーショントラック</strong>と同じ相手に結ばれます</li>
+</ol>
+<p>D-Drive の検証（カットシーンの検証）で、Facial のトラックに問題があると、次のコードが出ます。</p>
+<table>
+<tr><th>コード</th><th>意味</th><th>直し方</th></tr>
+<tr><td><code>TD-FACIAL-001</code></td><td>トラックの結び先が分かりません（このトラックは何もしません）</td><td>Bindings にトラック名を足す。または、トラック名を「&lt;役名&gt;_Facial」にして、同じ役名のアニメーショントラックと、その Binding を置く</td></tr>
+<tr><td><code>TD-FACIAL-002</code></td><td>クリップの感情レイヤー名が、モデルの補正データに無い（その重みは無視されます）</td><td>綴りを補正データのレイヤー名に合わせる</td></tr>
+<tr><td><code>TD-FACIAL-003</code></td><td>クリップのカット補正のポーズが見つからない（エラー）</td><td>ポーズの参照を入れ直す</td></tr>
+<tr><td><code>TD-FACIAL-004</code></td><td>結び先のキャラクター（Prefab）に Facial Correction Runner が付いていない</td><td>Prefab に Runner を付ける</td></tr>
+<tr><td><code>TD-FACIAL-005</code></td><td>結び先の Runner に、補正のデータが入っていない</td><td>Runner の「データ」に補正データを入れる</td></tr>
+</table>
+
+<h2 id="debug">デバッグ表示</h2>
+<p>実行中に、補正がどう掛かっているかを画面で確認できます。キャラクターに <strong>Add Component › T-Drive › Facial Debug Overlay</strong>（メニュー名は「T-Drive/Facial Debug Overlay」）を付け、<strong>レベル</strong>を選びます。</p>
+<table>
+<tr><th>レベル</th><th>表示</th></tr>
+<tr><td>0</td><td>切（何も出ません）</td></tr>
+<tr><td>1</td><td>画面に HUD。今の Yaw・Pitch、スナップ（カット切り替えとみなして即時反映したか）、倍率、効いているシェイプの重みの上位</td></tr>
+<tr><td>2</td><td>HUD + Scene ビューの 3D 表示。頭の前方向（青）・視点への向き（黄）・格子の中心（水色）</td></tr>
+</table>
+<p>表示する Runner・重みの件数・HUD の位置も変えられます。<strong>確認中:</strong> 見た目は、まだ人の目で確認できていません。</p>
 
 <h2>調整できる値</h2>
 <table>
@@ -89,12 +135,10 @@
 <h2 id="soon">準備中の機能</h2>
 <table>
 <tr><th>機能</th><th>状態</th></tr>
-<tr><td>シェイプタブ（この角度で彫る・左右に分ける・ミラー・別メッシュへ写す・整理・格子のサムネイル・アニメから読み込む など）</td><td><span class="soon">準備中</span></td></tr>
-<tr><td>Timeline のトラック（演出で強さ・感情・角度を動かす）と、Maya の <span class="path">.fctrack</span> の取り込み</td><td><span class="soon">準備中</span></td></tr>
-<tr><td>Unity の実行中のデバッグ表示</td><td><span class="soon">準備中</span></td></tr>
-<tr><td>シャープさ・コマ打ち・距離でレイヤーの重み・パース補正・誇張・部位別の強さ・LOD1 以降へのベイク・リップシンク</td><td><span class="soon">準備中</span></td></tr>
-<tr><td>Maya のターンテーブル、他のデータからのコピー</td><td><span class="soon">準備中</span></td></tr>
+<tr><td>シャープさ・コマ打ち・距離でレイヤーの重み・パース補正・誇張の評価・部位別の強さ・LOD1 以降へのベイク・リップシンク</td><td><span class="soon">準備中</span></td></tr>
+<tr><td>Maya のターンテーブル</td><td><span class="soon">準備中</span></td></tr>
 </table>
+<p>シェイプタブ・アニメから読み込む・他のデータからコピー・Timeline のトラック・デバッグ表示は、使えます（<a href="facial.html#now">今できること</a>）。</p>
 
 <footer><a href="Readme.html">トップへ戻る</a> / 前: <a href="facial-layers.html">レイヤーと検証</a> / <a href="facial.html">FacialController とは</a></footer>
 </body>

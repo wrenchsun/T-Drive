@@ -17,7 +17,7 @@
 <ol>
 <li>顔のブレンドシェイプが付いたモデルを Maya で開きます</li>
 <li><strong>T-Drive › エディタ</strong> を開き、1 段目のタブで <strong>FacialController</strong> を選びます</li>
-<li>2 段目のタブは左から <strong>セットアップ / グリッド / ポーズ / シェイプ / レイヤー / 検証 / 出力</strong>。<strong>シェイプ</strong>タブは<span class="soon">準備中</span>です</li>
+<li>2 段目のタブは左から <strong>セットアップ / グリッド / ポーズ / シェイプ / レイヤー / 検証 / 出力</strong>。<strong>シェイプ</strong>タブは<a href="facial-shapes.html">シェイプ</a>のページを見てください</li>
 </ol>
 
 <h2>新規・開く・保存</h2>
@@ -59,6 +59,9 @@
 <tr id="t20"><td>Toon のカメラ角度補正（T-20）</td><td>「カメラ角度補正（T-20）から取り込む…」で、Toon のキャラクタータブで作った補正（正面 / 3/4 / 横）を、Neutral レイヤーの Pitch 0・Yaw 0 / 45 / 90° のキーにします。T-20 のデータと Look は変わりません。左側（Yaw −）は、取り込んだあとに<a href="facial-grid.html">グリッドの「自動生成」</a>で埋めます</td></tr>
 <tr><td>作業セット</td><td>補正で触るシェイプとボーンにチェックを入れます（「絞り込み」「表示中を全部オン」「全部オフ」「選択中のジョイントを追加」）。チェックしたものだけが<a href="facial-pose.html">ポーズタブ</a>に並びます。選んだものをビューポートで光らせる機能は<span class="soon">準備中</span>です</td></tr>
 </table>
+
+<div class="tip"><strong>社内のテスト担当向け: サンプルモデルの補助</strong><br>
+サンプルモデル（shizuku）で試すときの補助ツールがあります。<code>mayapy tools/setup_sample_shizuku_facial.py</code> でサンプルのデータを作り、<code>mayapy tools/load_sample_shizuku_anim.py anim_idle</code> で体のアニメーション（例: 待機）を別のシーンに読み込みます。<strong>サンプルのモデル自体は、このツールには入っていません。</strong>各自で用意してください。</div>
 
 <footer><a href="Readme.html">トップへ戻る</a> / 前: <a href="facial.html">FacialController とは</a> / 次: <a href="facial-grid.html">グリッド</a></footer>
 </body>
