@@ -17,6 +17,14 @@ namespace TDrive.Facial
         static int s_globalLevel;
         static FacialDebugOverlay s_hidden;
 
+        // Domain Reload を切った設定でも、再生のたびに初期状態へ戻す（docs/19 U-8）
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        static void ResetStatics()
+        {
+            s_globalLevel = 0;
+            s_hidden = null;
+        }
+
         /// <summary>
         /// 全体のデバッグレベル（0〜2）。各コンポーネントの debugLevel との大きいほうが使われる。
         /// 0 より大きくすると、再生中でコンポーネントが 1 つも無ければ HUD 用の隠しオブジェクトを作る。

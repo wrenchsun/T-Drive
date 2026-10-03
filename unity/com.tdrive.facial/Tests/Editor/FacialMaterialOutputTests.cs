@@ -181,15 +181,14 @@ namespace TDrive.Facial.Tests
                 _a.runner.PushOverride(new FacialFrameOverride { emotionWeights = emo });
                 _a.runner.EvaluateNow(i * 3f, i * 1f, Dt);
             }
-            GC.Collect();
-            long before = GC.GetAllocatedBytesForCurrentThread();
-            for (int i = 0; i < 300; i++)
+            AllocProbe.AssertNoAlloc(() =>
             {
-                _a.runner.PushOverride(new FacialFrameOverride { emotionWeights = emo });
-                _a.runner.EvaluateNow(Mathf.Sin(i * 0.1f) * 80f, Mathf.Sin(i * 0.07f) * 40f, Dt);
-            }
-            long after = GC.GetAllocatedBytesForCurrentThread();
-            Assert.AreEqual(0L, after - before, "マテリアル出力で毎フレームの割り当てがある");
+                for (int i = 0; i < 300; i++)
+                {
+                    _a.runner.PushOverride(new FacialFrameOverride { emotionWeights = emo });
+                    _a.runner.EvaluateNow(Mathf.Sin(i * 0.1f) * 80f, Mathf.Sin(i * 0.07f) * 40f, Dt);
+                }
+            }, "マテリアル出力で毎フレームの割り当てがある");
         }
     }
 }

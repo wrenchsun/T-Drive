@@ -18,6 +18,7 @@
     <Compile Include="..\com.tdrive.facial\Tests\Editor\MiniJson.cs" Link="Tests\MiniJson.cs" />
     <Compile Include="..\com.tdrive.facial\Tests\Editor\FcposeCoreTests.cs" Link="Tests\FcposeCoreTests.cs" />
     <Compile Include="..\com.tdrive.facial\Tests\Editor\FctrackCoreTests.cs" Link="Tests\FctrackCoreTests.cs" />
+    <Compile Include="..\com.tdrive.facial\Tests\Editor\FacialCoreRobustnessTests.cs" Link="Tests\FacialCoreRobustnessTests.cs" />
   </ItemGroup>
 
   <ItemGroup>

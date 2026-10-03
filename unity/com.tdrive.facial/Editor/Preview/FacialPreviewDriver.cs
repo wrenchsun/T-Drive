@@ -1,6 +1,8 @@
 // エディタのプレビュー（再生しなくても Scene ビューのカメラで補正を確認する）。
 // 保存データを汚さないための約束:
-//  - Runner を [ExecuteAlways] にしない。ここが EvaluateNow を呼ぶ。Undo・SetDirty は使わない（シーンは dirty にならない）
+//  - Runner を [ExecuteAlways] にしない。ここが EvaluateNow を呼ぶ。Undo・SetDirty は使わない。
+//    ただし SetBlendShapeWeight 自体が Unity の中で SkinnedMeshRenderer を dirty にする（実測）ので、プレビュー中はシーンが「変更あり」に見える。
+//    保存される中身は FacialSaveGuard が 0 に戻す
 //  - 次のときは必ず ResetWeights（プレビューが書いた FC_* を 0 に戻す）: オフにしたとき / 再生に入る前 / アセンブリのリロード前
 //    / エディタの終了時 / シーン・Prefab・アセットの保存の直前（保存後は次の更新で自動的に再開）
 //  - 仮想の視点用オブジェクトは EditorUtility.CreateGameObjectWithHideFlags（HideAndDontSave）で作る = シーンに入らず保存されない
@@ -60,13 +62,38 @@ namespace TDrive.Facial.Editor
 
         static FacialPreviewDriver()
         {
-            // 保存されるものを守る側のフックは常時つなぐ
-            AssemblyReloadEvents.beforeAssemblyReload += ResetAllWeights;
+            // 保存されるものを守る側のフックは FacialSaveGuard（すべての Runner を戻す）。ここは隠しオブジェクトの後始末と状態の管理
+            AssemblyReloadEvents.beforeAssemblyReload += DestroyViewer;
             EditorApplication.quitting += ResetAllWeights;
             EditorApplication.playModeStateChanged += OnPlayModeChanged;
-            EditorSceneManager.sceneSaving += (scene, path) => OnBeforeSave();
-            UnityEditor.SceneManagement.PrefabStage.prefabSaving += root => OnBeforeSave();
             EditorApplication.hierarchyChanged += ForceEvalAll;
+            SweepLeftoverViewers(); // 前のリロードで残った隠しオブジェクトを消す
+        }
+
+        /// <summary>仮想の視点の名前（HideAndDontSave のゲームオブジェクト）。</summary>
+        public const string ViewerName = "FacialPreviewViewer";
+
+        /// <summary>名前で探して、残っている仮想の視点を消す（アセンブリのリロードで static の参照を失ったもの。docs/19 E-11）。消した数を返す。</summary>
+        public static int SweepLeftoverViewers()
+        {
+            int n = 0;
+            GameObject[] all = Resources.FindObjectsOfTypeAll<GameObject>();
+            for (int i = 0; i < all.Length; i++)
+            {
+                GameObject go = all[i];
+                if (go == null || go == _viewer || go.name != ViewerName) continue;
+                if (go.scene.IsValid() || EditorUtility.IsPersistent(go)) continue; // シーンのもの・アセットは触らない
+                if ((go.hideFlags & HideFlags.DontSave) == 0) continue;
+                Object.DestroyImmediate(go);
+                n++;
+            }
+            return n;
+        }
+
+        static void DestroyViewer()
+        {
+            if (_viewer != null) Object.DestroyImmediate(_viewer);
+            _viewer = null;
         }
 
         // ---------------------------------------------------------------- 公開
@@ -147,7 +174,7 @@ namespace TDrive.Facial.Editor
         }
 
         /// <summary>保存の直前: 書いた分を戻す。保存のあとは次の更新で自動的に再開する。</summary>
-        public static void OnBeforeSave() { ResetAllWeights(); }
+        public static void OnBeforeSave() { FacialSaveGuard.OnBeforeSave(); ResetAllWeights(); }
 
         static void ForceEvalAll()
         {
@@ -173,8 +200,7 @@ namespace TDrive.Facial.Editor
             if (!_hooked) return;
             _hooked = false;
             EditorApplication.update -= Tick;
-            if (_viewer != null) Object.DestroyImmediate(_viewer);
-            _viewer = null;
+            DestroyViewer();
         }
 
         // ---------------------------------------------------------------- 更新
@@ -267,18 +293,8 @@ namespace TDrive.Facial.Editor
         static Transform VirtualViewer()
         {
             if (_viewer == null)
-                _viewer = EditorUtility.CreateGameObjectWithHideFlags("FacialPreviewViewer", HideFlags.HideAndDontSave);
+                _viewer = EditorUtility.CreateGameObjectWithHideFlags(ViewerName, HideFlags.HideAndDontSave);
             return _viewer.transform;
-        }
-    }
-
-    /// <summary>保存の直前（シーン・Prefab・アセットのどれでも）にプレビューが書いた FC_* を戻す。</summary>
-    public sealed class FacialPreviewSaveGuard : AssetModificationProcessor
-    {
-        static string[] OnWillSaveAssets(string[] paths)
-        {
-            FacialPreviewDriver.OnBeforeSave();
-            return paths;
         }
     }
 }

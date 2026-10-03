@@ -11,6 +11,8 @@ namespace TDrive.Facial
     {
         readonly Dictionary<string, int> _exact = new Dictionary<string, int>(StringComparer.Ordinal);
         readonly Dictionary<string, int> _suffix = new Dictionary<string, int>(StringComparer.Ordinal);
+        // 別のシェイプと末尾が同じになった切り口（先に見つかった 1 つだけが使われる = あいまい）
+        readonly HashSet<string> _ambiguous = new HashSet<string>(StringComparer.Ordinal);
 
         public FacialShapeIndex(Mesh mesh)
         {
@@ -24,7 +26,9 @@ namespace TDrive.Facial
                 for (int d = name.IndexOf('.'); d >= 0 && d + 1 < name.Length; d = name.IndexOf('.', d + 1))
                 {
                     string tail = name.Substring(d + 1);
-                    if (!_suffix.ContainsKey(tail)) _suffix[tail] = i;
+                    int prev;
+                    if (!_suffix.TryGetValue(tail, out prev)) _suffix[tail] = i;
+                    else if (prev != i) _ambiguous.Add(tail);
                 }
             }
         }
@@ -37,6 +41,12 @@ namespace TDrive.Facial
             if (_exact.TryGetValue(name, out i)) return i;
             if (_suffix.TryGetValue(name, out i)) return i;
             return -1;
+        }
+
+        /// <summary>name が末尾一致でしか見つからず、その末尾が複数のシェイプに当たるとき true（完全一致があれば false）。</summary>
+        public bool IsAmbiguous(string name)
+        {
+            return !string.IsNullOrEmpty(name) && !_exact.ContainsKey(name) && _ambiguous.Contains(name);
         }
 
         public bool Contains(string name) { return Find(name) >= 0; }

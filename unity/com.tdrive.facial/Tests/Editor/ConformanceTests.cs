@@ -16,6 +16,8 @@ namespace TDrive.Facial.Tests
     {
         public const string EnvVar = "TDRIVE_CONFORMANCE_DIR";
         static readonly string[] KnownKinds = { "evaluate", "view_angles", "scalar", "smooth", "convert", "step" };
+        // Python 版だけが使う kind（C# には対応する実装が無い）。ここに無い kind は失敗にする（新しい kind の取りこぼしを防ぐ）
+        static readonly string[] PythonOnlyKinds = { "autofill", "presenter" };
 
         public sealed class Case
         {
@@ -82,23 +84,49 @@ namespace TDrive.Facial.Tests
                 _error = "tests/facial/conformance が見つからない（環境変数 " + EnvVar + " で指定できる）";
                 return;
             }
-            string[] files = System.IO.Directory.GetFiles(_dir, "*.json");
+            _error = LoadFrom(_dir, _cases, _skipped);
+        }
+
+        /// <summary>
+        /// dir の *.json を読んで cases / skipped に入れる。読めないファイル・未知の kind が 1 つでもあれば、cases と skipped を空にして説明を返す
+        /// （一部だけ読んだ状態で進めない。全テストを失敗させる）。問題が無ければ null。
+        /// </summary>
+        public static string LoadFrom(string dir, List<Case> cases, Dictionary<string, int> skipped)
+        {
+            string[] files = System.IO.Directory.GetFiles(dir, "*.json");
             Array.Sort(files, StringComparer.Ordinal);
+            var errors = new List<string>();
             foreach (string f in files)
             {
-                var root = (Obj)MiniJson.Parse(File.ReadAllText(f));
-                string kind = (string)root["kind"];
-                var cases = (List<object>)root["cases"];
-                if (Array.IndexOf(KnownKinds, kind) < 0)
+                try
                 {
-                    int n;
-                    _skipped.TryGetValue(kind, out n);
-                    _skipped[kind] = n + cases.Count;
-                    continue;
+                    var root = (Obj)MiniJson.Parse(File.ReadAllText(f));
+                    string kind = (string)root["kind"];
+                    var list = (List<object>)root["cases"];
+                    if (Array.IndexOf(KnownKinds, kind) < 0)
+                    {
+                        if (Array.IndexOf(PythonOnlyKinds, kind) < 0)
+                        {
+                            errors.Add(Path.GetFileName(f) + ": 未知の kind '" + kind + "'（C# に実装が無い kind は PythonOnlyKinds に明示するか、テストを足す）");
+                            continue;
+                        }
+                        int n;
+                        skipped.TryGetValue(kind, out n);
+                        skipped[kind] = n + list.Count;
+                        continue;
+                    }
+                    foreach (object c in list)
+                        cases.Add(new Case { File = Path.GetFileName(f), Kind = kind, Data = (Obj)c });
                 }
-                foreach (object c in cases)
-                    _cases.Add(new Case { File = Path.GetFileName(f), Kind = kind, Data = (Obj)c });
+                catch (Exception e)
+                {
+                    errors.Add(Path.GetFileName(f) + ": 読めない（" + e.GetType().Name + ": " + e.Message + "）");
+                }
             }
+            if (errors.Count == 0) return null;
+            cases.Clear();
+            skipped.Clear();
+            return "共通のテストデータを読めない:" + Environment.NewLine + string.Join(Environment.NewLine, errors);
         }
 
         public static IEnumerable<TestCaseData> Of(string kind)
@@ -390,7 +418,7 @@ namespace TDrive.Facial.Tests
         }
 
         [Test]
-        public void UnknownKindsAreIgnoredExplicitly()
+        public void PythonOnlyKindsAreAccountedForAndNothingElseIsIgnored()
         {
             int total = 0;
             var parts = new List<string>();

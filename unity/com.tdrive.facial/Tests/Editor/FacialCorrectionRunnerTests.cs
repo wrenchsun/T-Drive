@@ -1,11 +1,14 @@
 // FacialCorrectionRunner のテスト（Unity EditMode）。メッシュ・階層・データはすべてテスト内で作り、TearDown で破棄する。
 // LateUpdate は EditMode では呼ばれないので EvaluateNow を使う。アセットはディスクへ作らない。
+// ゲームオブジェクトはプレビューシーン（NewPreviewScene）に作る = ユーザーの開いているシーンを汚さない（docs/19 §6）。
 using System;
 using System.Collections.Generic;
 using System.Reflection;
 using NUnit.Framework;
 using TDrive.Facial.Core;
+using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using Object = UnityEngine.Object;
 
 namespace TDrive.Facial.Tests
@@ -29,6 +32,7 @@ namespace TDrive.Facial.Tests
         [SetUp]
         public void SetUp()
         {
+            _scene = EditorSceneManager.NewPreviewScene();
             // メッシュ: 3 頂点 + ブレンドシェイプ（Neutral の 3×3 から 1 個欠け・Joy の中央・通常シェイプ 2 つ）
             _mesh = new Mesh { name = "FacialTestMesh" };
             _mesh.vertices = new[] { Vector3.zero, Vector3.right, Vector3.up };
@@ -43,15 +47,15 @@ namespace TDrive.Facial.Tests
             AddShape("bs.jaw");
             AddShape("bs.other");
 
-            _root = new GameObject("FacialTestRoot");
-            _head = new GameObject("head");
+            _root = NewGo("FacialTestRoot");
+            _head = NewGo("head");
             _head.transform.SetParent(_root.transform, false);
             _head.transform.position = new Vector3(0f, 1.5f, 0f); // 顔は +Z を向く（回転なし）
-            _face = new GameObject("face");
+            _face = NewGo("face");
             _face.transform.SetParent(_root.transform, false);
             _smr = _face.AddComponent<SkinnedMeshRenderer>();
             _smr.sharedMesh = _mesh;
-            _viewer = new GameObject("viewer");
+            _viewer = NewGo("viewer");
 
             _data = ScriptableObject.CreateInstance<FacialCorrectionData>();
             _data.assetName = Asset;
@@ -81,6 +85,16 @@ namespace TDrive.Facial.Tests
             _runner.data = _data;
         }
 
+        Scene _scene;
+
+        // 普通のゲームオブジェクトを、ユーザーのシーンではなくプレビューシーンに作る
+        GameObject NewGo(string name)
+        {
+            var go = new GameObject(name);
+            SceneManager.MoveGameObjectToScene(go, _scene);
+            return go;
+        }
+
         [TearDown]
         public void TearDown()
         {
@@ -92,6 +106,7 @@ namespace TDrive.Facial.Tests
             if (_overrides != null) Object.DestroyImmediate(_overrides);
             foreach (Object o in _extra) if (o != null) Object.DestroyImmediate(o);
             _extra.Clear();
+            if (_scene.IsValid()) EditorSceneManager.ClosePreviewScene(_scene);
         }
 
         void AddShape(string name)
@@ -437,7 +452,7 @@ namespace TDrive.Facial.Tests
         [Test]
         public void ExplicitTargetsAndBaseBoneAreUsed()
         {
-            var otherGo = new GameObject("other");
+            var otherGo = NewGo("other");
             _extra.Add(otherGo);
             otherGo.transform.SetParent(_root.transform, false);
             var other = otherGo.AddComponent<SkinnedMeshRenderer>();
@@ -453,7 +468,7 @@ namespace TDrive.Facial.Tests
         [Test]
         public void ExtraMeshesGetTheSameWeights()
         {
-            var otherGo = new GameObject("eyelash");
+            var otherGo = NewGo("eyelash");
             _extra.Add(otherGo);
             otherGo.transform.SetParent(_root.transform, false);
             var other = otherGo.AddComponent<SkinnedMeshRenderer>();
@@ -569,7 +584,7 @@ namespace TDrive.Facial.Tests
         public void PushOverrideEmotionAndViewer()
         {
             _data.policy.interpSpeed = 0f;
-            var other = new GameObject("otherViewer");
+            var other = NewGo("otherViewer");
             _extra.Add(other);
             other.transform.position = new Vector3(-2f, 1.5f, 0f);
             ViewerAt(new Vector3(0f, 1.5f, 3f));
@@ -593,7 +608,7 @@ namespace TDrive.Facial.Tests
         [Test]
         public void ViewerOverrideBeatsEvaluateNowViewer()
         {
-            var side = new GameObject("side");
+            var side = NewGo("side");
             _extra.Add(side);
             side.transform.position = new Vector3(-2f, 1.5f, 0f);
             ViewerAt(new Vector3(0f, 1.5f, 3f));
@@ -688,16 +703,15 @@ namespace TDrive.Facial.Tests
                 _runner.PushOverride(new FacialFrameOverride { hasAlpha = true, alpha = 0.9f, emotionWeights = emo });
                 _runner.EvaluateNow(_viewer.transform, Dt);
             }
-            GC.Collect();
-            long before = GC.GetAllocatedBytesForCurrentThread();
-            for (int i = 0; i < 300; i++)
+            AllocProbe.AssertNoAlloc(() =>
             {
-                _viewer.transform.position = new Vector3(Mathf.Sin(i * 0.1f) * 3f, 1.5f + Mathf.Sin(i * 0.05f), Mathf.Cos(i * 0.1f) * 3f);
-                _runner.PushOverride(new FacialFrameOverride { hasAlpha = true, alpha = 0.9f, emotionWeights = emo });
-                _runner.EvaluateNow(_viewer.transform, Dt);
-            }
-            long after = GC.GetAllocatedBytesForCurrentThread();
-            Assert.AreEqual(0L, after - before, "2 回目以降の評価でマネージドの割り当てがある");
+                for (int i = 0; i < 300; i++)
+                {
+                    _viewer.transform.position = new Vector3(Mathf.Sin(i * 0.1f) * 3f, 1.5f + Mathf.Sin(i * 0.05f), Mathf.Cos(i * 0.1f) * 3f);
+                    _runner.PushOverride(new FacialFrameOverride { hasAlpha = true, alpha = 0.9f, emotionWeights = emo });
+                    _runner.EvaluateNow(_viewer.transform, Dt);
+                }
+            }, "2 回目以降の評価でマネージドの割り当てがある");
         }
     }
 }

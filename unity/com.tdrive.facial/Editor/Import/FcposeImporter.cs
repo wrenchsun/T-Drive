@@ -32,7 +32,7 @@ namespace TDrive.Facial.Editor
                 if (file.Document != null)
                 {
                     FacialCorrectionData data = FcposeConverter.BuildData(file.Document, stem, warn);
-                    data.sourceJson = text;
+                    FacialSourceJson.Set(data, text);
                     main = data;
                 }
                 else

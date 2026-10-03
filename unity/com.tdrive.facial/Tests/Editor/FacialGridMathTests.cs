@@ -152,7 +152,7 @@ namespace TDrive.Facial.Tests
             FacialCorrectionData d = FcposeConverter.BuildData(TwoLayerDoc, "t", null);
             try
             {
-                FcDocument src = FacialGridCells.ParseSource(d.sourceJson);
+                FcDocument src = FacialGridCells.ParseSource(FacialSourceJson.Get(d));
                 Assert.IsNotNull(src);
                 FacialCellKind[] n = FacialGridCells.Build(d, src, 0);
                 Assert.AreEqual(6, n.Length);

@@ -30,6 +30,10 @@ namespace TDrive.Facial
         static int _anglesId;
         static readonly int[] EmotionIds = new int[MaxEmotionVectors];
 
+        // Domain Reload を切った設定でも、再生のたびに引き直す（docs/19 U-8）
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        static void ResetStatics() { _init = false; }
+
         static void Init()
         {
             if (_init) return;
@@ -52,6 +56,8 @@ namespace TDrive.Facial
         readonly List<Renderer> _current = new List<Renderer>(8);
         readonly Vector4[] _emo = new Vector4[MaxEmotionVectors];
         int _usedVectors;
+        // 最初に書いたとき、そのブロックに他の値があったか（あれば外さず自分の値だけ 0 にする）
+        readonly Dictionary<Renderer, bool> _foreign = new Dictionary<Renderer, bool>();
 
         /// <summary>今、値を書いている Renderer の数。</summary>
         public int WrittenCount { get { return _written.Count; } }
@@ -110,6 +116,7 @@ namespace TDrive.Facial
             {
                 Renderer r = _current[i];
                 r.GetPropertyBlock(_block); // 他が書いた値を残す
+                if (!_foreign.ContainsKey(r)) _foreign[r] = !_block.isEmpty;
                 _block.SetVector(_anglesId, angles);
                 for (int v = 0; v < _usedVectors; v++) _block.SetVector(EmotionIds[v], _emo[v]);
                 r.SetPropertyBlock(_block);
@@ -131,9 +138,19 @@ namespace TDrive.Facial
             if (r == null) return;
             if (_block == null) _block = new MaterialPropertyBlock();
             r.GetPropertyBlock(_block);
+            bool foreign;
+            if (!_foreign.TryGetValue(r, out foreign)) foreign = !_block.isEmpty; // 記録が無いときは、今の中身で判断する
+            _foreign.Remove(r);
+            if (!foreign)
+            {
+                // 最初に書いたとき空だった = 自分の値だけ → ブロックごと外す（残ると SRP Batcher から外れたままになる。docs/19 U-5）
+                r.SetPropertyBlock(null);
+                return;
+            }
             _block.SetVector(_anglesId, Vector4.zero);
             for (int v = 0; v < MaxEmotionVectors; v++) _block.SetVector(EmotionIds[v], Vector4.zero);
             r.SetPropertyBlock(_block);
         }
+
     }
 }

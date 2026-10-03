@@ -6,6 +6,7 @@
 //   CutsceneData = <GameData>/<AssetNamingService の Cutscene フォルダ>/CUT_<カテゴリ>_<ショット識別子>.asset
 //   アニメーショントラック名 = FBX のファイル名の "__" の後ろ（<モデル>。"_2" 等の末尾も含む）→ 自動トラックは "<モデル>_Facial(auto)"
 using System;
+using System.Collections.Generic;
 using DDrive.Editor.AssetBrowser;
 using DDrive.Editor.Cutscene;
 using DDrive.Editor.Import;
@@ -72,6 +73,8 @@ namespace TDrive.Facial.DDrive.Editor
         AlreadyOk,
         /// <summary>同じトラック名の Binding が別の内容で既にある（デザイナーが作ったもの。触らない）。</summary>
         ConflictLeftAlone,
+        /// <summary>この D-Drive には Target = SameAsTrack が無い（1.4.0 より前）ので足していない。トラック名の規則（'&lt;役名&gt;_Facial(auto)'）で結ばれる。</summary>
+        NotSupported,
     }
 
     public enum FctrackSyncStatus
@@ -108,49 +111,92 @@ namespace TDrive.Facial.DDrive.Editor
             if (data == null) { r.Status = FctrackSyncStatus.NotReady; r.Message = "このショットの CutsceneData がまだありません"; return r; }
             if (data.Timeline == null) { r.Status = FctrackSyncStatus.NotReady; r.Message = "CutsceneData '" + data.name + "' に TimelineAsset がありません"; return r; }
 
-            FacialTrackSyncReport tl = FacialTrackTimelineSync.Apply(data.Timeline, asset, roleTrackName);
+            // D-Drive のフレーム範囲の切り出し（SourceFrameRange）に、クリップの開始位置と長さを合わせる（docs/19 E-5）
+            var options = new FacialTrackSyncOptions { SourceStartFrame = data.SourceFrameRange.Start, SourceEndFrame = data.SourceFrameRange.End };
+            FacialTrackSyncReport tl = FacialTrackTimelineSync.Apply(data.Timeline, asset, roleTrackName, options);
             r.Timeline = tl;
             if (!tl.Success) { r.Status = FctrackSyncStatus.NotReady; r.Message = string.Join(" / ", tl.Messages); return r; }
 
             FctrackBindingResult b = EnsureSameAsTrackBinding(data, tl.TrackName, roleTrackName);
+            ForgetUndo(data, tl);
             r.Binding = b;
             r.Changed = tl.Changed || b == FctrackBindingResult.Added;
             r.Status = FctrackSyncStatus.Done;
             r.Message = "'" + data.name + "' の " + string.Join(" / ", tl.Messages);
             if (b == FctrackBindingResult.Added) r.Message += " / Bindings に '" + tl.TrackName + "'（SameAsTrack → '" + roleTrackName + "'）を足しました";
+            else if (b == FctrackBindingResult.NotSupported)
+                r.Message += " / この D-Drive には SameAsTrack が無いので Binding は足していません（トラック名の規則 '" + tl.TrackName + "' で '" + roleTrackName + "' のモデルに結ばれます）";
             else if (b == FctrackBindingResult.ConflictLeftAlone)
                 r.Message += " / 注意: Bindings に同じ名前 '" + tl.TrackName + "' の別の設定が既にあるので変えていません（SameAsTrack → '" + roleTrackName + "' にするとモデルに結ばれます）";
             return r;
         }
 
-        /// <summary>Bindings に { TrackName, Target = SameAsTrack, SourceTrackName } を 1 つ足す。同名があれば足さない（内容が同じなら AlreadyOk、違えば触らない）。SerializedObject 経由。</summary>
+        // 自動の反映は Undo に積まない（Timeline の CreateTrack / CreateClip が積む記録を消す。ユーザーの Ctrl+Z で消える対象にしない。docs/19 E-12）
+        static void ForgetUndo(CutsceneData data, FacialTrackSyncReport tl)
+        {
+            UnityEditor.Undo.ClearUndo(data);
+            if (data.Timeline != null) UnityEditor.Undo.ClearUndo(data.Timeline);
+            if (tl.Track != null) UnityEditor.Undo.ClearUndo(tl.Track);
+            if (tl.Clip != null && tl.Clip.asset != null) UnityEditor.Undo.ClearUndo(tl.Clip.asset);
+        }
+
+        /// <summary>
+        /// Bindings に { TrackName, Target = SameAsTrack, SourceTrackName } を 1 つ足す。同名があれば足さない（内容が同じなら AlreadyOk、違えば触らない）。
+        /// SerializedObject 経由・名前で読み書きする（SameAsTrack の無い D-Drive でもコンパイルできる。無ければ NotSupported）。
+        /// Undo には積まない（自動の反映。docs/19 E-12）。
+        /// </summary>
         public static FctrackBindingResult EnsureSameAsTrackBinding(CutsceneData data, string trackName, string sourceTrackName)
         {
+            int sameAs;
+            if (!CutsceneBindingAccess.TryGetSameAsTrackValue(out sameAs)) return FctrackBindingResult.NotSupported;
             var so = new SerializedObject(data);
             SerializedProperty arr = so.FindProperty("Bindings");
             for (int i = 0; i < arr.arraySize; i++)
             {
                 SerializedProperty el = arr.GetArrayElementAtIndex(i);
                 if (el.FindPropertyRelative("TrackName").stringValue != trackName) continue;
-                bool same = el.FindPropertyRelative("Target").intValue == (int)CutsceneBindTarget.SameAsTrack
-                            && el.FindPropertyRelative("SourceTrackName").stringValue == sourceTrackName;
+                SerializedProperty src = el.FindPropertyRelative(CutsceneBindingAccess.SourceTrackFieldName);
+                bool same = el.FindPropertyRelative("Target").intValue == sameAs && src != null && src.stringValue == sourceTrackName;
                 return same ? FctrackBindingResult.AlreadyOk : FctrackBindingResult.ConflictLeftAlone;
             }
             int index = arr.arraySize;
             arr.InsertArrayElementAtIndex(index); // 末尾の複製になるので、全項目を書き直す
-            arr.GetArrayElementAtIndex(index).boxedValue = new CutsceneBinding
-            {
-                TrackName = trackName,
-                Target = CutsceneBindTarget.SameAsTrack,
-                SourceTrackName = sourceTrackName,
-            };
-            so.ApplyModifiedProperties();
+            CutsceneBinding fresh;
+            CutsceneBindingAccess.TryMakeSameAsTrack(trackName, sourceTrackName, out fresh);
+            arr.GetArrayElementAtIndex(index).boxedValue = fresh;
+            so.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(data);
             return FctrackBindingResult.Added;
         }
 
+        /// <summary>
+        /// 触ったアセットだけを保存する。D-Drive の版数は進めない（VersionStampSuppression の中）。
+        /// プロジェクト全体の SaveAssets は呼ばない（開いている別のアセットを巻き込まない。docs/19 E-7）。
+        /// </summary>
+        public static void SaveTouched(IEnumerable<UnityEngine.Object> assets)
+        {
+            if (assets == null) return;
+            using (VersionStampSuppression.Scope())
+            {
+                var done = new HashSet<UnityEngine.Object>();
+                foreach (UnityEngine.Object o in assets)
+                    if (o != null && done.Add(o)) AssetDatabase.SaveAssetIfDirty(o);
+            }
+        }
+
         /// <summary>.fctrack のアセットパスから CutsceneData を探して反映し、変更があれば保存する（版数は進めない。D-Drive の自動取り込みと同じ扱い）。</summary>
         public static FctrackSyncResult SyncFromPath(string fctrackPath)
+        {
+            var touched = new List<UnityEngine.Object>();
+            FctrackSyncResult r = SyncFromPath(fctrackPath, touched);
+            SaveTouched(touched);
+            return r;
+        }
+
+        /// <summary>
+        /// 反映する。変えたアセット（CutsceneData・TimelineAsset）は touched に足すだけで、保存しない（呼び出し側が SaveTouched で 1 回にまとめる）。
+        /// </summary>
+        public static FctrackSyncResult SyncFromPath(string fctrackPath, List<UnityEngine.Object> touched)
         {
             string sourceRoot = ImportRuleService.ResolveSourceRoot(ImportRuleService.DefaultSourceRoot);
             FctrackShotInfo info;
@@ -175,7 +221,7 @@ namespace TDrive.Facial.DDrive.Editor
             {
                 EditorUtility.SetDirty(data);
                 if (data.Timeline != null) EditorUtility.SetDirty(data.Timeline);
-                DDriveAssetSave.SaveAllSuppressed();
+                if (touched != null) { touched.Add(data); if (data.Timeline != null) touched.Add(data.Timeline); }
             }
             return result;
         }

@@ -26,7 +26,7 @@ namespace TDrive.Facial.Editor
             FcFile file = FcposeReader.Read(json, warn);
             if (file.Document == null) throw new FcposeException("FacialCorrection 形式ではありません（FacialPose です）");
             FacialCorrectionData data = BuildData(file.Document, fallbackAssetName, warn);
-            data.sourceJson = json;
+            FacialSourceJson.Set(data, json);
             return data;
         }
 

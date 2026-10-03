@@ -9,8 +9,12 @@ namespace TDrive.Facial.Core
 {
     public static class MiniJson
     {
+        /// <summary>入れ子の深さの上限（これを超えると FormatException。スタック枯渇を防ぐ）。</summary>
+        public const int MaxDepth = 256;
+
         public static object Parse(string text)
         {
+            if (text == null) throw new FormatException("JSON: 入力が null です");
             if (text.Length > 0 && text[0] == '﻿') text = text.Substring(1); // BOM
             var p = new Parser(text);
             p.SkipWs();
@@ -24,6 +28,7 @@ namespace TDrive.Facial.Core
         {
             readonly string _s;
             int _i;
+            int _depth;
 
             public Parser(string s) { _s = s; }
 
@@ -61,9 +66,10 @@ namespace TDrive.Facial.Core
             Dictionary<string, object> ReadObject()
             {
                 var d = new Dictionary<string, object>();
+                if (++_depth > MaxDepth) throw Error("入れ子が深すぎます（上限 " + MaxDepth + "）");
                 _i++; // {
                 SkipWs();
-                if (_i < _s.Length && _s[_i] == '}') { _i++; return d; }
+                if (_i < _s.Length && _s[_i] == '}') { _i++; _depth--; return d; }
                 while (true)
                 {
                     SkipWs();
@@ -77,7 +83,7 @@ namespace TDrive.Facial.Core
                     SkipWs();
                     if (AtEnd) throw Error("オブジェクトが閉じていない");
                     if (_s[_i] == ',') { _i++; continue; }
-                    if (_s[_i] == '}') { _i++; return d; }
+                    if (_s[_i] == '}') { _i++; _depth--; return d; }
                     throw Error("',' か '}' が必要");
                 }
             }
@@ -85,9 +91,10 @@ namespace TDrive.Facial.Core
             List<object> ReadArray()
             {
                 var l = new List<object>();
+                if (++_depth > MaxDepth) throw Error("入れ子が深すぎます（上限 " + MaxDepth + "）");
                 _i++; // [
                 SkipWs();
-                if (_i < _s.Length && _s[_i] == ']') { _i++; return l; }
+                if (_i < _s.Length && _s[_i] == ']') { _i++; _depth--; return l; }
                 while (true)
                 {
                     SkipWs();
@@ -95,7 +102,7 @@ namespace TDrive.Facial.Core
                     SkipWs();
                     if (AtEnd) throw Error("配列が閉じていない");
                     if (_s[_i] == ',') { _i++; continue; }
-                    if (_s[_i] == ']') { _i++; return l; }
+                    if (_s[_i] == ']') { _i++; _depth--; return l; }
                     throw Error("',' か ']' が必要");
                 }
             }
@@ -145,6 +152,8 @@ namespace TDrive.Facial.Core
                 double v;
                 if (!double.TryParse(_s.Substring(start, _i - start), NumberStyles.Float, CultureInfo.InvariantCulture, out v))
                     throw Error("数が読めない");
+                // 1e999 などで無限大になる値は受け付けない（NaN / Infinity は Python 側も拒否）
+                if (double.IsNaN(v) || double.IsInfinity(v)) throw Error("有限でない数");
                 return v;
             }
         }

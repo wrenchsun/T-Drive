@@ -26,7 +26,7 @@ namespace TDrive.Facial.DDrive.Editor
             for (int i = 0; i < issues.Count; i++)
                 yield return ToResult(issues[i]);
 
-            foreach (string text in FindMissingPoseReferences(cutscene.Timeline))
+            foreach (string text in FindMissingReferences(cutscene.Timeline))
                 yield return ValidationResult.Error(text, null, FacialCutsceneChecks.CodeMissingPose);
         }
 
@@ -57,8 +57,19 @@ namespace TDrive.Facial.DDrive.Editor
             return result;
         }
 
-        /// <summary>ポーズの参照が切れている（アセットを消した）クリップの説明を返す。</summary>
+        /// <summary>ポーズの参照が切れているクリップの説明を返す（互換のための名前。FindMissingReferences の一部）。</summary>
         public static List<string> FindMissingPoseReferences(TimelineAsset timeline)
+        {
+            return Find(timeline, true, false);
+        }
+
+        /// <summary>ポーズ（FacialPoseAsset）・演出カーブ（.fctrack = FacialTrackAsset）の参照が切れている（アセットを消した）クリップの説明を返す（003）。</summary>
+        public static List<string> FindMissingReferences(TimelineAsset timeline)
+        {
+            return Find(timeline, true, true);
+        }
+
+        static List<string> Find(TimelineAsset timeline, bool pose, bool fctrack)
         {
             var list = new List<string>();
             if (timeline == null) return list;
@@ -72,8 +83,11 @@ namespace TDrive.Facial.DDrive.Editor
                     if (asset == null) continue;
                     var so = new SerializedObject(asset);
                     SerializedProperty p = so.FindProperty("template.pose");
-                    if (p != null && p.objectReferenceValue == null && p.objectReferenceInstanceIDValue != 0)
+                    if (pose && p != null && p.objectReferenceValue == null && p.objectReferenceInstanceIDValue != 0)
                         list.Add("[T-Drive Facial] トラック '" + track.name + "' のクリップ '" + clip.displayName + "' のカット補正のポーズ（FacialPoseAsset）の参照が切れています");
+                    SerializedProperty trackProp = so.FindProperty("track");
+                    if (fctrack && trackProp != null && trackProp.objectReferenceValue == null && trackProp.objectReferenceInstanceIDValue != 0)
+                        list.Add("[T-Drive Facial] トラック '" + track.name + "' のクリップ '" + clip.displayName + "' の演出カーブ（.fctrack）の参照が切れています。.fctrack を取り込み直すか、クリップの「Track」を入れ直してください");
                 }
             }
             return list;

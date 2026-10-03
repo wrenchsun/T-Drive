@@ -128,6 +128,7 @@ namespace TDrive.Facial.Tests
         {
             using (var rig = new FacialTestRig(true))
             {
+                rig.runner.ZeroAllBoundOverride = false; // 再生中と同じ（書いた分だけ戻す）。編集時は結んだ FC_ をすべて 0 にする（E-4）
                 rig.runner.useManualAngles = true;
                 float[] captured = ArrangeCaptured(rig);
                 rig.runner.EvaluateNow(0f, 0f, 1f);
@@ -165,6 +166,7 @@ namespace TDrive.Facial.Tests
         {
             using (var rig = new FacialTestRig(true))
             {
+                rig.runner.ZeroAllBoundOverride = false; // 再生中と同じ（書いた分だけ戻す）。編集時は結んだ FC_ をすべて 0 にする（E-4）
                 rig.runner.useManualAngles = true;
                 rig.runner.EvaluateNow(0f, 0f, 1f);
                 Assert.Greater(rig.runner.ActiveWeightCount, 0);

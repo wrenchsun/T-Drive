@@ -1,4 +1,7 @@
-// トラックの Mixer。重なったクリップを重みでブレンドし、Runner へ PushOverride で渡す（ブレンドシェイプは直接書かない）。
+// トラックの Mixer。重なったクリップを重みでブレンドし、Runner へ SetOverride（持ち主 = この Mixer）で渡す（ブレンドシェイプは直接書かない）。
+//  - 上書きは次の ProcessFrame（または消すとき）まで Runner に残る → D-Drive のカットシーンの一時停止中（評価が来ない）も補正が保たれる（E-3）
+//  - 消すとき: クリップの無い区間（重みの合計が 0）/ OnGraphStop / OnPlayableDestroy / バインドが替わったとき。Runner 側も OnDisable・破棄で捨てる
+//  - 同じ Runner に Facial のトラックが複数あっても、持ち主ごとに合成される（規則は FacialCorrectionRunner.SetOverride）。"(auto)" のトラックは優先度 -1（手で作ったトラックが同じレイヤーを書けば手のほうが勝つ）
 //  - 強さ: 重みつきで 1（= 変えない）へ寄せる / 感情: レイヤー名 → Runner のレイヤー番号の重み付き加算
 //  - 角度の固定: 固定するクリップの重みの合計 = 手動の割合（manualAngleBlend）。足りない分はライブの角度
 //  - 曲線（.fctrack）: クリップの track があれば、各クリップの中の時刻で読んだ値（UpdateEffective）をブレンドに使う。手で入れた値が優先
@@ -21,6 +24,7 @@ namespace TDrive.Facial.Timeline
         public TrackAsset track;
 
         FacialCorrectionRunner _runner;
+        bool _owns; // _runner に自分の上書きを置いているか
         UnityEngine.Object _keyObject;
         bool _hasKey;
         float[] _emo = new float[0];
@@ -42,11 +46,17 @@ namespace TDrive.Facial.Timeline
             if (total > 0f)
             {
                 FacialFrameOverride ov = Blend(playable, count, total, runner);
-                runner.PushOverride(ov);
+                runner.SetOverride(this, ov, Priority(), director);
+                _owns = true;
+            }
+            else if (_owns)
+            {
+                runner.ClearOverride(this); // クリップの無い区間では通常へ戻す
+                _owns = false;
             }
 
             // 編集時は LateUpdate が来ない。ここで評価する（再生中は Runner の LateUpdate に任せる）
-            if (!Application.isPlaying) runner.EvaluateNow(EditViewer(), EditDeltaTime);
+            if (!Application.isPlaying) runner.EvaluateNow(EditViewer(runner), EditDeltaTime);
         }
 
         FacialFrameOverride Blend(Playable playable, int count, float total, FacialCorrectionRunner runner)
@@ -110,9 +120,9 @@ namespace TDrive.Facial.Timeline
                 if (anyEmo)
                 {
                     if (_emo.Length != layers) { _emo = new float[layers]; _emoTouched = new bool[layers]; }
-                    for (int l = 0; l < layers; l++) _emoTouched[l] = false;
+                    // 書いていないレイヤーは NaN（= 指定なし。Runner が自分の値か距離の重みを使う）にして、ほかのトラックの値を消さない
+                    for (int l = 0; l < layers; l++) { _emoTouched[l] = false; _emo[l] = float.NaN; }
                     float[] baseW = runner.emotionWeights;
-                    for (int l = 0; l < layers; l++) _emo[l] = baseW != null && l < baseW.Length ? baseW[l] : 0f;
                     for (int i = 0; i < count; i++)
                     {
                         FacialCorrectionBehaviour b = Behaviour(playable, i);
@@ -123,15 +133,11 @@ namespace TDrive.Facial.Timeline
                         {
                             int li = LayerIndex(data, b.effEmotions[e].layer);
                             if (li <= 0) continue; // 0 番（Neutral）と未知の名前は無視
-                            _emoTouched[li] = true;
                             float baseValue = baseW != null && li < baseW.Length ? baseW[li] : 0f;
+                            if (!_emoTouched[li]) { _emoTouched[li] = true; _emo[li] = baseValue; }
                             _emo[li] += w * (Mathf.Max(0f, b.effEmotions[e].weight) - baseValue);
                         }
                     }
-                    // 距離で決めるレイヤー（layerWeights.source = distance）は、どのクリップにも書かれていなければ NaN =「指定なし」
-                    // にして、Runner の距離の重みを生かす（書かれていればクリップの値が優先）
-                    for (int l = 1; l < layers; l++)
-                        if (!_emoTouched[l] && data.layers[l].weight.source == FacialLayerWeightSource.Distance) _emo[l] = float.NaN;
                     ov.emotionWeights = _emo;
                 }
             }
@@ -205,20 +211,44 @@ namespace TDrive.Facial.Timeline
             return -1;
         }
 
-        // バインド（無ければフォールバック）→ Runner。同じバインドなら前回の結果を使う
+        // 見つからなかったとき、毎フレーム探し直さない（フォールバックは Timeline 全体を走査する）。同じバインドの間は一定フレームおきにだけ再試行する
+        const int MissRetryFrames = 120;
+        bool _hasMiss;
+        UnityEngine.Object _missBound;
+        int _missFrames;
+
+        void Miss(UnityEngine.Object bound)
+        {
+            _hasMiss = true; _missBound = bound; _missFrames = 0;
+        }
+
+        // バインド（無ければフォールバック）→ Runner。同じバインドなら前回の結果（見つからなかった結果も）を使う
         FacialCorrectionRunner FindRunner(UnityEngine.Object bound)
         {
+            if (_hasMiss && ReferenceEquals(bound, _missBound) && ++_missFrames < MissRetryFrames) return null;
             UnityEngine.Object key = FacialTimelineBinding.ResolveBindingObject(director, track, bound);
-            if (key == null) return null;
-            if (_hasKey && ReferenceEquals(key, _keyObject) && _runner != null) return _runner;
+            if (key == null) { Miss(bound); return null; }
+            if (_hasKey && ReferenceEquals(key, _keyObject) && _runner != null) { _hasMiss = false; return _runner; }
+            ReleaseRunner(); // バインドが替わったら前の Runner の上書きを消す
             _keyObject = key;
             _hasKey = true;
             _runner = FacialTimelineBinding.RunnerFrom(key);
+            if (_runner == null) Miss(bound); else _hasMiss = false;
             return _runner;
         }
 
-        static Transform EditViewer()
+        // 自動で作ったトラック（"(auto)"）は弱くする（手で作ったトラックが同じレイヤー・視点を書けば、そちらが勝つ）
+        int Priority()
         {
+            return track != null && track.name != null && track.name.EndsWith("(auto)", System.StringComparison.Ordinal) ? -1 : 0;
+        }
+
+        // 編集時プレビューの視点（Runner の editViewer。Auto = メインカメラがあればそれ、無ければ Scene ビュー）
+        static Transform EditViewer(FacialCorrectionRunner runner)
+        {
+            FacialEditViewer mode = runner != null ? runner.editViewer : FacialEditViewer.Auto;
+            Camera main = mode == FacialEditViewer.SceneView ? null : Camera.main;
+            if (main != null) return main.transform;
 #if UNITY_EDITOR
             UnityEditor.SceneView sv = UnityEditor.SceneView.lastActiveSceneView;
             if (sv != null && sv.camera != null) return sv.camera.transform;
@@ -227,14 +257,22 @@ namespace TDrive.Facial.Timeline
             return cam != null ? cam.transform : null;
         }
 
-        // プレビュー（編集時）を抜けたとき、FC_ とカット補正を元へ戻す。再生中は Runner の LateUpdate / OnDisable が戻す
+        void ReleaseRunner()
+        {
+            if (_runner != null && _owns) _runner.ClearOverride(this);
+            _owns = false;
+        }
+
+        // グラフが止まったとき・壊れたとき: 上書きを消す。編集時のプレビューでは FC_ とカット補正も元へ戻す（再生中は Runner が次の LateUpdate / OnDisable で戻す）
         public override void OnGraphStop(Playable playable)
         {
+            ReleaseRunner();
             if (!Application.isPlaying && _runner != null) _runner.ResetWeights();
         }
 
         public override void OnPlayableDestroy(Playable playable)
         {
+            ReleaseRunner();
             if (!Application.isPlaying && _runner != null) _runner.ResetWeights();
             _runner = null;
             _keyObject = null;

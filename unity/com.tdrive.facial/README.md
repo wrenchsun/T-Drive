@@ -11,7 +11,8 @@
 | `TDrive.Facial.Runtime` | データ・Runner（FU-2 以降） |
 | `TDrive.Facial.Timeline` | Timeline 連携（com.unity.timeline があるときだけ。`TDRIVE_FACIAL_TIMELINE`） |
 | `TDrive.Facial.Editor` | インポーター・インスペクター（FU-2 以降） |
-| `TDrive.Facial.DDrive` / `.Editor` | D-Drive 連携（com.ddrive.core があるときだけ。`TDRIVE_FACIAL_DDRIVE`） |
+| `TDrive.Facial.DDrive` / `.Editor` | D-Drive 連携の基本（com.ddrive.core 1.3.1 以降。`TDRIVE_FACIAL_DDRIVE`）。トラック名の規則でのバインド・検証・.fctrack の反映。D-Drive 1.3.1 でもコンパイルできる（FC-1 の `SameAsTrack` は名前で引く） |
+| `TDrive.Facial.DDrive.FC` | D-Drive の FC-1 / FC-12 の型を直接使う部品（`FacialModelInstanceBridge`）。D-Drive 1.4.0 以降で自動（`TDRIVE_FACIAL_DDRIVE_FC`）、それより前の D-Drive では Project Settings › Player › Scripting Define Symbols に **`TDRIVE_DDRIVE_FC_FORCE`** を足したときだけコンパイルされる（FC-1 / FC-12 を含む D-Drive の開発版を使うとき） |
 
 ## テスト
 

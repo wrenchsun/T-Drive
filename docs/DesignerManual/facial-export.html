@@ -85,7 +85,11 @@
 <li><strong>クリップが重なっている所は、なめらかにブレンドされます</strong></li>
 <li><strong>クリップの外では、通常の補正</strong>（Runner の設定どおり）に戻ります</li>
 <li>再生していなくても、Timeline ウィンドウでスクラブ（時間を動かす）すると、補正の変化が見えます。プレビューをやめると、シェイプとボーンは元の値に戻ります</li>
-<li id="fctrack"><strong>Maya で打ったキーを Timeline に取り込む（<span class="path">.fctrack</span>）</strong>: Maya の出力タブで書き出した <span class="path">&lt;ショット&gt;__&lt;モデル&gt;.fctrack</span> を、D-Drive のカットシーンの置き場所（<span class="path">Assets/SourceAssets/Cutscene/&lt;分類&gt;/</span>）に置くと、そのカットシーンの Timeline に「&lt;モデル&gt;_Facial(auto)」というトラックが自動で入り、強さ・感情の重み・角度の固定が Maya のキーどおりに動きます。先に同じショットの FBX を取り込んでおいてください。置き直すと「(auto)」のトラックだけが更新され、手で足したトラックやクリップは残ります。クリップに手で入れた値は、取り込んだキーより優先されます。反映されないときは、.fctrack を選んで <strong>Tools › T-Drive › Facial › .fctrack を Timeline に反映し直す</strong> を実行します。<strong>実際のカットシーンでの確認はこれから（確認中）</strong>です</li><li><strong>D-Drive のプールで使うキャラクター</strong>: モデルの Prefab に「Facial Model Instance Bridge」も付けてください（Runner のインスペクターのボタンで追加できます）。出し直したキャラクターにも補正が正しく掛かります</li>
+<li id="fctrack"><strong>Maya で打ったキーを Timeline に取り込む（<span class="path">.fctrack</span>）</strong>: Maya の出力タブで書き出した <span class="path">&lt;ショット&gt;__&lt;モデル&gt;.fctrack</span> を、D-Drive のカットシーンの置き場所（<span class="path">Assets/SourceAssets/Cutscene/&lt;分類&gt;/</span>）に置くと、そのカットシーンの Timeline に「&lt;モデル&gt;_Facial(auto)」というトラックが自動で入り、強さ・感情の重み・角度の固定が Maya のキーどおりに動きます。先に同じショットの FBX を取り込んでおいてください。置き直すと「(auto)」のトラックだけが更新され、手で足したトラックやクリップは残ります。クリップに手で入れた値は、取り込んだキーより優先されます。反映されないときは、.fctrack を選んで <strong>Tools › T-Drive › Facial › .fctrack を Timeline に反映し直す</strong> を実行します。<strong>実際のカットシーンでの確認はこれから（確認中）</strong>です</li><li><strong>D-Drive のプールで使うキャラクター</strong>: モデルの Prefab に「Facial Model Instance Bridge」も付けてください（Runner のインスペクターのボタンで追加できます）。出し直したキャラクターにも補正が正しく掛かります。<strong>この部品は D-Drive 1.4.0 以降で使えます</strong>（タグが出るまでは、プログラマーが Project Settings › Player › Scripting Define Symbols に <code>TDRIVE_DDRIVE_FC_FORCE</code> を足します）</li>
+<li><strong>一時停止中</strong>も、クリップの指定（強さ・感情・角度の固定・カット補正）はそのまま保たれます。カットシーンが終わるか、キャラクターが片付けられると外れます</li>
+<li><strong>1 体に Facial トラックを 2 本以上</strong>置くと、合わさります。強さは掛け合わせ、感情・誇張・コマ打ちは手で置いたトラックが「(auto)」より優先、カット補正は全部足されます</li>
+<li><strong>再生していないときの Timeline のプレビュー</strong>は、メインカメラがあればそのカメラから見た角度で補正します。シーンビューのカメラに従わせたいときは、Runner の プレビュー ›「編集時の視点」を変えます</li>
+<li>プレビュー中は、シーンに「変更あり」の印が付きます。保存しても、補正のシェイプの重みは 0 で保存されます</li>
 </ul>
 
 <h3 id="ddrive">D-Drive のカットシーンで使うとき</h3>

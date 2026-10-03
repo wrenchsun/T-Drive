@@ -66,11 +66,13 @@ namespace TDrive.Facial.DDrive.Editor
         static void RunPending()
         {
             _scheduled = false;
+            // D-Drive の取り込み（delayCall）との順序は契約ではない（D-Drive docs/42 R-1）。やり直しで吸収する
             var done = new List<string>();
+            var touched = new List<Object>(); // 変えたアセットは最後に 1 回だけ保存する（プロジェクト全体は保存しない）
             var keys = new List<string>(Pending.Keys);
             foreach (string path in keys)
             {
-                FctrackSyncResult r = FctrackCutsceneSync.SyncFromPath(path);
+                FctrackSyncResult r = FctrackCutsceneSync.SyncFromPath(path, touched);
                 if (r.Status == FctrackSyncStatus.NotReady)
                 {
                     int attempts = Pending[path] + 1;
@@ -86,6 +88,7 @@ namespace TDrive.Facial.DDrive.Editor
                 }
             }
             foreach (string p in done) Pending.Remove(p);
+            FctrackCutsceneSync.SaveTouched(touched);
             if (Pending.Count > 0) StartTicking();
         }
 

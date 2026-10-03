@@ -96,7 +96,7 @@ namespace TDrive.Facial.Core
             }
 
             var t = new FcTrack();
-            t.Version = (int)(double)ver;
+            t.Version = FcposeReader.ToInt((double)ver);
             object v;
             t.Shot = d.TryGetValue("shot", out v) && v is string ? (string)v : "";
             t.Model = d.TryGetValue("model", out v) && v is string ? (string)v : "";

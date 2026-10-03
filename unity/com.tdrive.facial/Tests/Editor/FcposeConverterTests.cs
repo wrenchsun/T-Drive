@@ -85,7 +85,7 @@ namespace TDrive.Facial.Tests
             Assert.AreEqual("right", d.source.handedness);
             Assert.AreEqual("+Z", d.source.forwardAxis);
             AssertVec(new Vector3(0f, 1.5f, 0.5f), d.source.centerOffset);
-            Assert.AreEqual(json, d.sourceJson);
+            Assert.AreEqual(json, FacialSourceJson.Get(d));
         }
 
         [Test]

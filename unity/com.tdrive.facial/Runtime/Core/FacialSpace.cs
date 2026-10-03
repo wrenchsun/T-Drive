@@ -98,7 +98,7 @@ namespace TDrive.Facial.Core
         /// <summary>mirror.boneAxis（"X" / "Y" / "Z"）を |M| で入れ替えた軸名（符号なし）。</summary>
         public string MirrorAxis(string axis)
         {
-            int idx = "XYZ".IndexOf(axis, StringComparison.Ordinal);
+            int idx = axis == null ? -1 : "XYZ".IndexOf(axis, StringComparison.Ordinal);
             if (axis == null || axis.Length != 1 || idx < 0) throw new ArgumentException("未知の mirror.boneAxis: '" + axis + "'");
             Vec3 o = ApplyAbs(idx == 0 ? 1.0 : 0.0, idx == 1 ? 1.0 : 0.0, idx == 2 ? 1.0 : 0.0);
             int best = 0;
@@ -134,6 +134,7 @@ namespace TDrive.Facial.Core
         /// <summary>系 → 正準の軸の入れ替え行列 M（行優先 9 要素。長さの換算は含まない）。</summary>
         public static int[] ToCanonicalMatrix(SpaceSpec s)
         {
+            if (s == null) throw new ArgumentNullException("s");
             if (s.UpAxis == "Y")
             {
                 int h = s.Handedness == "left" ? 1 : -1;
@@ -153,6 +154,8 @@ namespace TDrive.Facial.Core
         /// <summary>M = M_dst^T · M_src。</summary>
         public static SpaceConverter Converter(SpaceSpec src, SpaceSpec dst)
         {
+            if (src == null) throw new ArgumentNullException("src");
+            if (dst == null) throw new ArgumentNullException("dst");
             int[] ms = ToCanonicalMatrix(src);
             int[] md = ToCanonicalMatrix(dst);
             var m = new int[9];
@@ -250,6 +253,7 @@ namespace TDrive.Facial.Core
         public static void ComputeViewAnglesInSpace(SpaceConverter toCanonical, Vec3 headPos, Quat headRotation,
             string forwardAxis, Vec3 viewerPos, Vec3 centerOffset, out double yawDeg, out double pitchDeg)
         {
+            if (toCanonical == null) throw new ArgumentNullException("toCanonical");
             Vec3 o = RotateVector(headRotation, centerOffset);
             var center = new Vec3(headPos.X + o.X, headPos.Y + o.Y, headPos.Z + o.Z);
             Vec3 axisVec;
@@ -258,6 +262,21 @@ namespace TDrive.Facial.Core
             double forwardYaw = Math.Atan2(fwd.Y, fwd.X) * (180.0 / Math.PI);
             FacialCore.ComputeViewAngles(toCanonical.Position(center), forwardYaw, toCanonical.Position(viewerPos),
                 out yawDeg, out pitchDeg);
+        }
+
+        /// <summary>
+        /// ComputeViewAnglesInSpace の、回転ではなく「世界での向き」を直接渡す版。左右反転（スケール -1）のボーンでは、回転だけでは軸の向きを表せないので、
+        /// 呼び出し側が TransformDirection で求めた worldForward（forwardAxis の世界での向き）と worldCenterOffset（centerOffset の世界での向き・回転だけ）を渡す。
+        /// 回転が正しい（反転なし）ときは ComputeViewAnglesInSpace と同じ結果になる。
+        /// </summary>
+        public static void ComputeViewAnglesFromWorldVectors(SpaceConverter toCanonical, Vec3 headPos, Vec3 worldCenterOffset, Vec3 worldForward,
+            Vec3 viewerPos, out double yawDeg, out double pitchDeg)
+        {
+            if (toCanonical == null) throw new ArgumentNullException("toCanonical");
+            var center = new Vec3(headPos.X + worldCenterOffset.X, headPos.Y + worldCenterOffset.Y, headPos.Z + worldCenterOffset.Z);
+            Vec3 fwd = toCanonical.Direction(worldForward);
+            double forwardYaw = Math.Atan2(fwd.Y, fwd.X) * (180.0 / Math.PI);
+            FacialCore.ComputeViewAngles(toCanonical.Position(center), forwardYaw, toCanonical.Position(viewerPos), out yawDeg, out pitchDeg);
         }
 
         public static void ComputeViewAnglesInSpace(SpaceSpec space, Vec3 headPos, Quat headRotation,

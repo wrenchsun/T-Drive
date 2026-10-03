@@ -38,18 +38,15 @@ namespace TDrive.Facial.Tests
         {
             if (!File.Exists(FbxPath) || !File.Exists(FcposePath))
                 Assert.Ignore("サンプルがありません（" + FbxPath + " と " + FcposePath + "）。tools/setup_sample_shizuku_facial.py の出力 facial/shizuku/export/unity/ を置くと走ります");
-            AssetDatabase.ImportAsset(FbxPath, ImportAssetOptions.ForceSynchronousImport);
-            AssetDatabase.ImportAsset(FcposePath, ImportAssetOptions.ForceSynchronousImport);
-
+            // 取り込み済みのアセットを読むだけ（強制の再取り込みはしない。ユーザーのアセットを書き換えない）
             var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(FbxPath);
-            Assert.IsNotNull(prefab, "FBX を読めない");
             _data = AssetDatabase.LoadAssetAtPath<FacialCorrectionData>(FcposePath);
-            Assert.IsNotNull(_data, ".fcpose を FacialCorrectionData として読めない");
+            if (prefab == null || _data == null)
+                Assert.Ignore("サンプルがまだ取り込まれていません（Unity が取り込むのを待ってから実行してください）: " + FbxPath);
 
-            // ユーザーのシーンに触れない: プレビューシーンの中に隠しオブジェクトとして置く
+            // ユーザーのシーンに触れない: 最初からプレビューシーンの中に作り、隠しオブジェクトにする
             _scene = EditorSceneManager.NewPreviewScene();
-            _instance = Object.Instantiate(prefab);
-            SceneManager.MoveGameObjectToScene(_instance, _scene);
+            _instance = (GameObject)PrefabUtility.InstantiatePrefab(prefab, _scene);
             Hide(_instance);
             _viewer = EditorUtility.CreateGameObjectWithHideFlags("viewer", HideFlags.HideAndDontSave);
             SceneManager.MoveGameObjectToScene(_viewer, _scene);

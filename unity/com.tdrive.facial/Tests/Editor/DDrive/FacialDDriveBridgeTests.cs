@@ -147,9 +147,11 @@ namespace TDrive.Facial.Tests.DDrive
         public void CheckReportsUnknownEmotionLayersOnlyWhenTheModelIsKnown()
         {
             FacialCorrectionTrack ft = _h.AddTrack("A_Facial", false);
+            AddRoleAnimationTrack("A", false);
             FacialCorrectionClip c = _h.AddClip(ft, 0, 2);
             c.template.emotions = new[] { new FacialEmotionEntry { layer = "Joy", weight = 1f }, new FacialEmotionEntry { layer = "Rage", weight = 1f } };
-            var bindings = new[] { new CutsceneBinding { TrackName = "A_Facial", Target = CutsceneBindTarget.SpawnModel } };
+            // モデルは役名（アニメーショントラック "A"）の Binding から引く（Facial のトラックに SpawnModel を直接結ぶと 007 になる）
+            var bindings = new[] { new CutsceneBinding { TrackName = "A", Target = CutsceneBindTarget.SpawnModel } };
 
             List<FacialCutsceneIssue> known = FacialCutsceneChecks.Check(_h.timeline, bindings, b => Known(_h.rig.runner));
             List<FacialCutsceneIssue> layers = Of(known, FacialCutsceneChecks.CodeUnknownLayer);
@@ -163,10 +165,64 @@ namespace TDrive.Facial.Tests.DDrive
         public void CheckReportsAPrefabWithoutRunnerOrData()
         {
             _h.AddTrack("A_Facial", false);
-            var bindings = new[] { new CutsceneBinding { TrackName = "A_Facial", Target = CutsceneBindTarget.SpawnModel } };
+            AddRoleAnimationTrack("A", false);
+            var bindings = new[] { new CutsceneBinding { TrackName = "A", Target = CutsceneBindTarget.SpawnModel } };
             Assert.AreEqual(1, Of(FacialCutsceneChecks.Check(_h.timeline, bindings, b => Known(null)), FacialCutsceneChecks.CodeNoRunner).Count);
             _h.rig.runner.data = null;
             Assert.AreEqual(1, Of(FacialCutsceneChecks.Check(_h.timeline, bindings, b => Known(_h.rig.runner)), FacialCutsceneChecks.CodeNoData).Count);
+        }
+
+        // ---------------------------------------------------------------- E-9
+
+        [TestCase(CutsceneBindTarget.SpawnModel, true)]
+        [TestCase(CutsceneBindTarget.MainCamera, true)]
+        [TestCase(CutsceneBindTarget.AnchorPoint, true)]
+        [TestCase(CutsceneBindTarget.Self, false)]
+        [TestCase(CutsceneBindTarget.SceneObjectByName, false)]
+        public void E9_FacialTrackWithItsOwnModelOrCameraBindingIsWarned(CutsceneBindTarget target, bool warned)
+        {
+            _h.AddTrack("A_Facial", false);
+            var bindings = new[] { new CutsceneBinding { TrackName = "A_Facial", Target = target } };
+            List<FacialCutsceneIssue> r = Of(FacialCutsceneChecks.Check(_h.timeline, bindings, b => default(FacialModelLookup)), FacialCutsceneChecks.CodeOwnBinding);
+            Assert.AreEqual(warned ? 1 : 0, r.Count);
+            if (warned) Assert.AreEqual(FacialCutsceneSeverity.Warning, r[0].Severity);
+        }
+
+        [Test]
+        public void E9_TwoFacialTracksOfTheSameRoleAreReportedAsMerged()
+        {
+            AddRoleAnimationTrack("Shizuku", false);
+            _h.AddTrack("Shizuku_Facial", false);
+            _h.AddTrack("Shizuku_Facial(auto)", false);
+            _h.AddTrack("Other_Facial", false); AddRoleAnimationTrack("Other", false);
+            var bindings = new[]
+            {
+                new CutsceneBinding { TrackName = "Shizuku", Target = CutsceneBindTarget.Self },
+                new CutsceneBinding { TrackName = "Other", Target = CutsceneBindTarget.Self },
+            };
+            List<FacialCutsceneIssue> r = Of(FacialCutsceneChecks.Check(_h.timeline, bindings, b => default(FacialModelLookup)), FacialCutsceneChecks.CodeSameRole);
+            Assert.AreEqual(1, r.Count, "Shizuku だけ（Other は 1 本）");
+            StringAssert.Contains("Shizuku", r[0].Message);
+            StringAssert.Contains("合成", r[0].Message);
+            Assert.AreEqual(FacialCutsceneSeverity.Info, r[0].Severity);
+        }
+
+        [Test]
+        public void E9_MissingFctrackReferenceIsReportedAs003()
+        {
+            FacialCorrectionClip c = _h.AddClip(_h.AddTrack("A_Facial", false), 0, 2);
+            var asset = ScriptableObject.CreateInstance<FacialTrackAsset>();
+            try
+            {
+                c.track = asset;
+                Assert.AreEqual(0, FacialCutsceneValidator.FindMissingReferences(_h.timeline).Count, "参照があれば問題なし");
+                Object.DestroyImmediate(asset); // アセットを消した = 参照が切れる
+                asset = null;
+                List<string> missing = FacialCutsceneValidator.FindMissingReferences(_h.timeline);
+                Assert.AreEqual(1, missing.Count);
+                StringAssert.Contains(".fctrack", missing[0]);
+            }
+            finally { if (asset != null) Object.DestroyImmediate(asset); }
         }
 
         // ---------------------------------------------------------------- IValidator（CutsceneData をメモリ上で作る）

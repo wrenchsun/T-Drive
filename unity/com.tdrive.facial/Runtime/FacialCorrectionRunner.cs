@@ -11,7 +11,10 @@ using UnityEngine;
 
 namespace TDrive.Facial
 {
-    /// <summary>外からの 1 フレームだけの上書き（Timeline など）。次の LateUpdate（または EvaluateNow）で使われて消える。</summary>
+    /// <summary>
+    /// 外からの上書き（Timeline など）。PushOverride = 次の LateUpdate（または EvaluateNow）だけ有効 / SetOverride = 持ち主ごとに、消すまで有効。
+    /// 値はどちらも Runner が自分のバッファへコピーする（呼び出し側の配列は保持しない）。
+    /// </summary>
     public struct FacialFrameOverride
     {
         /// <summary>true のとき alpha を全体の強さへ掛ける。</summary>
@@ -21,7 +24,7 @@ namespace TDrive.Facial
         public bool hasManualAngles;
         public float yaw;
         public float pitch;
-        /// <summary>レイヤーごとの感情の重み（index 0 は無視）。null = 上書きなし。配列は呼び出し側のもの（コピーしない）。</summary>
+        /// <summary>レイヤーごとの感情の重み（index 0 は無視）。null = 上書きなし。NaN の要素 = そのレイヤーは指定なし（距離で決めるレイヤーは距離の重み、それ以外は Runner の emotionWeights）。値は Runner がコピーする。</summary>
         public float[] emotionWeights;
         /// <summary>視点の Transform。null = 上書きなし。</summary>
         public Transform viewer;
@@ -40,6 +43,14 @@ namespace TDrive.Facial
         /// <summary>true のとき exaggeration（0〜1）を誇張の強さへ掛ける。</summary>
         public bool hasExaggeration;
         public float exaggeration;
+    }
+
+    /// <summary>Timeline の編集時プレビュー（再生していないとき）に、視点として使うカメラ。</summary>
+    public enum FacialEditViewer
+    {
+        [InspectorName("自動（メインカメラがあればそれ）")] Auto,
+        [InspectorName("Scene ビューのカメラ")] SceneView,
+        [InspectorName("メインカメラ")] MainCamera,
     }
 
     /// <summary>直近の評価で使った視点の出どころ（診断・デバッグ表示用）。</summary>
@@ -100,11 +111,15 @@ namespace TDrive.Facial
         public bool skipWhenNotVisible;
 
         [Header("マテリアル出力")]
-        [Tooltip("マテリアルへ角度・感情の重みを渡す方式。「データに従う」= 取り込んだデータの material の指定どおり。Renderer ごとの MaterialPropertyBlock に書く（他のキャラクターと衝突しない）")]
+        [Tooltip("マテリアルへ角度・感情の重みを渡す方式。「データに従う」= 取り込んだデータの material の指定どおり。Renderer ごとの MaterialPropertyBlock に書く（他のキャラクターと衝突しない）。注意: MaterialPropertyBlock を持つ Renderer は SRP Batcher の対象から外れる（出力している間だけ。出力を切る・無効化すると自分の値だけのブロックは外す）。大量に並べるキャラクターでは「出力しない」を使う")]
         public FacialMaterialOutputMode materialOutput = FacialMaterialOutputMode.FollowData;
 
         [Tooltip("補正の対象メッシュのほかに、値を渡したい Renderer（まつ毛・眉など別メッシュ）")]
         public Renderer[] materialTargets;
+
+        [Header("プレビュー")]
+        [Tooltip("Timeline を再生せずに（編集時に）プレビューするとき、補正の視点にするカメラ。自動 = メインカメラ（タグ MainCamera）があればそれ（ゲームビューのカットと同じ見え方）、無ければ Scene ビューのカメラ。再生中は使わない")]
+        public FacialEditViewer editViewer = FacialEditViewer.Auto;
 
         // --- 診断（読み取り専用） ---
         public float CurrentYaw { get { return (float)_curYaw; } }
@@ -136,6 +151,15 @@ namespace TDrive.Facial
         public static IReadOnlyList<FacialCorrectionRunner> ActiveRunners { get { return Active; } }
 
         static readonly List<FacialCorrectionRunner> Active = new List<FacialCorrectionRunner>(8);
+
+        // Domain Reload を切った設定でも、再生のたびに static を初期状態へ戻す（docs/19 U-8）
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        static void ResetStatics()
+        {
+            Active.Clear();
+            ScanRenderers.Clear();
+            ScanTransforms.Clear();
+        }
         Transform _lastViewer;
         FacialViewerSource _lastViewerSource;
         FacialAngleSource _lastAngleSource;
@@ -147,6 +171,7 @@ namespace TDrive.Facial
             public SkinnedMeshRenderer[] renderers;
             public int[] indices;
             public int count;
+            public Mesh[] meshes; // 作ったときのメッシュ（差し替え後の古い番号へ書かないための記録）
             public bool written;
             public bool hasLimit;
             public float limMin, limMax;
@@ -160,6 +185,7 @@ namespace TDrive.Facial
         readonly Dictionary<string, ShapeBinding> _bindings = new Dictionary<string, ShapeBinding>(StringComparer.Ordinal);
         readonly List<ShapeBinding> _written = new List<ShapeBinding>(64);
         readonly List<string> _missing = new List<string>();
+        readonly List<string> _ambiguous = new List<string>();
         readonly List<SkinnedMeshRenderer> _targets = new List<SkinnedMeshRenderer>(4);
         readonly List<Mesh> _targetMeshes = new List<Mesh>(4);
         readonly List<LayerEvalInput> _layerInputs = new List<LayerEvalInput>(8);
@@ -180,7 +206,10 @@ namespace TDrive.Facial
         FacialCorrectionData _cacheData;
         Transform _cacheBaseField;
         SkinnedMeshRenderer[] _cacheTargetsField;
-        int _cacheTargetsLen;
+        readonly List<SkinnedMeshRenderer> _cacheTargetsCopy = new List<SkinnedMeshRenderer>(4); // 配列の中身の差し替えを見つける
+        FacialLayerData[] _cacheLayers;
+        int _cacheCols, _cacheRows;
+        bool _rebuilding;
         bool _cacheAuto;
         int _scanFrame = int.MinValue;
         Transform _baseResolved;
@@ -198,8 +227,22 @@ namespace TDrive.Facial
         bool _stepHolding;
         double _stepAccum, _lastStepFps, _lastSharpness = 1.0, _lastExaggeration = 1.0;
         double _rawSharp = 1.0, _rawExag = 1.0;
+
+        // 上書き（SetOverride = 持ち主ごとに持続 / PushOverride = 1 フレーム）。並びは (priority 昇順, 登録順)。後ろほど強い
+        sealed class OverrideSlot
+        {
+            public object owner;
+            public UnityEngine.Object ownerObject;
+            public bool hasObject;
+            public int priority;
+            public FacialFrameOverride o;
+            public float[] emo = new float[0];
+            public int emoLen; // 0 = 感情の重みの指定なし
+        }
+        readonly List<OverrideSlot> _slots = new List<OverrideSlot>(4);
+        readonly OverrideSlot _pendingSlot = new OverrideSlot();
         bool _hasPending;
-        FacialFrameOverride _pending;
+        float[] _mergedEmo = new float[0];
 
         // カット補正（ポーズの加算）。戻し方: 前回書いた値と今の値が同じときだけ元へ戻す（アニメーションが書き直していたら触らない）
         sealed class PoseCache
@@ -210,7 +253,7 @@ namespace TDrive.Facial
             public Transform[] boneTransforms = new Transform[0];
             public FacialPoseBone[] bones = new FacialPoseBone[0];
         }
-        struct PoseShapeSave { public SkinnedMeshRenderer renderer; public int index; public float original, applied; }
+        struct PoseShapeSave { public SkinnedMeshRenderer renderer; public Mesh mesh; public int index; public float original, applied; }
         struct PoseBoneSave
         {
             public Transform t;
@@ -223,11 +266,87 @@ namespace TDrive.Facial
 
         // ---------------------------------------------------------------- 公開 API
 
-        /// <summary>次の LateUpdate（または EvaluateNow）だけ有効な上書きを渡す。使われたら消える。</summary>
+        /// <summary>
+        /// 次の LateUpdate（または EvaluateNow）だけ有効な上書きを渡す。使われたら消える（互換用）。
+        /// 持続する上書き（SetOverride）より強い（最後に足したものとして合成される）。値はコピーされる。
+        /// </summary>
         public void PushOverride(in FacialFrameOverride o)
         {
-            _pending = o;
+            CopyInto(_pendingSlot, o);
             _hasPending = true;
+        }
+
+        /// <summary>
+        /// 持ち主ごとの、消すまで続く上書き。同じ owner で呼び直すと値を入れ替える（毎フレーム呼んでよい。割り当てなし）。
+        /// Timeline が一時停止して評価が来ないフレームでも、値は保たれる。値はコピーされる（emotionWeights も Runner のバッファへ）。
+        /// 複数の持ち主の合成（並びは priority の小さい順、同じなら最初に登録した順。後ろほど強い）:
+        ///  alpha = すべて掛ける / 感情の重み = レイヤーごとに、そのレイヤー（NaN でない値）を持ついちばん後ろの持ち主 /
+        ///  角度の固定 = manualAngleBlend が最大のもの（同じなら後ろ）/ 視点 = null でないいちばん後ろ /
+        ///  カット補正のポーズ = すべて加算 / stepFps・誇張 = 指定のあるいちばん後ろ。
+        /// ownerObject（任意。owner 自身が UnityEngine.Object なら不要）が破棄されたら、その持ち主の上書きは自動で捨てる。
+        /// OnDisable ですべて捨てる（プールに戻ったインスタンスが古いカットを再生しない）。
+        /// </summary>
+        public void SetOverride(object owner, in FacialFrameOverride o, int priority = 0, UnityEngine.Object ownerObject = null)
+        {
+            if (owner == null) throw new ArgumentNullException("owner");
+            int idx = -1;
+            for (int i = 0; i < _slots.Count; i++)
+                if (ReferenceEquals(_slots[i].owner, owner)) { idx = i; break; }
+            OverrideSlot slot;
+            if (idx >= 0)
+            {
+                slot = _slots[idx];
+                if (slot.priority != priority) { _slots.RemoveAt(idx); slot.priority = priority; InsertSlot(slot); }
+            }
+            else
+            {
+                slot = new OverrideSlot { owner = owner, priority = priority };
+                InsertSlot(slot);
+            }
+            if (ownerObject == null) ownerObject = owner as UnityEngine.Object;
+            slot.ownerObject = ownerObject;
+            slot.hasObject = !ReferenceEquals(ownerObject, null);
+            CopyInto(slot, o);
+        }
+
+        /// <summary>owner の上書きを消す。あったら true。</summary>
+        public bool ClearOverride(object owner)
+        {
+            if (owner == null) return false;
+            for (int i = 0; i < _slots.Count; i++)
+                if (ReferenceEquals(_slots[i].owner, owner)) { _slots.RemoveAt(i); return true; }
+            return false;
+        }
+
+        /// <summary>持続する上書きと、まだ使われていない PushOverride をすべて消す。</summary>
+        public void ClearAllOverrides()
+        {
+            _slots.Clear();
+            _hasPending = false;
+        }
+
+        /// <summary>今ある持続する上書きの数（持ち主の数。診断・テスト用）。</summary>
+        public int OverrideCount { get { return _slots.Count; } }
+
+        void InsertSlot(OverrideSlot slot)
+        {
+            int at = _slots.Count;
+            while (at > 0 && _slots[at - 1].priority > slot.priority) at--;
+            _slots.Insert(at, slot);
+        }
+
+        static void CopyInto(OverrideSlot slot, in FacialFrameOverride o)
+        {
+            slot.o = o;
+            float[] src = o.emotionWeights;
+            int n = src != null ? src.Length : 0;
+            if (n > 0)
+            {
+                if (slot.emo.Length < n) slot.emo = new float[n];
+                Array.Copy(src, slot.emo, n);
+            }
+            slot.emoLen = n;
+            slot.o.emotionWeights = null; // 参照は持たない（emo のバッファを使う）
         }
 
         /// <summary>LateUpdate と同じ計算を今すぐ 1 回行う（エディタのプレビュー・テスト用）。viewer が null なら視点の解決は通常どおり。</summary>
@@ -242,14 +361,32 @@ namespace TDrive.Facial
             Step(deltaTime, null, true, yawDeg, pitchDeg);
         }
 
-        /// <summary>書いた FC_ シェイプをすべて 0 に戻し、計算の状態も捨てる（次の評価はスナップ）。カット補正（ポーズの加算）も元へ戻す。</summary>
+        /// <summary>
+        /// 書いた FC_ シェイプをすべて 0 に戻し、計算の状態も捨てる（次の評価はスナップ）。カット補正（ポーズの加算）も元へ戻す。
+        /// 編集時（再生中でないとき）は、結んである FC_ シェイプを書いた記録に関係なくすべて 0 にする（保存に値が残らないように。docs/19 E-4）。
+        /// 持続する上書き（SetOverride）は消さない。
+        /// </summary>
         public void ResetWeights()
         {
+            bool all = ZeroAllBoundOverride ?? !Application.isPlaying;
+            if (all && !_built && !_rebuilding) Rebuild(); // まだ結んでいなければ今結ぶ（保存の前に必ず戻せるように）
+            ResetCore(all);
+        }
+
+        /// <summary>テスト用: 再生中と同じ（書いた分だけ戻す）動きを編集時に確かめるため、ResetWeights の範囲を固定する。null = 自動。</summary>
+        internal bool? ZeroAllBoundOverride;
+
+        void ResetCore(bool zeroAllBound)
+        {
             RestorePose(); // カット補正で加算した分も元へ
+            if (zeroAllBound)
+            {
+                foreach (ShapeBinding b in _bindings.Values) WriteRaw(b, 0f, true);
+            }
             for (int i = 0; i < _written.Count; i++)
             {
                 ShapeBinding b = _written[i];
-                WriteRaw(b, 0f);
+                if (!zeroAllBound) WriteRaw(b, 0f, true);
                 b.written = false;
             }
             _written.Clear();
@@ -276,6 +413,16 @@ namespace TDrive.Facial
         {
             EnsureCache();
             return _missing;
+        }
+
+        /// <summary>
+        /// 末尾一致（"." より後ろ）で、複数のシェイプに当たってしまうデータのシェイプ名（先に見つかった 1 つだけが動く。docs/19 U-6）。
+        /// 完全一致で見つかったものは含まない。検証が警告に使う。
+        /// </summary>
+        public IReadOnlyList<string> GetAmbiguousShapeNames()
+        {
+            EnsureCache();
+            return _ambiguous;
         }
 
         /// <summary>見つかった FC_ シェイプの数（名前の種類）。</summary>
@@ -340,11 +487,23 @@ namespace TDrive.Facial
         {
             Active.Remove(this);
             ResetWeights(); // 書いた FC_ を 0 に戻す（プールへ返すときも）
+            ClearAllOverrides(); // 持続する上書きも捨てる（プールのインスタンスが古いカットを再生しない）
         }
+
+#if UNITY_EDITOR
+        void OnValidate()
+        {
+            _built = false; // インスペクターで対象・データを変えたら、次の評価で引き直す
+        }
+#endif
 
         void LateUpdate()
         {
-            if (skipWhenNotVisible && !AnyTargetVisible()) return;
+            if (skipWhenNotVisible && !AnyTargetVisible())
+            {
+                RestorePose(); // 評価しない間は、加算したカット補正も戻しておく（ボーンが動いたままにならない）
+                return;
+            }
             Step(Time.deltaTime, null, false, 0.0, 0.0);
         }
 
@@ -361,25 +520,74 @@ namespace TDrive.Facial
         void Step(float deltaTime, Transform viewerParam, bool explicitAngles, double explicitYaw, double explicitPitch)
         {
             RestorePose(); // 前回のカット補正を戻してから評価する（加算が積もらない）
+            DropDestroyedOwners();
 
-            // 外からの上書きは 1 回で消す
-            FacialFrameOverride ov = _pending;
-            bool hadOverride = _hasPending;
-            _pending = default(FacialFrameOverride);
-            _hasPending = false;
+            StepCore(deltaTime, viewerParam, explicitAngles, explicitYaw, explicitPitch);
 
-            StepCore(deltaTime, viewerParam, explicitAngles, explicitYaw, explicitPitch, ref ov, hadOverride);
-
-            // カット補正は FC_ の書き込みのあと（= アニメーションのあと）に加算する
-            if (hadOverride && ov.pose != null && ov.poseWeight > 0f && data != null)
+            // カット補正は FC_ の書き込みのあと（= アニメーションのあと）に加算する。持ち主ごとのポーズをすべて足す
+            if (data != null)
             {
-                EnsureCache();
-                ApplyPose(ov.pose, Mathf.Min(1f, ov.poseWeight));
+                for (int i = 0; i <= _slots.Count; i++)
+                {
+                    OverrideSlot sl = i < _slots.Count ? _slots[i] : (_hasPending ? _pendingSlot : null);
+                    if (sl == null || sl.o.pose == null || !(sl.o.poseWeight > 0f)) continue;
+                    EnsureCache();
+                    ApplyPose(sl.o.pose, Mathf.Min(1f, sl.o.poseWeight));
+                }
             }
+            _hasPending = false; // PushOverride は 1 回で消す
         }
 
-        void StepCore(float deltaTime, Transform viewerParam, bool explicitAngles, double explicitYaw, double explicitPitch,
-            ref FacialFrameOverride ov, bool hadOverride)
+        // 破棄された持ち主（Timeline が壊れたなど）の上書きを捨てる
+        void DropDestroyedOwners()
+        {
+            for (int i = _slots.Count - 1; i >= 0; i--)
+                if (_slots[i].hasObject && _slots[i].ownerObject == null) _slots.RemoveAt(i);
+        }
+
+        /// <summary>上書きを 1 つの値に合成する（規則は SetOverride の説明）。何も無ければ false。感情の重みは Runner のバッファ（NaN = 指定なし）。</summary>
+        bool MergeOverrides(int layerCount, out FacialFrameOverride m)
+        {
+            m = default(FacialFrameOverride);
+            int total = _slots.Count + (_hasPending ? 1 : 0);
+            if (total == 0) return false;
+            bool emoInit = false;
+            float alpha = 1f, bestBlend = 0f;
+            for (int i = 0; i < total; i++)
+            {
+                OverrideSlot sl = i < _slots.Count ? _slots[i] : _pendingSlot;
+                if (sl.o.hasAlpha) { m.hasAlpha = true; alpha *= Mathf.Max(0f, sl.o.alpha); }
+                if (sl.o.hasExaggeration) { m.hasExaggeration = true; m.exaggeration = sl.o.exaggeration; }
+                if (sl.o.hasStepFps) { m.hasStepFps = true; m.stepFps = sl.o.stepFps; }
+                if (sl.o.hasManualAngles)
+                {
+                    float b = sl.o.manualAngleBlend > 0f ? Mathf.Min(1f, sl.o.manualAngleBlend) : 1f;
+                    if (!m.hasManualAngles || b >= bestBlend)
+                    {
+                        m.hasManualAngles = true; m.yaw = sl.o.yaw; m.pitch = sl.o.pitch; m.manualAngleBlend = b; bestBlend = b;
+                    }
+                }
+                if (sl.emoLen > 0)
+                {
+                    if (!emoInit)
+                    {
+                        if (_mergedEmo.Length < layerCount) _mergedEmo = new float[layerCount];
+                        for (int k = 0; k < layerCount; k++) _mergedEmo[k] = float.NaN;
+                        emoInit = true;
+                    }
+                    int n = Mathf.Min(sl.emoLen, layerCount);
+                    for (int k = 0; k < n; k++)
+                        if (!float.IsNaN(sl.emo[k])) _mergedEmo[k] = sl.emo[k];
+                }
+            }
+            m.alpha = alpha;
+            for (int i = total - 1; i >= 0 && m.viewer == null; i--)
+                m.viewer = (i < _slots.Count ? _slots[i] : _pendingSlot).o.viewer;
+            m.emotionWeights = emoInit ? _mergedEmo : null;
+            return true;
+        }
+
+        void StepCore(float deltaTime, Transform viewerParam, bool explicitAngles, double explicitYaw, double explicitPitch)
         {
             FacialCorrectionData d = data;
             if (d == null || d.layers == null || d.layers.Length == 0)
@@ -389,6 +597,8 @@ namespace TDrive.Facial
             }
             EnsureCache();
             if (_targets.Count == 0) return;
+            FacialFrameOverride ov;
+            bool hadOverride = MergeOverrides(d.layers.Length, out ov);
 
             FacialEffectiveParams p = FacialCorrectionOverrides.Resolve(d, overrides);
 
@@ -428,9 +638,19 @@ namespace TDrive.Facial
                             Quaternion hr = bone.rotation;
                             Vector3 vp = viewer.position;
                             Vector3 co = d.grid.centerOffset;
-                            FacialSpace.ComputeViewAnglesInSpace(UnityToCanonical,
-                                new Vec3(hp.x, hp.y, hp.z), new Quat(hr.x, hr.y, hr.z, hr.w), _forwardAxis,
-                                new Vec3(vp.x, vp.y, vp.z), new Vec3(co.x, co.y, co.z), out liveYaw, out livePitch);
+                            Vec3 axisV;
+                            if (bone.localToWorldMatrix.determinant < 0f && FacialSpace.TryAxisVector(_forwardAxis, out axisV))
+                            {
+                                // 左右反転（スケール -1）のボーン: 回転だけでは軸の向きが裏返るので、世界での向きを TransformDirection で求める（docs/19 §5）
+                                Vector3 wf = bone.TransformDirection(new Vector3((float)axisV.X, (float)axisV.Y, (float)axisV.Z));
+                                Vector3 wo = bone.TransformDirection(co);
+                                FacialSpace.ComputeViewAnglesFromWorldVectors(UnityToCanonical, new Vec3(hp.x, hp.y, hp.z),
+                                    new Vec3(wo.x, wo.y, wo.z), new Vec3(wf.x, wf.y, wf.z), new Vec3(vp.x, vp.y, vp.z), out liveYaw, out livePitch);
+                            }
+                            else
+                                FacialSpace.ComputeViewAnglesInSpace(UnityToCanonical,
+                                    new Vec3(hp.x, hp.y, hp.z), new Quat(hr.x, hr.y, hr.z, hr.w), _forwardAxis,
+                                    new Vec3(vp.x, vp.y, vp.z), new Vec3(co.x, co.y, co.z), out liveYaw, out livePitch);
                             haveLive = true;
                             liveSource = FacialAngleSource.Viewer;
                         }
@@ -466,9 +686,8 @@ namespace TDrive.Facial
             _snapped = snap;
 
             // 4 感情の重み（0 以上。ミュートしたレイヤーは 0 = 除く）
-            // 優先: PushOverride（Timeline）の値 > 距離で決めるレイヤーの距離の重み > Runner の emotionWeights
+            // 優先: 上書き（Timeline・PushOverride）の値 > 距離で決めるレイヤーの距離の重み > Runner の emotionWeights
             float[] ovEmo = hadOverride ? ov.emotionWeights : null;
-            float[] emoSource = ovEmo != null ? ovEmo : emotionWeights;
             int layerCount = d.layers.Length;
             double viewDistance = viewer != null
                 ? (double)Vector3.Distance(viewer.position, (_baseResolved != null ? _baseResolved : transform).position) : 0.0;
@@ -484,9 +703,11 @@ namespace TDrive.Facial
                     if (ovEmo != null && i < ovEmo.Length && !float.IsNaN(ovEmo[i])) w = ovEmo[i]; // Timeline などの明示の値が優先
                     if (!(w > 0.0)) w = 0.0;
                 }
-                else if (i > 0 && emoSource != null && i < emoSource.Length)
+                else if (i > 0)
                 {
-                    float f = emoSource[i];
+                    // 上書きの値（NaN = 指定なし）→ 無ければ Runner の emotionWeights
+                    float f = ovEmo != null && i < ovEmo.Length ? ovEmo[i] : float.NaN;
+                    if (float.IsNaN(f)) f = emotionWeights != null && i < emotionWeights.Length ? emotionWeights[i] : 0f;
                     if (f > 0f) w = f; // NaN・負は 0
                 }
                 if (mutedLayers != null && i < mutedLayers.Length && mutedLayers[i]) w = 0.0;
@@ -594,12 +815,15 @@ namespace TDrive.Facial
             else if (_matOut != null && _matOut.WrittenCount > 0) _matOut.Clear();
         }
 
-        static void WriteRaw(ShapeBinding b, float percent)
+        // checkMesh: 戻すとき（古い番号が別のメッシュの関係ないシェイプを指さないよう、作ったときのメッシュと同じときだけ書く）
+        static void WriteRaw(ShapeBinding b, float percent, bool checkMesh = false)
         {
             for (int k = 0; k < b.count; k++)
             {
                 SkinnedMeshRenderer r = b.renderers[k];
-                if (r != null) r.SetBlendShapeWeight(b.indices[k], percent);
+                if (r == null) continue;
+                if (checkMesh && r.sharedMesh != b.meshes[k]) continue;
+                r.SetBlendShapeWeight(b.indices[k], percent);
             }
         }
 
@@ -684,7 +908,7 @@ namespace TDrive.Facial
                 float cur = r.GetBlendShapeWeight(pc.shapeIndices[i]);
                 float applied = cur + weight * pc.shapeValues[i] * 100f; // 加算（Unity は 0〜100）
                 r.SetBlendShapeWeight(pc.shapeIndices[i], applied);
-                _poseShapes.Add(new PoseShapeSave { renderer = r, index = pc.shapeIndices[i], original = cur, applied = applied });
+                _poseShapes.Add(new PoseShapeSave { renderer = r, mesh = r.sharedMesh, index = pc.shapeIndices[i], original = cur, applied = applied });
             }
             for (int i = 0; i < pc.boneTransforms.Length; i++)
             {
@@ -713,7 +937,7 @@ namespace TDrive.Facial
             for (int i = _poseShapes.Count - 1; i >= 0; i--)
             {
                 PoseShapeSave sv = _poseShapes[i];
-                if (sv.renderer == null) continue;
+                if (sv.renderer == null || sv.renderer.sharedMesh != sv.mesh) continue; // メッシュが替わっていたら番号は別のシェイプ
                 // 今の値が自分の書いた値のときだけ戻す（アニメーションが書き直していたら、その値を尊重する）
                 if (Mathf.Abs(sv.renderer.GetBlendShapeWeight(sv.index) - sv.applied) < 1e-3f)
                     sv.renderer.SetBlendShapeWeight(sv.index, sv.original);
@@ -734,7 +958,7 @@ namespace TDrive.Facial
 
         void EnsureCache()
         {
-            if (!_built || _cacheData != data || _cacheBaseField != baseBone || TargetsFieldChanged())
+            if (!_built || _cacheData != data || _cacheBaseField != baseBone || TargetsFieldChanged() || DataShapeChanged())
             {
                 Rebuild();
                 return;
@@ -757,22 +981,42 @@ namespace TDrive.Facial
             }
         }
 
+        // 配列の参照・長さ・中身のどれが変わっても引き直す（docs/19 U-7）
         bool TargetsFieldChanged()
         {
             SkinnedMeshRenderer[] t = targets;
             if (!ReferenceEquals(t, _cacheTargetsField)) return true;
             int n = t == null ? 0 : t.Length;
-            if (n != _cacheTargetsLen) return true;
+            if (n != _cacheTargetsCopy.Count) return true;
+            for (int i = 0; i < n; i++)
+                if (!ReferenceEquals(t[i], _cacheTargetsCopy[i])) return true;
             return false;
+        }
+
+        // データの参照が同じままレイヤーの配列・格子の大きさが変わったとき（docs/19 U-2）
+        bool DataShapeChanged()
+        {
+            FacialCorrectionData d = data;
+            if (d == null) return false;
+            return !ReferenceEquals(d.layers, _cacheLayers) || d.grid.cols != _cacheCols || d.grid.rows != _cacheRows;
         }
 
         void Rebuild()
         {
-            ResetWeights(); // 古い対応で書いた分を先に戻す
+            if (_rebuilding) return;
+            _rebuilding = true;
+            try { RebuildCore(); }
+            finally { _rebuilding = false; }
+        }
+
+        void RebuildCore()
+        {
+            ResetCore((ZeroAllBoundOverride ?? !Application.isPlaying) && _built); // 古い対応で書いた分を先に戻す（古い番号は、同じメッシュのときだけ書く）
             _poseCache.Clear();
             _bindings.Clear();
             _written.Clear();
             _missing.Clear();
+            _ambiguous.Clear();
             _targets.Clear();
             _targetMeshes.Clear();
             _layerInputs.Clear();
@@ -785,8 +1029,12 @@ namespace TDrive.Facial
             _cacheData = data;
             _cacheBaseField = baseBone;
             _cacheTargetsField = targets;
-            _cacheTargetsLen = targets == null ? 0 : targets.Length;
+            _cacheTargetsCopy.Clear();
+            if (targets != null) for (int i = 0; i < targets.Length; i++) _cacheTargetsCopy.Add(targets[i]);
             FacialCorrectionData d = data;
+            _cacheLayers = d != null ? d.layers : null;
+            _cacheCols = d != null ? d.grid.cols : 0;
+            _cacheRows = d != null ? d.grid.rows : 0;
             if (d == null) return;
 
             string prefix = string.IsNullOrEmpty(d.assetName) ? FacialNaming.FcPrefix : FacialNaming.AssetPrefix(d.assetName);
@@ -839,13 +1087,15 @@ namespace TDrive.Facial
                     string nm = names[n];
                     if (string.IsNullOrEmpty(nm) || !FacialNaming.IsFcName(nm) || !seen.Add(nm)) continue;
                     rs.Clear(); ix.Clear();
+                    bool amb = false;
                     for (int t = 0; t < _targets.Count; t++)
                     {
                         int idx = shapeIndex[t].Find(nm);
-                        if (idx >= 0) { rs.Add(_targets[t]); ix.Add(idx); }
+                        if (idx >= 0) { rs.Add(_targets[t]); ix.Add(idx); if (shapeIndex[t].IsAmbiguous(nm)) amb = true; }
                     }
                     if (rs.Count == 0) { _missing.Add(nm); continue; }
-                    _bindings[nm] = new ShapeBinding { renderers = rs.ToArray(), indices = ix.ToArray(), count = rs.Count };
+                    if (amb) _ambiguous.Add(nm);
+                    _bindings[nm] = NewBinding(rs, ix);
                 }
             }
             // 誇張用 _Ex シェイプ: メッシュにあるものだけ結ぶ（任意のシェイプ。無くても「足りない」には数えない）
@@ -864,7 +1114,7 @@ namespace TDrive.Facial
                         if (idx >= 0) { rs.Add(_targets[t]); ix.Add(idx); }
                     }
                     if (rs.Count == 0) continue;
-                    _bindings[nm] = new ShapeBinding { renderers = rs.ToArray(), indices = ix.ToArray(), count = rs.Count };
+                    _bindings[nm] = NewBinding(rs, ix);
                 }
             }
             if (d.limits != null)
@@ -895,6 +1145,13 @@ namespace TDrive.Facial
                 _intRenderers = ir.ToArray();
                 _intIndices = ii.ToArray();
             }
+        }
+
+        static ShapeBinding NewBinding(List<SkinnedMeshRenderer> rs, List<int> ix)
+        {
+            var meshes = new Mesh[rs.Count];
+            for (int i = 0; i < meshes.Length; i++) meshes[i] = rs[i].sharedMesh;
+            return new ShapeBinding { renderers = rs.ToArray(), indices = ix.ToArray(), count = rs.Count, meshes = meshes };
         }
 
         static bool HasShapeWithPrefix(SkinnedMeshRenderer r, string prefix)

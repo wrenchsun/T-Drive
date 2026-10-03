@@ -1,5 +1,5 @@
 // エディタのプレビュー（FacialPreviewDriver）のテスト。Scene ビューは使わず、角度指定・仮想のカメラ Transform で動かす。
-// ユーザーのシーンには触らない（テストの物はすべて HideAndDontSave）。シーンが dirty にならないことも確かめる。
+// ユーザーのシーンには触らない（テストの物はすべて HideAndDontSave）。シーンの dirty は FacialSaveGuardTests（一時のシーン）で確かめる。
 using NUnit.Framework;
 using TDrive.Facial.Editor;
 using UnityEditor;
@@ -117,10 +117,10 @@ namespace TDrive.Facial.Tests
         }
 
         [Test]
-        public void PreviewDoesNotDirtyTheSceneOrRecordUndo()
+        public void PreviewDoesNotRecordUndoAndLeavesNoViewer()
         {
-            var scene = EditorSceneManager.GetActiveScene();
-            bool dirtyBefore = scene.isDirty;
+            // シーンが dirty にならないことは、一時のシーンに普通のオブジェクトを置く FacialSaveGuardTests で確かめる
+            // （ここの rig は隠しオブジェクトでシーンに無いので、dirty の検査には使えない）
             int undoBefore = Undo.GetCurrentGroup();
 
             FacialPreviewState st = ManualState(30f, 10f);
@@ -129,7 +129,6 @@ namespace TDrive.Facial.Tests
             FacialPreviewDriver.OnBeforeSave();
             FacialPreviewDriver.SetOn(_rig.runner, false);
 
-            Assert.AreEqual(dirtyBefore, EditorSceneManager.GetActiveScene().isDirty, "プレビューでシーンが dirty になった");
             Assert.AreEqual(undoBefore, Undo.GetCurrentGroup(), "プレビューで Undo が積まれた");
             foreach (GameObject go in Resources.FindObjectsOfTypeAll<GameObject>())
                 if (go.name == "FacialPreviewViewer") Assert.Fail("仮想の視点がオフのあとも残っている");

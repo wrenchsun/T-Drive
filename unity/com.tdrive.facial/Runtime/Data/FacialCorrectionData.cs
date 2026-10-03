@@ -119,11 +119,6 @@ namespace TDrive.Facial
         [Tooltip("元の .fcpose の情報（変換前の値。参考）")]
         public FacialSourceInfo source;
 
-#if UNITY_EDITOR
-        // 格子ビューア（エディタ）用に元の JSON を持つ。ビルドには入らない
-        [HideInInspector] public string sourceJson;
-#endif
-
         /// <summary>materialMode を列挙型で（未知の文字列は None）。</summary>
         public FacialMaterialMode MaterialModeValue { get { return FacialMaterialOutput.ParseMode(materialMode); } }
 

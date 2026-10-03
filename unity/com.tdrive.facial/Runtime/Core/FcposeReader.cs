@@ -48,6 +48,15 @@ namespace TDrive.Facial.Core
 
         static bool IsNum(object v) { return v is double; }
 
+        /// <summary>double → int（0 方向への切り捨て。範囲外は int の端に収める。未定義の (int) キャストを避ける）。</summary>
+        internal static int ToInt(double v)
+        {
+            if (double.IsNaN(v)) return 0;
+            if (v >= int.MaxValue) return int.MaxValue;
+            if (v <= int.MinValue) return int.MinValue;
+            return (int)v;
+        }
+
         static double F(Dictionary<string, object> d, string key, double def)
         {
             object v;
@@ -57,7 +66,7 @@ namespace TDrive.Facial.Core
         static int I(Dictionary<string, object> d, string key, int def)
         {
             object v;
-            return d != null && d.TryGetValue(key, out v) && IsNum(v) ? (int)(double)v : def; // Python の int() と同じ 0 方向への切り捨て
+            return d != null && d.TryGetValue(key, out v) && IsNum(v) ? ToInt((double)v) : def; // Python の int() と同じ 0 方向への切り捨て
         }
 
         static string Str(Dictionary<string, object> d, string key, string def)
@@ -170,8 +179,8 @@ namespace TDrive.Facial.Core
             d.TryGetValue("bones", out bones);
             return new FcPoint
             {
-                Row = (int)(double)r,
-                Col = (int)(double)c,
+                Row = ToInt((double)r),
+                Col = ToInt((double)c),
                 IsKey = B(d, "isKey", false),
                 Pose = ReadPose(curves, bones),
             };

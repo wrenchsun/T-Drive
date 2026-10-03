@@ -24,6 +24,7 @@ namespace TDrive.Facial.Tests.DDrive
         {
             _rig = new FacialTestRig(true);
             _rig.runner.useManualAngles = true;
+            _rig.runner.ZeroAllBoundOverride = false; // 実行時（プール）と同じ: 書いた分だけ戻す。編集時は結んだ FC_ をすべて 0 にする（E-4）ので、そのままでは D-Drive の復元の値を壊す
             _holder = EditorUtility.CreateGameObjectWithHideFlags("PoolHolder", HideFlags.HideAndDontSave);
             _pool = new PoolService();
             _pool.SetInstanceParent(_holder.transform);
@@ -73,6 +74,7 @@ namespace TDrive.Facial.Tests.DDrive
             Assert.IsNotNull(p.GameObject, "Rent の GameObject");
             var inst = new Instance { pooled = p, go = p.GameObject };
             inst.runner = inst.go.GetComponent<FacialCorrectionRunner>();
+            if (inst.runner != null) inst.runner.ZeroAllBoundOverride = false; // プールの複製には引き継がれない（シリアライズされない）
             inst.smr = inst.go.GetComponentInChildren<SkinnedMeshRenderer>();
             inst.bridge = inst.go.GetComponent<FacialModelInstanceBridge>();
             inst.restore = inst.go.GetComponent<TestRestorePoolable>();

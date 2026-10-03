@@ -1,4 +1,4 @@
-// 格子ビューアの「点の状態」（キー / 自動生成 / 無し）。エディタ専用の元 JSON（FacialCorrectionData.sourceJson）から求める。
+// 格子ビューアの「点の状態」（キー / 自動生成 / 無し）。エディタ専用の元 JSON（FacialSourceJson。ランタイムのデータには持たない）から求める。
 // 元 JSON が無いデータ（手で作ったものなど）は、シェイプ名があれば「自動生成」扱いにする（キーかどうかが分からない）。
 using System;
 using TDrive.Facial.Core;

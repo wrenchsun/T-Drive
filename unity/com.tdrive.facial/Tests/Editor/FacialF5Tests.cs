@@ -410,16 +410,15 @@ namespace TDrive.Facial.Tests
                 R.PushOverride(new FacialFrameOverride { emotionWeights = emo, hasExaggeration = true, exaggeration = 0.9f });
                 R.EvaluateNow(_viewer.transform, Dt);
             }
-            GC.Collect();
-            long before = GC.GetAllocatedBytesForCurrentThread();
-            for (int i = 0; i < 300; i++)
+            AllocProbe.AssertNoAlloc(() =>
             {
-                _viewer.transform.position = new Vector3(Mathf.Sin(i * 0.1f) * 3f, 1.5f + Mathf.Sin(i * 0.05f), Mathf.Cos(i * 0.1f) * 3f);
-                R.PushOverride(new FacialFrameOverride { emotionWeights = emo, hasExaggeration = true, exaggeration = 0.9f });
-                R.EvaluateNow(_viewer.transform, Dt);
-            }
-            long after = GC.GetAllocatedBytesForCurrentThread();
-            Assert.AreEqual(0L, after - before, "F5 の機能を使った 2 回目以降の評価でマネージドの割り当てがある");
+                for (int i = 0; i < 300; i++)
+                {
+                    _viewer.transform.position = new Vector3(Mathf.Sin(i * 0.1f) * 3f, 1.5f + Mathf.Sin(i * 0.05f), Mathf.Cos(i * 0.1f) * 3f);
+                    R.PushOverride(new FacialFrameOverride { emotionWeights = emo, hasExaggeration = true, exaggeration = 0.9f });
+                    R.EvaluateNow(_viewer.transform, Dt);
+                }
+            }, "F5 の機能を使った 2 回目以降の評価でマネージドの割り当てがある");
         }
 
         // ---------------------------------------------------------------- 取り込み・書き出し

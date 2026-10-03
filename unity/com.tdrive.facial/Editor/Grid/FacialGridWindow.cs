@@ -120,11 +120,12 @@ namespace TDrive.Facial.Editor
 
         void RefreshCaches()
         {
-            if (_sourceFor != _data || _sourceJsonCache != _data.sourceJson)
+            string json = FacialSourceJson.Get(_data);
+            if (_sourceFor != _data || !ReferenceEquals(_sourceJsonCache, json))
             {
-                _source = FacialGridCells.ParseSource(_data.sourceJson);
+                _source = FacialGridCells.ParseSource(json);
                 _sourceFor = _data;
-                _sourceJsonCache = _data.sourceJson;
+                _sourceJsonCache = json;
             }
             _missing.Clear();
             if (_runner != null && _runner.data == _data)
@@ -205,7 +206,7 @@ namespace TDrive.Facial.Editor
                 + " / 無し " + FacialGridCells.Count(kinds, FacialCellKind.None)
                 + (_missing.Count > 0 ? " / シェイプ不足 " + _missing.Count : ""));
             EditorGUILayout.LabelField("緑 = キー　水色 = 自動生成　灰 = 無し　赤い枠 = メッシュに FC_ シェイプが無い　赤い点 = 今の角度", EditorStyles.wordWrappedMiniLabel);
-            if (_source == null && string.IsNullOrEmpty(_data.sourceJson))
+            if (_source == null && string.IsNullOrEmpty(FacialSourceJson.Get(_data)))
                 EditorGUILayout.LabelField("元の JSON が無いので、キーと自動生成の区別はできません", EditorStyles.miniLabel);
         }
 

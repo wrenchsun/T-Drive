@@ -25,6 +25,7 @@ namespace TDrive.Facial.Editor
         LimitUnknownShape,
         LimitIgnored,
         BlendShapeNormals,
+        AmbiguousShape,
     }
 
     public sealed class FacialIssue
@@ -55,7 +56,13 @@ namespace TDrive.Facial.Editor
             if (runner == null) return new List<FacialIssue>();
             if (runner.data == null) return Run(null, new SkinnedMeshRenderer[0], null);
             var renderers = new List<SkinnedMeshRenderer>(runner.ResolvedTargets);
-            return Run(runner.data, renderers, runner.ResolvedBaseBone);
+            List<FacialIssue> issues = Run(runner.data, renderers, runner.ResolvedBaseBone);
+            // 末尾一致で複数のシェイプに当たる名前（先に見つかった 1 つだけが動く。docs/19 U-6）
+            IReadOnlyList<string> ambiguous = runner.GetAmbiguousShapeNames();
+            for (int i = 0; i < ambiguous.Count; i++)
+                Add(issues, FacialIssueSeverity.Warning, FacialIssueKind.AmbiguousShape,
+                    "データのシェイプ '" + ambiguous[i] + "' は、末尾が同じシェイプがメッシュに複数あります（先に見つかった 1 つだけが動きます。FBX の blendShape ノード名を揃えるか、重複を消してください）", ambiguous[i], null);
+            return issues;
         }
 
         /// <summary>データ・対象メッシュ・基準ボーン（見つからなければ null）で検証する。</summary>

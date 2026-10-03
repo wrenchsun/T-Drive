@@ -22,13 +22,19 @@ namespace TDrive.Facial.Tests
 
         public static string N(string layer, int r, int c) { return FacialNaming.MorphName(Asset, layer, r, c); }
 
-        static GameObject Hidden(string name) { return EditorUtility.CreateGameObjectWithHideFlags(name, HideFlags.HideAndDontSave); }
+        // plain = true: 普通のゲームオブジェクト（シーンに入る = 保存される）。呼び出し側が一時のシーンへ移す。false: 隠しオブジェクト（シーンに入らない）
+        readonly bool _plain;
+        GameObject Hidden(string name)
+        {
+            return _plain ? new GameObject(name) : EditorUtility.CreateGameObjectWithHideFlags(name, HideFlags.HideAndDontSave);
+        }
 
         /// <summary>FC_ シェイプ名の前に付けるノード名の接頭辞（FBX 取り込み後の "bs." を再現する。空 = 付けない）。</summary>
         readonly string _fcPrefix;
 
-        public FacialTestRig(bool includeMissing = false, string fcPrefix = "")
+        public FacialTestRig(bool includeMissing = false, string fcPrefix = "", bool plain = false)
         {
+            _plain = plain;
             _fcPrefix = fcPrefix ?? "";
             mesh = new Mesh { name = "RigMesh" };
             mesh.vertices = new[] { Vector3.zero, Vector3.right, Vector3.up };

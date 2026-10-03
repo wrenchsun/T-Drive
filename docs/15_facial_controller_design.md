@@ -323,6 +323,14 @@ D-Drive を変更しない前提でできることだけを入れる（変更が
 | 検証 | `IValidator` 実装: CutsceneData の `.playable` にある FacialCorrectionTrack のバインド先に Runner があるか、Data の FC_* がモデルにそろっているか |
 | fctrack の取り込み | `AssetPostprocessor`（D-Drive の Cutscene 取り込みより後の順番）で、`SourceAssets/Cutscene/<Category>/<Shot>__<Model>.fctrack` から、対応する `.playable` に `FacialCorrectionTrack` を足す / 更新する。自動で作ったトラックは名前 `<Model>_Facial(auto)` で見分け、デザイナーのトラックは触らない |
 
+### 5.x Timeline などからの上書き（持ち主ごと・2026-10-03。レビュー E-2 / E-3）
+
+- `Runner.SetOverride(owner, in FacialFrameOverride, priority = 0, ownerObject = null)` / `ClearOverride(owner)` / `ClearAllOverrides()`。値はコピーして Runner が持ち、**外されるまで残る**（D-Drive のカットシーンは一時停止中に評価されないため）。定常状態で割り当てなし
+- 外すとき: Mixer が、クリップの重みの合計が 0 のとき・バインド先が変わったとき・グラフの停止 / 破棄で外す。Runner は、持ち主（`ownerObject`）が破棄されたら捨て、`OnDisable` で全部捨てる（プールから出し直したキャラクターに前のカットを持ち越さない）
+- 合成の順: 優先度の小さい順 → 登録順。あとのものほど強い。`(auto)` のトラックは優先度 −1、手で置いたトラックは 0。1 フレームだけの `PushOverride` は最後
+- 合成の規則: 強さ = 全部の掛け合わせ / 感情の重み = レイヤーごとに、値を持つ最後のもの（指定なしは Runner の値、距離のレイヤーは距離の値）/ 角度の固定 = ブレンドがいちばん大きいもの / 視点 = 最後に指定されたもの / カット補正 = 全部足す / コマ打ち・誇張 = 最後に指定されたもの
+- ブリッジの分割（レビュー E-1）: `TDrive.Facial.DDrive`（D-Drive 1.3.1 以降。新しい型は名前で調べる）と `TDrive.Facial.DDrive.FC`（D-Drive 1.4.0 以降、または `TDRIVE_DDRIVE_FC_FORCE`。新しい型を直接使うもの）
+
 ## 6. テスト
 
 | 層 | 内容 | 実行 |

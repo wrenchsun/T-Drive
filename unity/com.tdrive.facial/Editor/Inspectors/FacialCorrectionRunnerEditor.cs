@@ -187,7 +187,7 @@ namespace TDrive.Facial.Editor
             Undo.RecordObject(r, "調整用アセットを割り当て");
             r.overrides = ov;
             EditorUtility.SetDirty(r);
-            AssetDatabase.SaveAssets();
+            AssetDatabase.SaveAssetIfDirty(ov); // 作った調整用アセットだけ保存する（プロジェクト全体は保存しない。docs/19 E-13）
         }
 
         static void RepaintPreview(FacialCorrectionRunner r)

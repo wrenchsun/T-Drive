@@ -129,14 +129,21 @@ namespace TDrive.Facial.Tests.DDrive
             FctrackSyncResult r = FctrackCutsceneSync.ApplyToCutscene(_cut, _asset, "Shizuku");
             Assert.AreEqual(FctrackSyncStatus.Done, r.Status, r.Message);
             Assert.IsTrue(r.Changed);
-            Assert.AreEqual(FctrackBindingResult.Added, r.Binding);
             Assert.AreEqual(1, _tl.GetOutputTracks().OfType<FacialCorrectionTrack>().Count());
 
+            if (!BindingTestUtil.Supported)
+            {
+                // SameAsTrack の無い D-Drive（1.3.1 など）: Binding は足さない。トラック名の規則で結ばれる
+                Assert.AreEqual(FctrackBindingResult.NotSupported, r.Binding);
+                Assert.AreEqual(1, _cut.Bindings.Length);
+                return;
+            }
+            Assert.AreEqual(FctrackBindingResult.Added, r.Binding);
             Assert.AreEqual(2, _cut.Bindings.Length);
             CutsceneBinding b = _cut.Bindings[1];
             Assert.AreEqual("Shizuku_Facial(auto)", b.TrackName);
-            Assert.AreEqual(CutsceneBindTarget.SameAsTrack, b.Target);
-            Assert.AreEqual("Shizuku", b.SourceTrackName);
+            Assert.IsTrue(BindingTestUtil.IsSame(b));
+            Assert.AreEqual("Shizuku", BindingTestUtil.Source(b));
             Assert.IsFalse(b.Model.IsValid, "直前の Binding の Model を引きずらない");
             Assert.IsTrue(string.IsNullOrEmpty(b.SceneObjectName));
             // 元の Binding はそのまま
@@ -158,13 +165,15 @@ namespace TDrive.Facial.Tests.DDrive
             AddRole("Shizuku");
             _cut.Bindings = new CutsceneBinding[0];
             Assert.AreEqual(FctrackSyncStatus.Done, FctrackCutsceneSync.ApplyToCutscene(_cut, _asset, "Shizuku").Status);
+            BindingTestUtil.RequireSameAsTrack();
             Assert.AreEqual(1, _cut.Bindings.Length);
-            Assert.AreEqual(CutsceneBindTarget.SameAsTrack, _cut.Bindings[0].Target);
+            Assert.IsTrue(BindingTestUtil.IsSame(_cut.Bindings[0]));
         }
 
         [Test]
         public void ADesignerBindingWithTheSameNameIsNeverChanged()
         {
+            BindingTestUtil.RequireSameAsTrack(); // SameAsTrack の無い版では Binding を足す処理自体が無い（NotSupported）
             AddRole("Shizuku");
             _cut.Bindings = new[] { new CutsceneBinding { TrackName = "Shizuku_Facial(auto)", Target = CutsceneBindTarget.Self } };
             FctrackSyncResult r = FctrackCutsceneSync.ApplyToCutscene(_cut, _asset, "Shizuku");
@@ -178,10 +187,11 @@ namespace TDrive.Facial.Tests.DDrive
         [Test]
         public void ADesignerMadeSameAsTrackBindingToADifferentSourceIsLeftAlone()
         {
+            BindingTestUtil.RequireSameAsTrack();
             AddRole("Shizuku");
-            _cut.Bindings = new[] { new CutsceneBinding { TrackName = "Shizuku_Facial(auto)", Target = CutsceneBindTarget.SameAsTrack, SourceTrackName = "Other" } };
+            _cut.Bindings = new[] { BindingTestUtil.Same("Shizuku_Facial(auto)", "Other") };
             Assert.AreEqual(FctrackBindingResult.ConflictLeftAlone, FctrackCutsceneSync.ApplyToCutscene(_cut, _asset, "Shizuku").Binding);
-            Assert.AreEqual("Other", _cut.Bindings[0].SourceTrackName);
+            Assert.AreEqual("Other", BindingTestUtil.Source(_cut.Bindings[0]));
         }
 
         [Test]
@@ -213,9 +223,93 @@ namespace TDrive.Facial.Tests.DDrive
             _asset.rangeEnd = 300f;
             FctrackSyncResult r = FctrackCutsceneSync.ApplyToCutscene(_cut, _asset, "Shizuku");
             Assert.IsTrue(r.Changed);
-            Assert.AreEqual(FctrackBindingResult.AlreadyOk, r.Binding);
+            Assert.AreEqual(BindingTestUtil.Supported ? FctrackBindingResult.AlreadyOk : FctrackBindingResult.NotSupported, r.Binding);
             Assert.AreEqual(10d, _tl.GetOutputTracks().OfType<FacialCorrectionTrack>().Single().GetClips().Single().duration, 1e-6);
-            Assert.AreEqual(1, _cut.Bindings.Length);
+            Assert.AreEqual(BindingTestUtil.Supported ? 1 : 0, _cut.Bindings.Length);
+        }
+
+        // ---------------------------------------------------------------- E-5 / E-6 / E-12
+
+        TimelineClip OnlyClip() { return _tl.GetOutputTracks().OfType<FacialCorrectionTrack>().Single().GetClips().Single(); }
+
+        [Test]
+        public void E5_SourceFrameRangeShiftsTheClipInAndShortensTheClip()
+        {
+            AddRole("Shizuku");
+            _asset.rangeStart = 0f; _asset.rangeEnd = 300f; // 10 秒（30fps）
+            _cut.SourceFrameRange = new FrameRange { Start = 60, End = 149 }; // FBX の 60〜149 フレーム（2〜5 秒）= アニメーションの 0〜3 秒
+            _cut.Bindings = new CutsceneBinding[0];
+            Assert.AreEqual(FctrackSyncStatus.Done, FctrackCutsceneSync.ApplyToCutscene(_cut, _asset, "Shizuku").Status);
+            TimelineClip c = OnlyClip();
+            Assert.AreEqual(0d, c.start, 1e-6);
+            Assert.AreEqual(2d, c.clipIn, 1e-6, "アニメーションの 0 秒 = .fctrack の 2 秒");
+            Assert.AreEqual(3d, c.duration, 1e-6, "アニメーションと同じ 3 秒");
+        }
+
+        [Test]
+        public void E5_FctrackThatAlreadyStartsAtTheShotStartNeedsNoShift()
+        {
+            AddRole("Shizuku");
+            _asset.rangeStart = 60f; _asset.rangeEnd = 150f; // .fctrack の範囲 = ショットの範囲
+            _cut.SourceFrameRange = new FrameRange { Start = 60, End = 149 };
+            _cut.Bindings = new CutsceneBinding[0];
+            FctrackCutsceneSync.ApplyToCutscene(_cut, _asset, "Shizuku");
+            TimelineClip c = OnlyClip();
+            Assert.AreEqual(0d, c.clipIn, 1e-6);
+            Assert.AreEqual(0d, c.start, 1e-6);
+            Assert.AreEqual(3d, c.duration, 1e-6);
+        }
+
+        [Test]
+        public void E5_DefaultRangeKeepsTheOldPlacement()
+        {
+            AddRole("Shizuku");
+            _cut.Bindings = new CutsceneBinding[0];
+            FctrackCutsceneSync.ApplyToCutscene(_cut, _asset, "Shizuku"); // SourceFrameRange = 0, 0
+            TimelineClip c = OnlyClip();
+            Assert.AreEqual(0d, c.clipIn, 1e-6);
+            Assert.AreEqual(2d, c.duration, 1e-6);
+        }
+
+        [Test]
+        public void E6_ResyncDoesNotMoveOrResizeAClipTheDesignerAdjusted()
+        {
+            AddRole("Shizuku");
+            _cut.Bindings = new CutsceneBinding[0];
+            FctrackCutsceneSync.ApplyToCutscene(_cut, _asset, "Shizuku");
+            TimelineClip c = OnlyClip();
+            c.start = 1.5; c.duration = 0.5; c.clipIn = 0.25; // デザイナーが調整
+            _asset.rangeEnd = 300f; // .fctrack を置き直した（長さが変わった）
+            FctrackSyncResult r = FctrackCutsceneSync.ApplyToCutscene(_cut, _asset, "Shizuku");
+            Assert.AreEqual(1.5, c.start, 1e-6);
+            Assert.AreEqual(0.5, c.duration, 1e-6);
+            Assert.AreEqual(0.25, c.clipIn, 1e-6);
+            Assert.AreSame(_asset, ((FacialCorrectionClip)c.asset).track, "参照だけは更新される");
+            Assert.IsTrue(r.Timeline.Messages.Exists(m => m.Contains("デザイナーが変えている")), string.Join(" / ", r.Timeline.Messages));
+        }
+
+        [Test]
+        public void E6_ResyncStillUpdatesAClipTheDesignerLeftAlone()
+        {
+            AddRole("Shizuku");
+            _cut.Bindings = new CutsceneBinding[0];
+            FctrackCutsceneSync.ApplyToCutscene(_cut, _asset, "Shizuku");
+            _asset.rangeEnd = 300f;
+            FctrackCutsceneSync.ApplyToCutscene(_cut, _asset, "Shizuku");
+            Assert.AreEqual(10d, OnlyClip().duration, 1e-6);
+        }
+
+        [Test]
+        public void E12_AutomaticSyncDoesNotPushUndoRecords()
+        {
+            AddRole("Shizuku");
+            _cut.Bindings = new CutsceneBinding[0];
+            UnityEditor.Undo.IncrementCurrentGroup(); // 新しいグループ: 何か Undo を登録すると、そのグループに名前が付く
+            string before = UnityEditor.Undo.GetCurrentGroupName();
+            int group = UnityEditor.Undo.GetCurrentGroup();
+            FctrackCutsceneSync.ApplyToCutscene(_cut, _asset, "Shizuku");
+            Assert.AreEqual(group, UnityEditor.Undo.GetCurrentGroup());
+            Assert.AreEqual(before, UnityEditor.Undo.GetCurrentGroupName(), "自動の反映が Undo に積まれた: " + UnityEditor.Undo.GetCurrentGroupName());
         }
 
         // ---------------------------------------------------------------- 検証（SameAsTrack）
@@ -234,13 +328,14 @@ namespace TDrive.Facial.Tests.DDrive
         [Test]
         public void SameAsTrackBindingResolvesAndPassesTheReferencedBindingToTheModelLookup()
         {
+            BindingTestUtil.RequireSameAsTrack();
             FacialTimelineTestHarness h = Harness();
             h.timeline.CreateTrack<AnimationTrack>(null, "Shizuku");
             h.AddTrack("Face", false); // '<役名>_Facial' の規則に合わない名前でも、SameAsTrack なら解決できる
             var bindings = new[]
             {
                 new CutsceneBinding { TrackName = "Shizuku", Target = CutsceneBindTarget.SpawnModel },
-                new CutsceneBinding { TrackName = "Face", Target = CutsceneBindTarget.SameAsTrack, SourceTrackName = "Shizuku" },
+                BindingTestUtil.Same("Face", "Shizuku"),
             };
             CutsceneBinding seen = default(CutsceneBinding);
             List<FacialCutsceneIssue> r = FacialCutsceneChecks.Check(h.timeline, bindings, b => { seen = b; return Known(h.rig.runner); });
@@ -252,13 +347,14 @@ namespace TDrive.Facial.Tests.DDrive
         [Test]
         public void SameAsTrackChainIsFollowed()
         {
+            BindingTestUtil.RequireSameAsTrack();
             FacialTimelineTestHarness h = Harness();
             h.timeline.CreateTrack<AnimationTrack>(null, "Shizuku");
             h.AddTrack("Face", false);
             var bindings = new[]
             {
-                new CutsceneBinding { TrackName = "Face", Target = CutsceneBindTarget.SameAsTrack, SourceTrackName = "Mid" },
-                new CutsceneBinding { TrackName = "Mid", Target = CutsceneBindTarget.SameAsTrack, SourceTrackName = "Shizuku" },
+                BindingTestUtil.Same("Face", "Mid"),
+                BindingTestUtil.Same("Mid", "Shizuku"),
                 new CutsceneBinding { TrackName = "Shizuku", Target = CutsceneBindTarget.SpawnModel },
             };
             CutsceneBinding seen = default(CutsceneBinding);
@@ -269,10 +365,11 @@ namespace TDrive.Facial.Tests.DDrive
         [Test]
         public void SameAsTrackProblemsAreReportedAsUnbound()
         {
+            BindingTestUtil.RequireSameAsTrack();
             FacialTimelineTestHarness h = Harness();
             h.timeline.CreateTrack<AnimationTrack>(null, "Shizuku");
             h.AddTrack("Face", false);
-            CutsceneBinding Same(string name, string src) { return new CutsceneBinding { TrackName = name, Target = CutsceneBindTarget.SameAsTrack, SourceTrackName = src }; }
+            CutsceneBinding Same(string name, string src) { return BindingTestUtil.Same(name, src); }
 
             // 参照先が空 / Binding が無い / 自己参照 / 循環 / 参照先のトラックが Timeline に無い
             var cases = new[]
