@@ -230,6 +230,7 @@ FacialController（カメラ角度に応じた顔の補正。UE 版からの移�
 | FT-2 | D-Drive ブリッジ: バインドの補助（同じ役名の AnimationTrack）・検証（IValidator）・プール返却の確認テスト・D-Drive のカットシーンでのサンプル | — | 2.5 | FT-1 | MS2026 で `Cutscene.Play` → 補正が動く・シークとスキップに追従。D-Drive を変更していない | ✅ `Bridges/DDrive/`（`<役名>_Facial` → 同じ役名の AnimationTrack のバインド先・D-Drive の検証 `TD-FACIAL-001〜005`）。プール返却はインスタンスが無効化されるので Runner が FC_* を戻す（追加の処理は不要）。D-Drive は変更していない。`Cutscene.Play` での再生は人の確認待ち |
 | FT-3 | Maya → Timeline: `.fctrack` の出力（プレビュー用ノードのキー）+ Unity 側で `.playable` にトラックを足す / 更新する | — | 3 | FT-2 F1-5 | Maya で打ったキーが Timeline のクリップ / カーブになる。再出力でデザイナーが足したトラックは残る | ⬜ |
 | FT-4 | D-Drive 側への提案の起票（チケット 7-8 の書き換え案・C-1〜C-9）※ D-Drive のリポジトリは読み取りのみなので、文面を用意して渡す | — | 0.5 | — | [16](16_ddrive_changes_for_facial.md) の内容が D-Drive のチケットの形になっている | ✅ D-Drive 側で起票済み（D-Drive `docs/51_tdrive_integration.md`・`docs/11_tasks.md` FC-0〜FC-10、PR #86）。対応表は [16](16_ddrive_changes_for_facial.md) 冒頭 |
+| FT-5 | D-Drive の新しい拡張点に合わせる（D-Drive main `8af02ea` の FC-1 / FC-2 / FC-12）: ブリッジで Runner を `IModelInstanceListener` に対応（スポーン後にキャッシュを作り直す・返却前に戻す）、FC-2 の重みの復元と Runner の戻しが二重になっても壊れないテスト、`.fctrack` の取り込み（FT-3）では `SameAsTrack` の Binding を足す | — | 1.5 | FT-2 | D-Drive のプールから出し直したキャラクターで補正が正しく掛かる。SameAsTrack で結んだ Facial トラックが動く | ⬜ |
 
 ## Phase F5: UE 版の未実装項目
 
@@ -284,5 +285,5 @@ A 系の詳細仕様は Phase 3 完了時に起こす。
 | F1 | FacialController Maya の最小の一周 | 22 |
 | F2 | Maya ならではのシェイプ作成支援 | 15 |
 | FU | FacialController Unity | 16 |
-| FT | TimeLine / D-Drive 連携 | 9 |
+| FT | TimeLine / D-Drive 連携 | 10.5 |
 | F5 | UE 版の未実装項目 | 21 |

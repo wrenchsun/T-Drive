@@ -9,6 +9,21 @@
 > 番号の対応: **C-1〜C-9 → FC-1〜FC-9**、**doc17 の M-1〜M-9 → FC-11〜FC-19**（D-Drive 既存の M チケットと番号が衝突するため）、FC-10 = 「変更なしで動く」前提（§3 の A-1〜A-9 など）を D-Drive のテストで固定、FC-20 = `FC_` 接頭辞の予約とモデル取り込みが名前・ボーンを保つことの確認。
 > Unity 側の確認は、D-Drive のリポジトリのローカルブランチ `tdrive-facial`（push しない）に `com.tdrive.facial` をローカルパッケージとして入れて行う。
 
+> **2026-10-03 追記 2: D-Drive 側の実装状況**（D-Drive main `8af02ea` 時点。ローカルブランチ `tdrive-facial` に取り込み済みで、T-Drive のパッケージのテスト 368 件はその状態でも通る）
+>
+> | D-Drive のチケット | 内容 | 状態 | T-Drive 側でやること |
+> |---|---|---|---|
+> | FC-1（= C-1） | 同じ相手へのバインド `CutsceneBindTarget.SameAsTrack` | **実装済み** | `<役名>_Facial` の名前の規則による補完（ブリッジ）は残しつつ、`.fctrack` の取り込み（FT-3）では `SameAsTrack` の Binding を足す → FT-5 |
+> | FC-2（= C-2） | プール返却時にブレンドシェイプの重みを戻す | **実装済み** | Runner の `OnDisable` の戻しと二重になっても壊れないことを確認 → FT-5 |
+> | FC-12（= doc17 M-2） | モデルのスポーン / 返却の通知 `IModelInstanceListener` | **実装済み** | ブリッジで Runner を通知に対応させる（スロット適用後にキャッシュを作り直す / 返却前に戻す）→ FT-5 |
+> | FC-11（= doc17 M-1） | MaterialData のパスの無効化・キーワード | **実装済み** | Toon のブリッジ（U-22）で `_ToonCastShadow` = 0 → ShadowCaster の無効化に使う |
+> | FC-15（= doc17 M-5） | 知らないシェーダーを黙って `DDrive/Lit` に変換しない | **実装済み** | 罠 1（[17](17_ddrive_toon_materials.md) §4）は確認ダイアログで防げる。U-23 の検証は念のため残す |
+> | FC-20 | `FC_` / `fcs_` 接頭辞の予約（D-Drive の一覧から隠す・AnimData が指すと警告） | **実装済み** | 名前の規則を変えない（[15](15_facial_controller_design.md) §7: 改名は MAJOR） |
+> | FC-10 | 外部拡張の契約テスト（「変更なしで動く」前提を D-Drive のテストで固定） | **実装済み** | — |
+> | FC-3〜FC-9、FC-13、FC-14、FC-16〜FC-19 | 視点の API・マーカー・取り込み通知 ほか | 未着手 / 保留 | FC-3（視点）と FC-5（取り込み通知）が入ったら Runner の視点の解決と FT-3 を合わせる |
+>
+> D-Drive 側の人による確認項目は D-Drive の `docs/52_manual_verification_fc.md`（T-Drive と合わせて見る項目は同 §22）。T-Drive 側の確認項目は [18](18_manual_verification_facial.md) G 節。
+
 ## 1. 結論
 
 | 区分 | 件数 | 内容 |
