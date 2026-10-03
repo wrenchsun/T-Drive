@@ -775,3 +775,68 @@ def test_morph_names_used_for_bake_checks_follow_naming_module():
     doc = make_doc()
     assert naming.morph_name(doc.asset, "Neutral", 1, 2) == MORPH
     assert [i.name for i in run(doc, bake={})] == [MORPH]
+
+
+def test_orphan_ignores_targets_of_another_asset_that_extends_this_asset_id():
+    """C-1 / S-8: asset a のデータを検証するとき、asset a_b（a で始まる別のアセット）のターゲットを孤立と言わない。"""
+    doc = make_doc()
+    scene = make_scene(doc)
+    scene.targets = {MORPH, "FC_a_b_Neutral_R1_C2", "FC_a_b_Joy_Big_R0_C0", "FC_a_b_Persp_K0", "FC_a_Gone_R0_C0"}
+    got = sorted(i.name for i in run(doc, scene) if i.code == "orphan_target")
+    assert got == ["FC_a_Gone_R0_C0"]
+
+
+# ---------------------------------------------------------------- docs/19 C-4 / C-5: 検証が見ていない値
+def _issue(doc, code):
+    return [i for i in run(doc, make_scene(doc), bake=None) if i.code == code]
+
+
+def test_non_finite_values_are_errors():
+    doc = make_doc()
+    doc.layers[0].points[(1, 2)].pose.curves["bs.smile_L"] = float("nan")
+    doc.grid.center_offset = (0.0, float("inf"), 0.0)
+    got = _issue(doc, "non_finite_value")
+    assert got and all(i.severity == "error" for i in got)
+    assert any("smile_L" in i.message for i in got) and any("centerOffset" in i.message for i in got)
+    assert not _issue(make_doc(), "non_finite_value")
+
+
+@pytest.mark.parametrize(
+    "mutate,code",
+    [
+        (lambda d: setattr(d.mirror, "bone_axis", "x"), "mirror_axis_invalid"),
+        (lambda d: setattr(d.mirror, "bone_axis", "W"), "mirror_axis_invalid"),
+        (lambda d: setattr(d.autogen, "mode", "Nearest"), "autogen_invalid"),
+        (lambda d: setattr(d.autogen, "idw_power", 0.0), "autogen_invalid"),
+        (lambda d: setattr(d.autogen, "idw_power", 500.0), "autogen_invalid"),
+        (lambda d: setattr(d.meta, "unit", "furlong"), "meta_invalid"),
+        (lambda d: setattr(d.meta, "up_axis", "X"), "meta_invalid"),
+        (lambda d: (setattr(d.grid, "cols", 1000), setattr(d.grid, "rows", 1000)), "grid_size_invalid"),
+    ],
+)
+def test_values_that_would_crash_later_are_errors(mutate, code):
+    doc = make_doc()
+    mutate(doc)
+    got = _issue(doc, code)
+    assert got and got[0].severity == "error"
+
+
+def test_valid_defaults_have_no_value_errors():
+    doc = make_doc()
+    doc.mirror.bone_axis = "X"
+    codes_ = codes(run(doc, make_scene(doc)))
+    assert not {"non_finite_value", "mirror_axis_invalid", "autogen_invalid", "meta_invalid"} & set(codes_)
+
+
+def test_rename_chain_does_not_lose_values():
+    """C-3: A→B と C→A のように連鎖する改名で、同じポーズの値が上書きされて消えない。"""
+    doc = make_doc()
+    doc.layers[0].points[(1, 2)].pose.curves = {"A": 1.0, "B": 2.0, "C": 3.0}
+    rep = V.rename_report(doc, {"A": "B", "C": "A"}, "curve")
+    got = doc.layers[0].points[(1, 2)].pose.curves
+    assert sorted(got.values()) == [1.0, 2.0, 3.0]  # 値は 1 つも失われない
+    assert rep.collisions >= 1
+    # 重ならない連鎖（B がポーズに無い）は適用できる
+    doc.layers[0].points[(1, 2)].pose.curves = {"A": 1.0, "C": 3.0}
+    V.rename_report(doc, {"A": "B", "C": "A"}, "curve")
+    assert doc.layers[0].points[(1, 2)].pose.curves == {"B": 1.0, "A": 3.0}

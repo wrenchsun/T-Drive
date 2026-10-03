@@ -209,14 +209,16 @@ class UpdateWindow(QtWidgets.QDialog):
         msg = f"T-Drive Toon を v{updater.fmt(cur)} → v{updater.fmt(ver)} に{'戻し' if kind == 'older' else '更新し'}ます。"
         if kind == "major":
             msg += "\n\nMAJOR の更新です。移行ガイドを読みましたか？"
-        msg += "\n\n編集中の Look の未保存の変更は残ります（念のため先に保存してください）。続けますか？"
-        if QtWidgets.QMessageBox.question(self, WINDOW_TITLE, msg) != QtWidgets.QMessageBox.Yes:
+        msg += "\n\n編集中の Look・FacialController のデータの未保存の変更は、この更新では残ります（念のため先に保存してください）。続けますか？"
+        yes_no = QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No
+        if QtWidgets.QMessageBox.question(self, WINDOW_TITLE, msg, yes_no, QtWidgets.QMessageBox.No) != QtWidgets.QMessageBox.Yes:
             return
         self._apply(lambda: updater.update_to(self.git, f"v{updater.fmt(ver)}"))
 
     def rollback(self) -> None:
         prev = updater.read_state(self.git).get("previous")
-        if QtWidgets.QMessageBox.question(self, WINDOW_TITLE, f"前の版（{prev}）に戻しますか？") != QtWidgets.QMessageBox.Yes:
+        yes_no = QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No
+        if QtWidgets.QMessageBox.question(self, WINDOW_TITLE, f"前の版（{prev}）に戻しますか？", yes_no, QtWidgets.QMessageBox.No) != QtWidgets.QMessageBox.Yes:
             return
         self._apply(lambda: updater.rollback(self.git))
 
@@ -233,12 +235,12 @@ class UpdateWindow(QtWidgets.QDialog):
         new = updater.installed_version()
         if res["restart"]:
             QtWidgets.QMessageBox.information(
-                self, WINDOW_TITLE, f"v{new} にしました。\n\nこの更新は Maya の再起動が必要です。Look を保存してから Maya を再起動してください。"
+                self, WINDOW_TITLE, f"v{new} にしました。\n\nこの更新は Maya の再起動が必要です。Look と FacialController のデータを保存してから Maya を再起動してください（再起動すると未保存の変更は失われます）。"
             )
             self.refresh()
             return
         self.close()
-        runpy.run_path(str(REPO_ROOT / "maya" / "mcp_scripts" / "reload_tdrive.py"))  # 未保存の Look は引き継がれる
+        runpy.run_path(str(REPO_ROOT / "maya" / "mcp_scripts" / "reload_tdrive.py"))  # 未保存の Look・FacialController のデータは引き継がれる
         from tdrive import ui_update as fresh  # リロード後の新しいモジュール
 
         win = fresh.show()

@@ -1196,3 +1196,14 @@ def test_presenter_set_wires_one_context():
 def test_module_has_no_maya_or_qt_imports():
     src = (Path(P.__file__)).read_text(encoding="utf-8")
     assert not re.search(r"^\s*(import|from)\s+(maya|PySide|shiboken|PyQt)", src, re.M)
+
+
+def test_layer_weights_follow_rename_and_are_dropped_on_delete():
+    """C-11: レイヤーの改名・削除で layerWeights が古いまま残らない（レビューの指摘は HEAD では対応済みだった。回帰の確認）。"""
+    ps = make_set()
+    ps.layers.add("Joy")
+    ps.ctx.doc.layer_weights = {"Joy": {"source": "distance", "start": 1.0, "end": 2.0, "from": 0.0, "to": 1.0}}
+    assert ps.layers.rename(1, "Happy").ok
+    assert list(ps.ctx.doc.layer_weights) == ["Happy"]
+    assert ps.layers.delete(1).ok
+    assert not ps.ctx.doc.layer_weights

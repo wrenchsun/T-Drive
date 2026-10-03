@@ -171,9 +171,11 @@ def dumps(track: FacialTrack) -> str:
 
 
 def loads(text: str) -> FacialTrack:
+    from .fcpose_io import FcposeError, parse_json  # 厳密な読み込み（NaN / Infinity・深すぎる入れ子を拒否。C# と同じ）
+
     try:
-        return from_dict(json.loads(text))
-    except json.JSONDecodeError as e:
+        return from_dict(parse_json(text))
+    except FcposeError as e:
         raise FcTrackError(f"JSON として読めません: {e}") from e
 
 

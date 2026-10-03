@@ -71,3 +71,25 @@ def test_parse_sculpt_name():
     assert naming.parse_sculpt_name("sc_Joy_R0_C0", prefix="sc_").layer == "Joy"
     assert naming.parse_sculpt_name("FC_a_Neutral_R1_C2") is None
     assert naming.parse_sculpt_name("fcs_Neutral_R1_C2_Ex") is None
+
+
+# ---------------------------------------------------------------- docs/19 C-1 / S-8: 持ち主の判定
+@pytest.mark.parametrize(
+    "name,verdict",
+    [
+        ("FC_Chara_Neutral_R1_C2", naming.OWNER_OWN),
+        ("FC_Chara_Neutral_R1_C2_Ex", naming.OWNER_OWN),
+        ("FC_Chara_Persp_K0", naming.OWNER_OWN),
+        ("FC_Chara_Gone_R1_C2", naming.OWNER_OWN),  # 消えたレイヤー（_ なし）= 自分のものの孤立
+        ("FC_Chara_Smile_Big_R1_C2", naming.OWNER_OWN),  # 自分のレイヤー（_ あり）
+        ("FC_Chara_Alt_Joy_R1_C2", naming.OWNER_OTHER),  # asset Chara_Alt のレイヤー Joy かもしれない
+        ("FC_Chara_Alt_Persp_K0", naming.OWNER_OTHER),
+        ("FC_Chara_garbage", naming.OWNER_GARBAGE),
+        ("FC_Charb_Neutral_R1_C2", naming.OWNER_FOREIGN),
+        ("FC_Chara2_Neutral_R1_C2", naming.OWNER_FOREIGN),
+        ("bs.smile", naming.OWNER_FOREIGN),
+    ],
+)
+def test_owner_of_fc_name(name, verdict):
+    got, _parsed = naming.owner_of(name, "Chara", ["Neutral", "Smile_Big"])
+    assert got == verdict

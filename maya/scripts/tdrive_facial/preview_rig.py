@@ -588,7 +588,26 @@ def delete(asset: str) -> bool:
 
 
 def build_ex(doc: Document, camera: Optional[str] = None) -> BuildReport:
-    """プレビューを（作り直して）組む。rig の transform とそのキー・アトリビュートの値は作り直しでも残す（式と補助ノードだけ作り直す）。"""
+    """プレビューを（作り直して）組む。rig の transform とそのキー・アトリビュートの値は作り直しでも残す（式と補助ノードだけ作り直す）。
+
+    全体が Maya の Undo の 1 区切り。途中で失敗したら、そこまでに作ったノードを消して例外を投げる（半端なノードを残さない。S-9）。"""
+    created: list[str] = []
+    cmds.undoInfo(openChunk=True, chunkName="tdFacialPreviewBuild")
+    try:
+        return _build_ex(doc, camera, created)
+    except BaseException:
+        for n in reversed(created):  # 作りかけを片付ける（作り直しのとき残っていた rig・キーは作ったものではないので消さない）
+            try:
+                if cmds.objExists(n):
+                    cmds.delete(n)
+            except RuntimeError:
+                pass
+        raise
+    finally:
+        cmds.undoInfo(closeChunk=True)
+
+
+def _build_ex(doc: Document, camera: Optional[str], created: list[str]) -> BuildReport:
     asset = doc.asset or ""
     cam = camera_transform(camera)
     rig = find_rig(asset)
@@ -602,9 +621,14 @@ def build_ex(doc: Document, camera: Optional[str] = None) -> BuildReport:
         _zero_plugs([p for p in old_plugs])
     else:
         rig = cmds.createNode("transform", name=rig_name(asset))
+        created.append(rig)
+        if rig != rig_name(asset):  # 同じ名前の別のノードがある（つけた名前と違う名前になった）: あとで見つけられないので止める
+            raise PreviewRigError(f"{rig_name(asset)} という名前の別のノードがあるため、プレビューを作れません（その名前を変えてください）")
     _create_attrs(rig, doc)
     cam_dm = cmds.createNode("decomposeMatrix", name=f"{rig}_camDM")
+    created.append(cam_dm)
     head_dm = cmds.createNode("decomposeMatrix", name=f"{rig}_headDM")
+    created.append(head_dm)
     cmds.connectAttr(f"{cam}.worldMatrix[0]", f"{cam_dm}.inputMatrix", force=True)
     cmds.connectAttr(f"{plan.joint}.worldMatrix[0]", f"{head_dm}.inputMatrix", force=True)
     for src in cmds.listConnections(f"{rig}.camera", source=True, destination=False, plugs=True) or []:
@@ -612,6 +636,7 @@ def build_ex(doc: Document, camera: Optional[str] = None) -> BuildReport:
     cmds.connectAttr(f"{cam}.message", f"{rig}.camera", force=True)
     text = plan.template.replace("@RIG@", rig).replace("@CAM@", cam_dm).replace("@HEAD@", head_dm)
     expr = cmds.expression(string=text, name=f"{rig}_expr", alwaysEvaluate=False, unitConversion="none")
+    created.append(expr)
     _write_json(rig, CREATED_ATTR, [rig, cam_dm, head_dm, expr])
     _write_json(rig, TARGETS_ATTR, plan.plug_map())
     cmds.setAttr(f"{rig}.{SIGNATURE_ATTR}", plan.signature, type="string")

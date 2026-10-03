@@ -460,3 +460,100 @@ def test_schema_allows_unknown_keys_and_z_forward():
     d["grid"]["gridExtra"] = 1
     d["grid"]["forwardAxis"] = "-Z"
     assert validate(d) == []
+
+
+# --- docs/19 C-4 / M-13: 厳密な読み込み（C# の MiniJson と同じく拒否する）・上書きしない保存 ---
+def _doc_text(extra: str = "") -> str:
+    return '{"format": "FacialCorrection", "version": 1, "asset": "a"' + extra + "}"
+
+
+@pytest.mark.parametrize("token", ["NaN", "Infinity", "-Infinity", "1e999", "-1e999", "1" + "0" * 400])
+def test_loads_rejects_non_finite_numbers(token):
+    with pytest.raises(io.FcposeError):
+        io.loads(_doc_text(f', "grid": {{"yawRange": {token}}}'))
+
+
+def test_loads_rejects_too_deep_nesting():
+    ok = "[" * 255 + "]" * 255  # ルートの {} と合わせて 256 段
+    io.loads(_doc_text(f', "extraKey": {ok}'))
+    deep = "[" * 300 + "]" * 300
+    with pytest.raises(io.FcposeError):
+        io.loads(_doc_text(f', "extraKey": {deep}'))
+    huge = "[" * 100000 + "]" * 100000  # Python の再帰の上限を超える入れ子でも FcposeError（落ちない）
+    with pytest.raises(io.FcposeError):
+        io.loads(_doc_text(f', "extraKey": {huge}'))
+
+
+def test_int_fields_saturate_like_csharp():
+    assert io._i(1e30, 0) == 2**31 - 1 and io._i(-1e30, 0) == -(2**31) and io._i(3.9, 0) == 3 and io._i(-3.9, 0) == -3
+    doc = io.loads(_doc_text(', "grid": {"rows": 1e30}'))
+    assert doc.grid.rows == 2**31 - 1
+
+
+def test_failed_save_keeps_existing_file(tmp_path, monkeypatch):
+    """書き込みの途中（ディスクがいっぱい等）で失敗しても、既存のファイルは壊れない・一時ファイルが残らない。"""
+    import builtins
+
+    p = tmp_path / "a.fcpose.json"
+    doc = m.Document()
+    doc.asset = "a"
+    io.save(doc, p)
+    good = p.read_bytes()
+    real_open = builtins.open
+
+    class HalfWriter:
+        def __init__(self, f):
+            self._f = f
+
+        def write(self, text):
+            self._f.write(text[:10])
+            self._f.flush()
+            raise OSError("disk full")
+
+        def __getattr__(self, name):
+            return getattr(self._f, name)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            self._f.close()
+
+    def fake_open(path, mode="r", *a, **kw):
+        f = real_open(path, mode, *a, **kw)
+        return HalfWriter(f) if "w" in mode else f
+
+    monkeypatch.setattr(builtins, "open", fake_open)
+    doc.asset = "changed"
+    with pytest.raises(OSError):
+        io.save(doc, p)
+    monkeypatch.undo()
+    assert p.read_bytes() == good
+    assert [f.name for f in tmp_path.iterdir()] == ["a.fcpose.json"]
+
+
+def test_save_with_non_finite_value_keeps_existing_file(tmp_path):
+    p = tmp_path / "a.fcpose.json"
+    doc = m.Document()
+    doc.asset = "a"
+    io.save(doc, p)
+    good = p.read_bytes()
+    doc.layers[0].points[(0, 0)] = m.GridPoint(0, 0, True, m.SourcePose(curves={"x": float("nan")}))
+    with pytest.raises(ValueError):
+        io.save(doc, p)
+    assert p.read_bytes() == good
+
+
+def test_duplicate_points_and_dropped_values_are_reported():
+    """C-10: 同じ位置の点が重複していたとき・数値でない値を落としたときは、黙って捨てず警告を出す。"""
+    text = _doc_text(
+        ', "layers": [{"name": "Neutral", "points": ['
+        '{"row": 1, "col": 1, "isKey": true, "curves": {"a": 1.0}},'
+        '{"row": 1, "col": 1, "isKey": true, "curves": {"a": 0.5, "b": "oops"}}]}]'
+    )
+    with warnings.catch_warnings(record=True) as got:
+        warnings.simplefilter("always")
+        doc = io.loads(text)
+    msgs = " ".join(str(w.message) for w in got)
+    assert "重複" in msgs and "数値でない" in msgs
+    assert doc.layers[0].points[(1, 1)].pose.curves == {"a": 0.5}  # 後のものを使う（挙動は変えない）

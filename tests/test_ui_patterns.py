@@ -132,3 +132,45 @@ def test_distribution_bat_is_ascii_crlf():
 def test_install_ps1_has_bom():
     """Windows PowerShell 5.1 は BOM の無い UTF-8 を ANSI（cp932）として読み、日本語が化けて構文エラーになる。"""
     assert (ROOT / "tools/install.ps1").read_bytes().startswith(b"\xef\xbb\xbf")
+
+
+# ---------------------------------------------------------------- docs/19 M-9 / テストの穴: 確認ダイアログの既定・Qt の 2 引数のシグナル・scriptJob
+def test_confirm_dialogs_default_to_no():
+    """破棄・上書き・削除の確認で Enter が「はい」にならない（QMessageBox.question は既定のボタンを必ず渡す）。"""
+    bad = []
+    for f in (f for f in TOOL_FILES if f.parent.name in ("tdrive_facial", "tdrive")):  # Toon の画面は対象外
+        for node in ast.walk(ast.parse(f.read_text(encoding="utf-8"))):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "question"
+                and ast.unparse(node.func.value).endswith("QMessageBox")
+                and len(node.args) + len([k for k in node.keywords if k.arg in ("buttons", "defaultButton")]) < 5
+            ):
+                bad.append(f"{f.name}:{node.lineno}")
+    assert not bad, f"QMessageBox.question に既定のボタン（No）を渡していない: {bad}"
+
+
+def test_two_arg_signal_lambdas_are_safe():
+    """引数を 2 つ送るシグナル（currentItemChanged(現在, 前) など）に「引数 1 つ + 既定値付きの名前つき引数」の lambda をつなぐと、
+    2 つ目の引数が既定値の引数に入って上書きされる（clicked の落とし穴と同じ）。2 つ目は `_prev=None` のように _ で始めて受け流す。"""
+    pattern = re.compile(
+        r"\.(currentItemChanged|currentChanged|selectionChanged|currentCellChanged|cellChanged|rangeChanged)\.connect\(lambda\s+[A-Za-z]\w*\s*,\s*[A-Za-z]\w*\s*="
+    )
+    bad = [f"{f.name}:{i}" for f in TOOL_FILES for i, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1) if pattern.search(line)]
+    assert not bad, bad
+
+
+def test_script_jobs_registered_from_python_objects_are_cleaned_up():
+    """scriptJob に Python の関数（文字列でないもの）を渡している所は、後片付け（kill）も登録する。
+    userSetup.py の scriptJob は文字列（Python のオブジェクトを Maya に渡さない）のものだけ。"""
+    user_setup = (ROOT / "maya/scripts/userSetup.py").read_text(encoding="utf-8")
+    for line in user_setup.splitlines():
+        if "scriptJob(" in line:
+            assert "from tdrive" in line or "event=[event, f\"from tdrive" in line or "call" in line, line
+    bad = []
+    for f in TOOL_FILES:
+        src = f.read_text(encoding="utf-8")
+        if re.search(r"scriptJob\([^)]*(event|conditionChange|attributeChange|nodeDeleted)\s*=\s*\[[^\]]*,\s*[A-Za-z_][\w.]*\s*\]", src) and "kill=" not in src:
+            bad.append(f.name)
+    assert not bad, f"関数を渡した scriptJob があるのに kill が無い: {bad}"

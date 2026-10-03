@@ -1090,6 +1090,8 @@ class PoseTab(QtWidgets.QWidget):
         text = f"取り込みました: シェイプ {rep.curves_set} 本・ボーン {rep.bones_set} 本" + ("" if rep.changed else "（変化なし）")
         if res.base_ignored:
             text += f"。土台の表情のシェイプ {len(res.base_ignored)} 本は取り込みませんでした"
+        if res.below_base:
+            text += f"。土台の表情より低くしたシェイプ {len(res.below_base)} 本は取り込めませんでした（土台より下げた分はポーズに入れられません）: " + "、".join(res.below_base[:5])
         if rep.ignored:
             text += f"。作業セットの外なので取り込まなかった名前 {len(rep.ignored)} 個"
         if rep.unknown:

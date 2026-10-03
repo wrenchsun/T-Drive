@@ -254,7 +254,8 @@ class ExportTab(QtWidgets.QWidget):
         """検証に問題があるまま出力してよいか（「それでも出力する」）。"""
         box = QtWidgets.QMessageBox(QtWidgets.QMessageBox.Warning, "出力", text, parent=self)
         go = box.addButton("それでも出力する", QtWidgets.QMessageBox.AcceptRole)
-        box.addButton("やめる", QtWidgets.QMessageBox.RejectRole)
+        stop = box.addButton("やめる", QtWidgets.QMessageBox.RejectRole)
+        box.setDefaultButton(stop)  # Enter では出力しない（M-9）
         box.exec()
         return box.clickedButton() is go
 

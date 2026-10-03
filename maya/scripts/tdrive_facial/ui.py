@@ -71,7 +71,9 @@ def warn(parent: Optional[QtWidgets.QWidget], text: str) -> None:
 
 
 def ask_yes_no(parent: Optional[QtWidgets.QWidget], text: str, title: str = TITLE) -> bool:
-    return QtWidgets.QMessageBox.question(parent, title, text) == QtWidgets.QMessageBox.Yes
+    """はい / いいえの確認。Enter・既定のボタンは「いいえ」（破棄・上書き・削除を誤って確定しない。docs/19 M-9）。"""
+    yes_no = QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No
+    return QtWidgets.QMessageBox.question(parent, title, text, yes_no, QtWidgets.QMessageBox.No) == QtWidgets.QMessageBox.Yes
 
 
 def ask_save_discard_cancel(parent: Optional[QtWidgets.QWidget], text: str, title: str = TITLE) -> str:
@@ -332,7 +334,7 @@ class HeaderBar(QtWidgets.QWidget):
             if not Path(s.path).exists():
                 where += "（まだファイルがありません）"
         doc = s.doc
-        dirty = "  ●未保存" if s.dirty else ""
+        dirty = "  ●未保存" if s.dirty else ("  ●点に保存していない編集中の値があります" if s.has_unsaved_work else "")
         return f"データ: {where}   {doc.asset or ''}{dirty}"
 
     def refresh(self) -> None:
@@ -357,9 +359,9 @@ class HeaderBar(QtWidgets.QWidget):
     # -------------------------------------------------------------- ダイアログ（差し替えられる）
     def ask_discard(self) -> bool:
         """未保存の変更を捨ててよいか。変更が無ければ聞かずに True。"""
-        if not self.session.dirty:
+        if not self.session.has_unsaved_work:
             return True
-        return ask_yes_no(self, "未保存の変更があります。破棄しますか？")
+        return ask_yes_no(self, "未保存の変更（点に保存していない編集中の値を含む）があります。破棄しますか？")
 
     def ask_new(self) -> Optional[dict]:
         default = Path(cmds.file(query=True, sceneName=True) or "character").stem.lower()
@@ -423,6 +425,9 @@ class HeaderBar(QtWidgets.QWidget):
                     warn(self, str(exc))
             else:
                 self.on_save_as()
+        except session_mod.FacialSessionError as exc:  # 変換して開いた元のファイルへは上書きできない: 別名保存へ（M-12）
+            warn(self, str(exc))
+            self.on_save_as()
         except Exception as exc:  # noqa: BLE001
             warn(self, str(exc))
 

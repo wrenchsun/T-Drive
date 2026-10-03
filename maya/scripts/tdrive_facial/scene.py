@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import math
 import re
@@ -76,6 +77,24 @@ def quat_dot(a: Sequence[float], b: Sequence[float]) -> float:
 # ---------------------------------------------------------------------------
 # 名前・メッシュ
 # ---------------------------------------------------------------------------
+
+
+@contextlib.contextmanager
+def no_undo():
+    """この間の Maya のシーンの変更を Maya の Undo に積まない（編集状態の出入り・ポーズの当て込みなど、ユーザーの操作ではないもの。M-5）。"""
+    try:
+        prev = bool(cmds.undoInfo(query=True, state=True))
+        cmds.undoInfo(stateWithoutFlush=False)
+    except RuntimeError:
+        yield
+        return
+    try:
+        yield
+    finally:
+        try:
+            cmds.undoInfo(stateWithoutFlush=prev)
+        except RuntimeError:
+            pass
 
 
 def short_name(path: str) -> str:
@@ -191,15 +210,18 @@ def _blend_shape_before_skin(mesh: str) -> list[str]:
 
 
 def primary_blend_shape(mesh: str, create: bool = False) -> Optional[str]:
-    """FC_* を足す先の blendShape（スキンより前のものを優先。無ければ出力に近い最初のもの）。
+    """FC_* を足す先の blendShape（スキンより前のもの）。
 
-    create=True で、blendShape が 1 つも無いときは `tdFacial_<mesh>` をスキンより前（frontOfChain）に作る。
+    create=True で、スキンより前の blendShape が無ければ `tdFacial_<mesh>` をスキンより前（frontOfChain）に作る
+    （スキンの後ろの blendShape に FC_* を入れると、補正がスキニングの後に足されて頭の動きと食い違う。S-6）。
+    create=False のときは、スキンより前が無ければ出力に近い最初のもの（読むだけ）。無ければ None。
     """
-    nodes = _blend_shape_before_skin(mesh) or blend_shapes(mesh)
+    nodes = _blend_shape_before_skin(mesh)
     if nodes:
         return nodes[0]
     if not create:
-        return None
+        nodes = blend_shapes(mesh)
+        return nodes[0] if nodes else None
     name = f"{FRONT_BLEND_SHAPE_PREFIX}{short_name(mesh)}"
     return cmds.blendShape(mesh_shape(mesh), name=name, frontOfChain=True)[0]
 
@@ -242,6 +264,8 @@ def geometry_index(node: str, mesh: str) -> int:
     for g, i in zip(geos, inds):
         if (cmds.ls(g, long=True) or [g])[0] == target:
             return int(i)
+    if len(geos) > 1:  # 複数のメッシュを変形するノードで、見つからないまま 0 を返すと別のメッシュへ書いてしまう（S-13）
+        raise ValueError(f"{node} は {short_name(mesh)} を変形していません")
     return 0
 
 
@@ -461,14 +485,15 @@ def read_local(joint: str) -> tuple[tuple[float, float, float], Quat, tuple[floa
 
 
 def write_local(joint: str, t: Sequence[float], q: Sequence[float], s: Sequence[float]) -> None:
-    """ローカルの位置・向き（全体）・スケールをジョイントに設定する（translate / rotate / scale に分解して書く）。"""
+    """ローカルの位置（cm）・向き（全体）・スケールをジョイントに設定する（translate / rotate / scale に分解して書く。作業単位が cm 以外でも位置は cm で渡す）。"""
     q_jo = _euler_quat(cmds.getAttr(joint + ".jointOrient")[0])
     q_ra = _euler_quat(cmds.getAttr(joint + ".rotateAxis")[0])
     # 全体 = jointOrient · rotate · rotateAxis（ハミルトン積。Maya の行列 S·RA·R·JO と同じ回転）
     q_r = quat_mul(quat_mul(quat_inv(q_jo), quat_normalize(q)), quat_inv(q_ra))
     order = cmds.getAttr(joint + ".rotateOrder")
     e = om.MQuaternion(*q_r).asEulerRotation().reorderIt(order)
-    cmds.setAttr(joint + ".translate", *t)
+    ui = om.MDistance.uiUnit()
+    cmds.setAttr(joint + ".translate", *(om.MDistance(v, om.MDistance.kCentimeters).asUnits(ui) for v in t))
     cmds.setAttr(joint + ".rotate", *(_rad_to_angle_ui(a) for a in (e.x, e.y, e.z)))
     cmds.setAttr(joint + ".scale", *s)
 
@@ -631,6 +656,67 @@ def _enter(ref: Reference, extra_joints: Iterable[str]) -> None:
                 except RuntimeError:
                     raise ReferenceError_(f"{plug} を 0 にできません（ロックされていないか確認してください）")
 
+    # --- 基準姿勢のメッシュが、スキン・変形を通す前の形と一致するか（バインドポーズが無い・バインド後にジョイントを動かした・
+    #     他のデフォーマが効いているリグで、頭の動きなどを差分に焼き込まないため。S-3）
+    for m in ref.meshes:
+        others = _other_deformers(m)
+        if others:
+            ref.warnings.append(f"{short_name(m)} には blendShape・スキン以外のデフォーマ（{'、'.join(others[:3])}）が効いています。その変形も補正に焼き込まれることがあります")
+    bad = []
+    for m in ref.meshes:
+        dev = _deviation_from_orig(m)
+        if dev is not None and dev > BIND_TOLERANCE:
+            bad.append(f"{short_name(m)}（最大 {dev:.3f} cm）")
+    if bad:
+        raise ReferenceError_(
+            "基準姿勢の形が、スキン前のメッシュと合いません: " + "、".join(bad)
+            + "。バインドポーズ（dagPose）があるか、バインドのあとにジョイントを動かしていないか、他のデフォーマが効いていないか確認してください"
+        )
+
+
+def _other_deformers(mesh: str) -> list[str]:
+    """メッシュのヒストリにある、blendShape・スキン・tweak 以外のデフォーマ（クラスタ・ラティス・ノンリニアなど）。"""
+    hist = cmds.listHistory(mesh_shape(mesh), pruneDagObjects=True) or []
+    out = []
+    for n in hist:
+        try:
+            inherited = cmds.nodeType(n, inherited=True) or []
+        except RuntimeError:
+            continue
+        if "geometryFilter" in inherited and not ({"skinCluster", "blendShape", "tweak"} & set(inherited)):
+            out.append(n)
+    return out
+
+
+BIND_TOLERANCE = 5e-3  # cm。基準姿勢（バインドポーズ・重み 0）の頂点が、スキンを通す前の形からこれ以上ずれていたら止める
+
+
+def _deviation_from_orig(mesh: str) -> Optional[float]:
+    """今の（スキンを通した）頂点と、スキンの影響を切った（envelope 0）頂点の最大のずれ（cm）。
+
+    基準姿勢が本当にバインドポーズなら、スキンは単位行列で、ずれは 0。スキンが無い・envelope をつなげて / ロックされていて切れない
+    ときは None（確認しない）。切った envelope は必ず元へ戻す（Undo には積まない）。"""
+    skins = skin_clusters(mesh)
+    if not skins:
+        return None
+    after = read_points(mesh)
+    saved: dict[str, float] = {}
+    with no_undo():
+        try:
+            for sk in skins:
+                plug = sk + ".envelope"
+                if cmds.listConnections(plug, source=True, destination=False) or cmds.getAttr(plug, lock=True):
+                    return None
+                saved[plug] = cmds.getAttr(plug)
+                cmds.setAttr(plug, 0.0)
+            before = read_points(mesh)
+        finally:
+            for plug, v in saved.items():
+                cmds.setAttr(plug, v)
+    if before.shape != after.shape or after.size == 0:
+        return None
+    return float(np.max(np.linalg.norm(before - after, axis=1)))
+
 
 def reference_curve_plugs(ref: Reference, name: str) -> list[str]:
     """ソースの名前 → 動かす weight の plug（ref.meshes[0] の blendShape + 他のメッシュで同じターゲット名を持つノード）。見つからなければ空。
@@ -706,6 +792,20 @@ def read_target_delta(node: str, target: str, geo: int = 0) -> Optional[tuple[li
     return comps, arr
 
 
+def _discard_new_target(node: str, idx: int) -> None:
+    """作りかけの番号（weight・group）を消す。何もなければ何もしない。"""
+    for g in cmds.getAttr(node + ".inputTarget", multiIndices=True) or []:
+        try:
+            if idx in (cmds.getAttr(f"{node}.inputTarget[{g}].inputTargetGroup", multiIndices=True) or []):
+                cmds.removeMultiInstance(f"{node}.inputTarget[{g}].inputTargetGroup[{idx}]", b=True)
+        except RuntimeError:
+            pass
+    try:
+        cmds.removeMultiInstance(weight_plug(node, idx), b=True)
+    except RuntimeError:
+        pass
+
+
 def write_target_delta(
     node: str,
     target_name: str,
@@ -732,11 +832,16 @@ def write_target_delta(
     else:
         idx = table[target_name]
     item = _item_plug(node, idx, geo)
-    cmds.setAttr(item + ".inputPointsTarget", len(arr), *[(float(x), float(y), float(z), 1.0) for x, y, z in arr], type="pointArray")
-    ranges = _compress_components(comps)
-    cmds.setAttr(item + ".inputComponentsTarget", len(ranges), *ranges, type="componentList")
-    if created:
-        cmds.aliasAttr(target_name, weight_plug(node, idx))
+    try:
+        cmds.setAttr(item + ".inputPointsTarget", len(arr), *[(float(x), float(y), float(z), 1.0) for x, y, z in arr], type="pointArray")
+        ranges = _compress_components(comps)
+        cmds.setAttr(item + ".inputComponentsTarget", len(ranges), *ranges, type="componentList")
+        if created:
+            cmds.aliasAttr(target_name, weight_plug(node, idx))
+    except BaseException:
+        if created:  # 新しく作りかけた番号を消す（名前の無いターゲットを残さない。S-11）
+            _discard_new_target(node, idx)
+        raise
     return idx, created
 
 
@@ -779,6 +884,18 @@ def write_item_delta(node: str, target: str, item: int, deltas: np.ndarray, comp
     cmds.setAttr(plug + ".inputComponentsTarget", len(ranges), *ranges, type="componentList")
 
 
+def _empty_target(node: str, idx: int) -> None:
+    """ターゲットのすべての item（本体・中間形）の頂点の差分を空にする。要素ごと消す前に行うと、Undo で中身が戻る（消した要素の復元は中身を持たない）。"""
+    for g in cmds.getAttr(node + ".inputTarget", multiIndices=True) or []:
+        if idx not in (cmds.getAttr(f"{node}.inputTarget[{g}].inputTargetGroup", multiIndices=True) or []):
+            continue
+        items = cmds.getAttr(f"{node}.inputTarget[{g}].inputTargetGroup[{idx}].inputTargetItem", multiIndices=True) or []
+        for item in items:
+            plug = f"{node}.inputTarget[{g}].inputTargetGroup[{idx}].inputTargetItem[{item}]"
+            cmds.setAttr(plug + ".inputPointsTarget", 0, type="pointArray")
+            cmds.setAttr(plug + ".inputComponentsTarget", 0, type="componentList")
+
+
 def delete_targets(node: str, names: Iterable[str], sculpt_prefix: str = naming.DEFAULT_SCULPT_PREFIX) -> list[str]:
     """ターゲットを消す。**`FC_*` / `fcs_*`（sculpt_prefix）だけ**。それ以外の名前が 1 つでも入っていたら何も消さずに ValueError。
 
@@ -797,6 +914,7 @@ def delete_targets(node: str, names: Iterable[str], sculpt_prefix: str = naming.
         combos = list(dict.fromkeys(cmds.listConnections(weight_plug(node, idx), source=True, destination=False, type="combinationShape") or []))
         if combos:
             cmds.delete(combos)  # 組み合わせ補正の節（このターゲット専用）
+        _empty_target(node, idx)  # 先に中身を空にする（Undo で要素だけでなく頂点の差分も戻る。S-7）
         cmds.aliasAttr(f"{node}.{n}", remove=True)
         for g in cmds.getAttr(node + ".inputTarget", multiIndices=True) or []:
             if idx in (cmds.getAttr(f"{node}.inputTarget[{g}].inputTargetGroup", multiIndices=True) or []):

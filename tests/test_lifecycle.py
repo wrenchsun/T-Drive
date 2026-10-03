@@ -100,3 +100,34 @@ def test_error_hook_reports_tool_exceptions_and_chains():
         if saved_attr is None and hasattr(sys, lifecycle._ORIGINAL_HOOK_ATTR):
             delattr(sys, lifecycle._ORIGINAL_HOOK_ATTR)
         lifecycle._error_listeners.clear()
+
+
+# ---------------------------------------------------------------- docs/19 M-14 / M-15
+def test_cleanups_survive_importlib_reload():
+    """M-14: lifecycle 自身が importlib.reload されても、登録済みの後片付けが消えない（Maya に登録したものが外せなくなる）。"""
+    import importlib
+
+    ran = []
+    lifecycle.on_reload(lambda: ran.append(1))
+    mod = importlib.reload(lifecycle)
+    try:
+        assert mod.run_reload_cleanups() == [] and ran == [1]
+    finally:
+        mod._cleanups.clear()
+
+
+def test_repeated_error_still_reaches_script_editor(capsys, monkeypatch):
+    """M-15: 同じエラーの 2 回目以降も Script Editor（stderr）には 1 行出る。エラーの表示バー（listener）だけ 1 回。"""
+    got = _collect()
+    now = [1000.0]
+    monkeypatch.setattr(lifecycle, "_now", lambda: now[0])
+    lifecycle.report_error("同じエラー", "Traceback...\nValueError: x")
+    now[0] += 10.0  # 描画のたびに出続けない程度の間隔を空ける
+    lifecycle.report_error("同じエラー", "Traceback...\nValueError: x")
+    err = capsys.readouterr().err
+    assert len(got) == 1  # 表示のバーは 1 回
+    assert err.count("同じエラー") == 2  # Script Editor には 2 回目も出る
+    now[0] += 0.001  # すぐ後（毎フレーム）の繰り返しは出さない
+    lifecycle.report_error("同じエラー", "Traceback...\nValueError: x")
+    assert capsys.readouterr().err.count("同じエラー") == 0
+    lifecycle._error_listeners.clear()

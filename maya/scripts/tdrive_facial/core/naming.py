@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Optional
+from typing import Iterable, Optional
 
 FC_PREFIX = "FC_"
 DEFAULT_SCULPT_PREFIX = "fcs_"
@@ -123,6 +123,35 @@ def _parse_tail(asset: str, tail: str) -> Optional[ParsedName]:
             int(m.group("col")),
         )
     return None
+
+
+OWNER_OWN = "own"  # このアセットのもの（孤立かどうかは点の有無で決める）
+OWNER_OTHER = "other"  # 別のアセット（このアセットの ID で始まる、より長い ID）のものかもしれない: 触らない
+OWNER_GARBAGE = "garbage"  # `FC_<asset>_` で始まるが規則に合わない: このアセットの孤立として扱う
+OWNER_FOREIGN = "foreign"  # `FC_<asset>_` で始まらない（別のアセット・FC_ でない名前）: 触らない
+_ANY_PERSP_TAIL = re.compile(r"^.+_Persp_K\d+$")
+
+
+def owner_of(name: str, asset: str, layer_names: Iterable[str]) -> tuple[str, Optional[ParsedName]]:
+    """`FC_*` の名前が、asset（と、そのレイヤー名）のものかを判定する。孤立の掃除・検証の「消してよいか」の根拠（C-1 / S-8）。
+
+    同じ blendShape には別のアセットの FC_* も載る。`FC_<asset>_` の前方一致だけだと、asset `Chara` の掃除が
+    asset `Chara_Alt` の `FC_Chara_Alt_Joy_R1_C1` を消してしまう。そこで、レイヤー名に `_` を含み、
+    かつこのアセットのレイヤー名に無いものは、より長い ID の別アセットのものとみなして触らない（OWNER_OTHER）。
+    戻り値: (判定, 分解結果。OWNER_OWN のとき。GARBAGE / OTHER / FOREIGN は None)。
+    判定できない衝突（asset `a` のレイヤー `b_Joy` と asset `a_b` のレイヤー `Joy`）は、名前だけでは区別できない。
+    """
+    head = f"{FC_PREFIX}{asset}_"
+    if not isinstance(name, str) or not name.startswith(head):
+        return OWNER_FOREIGN, None
+    parsed = parse_name(name, asset)
+    if parsed is None:
+        if _ANY_PERSP_TAIL.match(name[len(head):]):
+            return OWNER_OTHER, None
+        return OWNER_GARBAGE, None
+    if parsed.kind != KIND_PERSP and "_" in (parsed.layer or "") and parsed.layer not in set(layer_names):
+        return OWNER_OTHER, None
+    return OWNER_OWN, parsed
 
 
 def parse_sculpt_name(name: str, prefix: str = DEFAULT_SCULPT_PREFIX) -> Optional[ParsedName]:

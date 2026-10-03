@@ -19,6 +19,7 @@ Y-up / 単位 cm / テクスチャは埋め込まない。書き出しの前に�
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import shutil
@@ -142,6 +143,9 @@ def _bake_warnings(doc: Document) -> list[str]:
         out.append(f"ベイク後にポーズを変えた点が {n_changed} 点あります（FBX の形は古いままです。ベイクし直してください）")
     if n_missing:
         out.append(f"ベイクの記録はあるのにシェイプが無い点が {n_missing} 点あります")
+    n_orphan = sum(1 for i in issues if i.code == "orphan_target")
+    if n_orphan:
+        out.append(f"データに無い補正シェイプ（FC_*）が {n_orphan} 個シーンに残っています（元に戻す・やり直すの取り残しなど。そのまま FBX に入ります。ベイクすると掃除されます）")
     return out
 
 
@@ -258,9 +262,17 @@ class UnityExportJob:
         self._t0 = time.perf_counter()
         self.meshes = collect_meshes(doc)
         self.warnings = _bake_warnings(doc)
-        self._doc = doc
+        self._doc = copy.deepcopy(doc)  # 出力中にデータを編集しても、FBX と .fcpose が食い違わないよう開始時の内容を持つ（M-7）
         self.out_dir.mkdir(parents=True, exist_ok=True)
         self.work = Path(tempfile.mkdtemp(prefix="tdrive_facial_export_"))
+        self._log = None
+        try:
+            self._start(doc)
+        except BaseException:
+            self._cleanup()  # 開始に失敗したら、一時フォルダ・ログを残さない（S-14）
+            raise
+
+    def _start(self, doc: Document) -> None:
         self.result_path = self.work / "result.json"
         scene = self.work / "scene.mb"
         # シーン名・未保存の印を変えずに内容だけ書き出す（メインスレッドで行う）
@@ -295,7 +307,8 @@ class UnityExportJob:
 
     def _cleanup(self) -> None:
         try:
-            self._log.close()
+            if self._log is not None:
+                self._log.close()
         except OSError:
             pass
         shutil.rmtree(self.work, ignore_errors=True)

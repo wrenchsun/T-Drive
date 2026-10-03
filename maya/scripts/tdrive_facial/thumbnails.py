@@ -221,16 +221,17 @@ def capture(
         rep.message = f"サムネイルを作れませんでした: {exc}"
         lifecycle.report_error("サムネイルの作成でエラー", traceback.format_exc(), once=False)
     finally:
-        if cam is not None:
+        with _no_undo():  # 一時カメラの削除も Undo に積まない（積むと Ctrl+Z でカメラが復活する。S-10）
+            if cam is not None:
+                with contextlib.suppress(RuntimeError):
+                    if cmds.objExists(cam):
+                        cmds.delete(cam)
+            keep = [n for n in saved_selection if cmds.objExists(n)]
             with contextlib.suppress(RuntimeError):
-                if cmds.objExists(cam):
-                    cmds.delete(cam)
-        keep = [n for n in saved_selection if cmds.objExists(n)]
-        with contextlib.suppress(RuntimeError):
-            if keep:
-                cmds.select(keep, replace=True)
-            else:
-                cmds.select(clear=True)
+                if keep:
+                    cmds.select(keep, replace=True)
+                else:
+                    cmds.select(clear=True)
     if rep.ok:
         if rep.made:
             rep.message = f"サムネイルを {len(rep.made)} 枚作りました" + (f"（作れなかった点 {len(rep.failed)} 個）" if rep.failed else "")

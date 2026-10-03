@@ -19,6 +19,7 @@ Maya 非依存（maya を import しない）。守ること:
 from __future__ import annotations
 
 import sys
+import time
 import traceback
 from functools import wraps
 from pathlib import Path
@@ -32,9 +33,27 @@ INT32_MIN, INT32_MAX = -(2**31), 2**31 - 1
 _KEEPALIVE_ATTR = "_tdrive_toon_keepalive"  # sys の属性（リロードで消えない）
 _ORIGINAL_HOOK_ATTR = "_tdrive_toon_original_excepthook"
 
-_cleanups: list[Callable[[], None]] = []
+_STATE_ATTR = "_tdrive_lifecycle_state"  # sys の属性（importlib.reload でも後片付けの登録が消えない。M-14）
+REPEAT_INTERVAL = 5.0  # 同じエラーを Script Editor に 1 行で出し直す最短の間隔（秒）
+
+
+def _held(key: str, factory: Callable[[], Any]) -> Any:
+    held = getattr(sys, _STATE_ATTR, None)
+    if held is None:
+        held = {}
+        setattr(sys, _STATE_ATTR, held)
+    if key not in held:
+        held[key] = factory()
+    return held[key]
+
+
+def _now() -> float:
+    return time.monotonic()
+
+
+_cleanups: list[Callable[[], None]] = _held("cleanups", list)
 _error_listeners: list[Callable[[str, str], None]] = []
-_reported: set[str] = set()
+_reported: dict[str, float] = {}  # エラーの鍵 → 最後に Script Editor へ出した時刻
 
 
 # ---------------------------------------------------------------- 寿命
@@ -107,9 +126,14 @@ def report_error(summary: str, detail: str = "", once: bool = True) -> None:
     """ツール内のエラーを通知する（スクリプトエディタに出し、エディタに表示）。once=True なら同じ内容は 1 回だけ。"""
     last_line = detail.strip().splitlines()[-1] if detail.strip() else ""
     key = f"{summary}\n{last_line}"
+    now = _now()
     if once and key in _reported:
+        # 表示のバーは 1 回だけ。Script Editor には間隔を空けて 1 行だけ出す（描画のたびに出続けないように。M-15）
+        if now - _reported[key] >= REPEAT_INTERVAL:
+            _reported[key] = now
+            sys.stderr.write(f"[T-Drive] エラー（再発）: {summary}\n")
         return
-    _reported.add(key)
+    _reported[key] = now
     sys.stderr.write(f"[T-Drive] エラー: {summary}\n{detail}\n")
     for fn in list(_error_listeners):
         try:

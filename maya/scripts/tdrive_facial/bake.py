@@ -156,9 +156,9 @@ def _is_orphan(doc: Document, name: str, live: set[tuple[str, int, int]], live_e
     """この asset の FC_* で、格子に対応する点が無いもの（`validate` の orphan_target と同じ判定）。
     誇張用の `_Ex` は、その点があって `validate.needs_extreme` のときだけ生きている。"""
     asset = doc.asset or ""
-    if not name.startswith(f"{naming.FC_PREFIX}{asset}_"):
-        return False
-    p = naming.parse_name(name, asset)
+    verdict, p = naming.owner_of(name, asset, [layer.name for layer in doc.layers])
+    if verdict in (naming.OWNER_FOREIGN, naming.OWNER_OTHER):
+        return False  # 別のアセットのもの（アセット ID がより長いものを含む）は消さない（C-1 / S-8）
     if p is None:
         return True
     if p.kind == naming.KIND_POINT:
@@ -288,6 +288,25 @@ def bake(
                     state[m].pop(n, None)
                     if n not in rep.removed:
                         rep.removed.append(n)
+            # 書き込み先でない blendShape ノード（以前の版でスキンの後ろのノードに焼いた・持ち主のノードが変わった）にある、
+            # 今焼いた名前・この asset の孤立の FC_* を消す（二重に効かないように。S-6）
+            written = {name for name, _p, _s in results}
+            for other in scene.blend_shapes(m):
+                if other == nodes[m]:
+                    continue
+                stale = [
+                    t
+                    for t in scene.target_indices(other)
+                    if naming.is_fc_name(t) and (t in written or _is_orphan(doc, t, live, live_ex))
+                ]
+                if stale:
+                    scene.delete_targets(other, stale)
+                    other_state = scene.get_bake_state(other)
+                    if any(t in other_state for t in stale):
+                        for t in stale:
+                            other_state.pop(t, None)
+                        scene.set_bake_state(other, other_state)
+                    rep.notes.append(f"{scene.short_name(other)} にあった古い補正シェイプ {len(stale)} 個を消しました（{scene.short_name(nodes[m])} に移しました）")
             # 状態は消えたターゲットのぶんも掃除する
             for n in [k for k in state[m] if k not in scene.target_indices(nodes[m])]:
                 state[m].pop(n, None)

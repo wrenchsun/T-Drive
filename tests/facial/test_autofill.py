@@ -823,3 +823,22 @@ def test_conformance_autofill(case):
         pose_close(got_pts[(e["row"], e["col"])].pose, _expect_pose(e), tol)
     for k, pose in keys_before.items():
         assert d.layers[0].points[k].is_key and d.layers[0].points[k].pose == pose
+
+
+def test_generate_all_layers_is_atomic_when_a_later_layer_fails():
+    """C-5: 全レイヤーの自動生成が途中のレイヤーで失敗しても、前のレイヤーだけ変わった状態にならない。"""
+    doc = make_doc(axis="x")  # 小文字のミラー軸: ボーンのあるキーを鏡映するレイヤーで ValueError
+    put(doc, 1, 4, curves={"a": 1.0})
+    doc.layers.append(Layer(name="Joy"))
+    put(doc, 1, 4, bones={"eye": bone(t=(1.0, 0.0, 0.0))}, layer=1)
+    before = snapshot(doc)
+    with pytest.raises(ValueError):
+        af.generate_from_keys(doc)
+    assert snapshot(doc) == before
+
+
+def test_rotation_with_w_minus_one_is_identity():
+    """C-9: 回転 (0, 0, 0, -1)（q と -q は同じ回転）も単位とみなす（UE 版と同じ）。"""
+    assert af._rotation_is_identity((0.0, 0.0, 0.0, 1.0))
+    assert af._rotation_is_identity((0.0, 0.0, 0.0, -1.0))
+    assert not af._rotation_is_identity((0.0, 0.0, 1.0, 0.0))

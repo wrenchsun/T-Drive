@@ -91,6 +91,7 @@ class CaptureResult:
 
     report: IngestReport
     base_ignored: list[str] = field(default_factory=list)
+    below_base: list[str] = field(default_factory=list)  # シーンの値が土台より低く、ポーズに入れられなかったシェイプ
 
 
 @dataclass
@@ -508,7 +509,7 @@ def capture_from_scene(session, working_set_only: Optional[bool] = None) -> Capt
     """「シーンから取り込む」。土台の表情が有効なら、`session.capture_from_scene` が土台の値を引く（ポーズの値 = シーンの値 − 土台の値）。
     base_ignored は、土台のとおり（変化なし）だったので取り込まなかった土台のシェイプ。"""
     rep = session.capture_from_scene(working_set_only=working_set_only)
-    return CaptureResult(rep, list(session.last_capture_base_ignored))
+    return CaptureResult(rep, list(session.last_capture_base_ignored), list(session.last_capture_below_base))
 
 
 # ---------------------------------------------------------------------------

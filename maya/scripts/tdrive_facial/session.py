@@ -51,6 +51,7 @@ import contextlib
 import copy
 import json
 import math
+import sys
 import traceback
 from dataclasses import dataclass, field
 from functools import wraps
@@ -104,6 +105,9 @@ MAX_UNDO = 100
 FILE_SUFFIX = ".fcpose.json"
 
 
+_no_undo = scene_mod.no_undo  # この間の Maya のシーンの変更を Undo に積まない（M-5）
+
+
 class FacialSessionError(RuntimeError):
     """セッションの操作ができない（メッセージはそのまま画面に出せる日本語）。"""
 
@@ -116,6 +120,13 @@ class FacialSessionError(RuntimeError):
 def default_path(character: str) -> Path:
     """既定の保存先 `<プロジェクト>/facial/<character>/<character>.fcpose.json`。"""
     return project.root() / "facial" / character / f"{character}{FILE_SUFFIX}"
+
+
+def _same_file(a: Path, b: Path) -> bool:
+    try:
+        return a.resolve() == b.resolve()
+    except OSError:
+        return a == b
 
 
 def _stem_of(path: Path) -> str:
@@ -201,12 +212,21 @@ class FacialSession:
         self._applied: Optional[tuple[int, int, int]] = None
         self._sculpt: Optional[SculptState] = None  # 「この角度で彫る」の最中（shapes.py。docs/14 §5.6）
         self._base: Optional[BaseExpression] = None  # 土台の表情（シーンだけの下敷き。モジュールの docstring「土台の表情」）
+        self._suspended: Optional["_SuspendedEdit"] = None  # 保存・出力のあいだ編集状態を一時的に抜けているときの、戻す情報（M-1）
         self.last_capture_base_ignored: list[str] = []  # 直近の `capture_from_scene` で、土台のとおりだったので取り込まなかったシェイプ
+        self.last_capture_below_base: list[str] = []  # 直近の `capture_from_scene` で、シーンの値が土台より低く、取り込めなかったシェイプ（C-2）
 
     # ------------------------------------------------------------ 状態
     @property
     def doc(self) -> Optional[Document]:
         return self.presenters.ctx.doc if self.presenters is not None else None
+
+    @property
+    def has_unsaved_work(self) -> bool:
+        """保存していないものがある: データの変更（dirty）か、点に保存していない編集中の値（スライダー・取り込み）。M-8。"""
+        if self.presenters is None:
+            return False
+        return bool(self.dirty or self.presenters.pose.dirty)
 
     def require(self) -> Document:
         if self.presenters is None:
@@ -365,6 +385,10 @@ class FacialSession:
     def save(self, path: Optional[str | Path] = None, overwrite: bool = False) -> Path:
         """保存する。path を渡すとそこへ（以後の保存先になる）。一度も保存していない既定の保存先に既存のファイルがあれば FileExistsError。"""
         doc = self.require()
+        target = Path(path) if path is not None else (self.path or default_path(doc.asset or "untitled"))
+        if self.source_path is not None and _same_file(target, self.source_path):
+            # 別の座標系から変換して開いたファイルの元には上書きしない（UE 版などへ戻せなくなる。M-12）
+            raise FacialSessionError(f"{target.as_posix()} は変換して開いた元のファイルです。別の名前で保存してください（上書きはできません）")
         if path is not None:
             self.path = Path(path)
             self._path_confirmed = True
@@ -711,8 +735,10 @@ class FacialSession:
             return self._ref
         pose_apply.assert_maya_space(doc)
         meshes = self._resolve_meshes(doc)
+        self._suspended = None  # 自分で入り直した: 保存の途中で抜けた記録は不要
         try:
-            ref = scene_mod.enter_reference_pose(meshes, extra_joints=self._bone_names(doc))
+            with _no_undo():
+                ref = scene_mod.enter_reference_pose(meshes, extra_joints=self._bone_names(doc))
         except scene_mod.ReferenceError_ as e:
             raise FacialSessionError(f"基準姿勢にできません: {e}") from e
         self._ref = ref
@@ -740,7 +766,8 @@ class FacialSession:
                 lifecycle.report_error("彫りを終えられませんでした", traceback.format_exc(), once=False)
         try:
             if ref.active and self._ref_alive():
-                ref.restore()
+                with _no_undo():
+                    ref.restore()
             else:
                 self._forget_edit()
         except BaseException:
@@ -756,6 +783,107 @@ class FacialSession:
         if not quiet and sync_preview and self._preview_pending:
             self._sync_preview()
         self._notify_state()
+
+    # ------------------------------------------------------------ ツールのリロードをまたぐ引き継ぎ（M-3）
+    def export_state(self) -> Optional[dict[str, Any]]:
+        """リロードの前: 開いているデータ・保存先・未保存の印・エディタ内 Undo / Redo・選択・編集中の値を、素の dict / list にして返す
+        （古いモジュールのクラスのオブジェクトを新しいモジュールへ渡さない）。データが開かれていなければ None。"""
+        if self.presenters is None:
+            return None
+        ctx = self.presenters.ctx
+        curves, bones = fcpose_io._pose_parts(SourcePose(dict(self.pose.curves), dict(self.pose.bones)))
+        return {
+            "doc": fcpose_io.to_dict(self.doc),
+            "path": str(self.path) if self.path is not None else None,
+            "dirty": self.dirty,
+            "path_confirmed": self._path_confirmed,
+            "converted_from": copy.deepcopy(self.converted_from),
+            "source_path": str(self.source_path) if self.source_path is not None else None,
+            "undo": [fcpose_io.to_dict(d) for d in self._undo],
+            "redo": [fcpose_io.to_dict(d) for d in self._redo],
+            "active_layer": ctx.active_layer,
+            "selection": list(ctx.selection) if ctx.selection is not None else None,
+            "buffer": {"curves": curves, "bones": bones},
+        }
+
+    def import_state(self, state: dict[str, Any]) -> bool:
+        """`export_state` の結果で、リロード前の状態を作り直す（新しいモジュールのセッションで呼ぶ）。戻り: 復元できたか。"""
+        doc = fcpose_io.from_dict(state["doc"])
+        path = Path(state["path"]) if state.get("path") else None
+        self._install(doc, path, confirmed=bool(state.get("path_confirmed")), dirty=bool(state.get("dirty")))
+        self.converted_from = copy.deepcopy(state.get("converted_from"))
+        self.source_path = Path(state["source_path"]) if state.get("source_path") else None
+        self._undo[:] = [fcpose_io.from_dict(d) for d in state.get("undo", [])]
+        self._redo[:] = [fcpose_io.from_dict(d) for d in state.get("redo", [])]
+        ctx = self._pres().ctx
+        n = len(doc.layers)
+        if n:
+            ctx.set_active_layer(min(max(int(state.get("active_layer", 0)), 0), n - 1))
+        sel = state.get("selection")
+        if sel is not None and ctx.in_grid(int(sel[0]), int(sel[1])):
+            ctx.set_selection((int(sel[0]), int(sel[1])))
+            buf = state.get("buffer") or {}
+            pose = fcpose_io._read_pose(buf.get("curves"), buf.get("bones"))
+            self.pose.curves, self.pose.bones = pose.curves, pose.bones  # 保存していないスライダーの値
+        self._changed(dirty=False)
+        return True
+
+    # ------------------------------------------------------------ 保存・出力のあいだだけ編集状態を抜ける（M-1）
+    def suspend_edit_for_save(self) -> bool:
+        """シーンの保存・出力の直前: 編集状態にいれば、元の姿勢・重み・接続へ戻す（基準姿勢をファイルに書かないため）。
+
+        土台の表情・彫りの状態は控えておく（編集中の値・選んでいる点は Presenter が持っているのでそのまま）。
+        戻すのは `resume_edit_after_save`。編集状態でなければ False。"""
+        if self._suspended is not None:
+            return True
+        if not self.editing:
+            return False
+        st = _SuspendedEdit(base=self._base, sculpt=self._sculpt)
+        ref = self._ref
+        assert ref is not None
+        try:
+            with _no_undo():
+                ref.restore()
+        finally:
+            ref.active = False
+            self._ref = None
+            self._ref_uuids = {}
+            self._applied = None
+            self._base = None
+            self._sculpt = None
+        self._suspended = st
+        return True
+
+    def resume_edit_after_save(self) -> None:
+        """保存・出力のあと: 抜けていた編集状態へ同じ内容で入り直す（点・編集中の値・土台の表情。シーンの変更フラグは保存の直後のまま）。"""
+        st, self._suspended = self._suspended, None
+        if st is None or self.presenters is None:
+            return
+        modified = bool(cmds.file(query=True, modified=True))
+        try:
+            self.begin_edit()
+            self._base = st.base
+            self._sculpt = st.sculpt
+            self._apply_buffer()
+        except Exception:  # noqa: BLE001  入り直せなくても保存は成功させる（シーンは元の姿勢のまま）
+            self.end_edit(quiet=True)
+            lifecycle.report_error("保存のあと編集状態へ戻れませんでした（編集状態を抜けました）", traceback.format_exc(), once=False)
+        finally:
+            cmds.file(modified=modified)
+        self._notify_state()
+
+    def on_before_save(self) -> None:
+        """シーンの保存の直前（kBeforeSave）: 編集状態を一時的に抜け、開いているデータの場所をシーンに記録する（M-1・M-2）。"""
+        self.suspend_edit_for_save()
+        if self.presenters is None:
+            return
+        path = self.path or default_path(self.doc.asset or "untitled")
+        if self._path_confirmed or not path.exists():  # 一度も保存していない既定の場所に別のファイルがあるときは記録しない
+            self._remember(path)
+
+    def on_after_save(self) -> None:
+        """シーンの保存の直後（kAfterSave）。"""
+        self.resume_edit_after_save()
 
     @contextlib.contextmanager
     def edit_guard(self):
@@ -828,7 +956,8 @@ class FacialSession:
         ctx = pres.ctx
         if ctx.selection is None:
             if self._base is None:
-                pose_apply.reset_to_reference(ref)
+                with _no_undo():
+                    pose_apply.reset_to_reference(ref)
                 self._applied = None
                 return None
             pose = SourcePose()
@@ -837,7 +966,8 @@ class FacialSession:
         pose = self._layered_pose(pose)
         for name in pose.curves:  # 編集中に作られた / Undo で戻ったターゲットの重みも、編集を抜けるとき 0 へ戻す対象にする
             ref._curve_cache.pop(name, None)
-        rep = pose_apply.apply_pose(ctx.doc, pose, ref)
+        with _no_undo():
+            rep = pose_apply.apply_pose(ctx.doc, pose, ref)
         self._track_weights(ref, pose.curves)
         if ctx.selection is None:
             self._applied = None
@@ -870,6 +1000,7 @@ class FacialSession:
         pose = pose_apply.capture_pose(doc, self._ref, working_set_only=wso)
         curves = pose.curves
         self.last_capture_base_ignored = []
+        self.last_capture_below_base = []
         base = self._base.curves if self._base is not None else {}
         if base:  # 土台を引く（ポーズの値 = シーンの値 − 土台の値）。除外・作業セットの外のシェイプは触らず、編集中の値を残す
             ws = set(doc.working_set.curves) if wso and doc.working_set.curves else None
@@ -878,7 +1009,11 @@ class FacialSession:
             for n in skip:
                 if n in pres.pose.curves:
                     curves[n] = pres.pose.curves[n]
+        # 土台より低くしたシェイプは差分が負になる。ポーズは可動域（0〜）で丸めるので入れられない: 黙って捨てず、知らせる（C-2）
+        below = sorted(n for n, v in curves.items() if n in base and v < -base_expr.EPS)
+        self.last_capture_below_base = below
         rep = pres.pose.ingest(curves, pose.bones, replace=True, working_set_only=wso)
+        rep.below_base = below
         self._notify_state()
         return rep
 
@@ -2505,10 +2640,12 @@ class FacialSession:
     # ============================================================ シーンの出来事（userSetup の scriptJob から）
     def on_before_scene_change(self) -> None:
         """新しいシーン / 別のシーンを開く直前（PreFileNewOrOpened）: 編集状態を抜けて、今のシーンを元の姿勢へ戻す。"""
+        self._suspended = None
         self.end_edit(quiet=True)
 
     def on_new_scene(self) -> None:
         """新しいシーン（NewSceneOpened）: 古いシーンの基準姿勢の記録は捨てる（新しいシーンへ書かない）。データは開いたまま。"""
+        self._suspended = None
         self._forget_edit()
         if self.presenters is not None:
             self.refresh_scene(notify=True)
@@ -2536,6 +2673,14 @@ class T20ImportResult(CommandResult):
     skipped: list[str] = field(default_factory=list)  # 取り込まなかったものと理由
     existing: list[str] = field(default_factory=list)  # 既にキーがあるので上書きしなかった点（overwrite=True で上書き）
     warnings: list[str] = field(default_factory=list)
+
+
+@dataclass
+class _SuspendedEdit:
+    """保存のあいだ編集状態を抜けたときの、入り直すための控え。"""
+
+    base: Optional["BaseExpression"] = None
+    sculpt: Optional["SculptState"] = None
 
 
 @dataclass
@@ -2634,7 +2779,7 @@ def on_scene_opened() -> None:
         if s.presenters is not None:
             s.refresh_scene(notify=True)  # 開いたままのデータ: 新しいシーンの事情を取り直す
         return
-    if s.dirty and s.presenters is not None:
+    if s.has_unsaved_work:
         print(f"[T-Drive] 未保存の FacialController のデータがあるため自動では開きません: {path}")
         return
     try:
@@ -2670,10 +2815,67 @@ def on_new_scene() -> None:
     _current.on_new_scene()
 
 
+# --- Maya のシーンのメッセージ（保存・出力・終了）。M-14: 登録の控えは sys に持つ（importlib.reload でも消えない）
+_SCENE_CALLBACKS_ATTR = "_tdrive_facial_scene_callbacks"
+
+
+@lifecycle.guarded()
+def _cb_before_save(_client=None) -> None:
+    _current.on_before_save()
+
+
+@lifecycle.guarded()
+def _cb_after_save(_client=None) -> None:
+    _current.on_after_save()
+
+
+@lifecycle.guarded()
+def _cb_before_export(_client=None) -> None:
+    _current.suspend_edit_for_save()  # 出力にも基準姿勢が入るので、保存と同じに抜ける（データの場所は記録しない）
+
+
+@lifecycle.guarded()
+def _cb_after_export(_client=None) -> None:
+    _current.resume_edit_after_save()
+
+
+@lifecycle.guarded()
+def _cb_maya_exiting(_client=None) -> None:
+    _current.end_edit(quiet=True)
+
+
+def remove_scene_callbacks() -> None:
+    """登録済みの MSceneMessage のコールバックを外す（古いモジュールが登録したものも。何度呼んでもよい）。"""
+    for cid in list(getattr(sys, _SCENE_CALLBACKS_ATTR, [])):
+        try:
+            om.MMessage.removeCallback(cid)
+        except Exception:  # noqa: BLE001  既に無い
+            pass
+    setattr(sys, _SCENE_CALLBACKS_ATTR, [])
+
+
+def install_scene_callbacks() -> None:
+    """保存・出力の直前に編集状態を抜け、直後に戻すコールバックを登録する（M-1）。登録し直しても重ならない。"""
+    remove_scene_callbacks()
+    ids = []
+    for msg, fn in (
+        (om.MSceneMessage.kBeforeSave, _cb_before_save),
+        (om.MSceneMessage.kAfterSave, _cb_after_save),
+        (om.MSceneMessage.kBeforeExport, _cb_before_export),
+        (om.MSceneMessage.kAfterExport, _cb_after_export),
+        (om.MSceneMessage.kMayaExiting, _cb_maya_exiting),
+    ):
+        lifecycle.keep_alive(fn)
+        ids.append(om.MSceneMessage.addCallback(msg, fn))
+    setattr(sys, _SCENE_CALLBACKS_ATTR, ids)
+
+
 def _reload_cleanup() -> None:
-    """ツールのリロード前: シーンを基準姿勢のまま残さない（古いモジュールが解放される前に戻す）。"""
+    """ツールのリロード前: シーンを基準姿勢のまま残さない（古いモジュールが解放される前に戻す）。コールバックも外す。"""
+    remove_scene_callbacks()
     _current.end_edit(quiet=True)
     _current.listeners.clear()
 
 
 lifecycle.on_reload(_reload_cleanup)
+install_scene_callbacks()

@@ -114,3 +114,14 @@ def test_curve_names():
     assert ft.emotion_curve_name("Joy") == "emotion.Joy"
     assert all(ft.is_valid_curve_name(n) for n in ("alpha", "useManual", "manualYaw", "manualPitch", "emotion.Joy"))
     assert not ft.is_valid_curve_name("enable")
+
+
+def test_loads_rejects_non_finite_and_deep_json():
+    """C-4: .fctrack の読み込みも NaN / Infinity / 深すぎる入れ子を拒否する（C# の MiniJson と同じ）。"""
+    import pytest
+
+    from tdrive_facial.core import fctrack
+
+    for bad in ('{"curves": {"a": [[0, NaN]]}}', '{"curves": {"a": [[0, 1e999]]}}', '{"x": ' + "[" * 300 + "]" * 300 + "}"):
+        with pytest.raises(fctrack.FcTrackError):
+            fctrack.loads(bad)

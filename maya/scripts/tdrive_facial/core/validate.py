@@ -22,7 +22,8 @@ from dataclasses import dataclass, field
 from typing import Collection, Iterable, Mapping, Optional, Sequence
 
 from . import naming
-from .model import FORWARD_AXES, MAX_LAYERS, Document, SourcePose
+from . import space
+from .model import FILL_MODES, FORWARD_AXES, MAX_LAYERS, MIRROR_AXES, Document, SourcePose
 from .profile import (
     DEFAULT_LIMIT,
     NamingProfile,
@@ -255,6 +256,7 @@ def validate(
     # --- 構造（格子・レイヤー）---
     if not asset:
         add(Issue("asset_missing", SEVERITY_ERROR, "アセット名（asset）が空です。FC_<asset>_… の名前を作れません"))
+    _check_values(doc, add)
     _check_grid(doc, scene, add)
     _check_layers(doc, add)
     _check_layer_weights(doc, add)
@@ -294,6 +296,69 @@ def validate(
         _check_bake(doc, scene, bake_state, add)
         _check_targets(doc, scene, add)
     return issues
+
+
+MAX_GRID_SIDE = 64  # 格子の列数・行数の上限（画面の入力欄と同じ。これを超えると自動生成・ベイクが終わらない）
+MAX_IDW_POWER = 64.0  # IDW の指数の上限（これを超えると 1 / dist**p が 0 除算になる）
+
+
+def _walk_numbers(v, path: str):
+    """辞書・リストの中の数値（float）を (場所, 値) で列挙する（再帰を使わない）。"""
+    stack = [(v, path)]
+    while stack:
+        cur, where = stack.pop()
+        if isinstance(cur, dict):
+            stack.extend((c, f"{where}.{k}" if where else str(k)) for k, c in cur.items())
+        elif isinstance(cur, (list, tuple)):
+            stack.extend((c, f"{where}[{i}]") for i, c in enumerate(cur))
+        elif isinstance(cur, float):
+            yield where, cur
+
+
+def _check_values(doc: Document, add) -> None:
+    """読み込みでは通るが、あとで落ちる・結果が壊れる値（有限でない数・ミラー軸・自動生成の設定・単位・格子の大きさ。docs/19 C-4 / C-5）。"""
+    from . import fcpose_io  # 書き出しと同じ辞書で調べる（遅延 import: fcpose_io は validate に依存しない）
+
+    try:
+        d = fcpose_io.to_dict(doc)
+    except Exception:  # noqa: BLE001  辞書にできない = 下の検査で個別に見る
+        d = {}
+    bad = [where for where, val in _walk_numbers(d, "") if not math.isfinite(val)]
+    for where in bad[:20]:
+        add(Issue("non_finite_value", SEVERITY_ERROR, f"有限でない数値（NaN / 無限大）があります: {where}。保存・ベイクできません", name=where))
+    if len(bad) > 20:
+        add(Issue("non_finite_value", SEVERITY_ERROR, f"有限でない数値がほかに {len(bad) - 20} 個あります"))
+    if doc.mirror.bone_axis not in MIRROR_AXES:
+        add(
+            Issue(
+                "mirror_axis_invalid",
+                SEVERITY_ERROR,
+                f"ミラーの軸「{doc.mirror.bone_axis}」は使えません（{' / '.join(MIRROR_AXES)}。大文字で指定）",
+                name=doc.mirror.bone_axis,
+            )
+        )
+    if doc.autogen.mode not in FILL_MODES:
+        add(Issue("autogen_invalid", SEVERITY_ERROR, f"自動生成の方式「{doc.autogen.mode}」は使えません（{' / '.join(FILL_MODES)}）", name=doc.autogen.mode))
+    p = doc.autogen.idw_power
+    if not (math.isfinite(p) and 0.0 < p <= MAX_IDW_POWER):
+        add(Issue("autogen_invalid", SEVERITY_ERROR, f"自動生成の IDW の指数 {_fmt(p)} が範囲外です（0 より大きく {MAX_IDW_POWER:g} 以下）", name="idwPower"))
+    m = doc.meta
+    if m.unit not in space.UNIT_TO_CM or m.up_axis not in ("Y", "Z") or m.handedness not in ("left", "right"):
+        add(
+            Issue(
+                "meta_invalid",
+                SEVERITY_ERROR,
+                f"座標系の記録（単位 {m.unit} / 上軸 {m.up_axis} / {m.handedness}）が使えない値です",
+            )
+        )
+    if doc.grid.cols > MAX_GRID_SIDE or doc.grid.rows > MAX_GRID_SIDE:
+        add(
+            Issue(
+                "grid_size_invalid",
+                SEVERITY_ERROR,
+                f"格子の大きさ（{doc.grid.cols} 列 × {doc.grid.rows} 行）が大きすぎます。列・行とも {MAX_GRID_SIDE} 以下にしてください",
+            )
+        )
 
 
 def _check_grid(doc: Document, scene: SceneInfo, add) -> None:
@@ -766,11 +831,11 @@ def _check_targets(doc: Document, scene: SceneInfo, add) -> None:
     live = {(layer.name, rc[0], rc[1]) for _li, layer, rc, _pt in _bake_candidates(doc)}
     live_ex = {(layer.name, rc[0], rc[1]) for li, layer, rc, _pt in _bake_candidates(doc) if needs_extreme(doc, li, rc)}
     n_persp = len(doc.perspective.keys) if doc.perspective is not None else 0
-    head = f"{naming.FC_PREFIX}{asset}_"
+    layer_names = [layer.name for layer in doc.layers]
     for t in sorted(scene.targets):
-        if not t.startswith(head):
-            continue  # 別のアセットの FC_*、または FC_ でない名前は対象外
-        p = naming.parse_name(t, asset)
+        verdict, p = naming.owner_of(t, asset, layer_names)
+        if verdict in (naming.OWNER_FOREIGN, naming.OWNER_OTHER):
+            continue  # 別のアセットの FC_*（アセット ID がより長いものを含む）、または FC_ でない名前は対象外（C-1）
         orphan = False
         why = ""
         if p is None:
@@ -849,20 +914,24 @@ def _clean_mapping(mapping: Mapping[str, str]) -> dict[str, str]:
 
 
 def _rename_dict(d: dict, mapping: Mapping[str, str]) -> tuple[dict, int, int]:
-    """辞書のキーを一斉に改名（2 パス: 先に最終キーを決めてから衝突を見る）。戻り値 = (新しい辞書, 改名数, 見送り数)。"""
-    finals = [mapping.get(k, k) for k in d]
-    counts = Counter(finals)
+    """辞書のキーを一斉に改名する。最終的な名前が重なる改名は見送る（値を失わない。連鎖 A→B・C→A でも）。
+
+    見送った改名のキーは元の名前のまま残り、その名前も「使われている」ので、ほかの改名がそこへ来るなら、それも見送る
+    （重なりがなくなるまで繰り返す）。戻り値 = (新しい辞書, 改名数, 見送り数)。"""
+    active = {k: mapping[k] for k in d if k in mapping and mapping[k] != k}
+    collided = 0
+    while True:
+        finals = Counter(active.get(k, k) for k in d)
+        clash = [k for k, f in active.items() if finals[f] > 1]
+        if not clash:
+            break
+        for k in clash:
+            del active[k]
+        collided += len(clash)
     out: dict = {}
-    replaced = collided = 0
-    for (k, v), f in zip(d.items(), finals):
-        if f != k:
-            if counts[f] > 1:
-                out[k] = v  # 衝突: この辞書では元の名前のまま残す
-                collided += 1
-                continue
-            replaced += 1
-        out[f] = v
-    return out, replaced, collided
+    for k, v in d.items():
+        out[active.get(k, k)] = v
+    return out, len(active), collided
 
 
 def _rename_list(items: list[str], mapping: Mapping[str, str]) -> tuple[list[str], int]:

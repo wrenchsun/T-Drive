@@ -424,3 +424,16 @@ def test_warnings_not_raised_for_normal_load():
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         P.builtin_profiles()
+
+
+def test_profile_limit_without_node_name_applies_to_scene_names():
+    """C-7: ノード名なしの可動域（arkit52 の jawOpen など）が、シーンの名前（bs.jawOpen）にも効く（curve_matches と同じ規則）。"""
+    prof = P.NamingProfile(name="p", limits={"jawOpen": (0.0, 2.0), "bs.smile": (-1.0, 1.0)})
+    assert P.effective_limit(None, prof, "bs.jawOpen") == (0.0, 2.0)
+    assert P.effective_limit(None, prof, "jawOpen") == (0.0, 2.0)
+    assert P.has_limit(None, prof, "face.jawOpen")
+    assert P.effective_limit(None, prof, "bs.jawOpenX") == (0.0, 1.0)  # 別のターゲット名には効かない
+    assert P.effective_limit(None, prof, "bs.smile") == (-1.0, 1.0)  # ノード名つきは完全一致のまま
+    assert P.effective_limit(None, prof, "other.smile") == (0.0, 1.0)
+    pose = m.SourcePose(curves={"bs.jawOpen": 1.7})
+    assert P.clamp_pose(pose, m.Document(), prof).curves["bs.jawOpen"] == 1.7  # 誇張が丸められない

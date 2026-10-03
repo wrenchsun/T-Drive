@@ -294,9 +294,15 @@ def restore(control: str | None = None) -> None:
         old.deleteLater()
     _window = ShellWindow()
     _control = parent if isinstance(parent, str) else None
+    # 自分が入っている枠の名前（名前が文字列で渡されなくても、入れ物の親をたどって分かるようにする）
+    own = [parent] if isinstance(parent, str) else []
+    w = holder
+    while w is not None:
+        own.append(w.objectName())
+        w = w.parentWidget()
     lifecycle.on_reload(_cleanup)
     omui.MQtUtil.addWidgetToMayaLayout(int(getCppPointer(_window)[0]), int(ptr))
-    _remove_old_control()  # 新しい枠から復元されたなら、旧エディタの枠は要らない（二重表示を防ぐ）
+    _remove_old_control(own)  # 新しい枠から復元されたなら、旧エディタの枠は要らない（二重表示を防ぐ。自分が入る枠は消さない）
     _update_dock_label()
 
 
@@ -305,9 +311,22 @@ def select_tool(tool_id: str) -> None:
         _window.select_tool(tool_id)
 
 
-def _remove_old_control() -> None:
-    """旧エディタの枠（2 段タブになる前）が残っていれば消す。ドッキング位置は引き継がない（新しい枠を作る）。"""
-    if _control != OLD_CONTROL_NAME and cmds.workspaceControl(OLD_CONTROL_NAME, exists=True):
+def _same_control(a: str | None, b: str | None) -> bool:
+    """枠の名前が同じか（UI のパス `a|b|名前` の最後の部分・大文字小文字の違いは同じとみなす）。"""
+    if not a or not b:
+        return False
+    return a.rsplit("|", 1)[-1].lower() == b.rsplit("|", 1)[-1].lower()
+
+
+def _remove_old_control(own=()) -> None:
+    """旧エディタの枠（2 段タブになる前）が残っていれば消す。ドッキング位置は引き継がない（新しい枠を作る）。
+
+    **今復元している枠自身（`_control` と、`own` = 自分が入っている枠の名前）は消さない**（古いレイアウトから復元されたとき、
+    復元中の枠を消してパネルが消える・落ちるのを防ぐ。docs/19 M-4）。
+    """
+    if _same_control(_control, OLD_CONTROL_NAME) or any(_same_control(n, OLD_CONTROL_NAME) for n in own):
+        return
+    if cmds.workspaceControl(OLD_CONTROL_NAME, exists=True):
         cmds.deleteUI(OLD_CONTROL_NAME)
 
 
@@ -330,10 +349,11 @@ def _cleanup() -> None:
 def close() -> None:
     """ウィンドウを閉じる（ドッキング位置の記録も消す）。"""
     global _window, _control
+    # 後片付け（出力中のジョブの中止・購読の解除・基準姿勢から元へ戻す）を、Qt の枠を消すより先に行う（M-6）
+    if _window is not None:
+        _window.detach()
     for name in (_control, CONTROL_NAME, OLD_CONTROL_NAME):
         if name and cmds.workspaceControl(name, exists=True):
             cmds.deleteUI(name)
-    if _window is not None:
-        _window.detach()
-        _window = None
+    _window = None
     _control = None

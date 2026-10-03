@@ -400,6 +400,15 @@ def run_mini() -> None:
     # ---- バインドポーズが無いとき
     for dp in cmds.ls(type="dagPose") or []:
         cmds.delete(dp)
+    try:  # バインド後に動かしたままのジョイント（バインドポーズ無し）では、基準姿勢が元のメッシュと合わないので止める（S-3）
+        scene.enter_reference_pose([face])
+        stopped = False
+    except scene.ReferenceError_:
+        stopped = True
+    check("バインドポーズが無く、ジョイントがバインド後に動いたままなら基準姿勢に入れない（S-3）", stopped)
+    for j, tr in (("root", (0, 0, 0)), ("head", (0, 10, 0)), ("eye_L", (2.8, 2.96, 7.4)), ("eye_R", (-2.8, 2.96, 7.4))):
+        cmds.setAttr(f"{j}.translate", *tr)
+        cmds.setAttr(f"{j}.rotate", 0, 0, 0)
     with scene.enter_reference_pose([face]) as ref:
         warned = (not ref.has_bind_pose) and any("バインドポーズ" in w for w in ref.warnings)
     rep = bakemod.bake(doc)

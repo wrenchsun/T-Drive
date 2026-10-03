@@ -3,6 +3,8 @@
 .fx / ToonCore.hlsl の変更も反映される（dx11Shader -reload は使わない。docs/09 §6）。
 **編集中の Look（未保存の変更・エディタ内 Undo を含む）とプレビュー環境（プロファイル・ライト）は引き継ぐ**。
 以前はファイルから開き直していたため、未保存の変更が消えていた（2026-09-28 修正）。
+**FacialController の開いているデータ（未保存の変更・保存先・Undo・選択・編集中の値）も引き継ぐ**（docs/19 M-3）。
+基準姿勢の編集状態はリロードの前に抜けてシーンを元へ戻す（リロード後に必要なら入り直す）。
 """
 
 import sys
@@ -21,6 +23,14 @@ carry = None
 if old_session is not None:
     s_old = old_session.current()
     carry = {k: getattr(s_old, k) for k in _SESSION_FIELDS if hasattr(s_old, k)}
+facial_carry = None
+old_facial = sys.modules.get("tdrive_facial.session")
+if old_facial is not None:
+    try:
+        old_facial.current().end_edit(quiet=True)  # 基準姿勢のまま引き継がない（シーンを元の姿勢へ戻してから）
+        facial_carry = old_facial.current().export_state()
+    except Exception as exc:  # noqa: BLE001  引き継げなければ目立つように知らせる（黙って消さない）
+        cmds.warning(f"[T-Drive] FacialController のデータを引き継げませんでした。未保存の変更は失われます: {exc}")
 env = dict(getattr(old_preview, "_env", {})) if old_preview is not None else {}
 editor_open = False
 editor_control = None
@@ -75,6 +85,15 @@ elif (path := preview.remembered_look_path()) and preview.preview_shaders():
     print(f"tdrive_toon reloaded; preview rebuilt from {path}")
 else:
     print("tdrive_toon reloaded")
+
+if facial_carry is not None:
+    try:
+        from tdrive_facial import session as facial_session
+
+        facial_session.current().import_state(facial_carry)
+        print("tdrive_facial reloaded; データを引き継ぎました（未保存の変更・Undo・選択を含む）")
+    except Exception as exc:  # noqa: BLE001
+        cmds.warning(f"[T-Drive] FacialController のデータを引き継げませんでした。未保存の変更は失われます: {exc}")
 
 if editor_open:
     shell.restore(editor_control)  # 同じドッキング位置に新しいコードのエディタを作り直す

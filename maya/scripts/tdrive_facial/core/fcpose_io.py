@@ -74,8 +74,16 @@ def _f(v: Any, default: float) -> float:
     return float(v) if _is_num(v) else default
 
 
+INT_MIN, INT_MAX = -(2**31), 2**31 - 1
+
+
 def _i(v: Any, default: int) -> int:
-    return int(v) if _is_num(v) else default
+    """整数にする（0 方向への切り捨て。範囲外は 32 ビット符号付き整数の端に収める。C# の ToInt と同じ）。"""
+    if not _is_num(v):
+        return default
+    if isinstance(v, float) and v != v:
+        return 0
+    return max(INT_MIN, min(INT_MAX, int(v)))
 
 
 def _s(v: Any, default: str) -> str:
@@ -138,8 +146,12 @@ def _read_pose(curves: Any, bones: Any) -> SourcePose:
     pose = SourcePose()
     if isinstance(curves, dict):
         pose.curves = {k: float(v) for k, v in curves.items() if _is_num(v)}
+        if len(pose.curves) != len(curves):
+            warnings.warn(f"数値でない値のシェイプ {len(curves) - len(pose.curves)} 個を読み飛ばしました", UserWarning, stacklevel=4)
     if isinstance(bones, dict):
         pose.bones = {k: _read_bone(v) for k, v in bones.items() if isinstance(v, dict)}
+        if len(pose.bones) != len(bones):
+            warnings.warn(f"オブジェクトでない値のボーン {len(bones) - len(pose.bones)} 個を読み飛ばしました", UserWarning, stacklevel=4)
     return pose
 
 
@@ -151,8 +163,8 @@ def _read_point(d: dict) -> Optional[GridPoint]:
         warnings.warn("row / col が無い点を読み飛ばしました", UserWarning, stacklevel=4)
         return None
     return GridPoint(
-        row=int(d["row"]),
-        col=int(d["col"]),
+        row=_i(d["row"], 0),
+        col=_i(d["col"], 0),
         is_key=_b(d.get("isKey"), False),
         pose=_read_pose(d.get("curves"), d.get("bones")),
         extra=_extra(d, _POINT_KEYS),
@@ -175,6 +187,10 @@ def _read_layer(d: dict) -> Layer:
             if isinstance(p, dict):
                 point = _read_point(p)
                 if point is not None:
+                    if (point.row, point.col) in layer.points:
+                        warnings.warn(
+                            f"レイヤー「{layer.name}」に同じ位置の点が重複しています（R{point.row} C{point.col}）。後のものを使います", UserWarning, stacklevel=3
+                        )
                     layer.points[(point.row, point.col)] = point
     return layer
 
@@ -396,11 +412,59 @@ def loads(text: str) -> AnyDocument:
     """JSON 文字列 → Document / PoseDocument（format で決まる）。"""
     if text.startswith("﻿"):
         text = text[1:]
+    return from_dict(parse_json(text))
+
+
+def parse_json(text: str) -> Any:
+    """厳密な JSON の読み込み（NaN / Infinity / 1e999・深すぎる入れ子・巨大な整数を FcposeError にする。C# の MiniJson と同じ）。"""
     try:
-        d = json.loads(text)
+        d = json.loads(text, parse_constant=_reject_constant, parse_float=_parse_float, parse_int=_parse_int)
     except json.JSONDecodeError as e:
         raise FcposeError(f"JSON の解析に失敗しました（書式が壊れています）: {e}") from e
-    return from_dict(d)
+    except RecursionError as e:
+        raise FcposeError(f"JSON の入れ子が深すぎます（上限 {MAX_DEPTH}）") from e
+    _check_depth(d)
+    return d
+
+
+MAX_DEPTH = 256  # 入れ子の深さの上限（C# の MiniJson.MaxDepth と同じ。超えたら読み込みを拒否する）
+
+
+def _reject_constant(token: str) -> float:
+    """NaN / Infinity / -Infinity は受け付けない（C# の MiniJson も拒否する）。"""
+    raise FcposeError(f"JSON に有限でない数（{token}）があります")
+
+
+def _parse_float(token: str) -> float:
+    v = float(token)
+    if math.isinf(v) or math.isnan(v):
+        raise FcposeError(f"JSON に有限でない数（{token}）があります")  # 1e999 など
+    return v
+
+
+def _parse_int(token: str) -> int:
+    v = int(token)
+    try:
+        float(v)
+    except OverflowError:
+        raise FcposeError("JSON の整数が大きすぎます（double に収まりません）") from None
+    return v
+
+
+def _check_depth(root: Any) -> None:
+    """オブジェクト / 配列の入れ子が MAX_DEPTH を超えていたら FcposeError（再帰を使わない）。"""
+    stack = [(root, 1)]
+    while stack:
+        v, depth = stack.pop()
+        if isinstance(v, dict):
+            children = list(v.values())
+        elif isinstance(v, list):
+            children = v
+        else:
+            continue
+        if depth > MAX_DEPTH:
+            raise FcposeError(f"JSON の入れ子が深すぎます（上限 {MAX_DEPTH}）")
+        stack.extend((c, depth + 1) for c in children)
 
 
 def load(path: Union[str, os.PathLike]) -> AnyDocument:
@@ -622,9 +686,19 @@ def dumps(doc: AnyDocument) -> str:
 
 def save(doc: AnyDocument, path: Union[str, os.PathLike]) -> None:
     """ファイルへ書く（UTF-8・BOM なし・改行 \\n）。親フォルダが無ければ作る。"""
-    text = dumps(doc)
+    text = dumps(doc)  # 書けない値（NaN など）はここで ValueError。ファイルには触れない
     parent = os.path.dirname(os.fspath(path))
     if parent:
         os.makedirs(parent, exist_ok=True)
-    with open(path, "w", encoding="utf-8", newline="\n") as f:
-        f.write(text)
+    # 一時ファイルに書いて置き換える（途中で失敗しても、唯一のファイルを壊さない。M-13）
+    tmp = f"{os.fspath(path)}.{os.getpid()}.tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+            f.write(text)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise

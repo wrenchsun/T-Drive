@@ -207,7 +207,7 @@ def add_mirror_keys(samples: list[KeySample], mirror: Mirror) -> int:
 
 def _rotation_is_identity(q: Sequence[float]) -> bool:
     tol = BONE_ROTATION_IDENTITY_TOL
-    return abs(q[0]) <= tol and abs(q[1]) <= tol and abs(q[2]) <= tol and abs(q[3] - 1.0) <= tol
+    return abs(q[0]) <= tol and abs(q[1]) <= tol and abs(q[2]) <= tol and abs(abs(q[3]) - 1.0) <= tol  # q と -q は同じ回転
 
 
 def _interpolate(
@@ -364,8 +364,14 @@ def generate_from_keys(doc: Document, layer_index: Optional[int] = None) -> Auto
         targets = list(doc.layers)
     else:
         targets = [_check_layer(doc, layer_index)]
-    for layer in targets:
-        _generate_layer(doc, layer, summary)
+    saved = [copy.deepcopy(layer.points) for layer in targets]
+    try:
+        for layer in targets:
+            _generate_layer(doc, layer, summary)
+    except BaseException:
+        for layer, points in zip(targets, saved):  # 途中で失敗したら、前のレイヤーも元へ戻す（全部か何もしないか）
+            layer.points = points
+        raise
     return summary
 
 

@@ -222,6 +222,40 @@ def _split_key(content: str) -> Optional[tuple[str, str]]:
     return None
 
 
+def _unclosed(text: str) -> bool:
+    """括弧 `{` `[` が閉じていない（引用の外で数える）。折り返された flow のマップ・列の判定用。"""
+    depth = 0
+    quote = ""
+    for ch in text:
+        if quote:
+            if ch == quote:
+                quote = ""
+        elif ch in "\"'":
+            quote = ch
+        elif ch in "{[":
+            depth += 1
+        elif ch in "}]":
+            depth -= 1
+    return depth > 0 or bool(quote)
+
+
+def _continues(prev: list, ind: int, content: str) -> bool:
+    """content（桁 ind）が、直前の行 prev = [桁, 内容] の折り返しの続きか。
+
+    直前が値を持つ行（`key: value` / `- value` / 値だけの行）で、続きが深く（桁が大きく）、キーでも列の項目でもないとき。
+    括弧が閉じていないときは、キーのように見えても続き。"""
+    if _unclosed(prev[1]):
+        return True
+    p_ind, p = prev
+    if ind <= p_ind or content == "-" or content.startswith("- ") or _split_key(content) is not None:
+        return False
+    inner = p[2:].lstrip(" ") if p.startswith("- ") else p
+    if not inner or inner == "-":
+        return False
+    kv = _split_key(inner)
+    return kv is None or bool(kv[1])  # 値だけの行、または `key: value`（`key:` でブロックを開く行は続きを取らない）
+
+
 class _Lines:
     """(インデント, 内容) の列。ブロックのマップ・列を再帰で読む。"""
 
@@ -233,7 +267,11 @@ class _Lines:
                 continue
             expanded = body.expandtabs(2)
             content = expanded.lstrip(" ")
-            self.items.append([len(expanded) - len(content), content])
+            ind = len(expanded) - len(content)
+            if self.items and _continues(self.items[-1], ind, content):
+                self.items[-1][1] += " " + content  # 折り返された行は前の行の続き（YAML は空白 1 つでつなぐ。C-8）
+                continue
+            self.items.append([ind, content])
 
     def __len__(self) -> int:
         return len(self.items)

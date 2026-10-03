@@ -988,6 +988,7 @@ class IngestReport(CommandResult):
     ignored: list[str] = field(default_factory=list)  # 作業セットの外で取り込まなかった名前
     unknown: list[str] = field(default_factory=list)  # モデルに無い名前（scene が分かるとき。取り込みはする）
     clamped: list[str] = field(default_factory=list)  # 可動域で丸めたシェイプ
+    below_base: list[str] = field(default_factory=list)  # 土台の表情があるとき、シーンの値が土台より低かった（差分が負で、ポーズには入れられない）シェイプ
 
 
 class PosePresenter(Observable):

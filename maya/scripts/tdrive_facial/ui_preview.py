@@ -220,10 +220,20 @@ class PreviewGroup(QtWidgets.QGroupBox):
         """セッションの軽い通知（編集状態の出入り・プレビューの作成など）。スライダーのドラッグ中は何もしない。"""
         if self._detached or self._drag:
             return
+        if self.window().isVisible() and not self.isVisible():
+            # 画面は出ているのに、このタブが隠れている: 読み直さない（スライダー 1 目盛りごとに全部読み直して重い。M-11）。見えたとき 1 回だけ
+            self._stale = True
+            return
         try:
             self.refresh()
         except RuntimeError:
             self._detached = True
+
+    def showEvent(self, event) -> None:  # noqa: N802 (Qt)
+        super().showEvent(event)
+        if getattr(self, "_stale", False) and not self._detached:
+            self._stale = False
+            self.refresh()
 
     @staticmethod
     def _angle_spin(prefix: str, lo: float, hi: float) -> QtWidgets.QDoubleSpinBox:

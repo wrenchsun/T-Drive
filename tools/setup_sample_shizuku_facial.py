@@ -166,9 +166,11 @@ def main() -> int:
     if bad:
         raise RuntimeError(f"fcpose.json に絶対パスが入っています: {bad}")
 
-    cmds.file(rename=SCENE_OUT.as_posix())
+    scene_out = project_root / "assets" / "shizuku" / "shizuku_facial.mb"  # --project の下へ（S-15。入力の shizuku.mb は読むだけ）
+    scene_out.parent.mkdir(parents=True, exist_ok=True)
+    cmds.file(rename=scene_out.as_posix())
     cmds.file(save=True, type="mayaBinary", force=True)
-    print(f"saved scene: {SCENE_OUT}")
+    print(f"saved scene: {scene_out}")
 
     # --- Unity 向けの出力 ---
     t0 = time.perf_counter()

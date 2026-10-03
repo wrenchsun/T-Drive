@@ -17,6 +17,7 @@ sys.path.insert(0, str(REPO / "maya" / "scripts"))
 import maya.standalone  # noqa: E402
 
 maya.standalone.initialize(name="python")
+code = 1  # 最後まで行けたときだけ 0（失敗したのに成功で終わらない。S-14）
 try:
     from maya import cmds
 
@@ -35,6 +36,7 @@ try:
         Path(a["result"]).with_suffix(".error.txt").write_text(traceback.format_exc(), encoding="utf-8")
         raise
     Path(a["result"]).write_text(json.dumps(res, ensure_ascii=False), encoding="utf-8")
+    code = 0
 finally:
     maya.standalone.uninitialize()
-    os._exit(0)
+    os._exit(code)

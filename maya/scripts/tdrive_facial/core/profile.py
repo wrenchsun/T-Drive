@@ -344,16 +344,29 @@ def effective_limit(doc: Optional[Document], profile: Optional[NamingProfile], c
     if doc is not None and doc.limits and curve in doc.limits:
         lo, hi = doc.limits[curve]
         return (float(lo), float(hi))
-    if profile is not None and curve in profile.limits:
-        lo, hi = profile.limits[curve]
-        return (float(lo), float(hi))
+    found = _profile_limit(profile, curve)
+    if found is not None:
+        return (float(found[0]), float(found[1]))
     return DEFAULT_LIMIT
+
+
+def _profile_limit(profile: Optional[NamingProfile], curve: str) -> Optional[Limit]:
+    """プロファイルの可動域。ノード名つきの項目は完全一致、ノード名なしの項目（`jawOpen`）はどのノードの同じ名前のターゲットにも効く
+    （`curve_matches` と同じ規則。C-7）。"""
+    if profile is None or not profile.limits:
+        return None
+    if curve in profile.limits:
+        return profile.limits[curve]
+    target = curve.partition(".")[2] if "." in curve else ""
+    if target and target in profile.limits:
+        return profile.limits[target]
+    return None
 
 
 def has_limit(doc: Optional[Document], profile: Optional[NamingProfile], curve: str) -> bool:
     """可動域が明示されているか（False = 既定の 0〜1）。"""
     in_doc = bool(doc is not None and doc.limits and curve in doc.limits)
-    in_profile = bool(profile is not None and curve in profile.limits)
+    in_profile = _profile_limit(profile, curve) is not None
     return in_doc or in_profile
 
 

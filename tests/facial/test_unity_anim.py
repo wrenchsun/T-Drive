@@ -210,3 +210,22 @@ def test_build_mapping_from_profile_uses_standard_names():
     m = U.build_mapping_from_profile(["EYEBLINKLEFT", "JAWOPEN", "foo"], prof, ["eyeBlinkLeft", "jawOpen"])
     assert m.mapping == {"EYEBLINKLEFT": "eyeBlinkLeft", "JAWOPEN": "jawOpen"}
     assert m.unmatched == ["foo"]
+
+
+def test_wrapped_long_lines_do_not_drop_curves():
+    """C-8: Unity が長い行（長いパス・属性名）を折り返して書いても、カーブを黙って落とさない。"""
+    long_path = "Armature/Hips/Spine/Chest/Neck/Head/" + "Very_Long_Child_Name/" * 8 + "Face"
+    folded = long_path[:60] + "\n      " + long_path[60:120] + "\n      " + long_path[120:]
+    text = (
+        "--- !u!74 &1\nAnimationClip:\n  m_FloatCurves:\n"
+        "  - curve:\n      m_Curve:\n"
+        "      - time: 0\n        value: 100\n        inSlope: 0\n        outSlope: 0\n"
+        f"    attribute: blendShape.bs.first\n    path: {folded}\n"
+        "  - curve:\n      m_Curve:\n"
+        "      - time: 0\n        value: 50\n        inSlope: 0\n        outSlope: 0\n"
+        "    attribute: blendShape.bs.second\n    path: face\n"
+    )
+    c = U.loads(text)
+    assert {a for (_p, a) in c.float_curves} == {"blendShape.bs.first", "blendShape.bs.second"}
+    first = next(fc for (_p, a), fc in c.float_curves.items() if a == "blendShape.bs.first")
+    assert first.path.replace(" ", "") == long_path  # 折り返しは空白 1 つでつながる（継ぎ目に空白が入る）

@@ -122,6 +122,7 @@ class ShapeCtx:
     suffix_r: str = "_R"
     axis: int = 0  # 顔の左右の軸（0 = X）
     threshold: float = 0.001  # cm
+    base_bone: str = ""  # 基準ボーン（頭）。中間形・誇張形を作るとき、頭が基準姿勢にあるかの確認に使う（S-5）
 
     def made(self) -> list[str]:
         return get_made(self.node)
@@ -191,6 +192,7 @@ def make_ctx(doc: Document, create: bool = True) -> ShapeCtx:
         suffix_r=doc.mirror.suffix_r or "_R",
         axis=space.mirror_axis_index(doc.mirror.bone_axis),
         threshold=doc.bake.delta_threshold if doc.bake is not None else 0.001,
+        base_bone=doc.grid.base_bone or "",
     )
 
 
@@ -295,14 +297,44 @@ def _copy_items(ctx: ShapeCtx, src: str, dst: str, fn) -> int:
     return count
 
 
-def rest_points(meshes: Sequence[str] | str) -> np.ndarray:
-    """基準姿勢（バインドポーズ・全シェイプ 0）の頂点（オブジェクト空間）。複数のメッシュを渡すと最初のメッシュの分。"""
+def rest_points(meshes: Sequence[str] | str, head_now: Optional[dict] = None) -> np.ndarray:
+    """基準姿勢（バインドポーズ・全シェイプ 0）の頂点（オブジェクト空間）。複数のメッシュを渡すと最初のメッシュの分。
+
+    head_now（頭とその親の、基準姿勢に入る前のローカル値 `{短い名前: (t, q, s)}`）を渡すと、基準姿勢と比べて動いていれば
+    ShapeError("head_moved")。中間形・誇張形が頭の動きを形に焼き込まないため（S-5）。"""
     ms = [meshes] if isinstance(meshes, str) else list(meshes)
     try:
-        with scene.enter_reference_pose(ms):
+        with scene.enter_reference_pose(ms) as ref:
+            for name, (t, q, _s) in (head_now or {}).items():
+                b = ref.bones.get(name)
+                if b is not None and (
+                    max(abs(x - y) for x, y in zip(t, b.t)) > HEAD_EPS_T or abs(scene.quat_dot(q, b.q)) < 1.0 - HEAD_EPS_Q
+                ):
+                    raise ShapeError(
+                        f"頭（{name}）が基準姿勢から動いています。中間形・誇張形はスキンの前の空間で作るため、"
+                        "頭は基準姿勢のポーズ（頭のずれを 0）で実行してください（目・口などのボーンのずらしは使えます）",
+                        "head_moved",
+                    )
             return scene.read_points(ms[0])
     except scene.ReferenceError_ as e:
         raise ShapeError(f"基準姿勢にできません: {e}", "no_reference") from e
+
+
+def _head_locals(ctx: "ShapeCtx") -> dict:
+    """基準ボーンとその親（短い名前）の今のローカル値。基準ボーンが分からなければ空。"""
+    if not ctx.base_bone:
+        return {}
+    joints = scene.mesh_joints([ctx.mesh])
+    parents = scene.joint_parents(joints)
+    chain = [ctx.base_bone]
+    while chain[-1] in parents and parents[chain[-1]] not in chain:
+        chain.append(parents[chain[-1]])
+    out = {}
+    for name in chain:
+        path = scene.find_joint(name, joints)
+        if path:
+            out[name] = scene.read_local(path)
+    return out
 
 
 def current_delta(ctx: ShapeCtx, exclude_own: Optional[str] = None) -> np.ndarray:
@@ -323,10 +355,11 @@ def current_delta(ctx: ShapeCtx, exclude_own: Optional[str] = None) -> np.ndarra
                 own_plug = None
     try:
         snapshot = scene.read_points(ctx.mesh)
+        head_now = _head_locals(ctx)
     finally:
         if own_plug is not None:
             cmds.setAttr(own_plug, own_value)
-    return snapshot - rest_points(ctx.mesh)
+    return snapshot - rest_points(ctx.mesh, head_now)
 
 
 def select_vertices(mesh: str, ids: Sequence[int]) -> None:
@@ -670,7 +703,10 @@ def inbetween_item(weight: float) -> int:
     """重み（0〜1 の間）→ inputTargetItem の番号（5000 + 重み × 1000）。"""
     if not (0.0 < weight < 1.0):
         raise ShapeError("中間形の重みは 0 より大きく 1 より小さい値にしてください（例: 0.5）", "bad_weight")
-    return 5000 + int(round(weight * 1000))
+    item = 5000 + int(round(weight * 1000))
+    if not (5000 < item < scene.DELTA_ITEM):  # 0.9995 以上は 6000（本体）、0.0005 以下は 5000（重み 0）になってしまう（S-12）
+        raise ShapeError("中間形の重みは 0.001〜0.999 の間にしてください（本体の形を上書きしてしまうため）", "bad_weight")
+    return item
 
 
 def add_inbetween(
