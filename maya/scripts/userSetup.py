@@ -4,6 +4,7 @@
 読めずに真っ黒になり、Look も自動で開かない（2026-09-29 の不具合）:
 - プロジェクトフォルダを決めて $TDRIVE_PROJECT を設定（docs/13 §1）
 - シーンを開いたら記録された Look を開く（SceneOpened）/ シーンを保存したら Look も保存する（SceneSaved）
+- FacialController も同じ（SceneOpened / SceneSaved + 新しいシーン・シーンを閉じる前に基準姿勢の編集状態を元へ戻す）
 
 画面の準備ができてから行うもの（executeDeferred）:
 - MCP 用の commandPort を localhost:7001 で開く（環境変数 TDRIVE_MCP_PORT=0 で無効化）
@@ -26,6 +27,18 @@ def _tdrive_early():
     cmds.scriptJob(event=["SceneSaved", "from tdrive_toon import session; session.on_scene_saved()"], protected=True)
 
 
+def _tdrive_facial_early():
+    """FacialController のシーンの出来事（Toon と同じ文字列の scriptJob。Python のオブジェクトは Maya に渡さない）。
+    失敗しても Toon の起動を止めない（呼び出し側で握る）。"""
+    for event, call in (
+        ("PreFileNewOrOpened", "on_before_scene_change"),  # シーンを閉じる前に、基準姿勢の編集状態を元へ戻す
+        ("NewSceneOpened", "on_new_scene"),
+        ("SceneOpened", "on_scene_opened"),
+        ("SceneSaved", "on_scene_saved"),
+    ):
+        cmds.scriptJob(event=[event, f"from tdrive_facial import session; session.{call}()"], protected=True)
+
+
 def _tdrive_startup():
     from tdrive import mcp_bridge, menu
     from tdrive_toon import session
@@ -34,6 +47,13 @@ def _tdrive_startup():
     menu.install()
     if cmds.file(query=True, sceneName=True) and session.current().look is None:
         session.on_scene_opened()  # scriptJob より先にシーンが開いていた場合
+    try:
+        from tdrive_facial import session as facial_session
+
+        if cmds.file(query=True, sceneName=True) and facial_session.current().presenters is None:
+            facial_session.on_scene_opened()
+    except Exception as exc:  # noqa: BLE001  FacialController の不具合で Toon の起動を止めない
+        print(f"[T-Drive] FacialController の起動時の準備に失敗: {exc}")
     try:
         from tdrive import ui_update
 
@@ -47,4 +67,8 @@ if not cmds.about(batch=True):
         _tdrive_early()
     except Exception as exc:  # noqa: BLE001  Maya の起動を止めない
         print(f"[T-Drive] 起動時の準備に失敗: {exc}")
+    try:
+        _tdrive_facial_early()
+    except Exception as exc:  # noqa: BLE001  FacialController の不具合で Maya の起動を止めない
+        print(f"[T-Drive] FacialController の起動時の準備に失敗: {exc}")
     maya.utils.executeDeferred(_tdrive_startup)

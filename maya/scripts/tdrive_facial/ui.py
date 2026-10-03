@@ -19,20 +19,31 @@ class FacialTool:
         w.setEnabled(False)
         return w
 
+    # 以下はセッション層（tdrive_facial.session）へ委ねる。import は呼ぶときに行う（Qt だけの環境でもこのモジュールを読めるように）
     def on_scene_opened(self) -> None:
-        pass
+        from . import session
+
+        session.on_scene_opened()
 
     def on_scene_saved(self) -> None:
-        pass
+        from . import session
+
+        session.on_scene_saved()
 
     def undo(self) -> bool:
-        return False
+        from . import session
+
+        return session.current().undo()
 
     def redo(self) -> bool:
-        return False
+        from . import session
+
+        return session.current().redo()
 
     def refresh(self) -> None:
-        pass
+        from . import session
+
+        session.current().refresh()
 
 
 def make_tool() -> FacialTool:
