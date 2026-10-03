@@ -118,3 +118,7 @@ UE の自動テストは 11 件: `ExactGridPoint` `BilinearCenter` `EmotionBlend
 ## autofill.json（自動生成）
 
 書式は [README_autofill.md](README_autofill.md)。期待値は UE 版のコードを移した Python 版で作成（UE 版にこの部分の自動テストは無い）。許容誤差 1e-4。
+
+## presenter.json（画面の状態）
+
+書式は [README_presenter.md](README_presenter.md)。操作の列 → 見える状態。期待値は Python 版で作成。

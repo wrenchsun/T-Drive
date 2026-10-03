@@ -1,0 +1,4302 @@
+{
+ "kind": "presenter",
+ "description": "画面の状態（Presenter 4 種）の操作列 → 観測できる状態。setup から始めて各 step の op を順に実行し、step の expect を比べる。UE 版のパネルの動きを Python（core/presenters.py）に写した結果を固定したもの（形式は README_presenter.md）",
+ "documents": {
+  "smile": {
+   "format": "FacialCorrection",
+   "version": 1,
+   "asset": "a",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 5,
+    "rows": 3,
+    "baseBone": "head",
+    "forwardAxis": "+X"
+   },
+   "mirror": {
+    "enabled": true,
+    "suffixL": "_L",
+    "suffixR": "_R",
+    "exclude": [],
+    "boneAxis": "Y"
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "points": [
+      {
+       "row": 1,
+       "col": 2,
+       "isKey": true,
+       "curves": {
+        "JawOpen": 0.4
+       },
+       "bones": {}
+      },
+      {
+       "row": 1,
+       "col": 3,
+       "isKey": true,
+       "curves": {
+        "Smile_L": 0.8
+       },
+       "bones": {}
+      },
+      {
+       "row": 2,
+       "col": 3,
+       "isKey": false,
+       "curves": {
+        "Smile_L": 0.2
+       },
+       "bones": {}
+      }
+     ]
+    },
+    {
+     "name": "Joy",
+     "enabled": true,
+     "points": [
+      {
+       "row": 1,
+       "col": 2,
+       "isKey": true,
+       "curves": {
+        "Smile_L": 1.0
+       },
+       "bones": {}
+      }
+     ],
+     "emotionCurve": "joy_w"
+    }
+   ],
+   "workingSet": {
+    "curves": [
+     "Smile_L",
+     "Smile_R",
+     "JawOpen"
+    ],
+    "bones": [
+     "Eye_L",
+     "Eye_R"
+    ]
+   }
+  },
+  "smile_jaw_excluded": {
+   "format": "FacialCorrection",
+   "version": 1,
+   "asset": "a",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 5,
+    "rows": 3,
+    "baseBone": "head",
+    "forwardAxis": "+X"
+   },
+   "mirror": {
+    "enabled": true,
+    "suffixL": "_L",
+    "suffixR": "_R",
+    "exclude": [
+     "Jaw"
+    ],
+    "boneAxis": "Y"
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "points": [
+      {
+       "row": 1,
+       "col": 2,
+       "isKey": true,
+       "curves": {
+        "JawOpen": 0.4
+       },
+       "bones": {}
+      },
+      {
+       "row": 1,
+       "col": 3,
+       "isKey": true,
+       "curves": {
+        "Smile_L": 0.8
+       },
+       "bones": {}
+      },
+      {
+       "row": 2,
+       "col": 3,
+       "isKey": false,
+       "curves": {
+        "Smile_L": 0.2
+       },
+       "bones": {}
+      }
+     ]
+    },
+    {
+     "name": "Joy",
+     "enabled": true,
+     "points": [
+      {
+       "row": 1,
+       "col": 2,
+       "isKey": true,
+       "curves": {
+        "Smile_L": 1.0
+       },
+       "bones": {}
+      }
+     ],
+     "emotionCurve": "joy_w"
+    }
+   ],
+   "workingSet": {
+    "curves": [
+     "Smile_L",
+     "Smile_R",
+     "JawOpen"
+    ],
+    "bones": [
+     "Eye_L",
+     "Eye_R"
+    ]
+   }
+  },
+  "smile_no_mirror": {
+   "format": "FacialCorrection",
+   "version": 1,
+   "asset": "a",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 5,
+    "rows": 3,
+    "baseBone": "head",
+    "forwardAxis": "+X"
+   },
+   "mirror": {
+    "enabled": false,
+    "suffixL": "_L",
+    "suffixR": "_R",
+    "exclude": [],
+    "boneAxis": "Y"
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "points": [
+      {
+       "row": 1,
+       "col": 2,
+       "isKey": true,
+       "curves": {
+        "JawOpen": 0.4
+       },
+       "bones": {}
+      },
+      {
+       "row": 1,
+       "col": 3,
+       "isKey": true,
+       "curves": {
+        "Smile_L": 0.8
+       },
+       "bones": {}
+      },
+      {
+       "row": 2,
+       "col": 3,
+       "isKey": false,
+       "curves": {
+        "Smile_L": 0.2
+       },
+       "bones": {}
+      }
+     ]
+    },
+    {
+     "name": "Joy",
+     "enabled": true,
+     "points": [
+      {
+       "row": 1,
+       "col": 2,
+       "isKey": true,
+       "curves": {
+        "Smile_L": 1.0
+       },
+       "bones": {}
+      }
+     ],
+     "emotionCurve": "joy_w"
+    }
+   ],
+   "workingSet": {
+    "curves": [
+     "Smile_L",
+     "Smile_R",
+     "JawOpen"
+    ],
+    "bones": [
+     "Eye_L",
+     "Eye_R"
+    ]
+   }
+  },
+  "neutral_only": {
+   "format": "FacialCorrection",
+   "version": 1,
+   "asset": "a",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 5,
+    "rows": 3,
+    "baseBone": "head",
+    "forwardAxis": "+X"
+   },
+   "mirror": {
+    "enabled": true,
+    "suffixL": "_L",
+    "suffixR": "_R",
+    "exclude": [],
+    "boneAxis": "Y"
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "points": []
+    }
+   ]
+  },
+  "case_mismatch": {
+   "format": "FacialCorrection",
+   "version": 1,
+   "asset": "a",
+   "grid": {
+    "yawRange": 90,
+    "pitchRange": 45,
+    "cols": 5,
+    "rows": 3,
+    "baseBone": "head",
+    "forwardAxis": "+X"
+   },
+   "mirror": {
+    "enabled": true,
+    "suffixL": "_L",
+    "suffixR": "_R",
+    "exclude": [],
+    "boneAxis": "Y"
+   },
+   "layers": [
+    {
+     "name": "Neutral",
+     "enabled": true,
+     "points": [
+      {
+       "row": 1,
+       "col": 2,
+       "isKey": true,
+       "curves": {
+        "smile_l": 0.5,
+        "Ghost": 0.3
+       },
+       "bones": {}
+      }
+     ]
+    }
+   ],
+   "workingSet": {
+    "curves": [
+     "smile_l"
+    ],
+    "bones": []
+   }
+  }
+ },
+ "cases": [
+  {
+   "name": "point_states_unknown_bake",
+   "source": "python-port",
+   "note": "bakeState なし（不明）: 色は状態から、ベイクの区分は unknown / none。未ベイクは数えない",
+   "setup": {
+    "document": "smile"
+   },
+   "steps": [
+    {
+     "op": "noop",
+     "expect": {
+      "points": [
+       {
+        "row": 1,
+        "col": 2,
+        "state": "key",
+        "color": "green",
+        "bake": "unknown",
+        "frame": "none",
+        "morph": "FC_a_Neutral_R1_C2"
+       },
+       {
+        "row": 2,
+        "col": 3,
+        "state": "generated",
+        "color": "cyan"
+       },
+       {
+        "row": 0,
+        "col": 0,
+        "state": "empty",
+        "color": "grey",
+        "bake": "none",
+        "hasPose": false
+       }
+      ],
+      "summary": {
+       "keys": 2,
+       "generated": 1,
+       "empty": 12,
+       "unbaked": 0,
+       "changed": 0,
+       "baked": 0,
+       "total": 15
+      },
+      "selection": null,
+      "dirty": false
+     }
+    }
+   ]
+  },
+  {
+   "name": "bake_status_flags",
+   "source": "python-port",
+   "note": "ベイクの状態（bake_state と pose_hash）: ベイク済み / 変更あり / 未ベイク。枠は未ベイクと変更ありだけ",
+   "setup": {
+    "document": "smile",
+    "bakeState": {
+     "FC_a_Neutral_R1_C2": "@current",
+     "FC_a_Neutral_R1_C3": "@stale"
+    }
+   },
+   "steps": [
+    {
+     "op": "noop",
+     "expect": {
+      "points": [
+       {
+        "row": 1,
+        "col": 2,
+        "bake": "baked",
+        "frame": "none"
+       },
+       {
+        "row": 1,
+        "col": 3,
+        "bake": "changed",
+        "frame": "changed"
+       },
+       {
+        "row": 2,
+        "col": 3,
+        "bake": "unbaked",
+        "frame": "unbaked"
+       },
+       {
+        "row": 0,
+        "col": 0,
+        "bake": "none",
+        "frame": "none"
+       }
+      ],
+      "summary": {
+       "keys": 2,
+       "generated": 1,
+       "empty": 12,
+       "unbaked": 1,
+       "changed": 1,
+       "baked": 1
+      }
+     }
+    },
+    {
+     "op": "bake.mark_point",
+     "args": {
+      "layer": 0,
+      "row": 2,
+      "col": 3
+     },
+     "expect": {
+      "points": [
+       {
+        "row": 2,
+        "col": 3,
+        "bake": "baked"
+       }
+      ],
+      "summary": {
+       "unbaked": 0,
+       "changed": 1,
+       "baked": 2
+      }
+     }
+    },
+    {
+     "op": "bake.clear",
+     "expect": {
+      "summary": {
+       "unbaked": 3,
+       "changed": 0,
+       "baked": 0
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "bake_missing_target_counts_as_unbaked",
+   "source": "python-port",
+   "note": "scene.targets にある FC_* だけが「焼いてある」。bake_state にあっても targets に無ければ未ベイク扱い",
+   "setup": {
+    "document": "smile",
+    "bakeState": {
+     "FC_a_Neutral_R1_C2": "@current",
+     "FC_a_Neutral_R1_C3": "@current"
+    },
+    "scene": {
+     "curves": [],
+     "bones": [],
+     "targets": [
+      "FC_a_Neutral_R1_C2"
+     ]
+    }
+   },
+   "steps": [
+    {
+     "op": "noop",
+     "expect": {
+      "points": [
+       {
+        "row": 1,
+        "col": 2,
+        "bake": "baked"
+       },
+       {
+        "row": 1,
+        "col": 3,
+        "bake": "unbaked"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "select_and_angles",
+   "source": "python-port",
+   "note": "選択: 点の角度と色（選択中は orange）、押し直しは same_point、格子の外は invalid",
+   "setup": {
+    "document": "smile"
+   },
+   "steps": [
+    {
+     "op": "select",
+     "args": {
+      "row": 1,
+      "col": 3
+     },
+     "expect": {
+      "result": {
+       "status": "selected",
+       "row": 1,
+       "col": 3,
+       "yaw": 45,
+       "pitch": 0,
+       "cameraJump": true
+      },
+      "selection": [
+       1,
+       3
+      ],
+      "points": [
+       {
+        "row": 1,
+        "col": 3,
+        "selected": true,
+        "color": "green",
+        "displayColor": "orange"
+       }
+      ],
+      "dirty": false,
+      "pose": {
+       "curves": {
+        "Smile_L": 0.8
+       },
+       "bones": {}
+      }
+     }
+    },
+    {
+     "op": "select",
+     "args": {
+      "row": 1,
+      "col": 3
+     },
+     "expect": {
+      "result": {
+       "status": "same_point",
+       "cameraJump": true
+      }
+     }
+    },
+    {
+     "op": "select",
+     "args": {
+      "row": 0,
+      "col": 0
+     },
+     "expect": {
+      "result": {
+       "status": "selected",
+       "yaw": -90,
+       "pitch": -45
+      },
+      "points": [
+       {
+        "row": 1,
+        "col": 3,
+        "selected": false,
+        "displayColor": "green"
+       }
+      ],
+      "pose": {
+       "curves": {},
+       "bones": {}
+      }
+     }
+    },
+    {
+     "op": "select",
+     "args": {
+      "row": 3,
+      "col": 0
+     },
+     "expect": {
+      "result": {
+       "status": "invalid"
+      },
+      "selection": [
+       0,
+       0
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "select_unsaved_save",
+   "source": "python-port",
+   "note": "未保存の編集があるまま別の点へ: needs_confirm → 「保存」で保存してから切り替え",
+   "setup": {
+    "document": "smile"
+   },
+   "steps": [
+    {
+     "op": "select",
+     "args": {
+      "row": 1,
+      "col": 2
+     }
+    },
+    {
+     "op": "pose.set_curve",
+     "args": {
+      "name": "JawOpen",
+      "value": 0.9
+     },
+     "expect": {
+      "result": {
+       "value": 0.9,
+       "clamped": false
+      },
+      "dirty": true
+     }
+    },
+    {
+     "op": "select",
+     "args": {
+      "row": 1,
+      "col": 3
+     },
+     "expect": {
+      "result": {
+       "status": "needs_confirm",
+       "row": 1,
+       "col": 3
+      },
+      "selection": [
+       1,
+       2
+      ],
+      "dirty": true,
+      "docPoints": [
+       {
+        "layer": 0,
+        "row": 1,
+        "col": 2,
+        "curves": {
+         "JawOpen": 0.4
+        }
+       }
+      ]
+     }
+    },
+    {
+     "op": "confirm_select",
+     "args": {
+      "choice": "save"
+     },
+     "expect": {
+      "result": {
+       "status": "selected",
+       "saved": true,
+       "row": 1,
+       "col": 3
+      },
+      "selection": [
+       1,
+       3
+      ],
+      "dirty": false,
+      "docPoints": [
+       {
+        "layer": 0,
+        "row": 1,
+        "col": 2,
+        "isKey": true,
+        "curves": {
+         "JawOpen": 0.9
+        }
+       }
+      ],
+      "pose": {
+       "curves": {
+        "Smile_L": 0.8
+       },
+       "bones": {}
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "select_unsaved_discard",
+   "source": "python-port",
+   "note": "「破棄」: 保存せずに切り替える（元のポーズのまま）。確認待ちが無いときの confirm は invalid",
+   "setup": {
+    "document": "smile"
+   },
+   "steps": [
+    {
+     "op": "select",
+     "args": {
+      "row": 1,
+      "col": 2
+     }
+    },
+    {
+     "op": "pose.set_curve",
+     "args": {
+      "name": "JawOpen",
+      "value": 0.9
+     }
+    },
+    {
+     "op": "select",
+     "args": {
+      "row": 1,
+      "col": 3
+     },
+     "expect": {
+      "result": {
+       "status": "needs_confirm"
+      }
+     }
+    },
+    {
+     "op": "confirm_select",
+     "args": {
+      "choice": "discard"
+     },
+     "expect": {
+      "result": {
+       "status": "selected",
+       "saved": false
+      },
+      "selection": [
+       1,
+       3
+      ],
+      "dirty": false,
+      "docPoints": [
+       {
+        "layer": 0,
+        "row": 1,
+        "col": 2,
+        "curves": {
+         "JawOpen": 0.4
+        }
+       }
+      ]
+     }
+    },
+    {
+     "op": "confirm_select",
+     "args": {
+      "choice": "discard"
+     },
+     "expect": {
+      "result": {
+       "status": "invalid"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "select_unsaved_cancel",
+   "source": "python-port",
+   "note": "「取りやめ」: 選択も編集中の値もそのまま",
+   "setup": {
+    "document": "smile"
+   },
+   "steps": [
+    {
+     "op": "select",
+     "args": {
+      "row": 1,
+      "col": 2
+     }
+    },
+    {
+     "op": "pose.set_curve",
+     "args": {
+      "name": "JawOpen",
+      "value": 0.9
+     }
+    },
+    {
+     "op": "select",
+     "args": {
+      "row": 0,
+      "col": 4
+     },
+     "expect": {
+      "result": {
+       "status": "needs_confirm"
+      }
+     }
+    },
+    {
+     "op": "confirm_select",
+     "args": {
+      "choice": "cancel"
+     },
+     "expect": {
+      "result": {
+       "status": "cancelled",
+       "row": 1,
+       "col": 2
+      },
+      "selection": [
+       1,
+       2
+      ],
+      "dirty": true,
+      "pose": {
+       "curves": {
+        "JawOpen": 0.9
+       },
+       "bones": {}
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "select_same_point_keeps_edits",
+   "source": "python-port",
+   "note": "同じ点の押し直しは確認なし・編集中の値を保つ",
+   "setup": {
+    "document": "smile"
+   },
+   "steps": [
+    {
+     "op": "select",
+     "args": {
+      "row": 1,
+      "col": 2
+     }
+    },
+    {
+     "op": "pose.set_curve",
+     "args": {
+      "name": "JawOpen",
+      "value": 0.9
+     }
+    },
+    {
+     "op": "select",
+     "args": {
+      "row": 1,
+      "col": 2
+     },
+     "expect": {
+      "result": {
+       "status": "same_point"
+      },
+      "dirty": true,
+      "pose": {
+       "curves": {
+        "JawOpen": 0.9
+       },
+       "bones": {}
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "dirty_is_live",
+   "source": "python-port",
+   "note": "未保存の判定は保存済みとの比較（許容 1e-3）。値を戻せば False",
+   "setup": {
+    "document": "smile"
+   },
+   "steps": [
+    {
+     "op": "select",
+     "args": {
+      "row": 1,
+      "col": 2
+     },
+     "expect": {
+      "dirty": false
+     }
+    },
+    {
+     "op": "pose.set_curve",
+     "args": {
+      "name": "JawOpen",
+      "value": 0.9
+     },
+     "expect": {
+      "dirty": true
+     }
+    },
+    {
+     "op": "pose.set_curve",
+     "args": {
+      "name": "JawOpen",
+      "value": 0.4005
+     },
+     "expect": {
+      "dirty": false
+     }
+    },
+    {
+     "op": "pose.set_curve",
+     "args": {
+      "name": "Smile_L",
+      "value": 0.0
+     },
+     "expect": {
+      "dirty": false
+     }
+    },
+    {
+     "op": "pose.set_curve",
+     "args": {
+      "name": "Smile_L",
+      "value": 0.01
+     },
+     "expect": {
+      "dirty": true
+     }
+    },
+    {
+     "op": "pose.reload",
+     "expect": {
+      "dirty": false,
+      "pose": {
+       "curves": {
+        "JawOpen": 0.4
+       },
+       "bones": {}
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "unkey",
+   "source": "python-port",
+   "note": "キー解除: キーでない点は失敗。解除した点は自動生成になる（ポーズは残る）",
+   "setup": {
+    "document": "smile"
+   },
+   "steps": [
+    {
+     "op": "unkey",
+     "args": {
+      "row": 1,
+      "col": 3
+     },
+     "expect": {
+      "result": {
+       "ok": true
+      },
+      "points": [
+       {
+        "row": 1,
+        "col": 3,
+        "state": "generated",
+        "color": "cyan"
+       }
+      ],
+      "summary": {
+       "keys": 1,
+       "generated": 2
+      }
+     }
+    },
+    {
+     "op": "unkey",
+     "args": {
+      "row": 1,
+      "col": 3
+     },
+     "expect": {
+      "result": {
+       "ok": false,
+       "code": "not_key"
+      }
+     }
+    },
+    {
+     "op": "unkey",
+     "expect": {
+      "result": {
+       "ok": false,
+       "code": "no_selection"
+      }
+     }
+    },
+    {
+     "op": "select",
+     "args": {
+      "row": 1,
+      "col": 2
+     }
+    },
+    {
+     "op": "unkey",
+     "expect": {
+      "result": {
+       "ok": true
+      },
+      "summary": {
+       "keys": 0,
+       "generated": 3
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "clear_point_reports_stale_morph",
+   "source": "python-port",
+   "note": "クリア: 点を消し、ベイク済みの FC_* を stale_morphs で返す（Maya 層が消す）",
+   "setup": {
+    "document": "smile",
+    "bakeState": {
+     "FC_a_Neutral_R1_C3": "@current",
+     "FC_a_Neutral_R1_C2": "@current"
+    }
+   },
+   "steps": [
+    {
+     "op": "clear_point",
+     "args": {
+      "row": 1,
+      "col": 3
+     },
+     "expect": {
+      "result": {
+       "ok": true,
+       "staleMorphs": [
+        "FC_a_Neutral_R1_C3"
+       ]
+      },
+      "points": [
+       {
+        "row": 1,
+        "col": 3,
+        "state": "empty"
+       }
+      ],
+      "docPoints": [
+       {
+        "layer": 0,
+        "row": 1,
+        "col": 3,
+        "absent": true
+       }
+      ],
+      "summary": {
+       "keys": 1,
+       "empty": 13
+      }
+     }
+    },
+    {
+     "op": "clear_point",
+     "args": {
+      "row": 1,
+      "col": 3
+     },
+     "expect": {
+      "result": {
+       "ok": false,
+       "code": "empty"
+      }
+     }
+    },
+    {
+     "op": "clear_point",
+     "args": {
+      "row": 9,
+      "col": 9
+     },
+     "expect": {
+      "result": {
+       "ok": false,
+       "code": "outside_grid"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "clear_layer",
+   "source": "python-port",
+   "note": "レイヤーのクリア: アクティブレイヤーだけ",
+   "setup": {
+    "document": "smile"
+   },
+   "steps": [
+    {
+     "op": "layer.set_active",
+     "args": {
+      "index": 1
+     },
+     "expect": {
+      "activeLayer": 1
+     }
+    },
+    {
+     "op": "clear_layer",
+     "expect": {
+      "result": {
+       "ok": true
+      },
+      "summary": {
+       "keys": 0,
+       "empty": 15
+      }
+     }
+    },
+    {
+     "op": "clear_layer",
+     "expect": {
+      "result": {
+       "ok": false,
+       "code": "empty"
+      }
+     }
+    },
+    {
+     "op": "layer.set_active",
+     "args": {
+      "index": 0
+     },
+     "expect": {
+      "summary": {
+       "keys": 2,
+       "generated": 1
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "generate_mirror_idw",
+   "source": "python-port",
+   "note": "自動生成: ミラーの仮想キー（+45° の Smile_L → -45° の Smile_R）。キーは変わらない。2 回目も同じ結果",
+   "setup": {
+    "document": "smile"
+   },
+   "steps": [
+    {
+     "op": "generate",
+     "args": {
+      "allLayers": false
+     },
+     "expect": {
+      "result": {
+       "ok": true,
+       "summary": {
+        "keys": 2,
+        "mirrorKeys": 1,
+        "generated": 13
+       }
+      },
+      "summary": {
+       "keys": 2,
+       "generated": 13,
+       "empty": 0
+      },
+      "docPoints": [
+       {
+        "layer": 0,
+        "row": 1,
+        "col": 1,
+        "isKey": false,
+        "curves": {
+         "Smile_R": 0.8
+        }
+       },
+       {
+        "layer": 0,
+        "row": 1,
+        "col": 3,
+        "isKey": true,
+        "curves": {
+         "Smile_L": 0.8
+        }
+       },
+       {
+        "layer": 0,
+        "row": 1,
+        "col": 2,
+        "isKey": true,
+        "curves": {
+         "JawOpen": 0.4
+        }
+       }
+      ]
+     }
+    },
+    {
+     "op": "generate",
+     "expect": {
+      "result": {
+       "ok": true,
+       "summary": {
+        "keys": 2,
+        "generated": 13
+       }
+      },
+      "summary": {
+       "generated": 13
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "generate_all_layers",
+   "source": "python-port",
+   "note": "全レイヤーを対象にすると Joy も生成する",
+   "setup": {
+    "document": "smile"
+   },
+   "steps": [
+    {
+     "op": "generate",
+     "args": {
+      "allLayers": true
+     },
+     "expect": {
+      "result": {
+       "ok": true,
+       "summary": {
+        "layers": 2
+       }
+      }
+     }
+    },
+    {
+     "op": "layer.set_active",
+     "args": {
+      "index": 1
+     },
+     "expect": {
+      "summary": {
+       "keys": 1,
+       "generated": 14
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "generate_no_keys",
+   "source": "python-port",
+   "note": "キーが無ければ何もしない（失敗）",
+   "setup": {
+    "document": "neutral_only"
+   },
+   "steps": [
+    {
+     "op": "generate",
+     "expect": {
+      "result": {
+       "ok": false,
+       "code": "no_keys"
+      },
+      "summary": {
+       "keys": 0,
+       "generated": 0
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "copy_paste_pose",
+   "source": "python-port",
+   "note": "コピー → 別の点へ貼り付け。貼った点はキー。クリップボードが空なら失敗",
+   "setup": {
+    "document": "smile"
+   },
+   "steps": [
+    {
+     "op": "paste_pose",
+     "args": {
+      "row": 0,
+      "col": 0
+     },
+     "expect": {
+      "result": {
+       "ok": false,
+       "code": "no_clipboard"
+      },
+      "clipboard": false
+     }
+    },
+    {
+     "op": "copy_pose",
+     "args": {
+      "row": 0,
+      "col": 0
+     },
+     "expect": {
+      "result": {
+       "ok": false,
+       "code": "empty"
+      }
+     }
+    },
+    {
+     "op": "copy_pose",
+     "args": {
+      "row": 1,
+      "col": 2
+     },
+     "expect": {
+      "result": {
+       "ok": true
+      },
+      "clipboard": true
+     }
+    },
+    {
+     "op": "paste_pose",
+     "args": {
+      "row": 0,
+      "col": 0
+     },
+     "expect": {
+      "result": {
+       "ok": true
+      },
+      "points": [
+       {
+        "row": 0,
+        "col": 0,
+        "state": "key"
+       }
+      ],
+      "docPoints": [
+       {
+        "layer": 0,
+        "row": 0,
+        "col": 0,
+        "isKey": true,
+        "curves": {
+         "JawOpen": 0.4
+        }
+       }
+      ]
+     }
+    },
+    {
+     "op": "paste_pose",
+     "args": {
+      "row": 2,
+      "col": 3
+     },
+     "expect": {
+      "result": {
+       "ok": true
+      },
+      "points": [
+       {
+        "row": 2,
+        "col": 3,
+        "state": "key"
+       }
+      ],
+      "docPoints": [
+       {
+        "layer": 0,
+        "row": 2,
+        "col": 3,
+        "curves": {
+         "JawOpen": 0.4
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "paste_mirrored",
+   "source": "python-port",
+   "note": "左右反転して貼る（接尾辞を入れ替える。除外パターンの名前は入らず、全部除外なら失敗）",
+   "setup": {
+    "document": "smile_jaw_excluded"
+   },
+   "steps": [
+    {
+     "op": "copy_pose",
+     "args": {
+      "row": 1,
+      "col": 3
+     }
+    },
+    {
+     "op": "paste_mirrored",
+     "args": {
+      "row": 1,
+      "col": 1
+     },
+     "expect": {
+      "result": {
+       "ok": true
+      },
+      "points": [
+       {
+        "row": 1,
+        "col": 1,
+        "state": "key"
+       }
+      ],
+      "docPoints": [
+       {
+        "layer": 0,
+        "row": 1,
+        "col": 1,
+        "isKey": true,
+        "curves": {
+         "Smile_R": 0.8
+        }
+       }
+      ]
+     }
+    },
+    {
+     "op": "copy_pose",
+     "args": {
+      "row": 1,
+      "col": 2
+     }
+    },
+    {
+     "op": "paste_mirrored",
+     "args": {
+      "row": 0,
+      "col": 0
+     },
+     "expect": {
+      "result": {
+       "ok": false,
+       "code": "empty_result"
+      },
+      "docPoints": [
+       {
+        "layer": 0,
+        "row": 0,
+        "col": 0,
+        "absent": true
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "paste_mirrored_needs_mirror",
+   "source": "python-port",
+   "note": "ミラーが無効なら左右反転の貼り付けはできない（普通の貼り付けはできる）",
+   "setup": {
+    "document": "smile_no_mirror"
+   },
+   "steps": [
+    {
+     "op": "copy_pose",
+     "args": {
+      "row": 1,
+      "col": 3
+     }
+    },
+    {
+     "op": "paste_mirrored",
+     "args": {
+      "row": 1,
+      "col": 1
+     },
+     "expect": {
+      "result": {
+       "ok": false,
+       "code": "mirror_disabled"
+      }
+     }
+    },
+    {
+     "op": "actions",
+     "args": {
+      "row": 1,
+      "col": 1
+     },
+     "expect": {
+      "result": {
+       "paste": true,
+       "pasteMirrored": false
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "context_menu_actions",
+   "source": "python-port",
+   "note": "点ごとの操作の可否（右クリックのメニュー）とボタンの可否",
+   "setup": {
+    "document": "smile"
+   },
+   "steps": [
+    {
+     "op": "actions",
+     "args": {
+      "row": 1,
+      "col": 3
+     },
+     "expect": {
+      "result": {
+       "unkey": true,
+       "clear": true,
+       "bakePoint": true,
+       "copy": true,
+       "paste": false,
+       "pasteMirrored": false,
+       "cameraToPoint": true
+      }
+     }
+    },
+    {
+     "op": "actions",
+     "args": {
+      "row": 2,
+      "col": 3
+     },
+     "expect": {
+      "result": {
+       "unkey": false,
+       "clear": true,
+       "bakePoint": true,
+       "copy": true
+      }
+     }
+    },
+    {
+     "op": "actions",
+     "args": {
+      "row": 0,
+      "col": 0
+     },
+     "expect": {
+      "result": {
+       "unkey": false,
+       "clear": false,
+       "bakePoint": false,
+       "copy": false,
+       "cameraToPoint": true
+      }
+     }
+    },
+    {
+     "op": "actions",
+     "args": {
+      "row": 9,
+      "col": 9
+     },
+     "expect": {
+      "result": {
+       "unkey": false,
+       "cameraToPoint": false
+      }
+     }
+    },
+    {
+     "op": "actions",
+     "expect": {
+      "result": {
+       "cameraToPoint": false
+      }
+     }
+    },
+    {
+     "op": "copy_pose",
+     "args": {
+      "row": 1,
+      "col": 3
+     }
+    },
+    {
+     "op": "actions",
+     "args": {
+      "row": 0,
+      "col": 0
+     },
+     "expect": {
+      "result": {
+       "paste": true,
+       "pasteMirrored": true
+      }
+     }
+    },
+    {
+     "op": "toolbar",
+     "expect": {
+      "result": {
+       "generate": true,
+       "unkey": false,
+       "clear": false,
+       "clearLayer": true
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "resize_preview_then_apply",
+   "source": "python-port",
+   "note": "格子サイズの変更: 予行で捨てられるキーを知らせ、適用すると角度で引き継ぐ。選択が外に出たら解除",
+   "setup": {
+    "document": "smile"
+   },
+   "steps": [
+    {
+     "op": "select",
+     "args": {
+      "row": 1,
+      "col": 4
+     }
+    },
+    {
+     "op": "preview_resize",
+     "args": {
+      "cols": 3,
+      "rows": 3
+     },
+     "expect": {
+      "result": {
+       "ok": true,
+       "dryRun": true,
+       "summary": {
+        "keptKeys": 2
+       },
+       "droppedKeys": [
+        {
+         "layer": "Neutral",
+         "row": 1,
+         "col": 3,
+         "yaw": 45,
+         "pitch": 0
+        }
+       ]
+      },
+      "grid": {
+       "cols": 5,
+       "rows": 3
+      }
+     }
+    },
+    {
+     "op": "resize",
+     "args": {
+      "cols": 3,
+      "rows": 3
+     },
+     "expect": {
+      "result": {
+       "ok": true,
+       "dryRun": false,
+       "summary": {
+        "keptKeys": 2
+       },
+       "droppedKeys": [
+        {
+         "layer": "Neutral",
+         "row": 1,
+         "col": 3
+        }
+       ]
+      },
+      "grid": {
+       "cols": 3,
+       "rows": 3,
+       "yawRange": 90
+      },
+      "selection": null,
+      "docPoints": [
+       {
+        "layer": 0,
+        "row": 1,
+        "col": 1,
+        "isKey": true,
+        "curves": {
+         "JawOpen": 0.4
+        }
+       }
+      ]
+     }
+    },
+    {
+     "op": "resize",
+     "args": {
+      "cols": 0,
+      "rows": 3
+     },
+     "expect": {
+      "result": {
+       "ok": false,
+       "code": "invalid_size"
+      },
+      "grid": {
+       "cols": 3
+      }
+     }
+    },
+    {
+     "op": "resize",
+     "args": {
+      "cols": 3,
+      "rows": 3,
+      "yawRange": 0
+     },
+     "expect": {
+      "result": {
+       "ok": false,
+       "code": "invalid_range"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "resize_reports_stale_morphs",
+   "source": "python-port",
+   "note": "格子が小さくなって対象でなくなった点の FC_* は stale_morphs",
+   "setup": {
+    "document": "smile",
+    "bakeState": {
+     "FC_a_Neutral_R1_C3": "@current",
+     "FC_a_Neutral_R1_C2": "@current"
+    }
+   },
+   "steps": [
+    {
+     "op": "resize",
+     "args": {
+      "cols": 3,
+      "rows": 3
+     },
+     "expect": {
+      "result": {
+       "ok": true,
+       "staleMorphs": [
+        "FC_a_Neutral_R1_C3"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "camera_marker_inside",
+   "source": "python-port",
+   "note": "カメラの角度 → 格子の座標（赤い点）。範囲の内側",
+   "setup": {
+    "document": "smile"
+   },
+   "steps": [
+    {
+     "op": "locate",
+     "args": {
+      "yaw": 0,
+      "pitch": 0
+     },
+     "expect": {
+      "result": {
+       "colPos": 2,
+       "rowPos": 1,
+       "clamped": false,
+       "fadedOut": false,
+       "nearestRow": 1,
+       "nearestCol": 2,
+       "fadeScale": 1
+      }
+     }
+    },
+    {
+     "op": "locate",
+     "args": {
+      "yaw": 30,
+      "pitch": 15
+     },
+     "expect": {
+      "result": {
+       "colPos": 2.6667,
+       "rowPos": 1.3333,
+       "nearestRow": 1,
+       "nearestCol": 3,
+       "col0": 2,
+       "col1": 3,
+       "row0": 1,
+       "row1": 2,
+       "colFrac": 0.6667,
+       "rowFrac": 0.3333
+      }
+     }
+    },
+    {
+     "op": "nearest_point",
+     "args": {
+      "yaw": -44,
+      "pitch": -40
+     },
+     "expect": {
+      "result": [
+       0,
+       1
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "camera_marker_outside",
+   "source": "python-port",
+   "note": "範囲の外: clamped = true、描画用の位置は端、フェードの幅（15°）も超えると fadedOut",
+   "setup": {
+    "document": "smile"
+   },
+   "steps": [
+    {
+     "op": "locate",
+     "args": {
+      "yaw": 100,
+      "pitch": -50
+     },
+     "expect": {
+      "result": {
+       "colPos": 4.2222,
+       "rowPos": -0.1111,
+       "colPosClamped": 4,
+       "rowPosClamped": 0,
+       "clamped": true,
+       "fadedOut": false,
+       "nearestRow": 0,
+       "nearestCol": 4
+      }
+     }
+    },
+    {
+     "op": "locate",
+     "args": {
+      "yaw": 120,
+      "pitch": 0
+     },
+     "expect": {
+      "result": {
+       "clamped": true,
+       "fadedOut": true,
+       "nearestCol": 4
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "angles_of_points",
+   "source": "python-port",
+   "note": "点 → (Yaw, Pitch)。行 0 が -Pitch、列 0 が -Yaw",
+   "setup": {
+    "document": "smile"
+   },
+   "steps": [
+    {
+     "op": "angles_of",
+     "args": {
+      "row": 0,
+      "col": 0
+     },
+     "expect": {
+      "result": [
+       -90,
+       -45
+      ]
+     }
+    },
+    {
+     "op": "angles_of",
+     "args": {
+      "row": 2,
+      "col": 4
+     },
+     "expect": {
+      "result": [
+       90,
+       45
+      ]
+     }
+    },
+    {
+     "op": "angles_of",
+     "args": {
+      "row": 1,
+      "col": 2
+     },
+     "expect": {
+      "result": [
+       0,
+       0
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "grid_view_orientation",
+   "source": "python-port",
+   "note": "表示の並び: 上が最大 Pitch（行番号が大きい方）",
+   "setup": {
+    "document": "smile"
+   },
+   "steps": [
+    {
+     "op": "noop",
+     "expect": {
+      "gridView": {
+       "rows": 3,
+       "cols": 5,
+       "displayRows": [
+        2,
+        1,
+        0
+       ],
+       "layer": "Neutral"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "pose_working_set_and_filter",
+   "source": "python-port",
+   "note": "作業セットの絞り込み（作業セットが空でなければ効く）と文字列の絞り込み（大小無視の部分一致）",
+   "setup": {
+    "document": "smile",
+    "scene": {
+     "curves": [
+      "Smile_L",
+      "Smile_R",
+      "JawOpen",
+      "Blink_L"
+     ],
+     "bones": [
+      "Eye_L",
+      "Eye_R",
+      "head"
+     ]
+    }
+   },
+   "steps": [
+    {
+     "op": "select",
+     "args": {
+      "row": 1,
+      "col": 2
+     },
+     "expect": {
+      "poseRows": {
+       "curves": [
+        "Smile_L",
+        "Smile_R",
+        "JawOpen"
+       ],
+       "bones": [
+        "Eye_L",
+        "Eye_R"
+       ]
+      }
+     }
+    },
+    {
+     "op": "pose.set_filter",
+     "args": {
+      "text": "smile"
+     },
+     "expect": {
+      "poseRows": {
+       "curves": [
+        "Smile_L",
+        "Smile_R"
+       ],
+       "bones": [
+        "Eye_L",
+        "Eye_R"
+       ]
+      }
+     }
+    },
+    {
+     "op": "pose.set_bone_filter",
+     "args": {
+      "text": "_r"
+     },
+     "expect": {
+      "poseRows": {
+       "curves": [
+        "Smile_L",
+        "Smile_R"
+       ],
+       "bones": [
+        "Eye_R"
+       ]
+      }
+     }
+    },
+    {
+     "op": "pose.set_filter",
+     "args": {
+      "text": ""
+     }
+    },
+    {
+     "op": "pose.set_bone_filter",
+     "args": {
+      "text": ""
+     }
+    },
+    {
+     "op": "pose.set_working_set_only",
+     "args": {
+      "value": false
+     },
+     "expect": {
+      "poseRows": {
+       "curves": [
+        "Blink_L",
+        "JawOpen",
+        "Smile_L",
+        "Smile_R"
+       ],
+       "bones": [
+        "Eye_L",
+        "Eye_R",
+        "head"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "pose_hidden_edits_outside_working_set",
+   "source": "python-port",
+   "note": "作業セットの外にある編集済みの値は一覧に出ないが、保存では残る（hidden の数で知らせる）",
+   "setup": {
+    "document": "smile"
+   },
+   "steps": [
+    {
+     "op": "select",
+     "args": {
+      "row": 1,
+      "col": 2
+     }
+    },
+    {
+     "op": "pose.ingest",
+     "args": {
+      "curves": {
+       "JawOpen": 0.4,
+       "Other": 0.5
+      },
+      "replace": false,
+      "workingSetOnly": false
+     },
+     "expect": {
+      "result": {
+       "ignored": []
+      }
+     }
+    },
+    {
+     "op": "pose.set_working_set_only",
+     "args": {
+      "value": true
+     },
+     "expect": {
+      "poseView": {
+       "hiddenCurves": 1,
+       "workingSetActive": true
+      }
+     }
+    },
+    {
+     "op": "pose.save",
+     "expect": {
+      "docPoints": [
+       {
+        "layer": 0,
+        "row": 1,
+        "col": 2,
+        "curves": {
+         "JawOpen": 0.4,
+         "Other": 0.5
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "pose_limits_clamp",
+   "source": "python-port",
+   "note": "スライダーの範囲はプロファイル / limits。範囲の外は丸める",
+   "setup": {
+    "document": "smile",
+    "profile": {
+     "format": "FacialNamingProfile",
+     "version": 1,
+     "name": "p",
+     "limits": {
+      "Smile_L": [
+       0,
+       2
+      ]
+     }
+    }
+   },
+   "steps": [
+    {
+     "op": "select",
+     "args": {
+      "row": 0,
+      "col": 0
+     }
+    },
+    {
+     "op": "pose.set_curve",
+     "args": {
+      "name": "Smile_L",
+      "value": 1.7
+     },
+     "expect": {
+      "result": {
+       "value": 1.7,
+       "clamped": false
+      }
+     }
+    },
+    {
+     "op": "pose.set_curve",
+     "args": {
+      "name": "Smile_R",
+      "value": 1.7
+     },
+     "expect": {
+      "result": {
+       "value": 1.0,
+       "clamped": true
+      }
+     }
+    },
+    {
+     "op": "pose.set_curve",
+     "args": {
+      "name": "JawOpen",
+      "value": -1
+     },
+     "expect": {
+      "result": {
+       "value": 0.0,
+       "clamped": true
+      }
+     }
+    },
+    {
+     "op": "noop",
+     "expect": {
+      "poseView": {
+       "curves": [
+        {
+         "name": "Smile_L",
+         "lo": 0,
+         "hi": 2,
+         "explicitLimit": true
+        },
+        {
+         "name": "Smile_R",
+         "lo": 0,
+         "hi": 1,
+         "explicitLimit": false
+        },
+        {
+         "name": "JawOpen"
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "pose_edit_without_point",
+   "source": "python-port",
+   "note": "点を選ぶ前は編集・保存できない",
+   "setup": {
+    "document": "smile"
+   },
+   "steps": [
+    {
+     "op": "pose.set_curve",
+     "args": {
+      "name": "JawOpen",
+      "value": 0.5
+     },
+     "expect": {
+      "result": {
+       "ok": false,
+       "code": "no_point"
+      },
+      "dirty": false
+     }
+    },
+    {
+     "op": "pose.save",
+     "expect": {
+      "result": {
+       "ok": false,
+       "code": "no_point"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "pose_save_makes_key",
+   "source": "python-port",
+   "note": "保存: その点がキーになる（自動生成の入力）。ほぼ 0 の値・恒等のボーンは書かない",
+   "setup": {
+    "document": "smile"
+   },
+   "steps": [
+    {
+     "op": "select",
+     "args": {
+      "row": 0,
+      "col": 0
+     }
+    },
+    {
+     "op": "pose.set_curve",
+     "args": {
+      "name": "Smile_L",
+      "value": 0.5
+     }
+    },
+    {
+     "op": "pose.set_curve",
+     "args": {
+      "name": "Smile_R",
+      "value": 5e-05
+     }
+    },
+    {
+     "op": "pose.set_bone",
+     "args": {
+      "name": "Eye_L",
+      "t": [
+       0,
+       1,
+       0
+      ]
+     }
+    },
+    {
+     "op": "pose.set_bone",
+     "args": {
+      "name": "Eye_R",
+      "t": [
+       0,
+       0,
+       0
+      ]
+     }
+    },
+    {
+     "op": "pose.save",
+     "expect": {
+      "result": {
+       "ok": true,
+       "becomesKey": true,
+       "removed": false
+      },
+      "dirty": false,
+      "points": [
+       {
+        "row": 0,
+        "col": 0,
+        "state": "key",
+        "selected": true
+       }
+      ],
+      "docPoints": [
+       {
+        "layer": 0,
+        "row": 0,
+        "col": 0,
+        "isKey": true,
+        "curves": {
+         "Smile_L": 0.5
+        },
+        "bones": {
+         "Eye_L": {
+          "t": [
+           0,
+           1,
+           0
+          ],
+          "r": [
+           0,
+           0,
+           0,
+           1
+          ],
+          "s": [
+           1,
+           1,
+           1
+          ]
+         }
+        }
+       }
+      ],
+      "pose": {
+       "curves": {
+        "Smile_L": 0.5
+       },
+       "bones": {
+        "Eye_L": {
+         "t": [
+          0,
+          1,
+          0
+         ]
+        }
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "pose_save_generated_point_becomes_key",
+   "source": "python-port",
+   "note": "自動生成の点を編集して保存するとキーになる",
+   "setup": {
+    "document": "smile"
+   },
+   "steps": [
+    {
+     "op": "select",
+     "args": {
+      "row": 2,
+      "col": 3
+     }
+    },
+    {
+     "op": "pose.set_curve",
+     "args": {
+      "name": "Smile_L",
+      "value": 0.6
+     }
+    },
+    {
+     "op": "pose.save",
+     "expect": {
+      "result": {
+       "becomesKey": true
+      },
+      "points": [
+       {
+        "row": 2,
+        "col": 3,
+        "state": "key"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "pose_save_empty",
+   "source": "python-port",
+   "note": "空のポーズを保存すると点が消える（UE 準拠）。keepEmptyKey なら「補正なし」のキーとして残す",
+   "setup": {
+    "document": "smile"
+   },
+   "steps": [
+    {
+     "op": "select",
+     "args": {
+      "row": 1,
+      "col": 2
+     }
+    },
+    {
+     "op": "pose.zero",
+     "expect": {
+      "dirty": true,
+      "pose": {
+       "curves": {},
+       "bones": {}
+      }
+     }
+    },
+    {
+     "op": "pose.save",
+     "args": {
+      "keepEmptyKey": true
+     },
+     "expect": {
+      "result": {
+       "ok": true,
+       "becomesKey": true,
+       "removed": false
+      },
+      "docPoints": [
+       {
+        "layer": 0,
+        "row": 1,
+        "col": 2,
+        "isKey": true,
+        "curves": {}
+       }
+      ],
+      "points": [
+       {
+        "row": 1,
+        "col": 2,
+        "state": "key"
+       }
+      ]
+     }
+    },
+    {
+     "op": "pose.save",
+     "expect": {
+      "result": {
+       "ok": true,
+       "removed": true,
+       "becomesKey": false
+      },
+      "docPoints": [
+       {
+        "layer": 0,
+        "row": 1,
+        "col": 2,
+        "absent": true
+       }
+      ],
+      "points": [
+       {
+        "row": 1,
+        "col": 2,
+        "state": "empty"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "pose_save_reports_stale_when_emptied",
+   "source": "python-port",
+   "note": "保存で空になって点が消えるとき、ベイク済みの FC_* を stale_morphs で返す",
+   "setup": {
+    "document": "smile",
+    "bakeState": {
+     "FC_a_Neutral_R1_C2": "@current"
+    }
+   },
+   "steps": [
+    {
+     "op": "select",
+     "args": {
+      "row": 1,
+      "col": 2
+     }
+    },
+    {
+     "op": "pose.zero"
+    },
+    {
+     "op": "pose.save",
+     "expect": {
+      "result": {
+       "removed": true,
+       "staleMorphs": [
+        "FC_a_Neutral_R1_C2"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "pose_save_marks_changed_since_bake",
+   "source": "python-port",
+   "note": "ベイク済みの点を保存し直すと「ベイク後に変更あり」になる",
+   "setup": {
+    "document": "smile",
+    "bakeState": {
+     "FC_a_Neutral_R1_C2": "@current"
+    }
+   },
+   "steps": [
+    {
+     "op": "select",
+     "args": {
+      "row": 1,
+      "col": 2
+     },
+     "expect": {
+      "points": [
+       {
+        "row": 1,
+        "col": 2,
+        "bake": "baked"
+       }
+      ]
+     }
+    },
+    {
+     "op": "pose.set_curve",
+     "args": {
+      "name": "JawOpen",
+      "value": 0.7
+     }
+    },
+    {
+     "op": "pose.save",
+     "expect": {
+      "points": [
+       {
+        "row": 1,
+        "col": 2,
+        "bake": "changed",
+        "frame": "changed"
+       }
+      ],
+      "summary": {
+       "changed": 1
+      }
+     }
+    },
+    {
+     "op": "bake.mark_point",
+     "args": {
+      "layer": 0,
+      "row": 1,
+      "col": 2
+     },
+     "expect": {
+      "points": [
+       {
+        "row": 1,
+        "col": 2,
+        "bake": "baked"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "pose_zero_and_reset_bones",
+   "source": "python-port",
+   "note": "ゼロに戻す / ボーンを戻す / 1 本だけ戻す",
+   "setup": {
+    "document": "smile"
+   },
+   "steps": [
+    {
+     "op": "select",
+     "args": {
+      "row": 0,
+      "col": 0
+     }
+    },
+    {
+     "op": "pose.set_curve",
+     "args": {
+      "name": "Smile_L",
+      "value": 0.5
+     }
+    },
+    {
+     "op": "pose.set_bone",
+     "args": {
+      "name": "Eye_L",
+      "t": [
+       0,
+       1,
+       0
+      ]
+     }
+    },
+    {
+     "op": "pose.set_bone",
+     "args": {
+      "name": "Eye_R",
+      "t": [
+       0,
+       2,
+       0
+      ]
+     }
+    },
+    {
+     "op": "pose.reset_bone",
+     "args": {
+      "name": "Eye_L"
+     },
+     "expect": {
+      "pose": {
+       "curves": {
+        "Smile_L": 0.5
+       },
+       "bones": {
+        "Eye_R": {
+         "t": [
+          0,
+          2,
+          0
+         ]
+        }
+       }
+      }
+     }
+    },
+    {
+     "op": "pose.reset_bones",
+     "expect": {
+      "pose": {
+       "curves": {
+        "Smile_L": 0.5
+       },
+       "bones": {}
+      }
+     }
+    },
+    {
+     "op": "pose.set_bone",
+     "args": {
+      "name": "Eye_L",
+      "t": [
+       0,
+       1,
+       0
+      ]
+     }
+    },
+    {
+     "op": "pose.zero",
+     "expect": {
+      "pose": {
+       "curves": {},
+       "bones": {}
+      },
+      "dirty": false
+     }
+    }
+   ]
+  },
+  {
+   "name": "pose_mirror",
+   "source": "python-port",
+   "note": "左右反転: L/R を入れ替え、ボーンのずれを鏡映。除外パターンの名前はそのまま残す",
+   "setup": {
+    "document": "smile_jaw_excluded"
+   },
+   "steps": [
+    {
+     "op": "select",
+     "args": {
+      "row": 1,
+      "col": 3
+     }
+    },
+    {
+     "op": "pose.set_curve",
+     "args": {
+      "name": "JawOpen",
+      "value": 0.3
+     }
+    },
+    {
+     "op": "pose.set_bone",
+     "args": {
+      "name": "Eye_L",
+      "t": [
+       0,
+       2,
+       1
+      ]
+     }
+    },
+    {
+     "op": "pose.mirror",
+     "expect": {
+      "result": {
+       "ok": true
+      },
+      "dirty": true,
+      "pose": {
+       "curves": {
+        "Smile_R": 0.8,
+        "JawOpen": 0.3
+       },
+       "bones": {
+        "Eye_R": {
+         "t": [
+          0,
+          -2,
+          1
+         ]
+        }
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "pose_mirror_disabled",
+   "source": "python-port",
+   "note": "ミラーが無効なら左右反転できない",
+   "setup": {
+    "document": "smile_no_mirror"
+   },
+   "steps": [
+    {
+     "op": "select",
+     "args": {
+      "row": 1,
+      "col": 3
+     }
+    },
+    {
+     "op": "pose.mirror",
+     "expect": {
+      "result": {
+       "ok": false,
+       "code": "mirror_disabled"
+      },
+      "poseView": {
+       "canMirror": false
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "pose_ingest_replace",
+   "source": "python-port",
+   "note": "シーンから取り込む（置き換え）: 作業セットの外は取り込まず、渡されなかった範囲内の名前は消える",
+   "setup": {
+    "document": "smile"
+   },
+   "steps": [
+    {
+     "op": "select",
+     "args": {
+      "row": 1,
+      "col": 2
+     }
+    },
+    {
+     "op": "pose.ingest",
+     "args": {
+      "curves": {
+       "Smile_L": 0.3,
+       "Other": 0.9
+      },
+      "bones": {
+       "Eye_L": {
+        "t": [
+         0,
+         1,
+         0
+        ]
+       }
+      }
+     },
+     "expect": {
+      "result": {
+       "changed": true,
+       "ignored": [
+        "Other"
+       ],
+       "curvesSet": 1,
+       "bonesSet": 1,
+       "removed": 1
+      },
+      "dirty": true,
+      "pose": {
+       "curves": {
+        "Smile_L": 0.3
+       },
+       "bones": {
+        "Eye_L": {
+         "t": [
+          0,
+          1,
+          0
+         ]
+        }
+       }
+      }
+     }
+    },
+    {
+     "op": "pose.ingest",
+     "args": {
+      "curves": {
+       "Smile_L": 0.3
+      },
+      "bones": {
+       "Eye_L": {
+        "t": [
+         0,
+         0,
+         0
+        ]
+       }
+      }
+     },
+     "expect": {
+      "result": {
+       "changed": true
+      },
+      "pose": {
+       "curves": {
+        "Smile_L": 0.3
+       },
+       "bones": {}
+      }
+     }
+    },
+    {
+     "op": "pose.ingest",
+     "args": {
+      "curves": {
+       "Smile_L": 0.3
+      }
+     },
+     "expect": {
+      "result": {
+       "changed": false
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "pose_ingest_merge_and_clamp",
+   "source": "python-port",
+   "note": "取り込み（上書きだけ）: 渡した名前だけ上書き。可動域で丸めた名前は clamped、モデルに無い名前は unknown",
+   "setup": {
+    "document": "smile",
+    "scene": {
+     "curves": [
+      "Smile_L",
+      "JawOpen"
+     ],
+     "bones": [
+      "Eye_L"
+     ]
+    }
+   },
+   "steps": [
+    {
+     "op": "select",
+     "args": {
+      "row": 1,
+      "col": 2
+     }
+    },
+    {
+     "op": "pose.ingest",
+     "args": {
+      "curves": {
+       "Smile_L": 1.5,
+       "Smile_R": 0.2
+      },
+      "replace": false
+     },
+     "expect": {
+      "result": {
+       "clamped": [
+        "Smile_L"
+       ],
+       "unknown": [
+        "Smile_R"
+       ],
+       "curvesSet": 2
+      },
+      "pose": {
+       "curves": {
+        "JawOpen": 0.4,
+        "Smile_L": 1.0,
+        "Smile_R": 0.2
+       },
+       "bones": {}
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "pose_export_import",
+   "source": "python-port",
+   "note": "単独ポーズの書き出し（FacialPose）→ 別の点へ読み込み。空は書き出さない",
+   "setup": {
+    "document": "smile"
+   },
+   "steps": [
+    {
+     "op": "select",
+     "args": {
+      "row": 0,
+      "col": 0
+     }
+    },
+    {
+     "op": "pose.export",
+     "expect": {
+      "result": {
+       "ok": false,
+       "code": "empty"
+      }
+     }
+    },
+    {
+     "op": "select",
+     "args": {
+      "row": 1,
+      "col": 3
+     }
+    },
+    {
+     "op": "pose.export",
+     "expect": {
+      "result": {
+       "ok": true,
+       "format": "FacialPose",
+       "curves": {
+        "Smile_L": 0.8
+       }
+      }
+     }
+    },
+    {
+     "op": "select",
+     "args": {
+      "row": 0,
+      "col": 4
+     }
+    },
+    {
+     "op": "pose.import_last_export",
+     "expect": {
+      "result": {
+       "ok": true,
+       "curvesSet": 1,
+       "changed": true
+      },
+      "dirty": true,
+      "pose": {
+       "curves": {
+        "Smile_L": 0.8
+       },
+       "bones": {}
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "layers_add_rename_delete",
+   "source": "python-port",
+   "note": "レイヤーの追加・改名・無効化・感情カーブ・削除。レイヤー 0（Neutral）は改名・削除・感情カーブの設定ができない",
+   "setup": {
+    "document": "neutral_only"
+   },
+   "steps": [
+    {
+     "op": "layer.add",
+     "args": {
+      "name": "Anger"
+     },
+     "expect": {
+      "result": {
+       "ok": true,
+       "index": 1
+      },
+      "layers": [
+       {
+        "name": "Neutral",
+        "active": true
+       },
+       {
+        "name": "Anger",
+        "active": false,
+        "enabled": true
+       }
+      ]
+     }
+    },
+    {
+     "op": "layer.add",
+     "args": {
+      "name": "Anger"
+     },
+     "expect": {
+      "result": {
+       "ok": false,
+       "code": "duplicate"
+      }
+     }
+    },
+    {
+     "op": "layer.add",
+     "args": {
+      "name": "anger"
+     },
+     "expect": {
+      "result": {
+       "ok": false,
+       "code": "case_collision"
+      }
+     }
+    },
+    {
+     "op": "layer.add",
+     "args": {
+      "name": "Persp"
+     },
+     "expect": {
+      "result": {
+       "ok": false,
+       "code": "reserved"
+      }
+     }
+    },
+    {
+     "op": "layer.add",
+     "args": {
+      "name": "a b"
+     },
+     "expect": {
+      "result": {
+       "ok": false,
+       "code": "chars"
+      }
+     }
+    },
+    {
+     "op": "layer.add",
+     "args": {
+      "name": "  "
+     },
+     "expect": {
+      "result": {
+       "ok": false,
+       "code": "empty"
+      }
+     }
+    },
+    {
+     "op": "layer.rename",
+     "args": {
+      "index": 0,
+      "name": "Base"
+     },
+     "expect": {
+      "result": {
+       "ok": false,
+       "code": "neutral"
+      }
+     }
+    },
+    {
+     "op": "layer.rename",
+     "args": {
+      "index": 1,
+      "name": "Anger"
+     },
+     "expect": {
+      "result": {
+       "ok": true,
+       "code": "unchanged"
+      }
+     }
+    },
+    {
+     "op": "layer.rename",
+     "args": {
+      "index": 1,
+      "name": "Neutral"
+     },
+     "expect": {
+      "result": {
+       "ok": false,
+       "code": "duplicate"
+      }
+     }
+    },
+    {
+     "op": "layer.rename",
+     "args": {
+      "index": 1,
+      "name": "Rage"
+     },
+     "expect": {
+      "result": {
+       "ok": true
+      },
+      "layers": [
+       {
+        "name": "Neutral"
+       },
+       {
+        "name": "Rage"
+       }
+      ]
+     }
+    },
+    {
+     "op": "layer.set_enabled",
+     "args": {
+      "index": 1,
+      "enabled": false
+     },
+     "expect": {
+      "layers": [
+       {
+        "name": "Neutral",
+        "enabled": true
+       },
+       {
+        "name": "Rage",
+        "enabled": false
+       }
+      ]
+     }
+    },
+    {
+     "op": "layer.set_emotion_curve",
+     "args": {
+      "index": 1,
+      "curve": "rage_w"
+     },
+     "expect": {
+      "result": {
+       "ok": true,
+       "warnings": []
+      },
+      "layers": [
+       {},
+       {
+        "emotionCurve": "rage_w"
+       }
+      ]
+     }
+    },
+    {
+     "op": "layer.set_emotion_curve",
+     "args": {
+      "index": 1,
+      "curve": "x"
+     },
+     "expect": {
+      "result": {
+       "ok": true
+      }
+     }
+    },
+    {
+     "op": "layer.set_emotion_curve",
+     "args": {
+      "index": 0,
+      "curve": "x"
+     },
+     "expect": {
+      "result": {
+       "ok": false,
+       "code": "neutral"
+      }
+     }
+    },
+    {
+     "op": "layer.delete",
+     "args": {
+      "index": 0
+     },
+     "expect": {
+      "result": {
+       "ok": false,
+       "code": "neutral"
+      }
+     }
+    },
+    {
+     "op": "layer.delete",
+     "args": {
+      "index": 5
+     },
+     "expect": {
+      "result": {
+       "ok": false,
+       "code": "range"
+      }
+     }
+    },
+    {
+     "op": "layer.delete",
+     "args": {
+      "index": 1
+     },
+     "expect": {
+      "result": {
+       "ok": true
+      },
+      "layers": [
+       {
+        "name": "Neutral",
+        "active": true
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "layers_limit_16",
+   "source": "python-port",
+   "note": "レイヤーは Neutral を含めて最大 16",
+   "setup": {
+    "document": "neutral_only"
+   },
+   "steps": [
+    {
+     "op": "layer.add",
+     "args": {
+      "name": "L1"
+     },
+     "expect": {
+      "result": {
+       "ok": true,
+       "index": 1
+      }
+     }
+    },
+    {
+     "op": "layer.add",
+     "args": {
+      "name": "L2"
+     },
+     "expect": {
+      "result": {
+       "ok": true,
+       "index": 2
+      }
+     }
+    },
+    {
+     "op": "layer.add",
+     "args": {
+      "name": "L3"
+     },
+     "expect": {
+      "result": {
+       "ok": true,
+       "index": 3
+      }
+     }
+    },
+    {
+     "op": "layer.add",
+     "args": {
+      "name": "L4"
+     },
+     "expect": {
+      "result": {
+       "ok": true,
+       "index": 4
+      }
+     }
+    },
+    {
+     "op": "layer.add",
+     "args": {
+      "name": "L5"
+     },
+     "expect": {
+      "result": {
+       "ok": true,
+       "index": 5
+      }
+     }
+    },
+    {
+     "op": "layer.add",
+     "args": {
+      "name": "L6"
+     },
+     "expect": {
+      "result": {
+       "ok": true,
+       "index": 6
+      }
+     }
+    },
+    {
+     "op": "layer.add",
+     "args": {
+      "name": "L7"
+     },
+     "expect": {
+      "result": {
+       "ok": true,
+       "index": 7
+      }
+     }
+    },
+    {
+     "op": "layer.add",
+     "args": {
+      "name": "L8"
+     },
+     "expect": {
+      "result": {
+       "ok": true,
+       "index": 8
+      }
+     }
+    },
+    {
+     "op": "layer.add",
+     "args": {
+      "name": "L9"
+     },
+     "expect": {
+      "result": {
+       "ok": true,
+       "index": 9
+      }
+     }
+    },
+    {
+     "op": "layer.add",
+     "args": {
+      "name": "L10"
+     },
+     "expect": {
+      "result": {
+       "ok": true,
+       "index": 10
+      }
+     }
+    },
+    {
+     "op": "layer.add",
+     "args": {
+      "name": "L11"
+     },
+     "expect": {
+      "result": {
+       "ok": true,
+       "index": 11
+      }
+     }
+    },
+    {
+     "op": "layer.add",
+     "args": {
+      "name": "L12"
+     },
+     "expect": {
+      "result": {
+       "ok": true,
+       "index": 12
+      }
+     }
+    },
+    {
+     "op": "layer.add",
+     "args": {
+      "name": "L13"
+     },
+     "expect": {
+      "result": {
+       "ok": true,
+       "index": 13
+      }
+     }
+    },
+    {
+     "op": "layer.add",
+     "args": {
+      "name": "L14"
+     },
+     "expect": {
+      "result": {
+       "ok": true,
+       "index": 14
+      }
+     }
+    },
+    {
+     "op": "layer.add",
+     "args": {
+      "name": "L15"
+     },
+     "expect": {
+      "result": {
+       "ok": true,
+       "index": 15
+      }
+     }
+    },
+    {
+     "op": "layer.add",
+     "args": {
+      "name": "L16"
+     },
+     "expect": {
+      "result": {
+       "ok": false,
+       "code": "limit"
+      },
+      "layerView": {
+       "count": 16,
+       "limit": 16,
+       "canAdd": false
+      }
+     }
+    },
+    {
+     "op": "layer.delete",
+     "args": {
+      "index": 15
+     },
+     "expect": {
+      "result": {
+       "ok": true
+      },
+      "layerView": {
+       "count": 15,
+       "canAdd": true
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "layers_presets_and_add_or_select",
+   "source": "python-port",
+   "note": "プリセット 7 種（Neutral は常設）。ボタンは「あれば選ぶ・無ければ足して選ぶ」",
+   "setup": {
+    "document": "neutral_only"
+   },
+   "steps": [
+    {
+     "op": "noop",
+     "expect": {
+      "layerView": {
+       "presets": [
+        [
+         "Anger",
+         false
+        ],
+        [
+         "Contempt",
+         false
+        ],
+        [
+         "Disgust",
+         false
+        ],
+        [
+         "Fear",
+         false
+        ],
+        [
+         "Joy",
+         false
+        ],
+        [
+         "Sadness",
+         false
+        ],
+        [
+         "Surprise",
+         false
+        ]
+       ]
+      }
+     }
+    },
+    {
+     "op": "layer.add_or_select",
+     "args": {
+      "name": "Joy"
+     },
+     "expect": {
+      "result": {
+       "ok": true,
+       "index": 1,
+       "switch": {
+        "status": "selected",
+        "layer": 1
+       }
+      },
+      "activeLayer": 1,
+      "layerView": {
+       "presets": [
+        [
+         "Anger",
+         false
+        ],
+        [
+         "Contempt",
+         false
+        ],
+        [
+         "Disgust",
+         false
+        ],
+        [
+         "Fear",
+         false
+        ],
+        [
+         "Joy",
+         true
+        ],
+        [
+         "Sadness",
+         false
+        ],
+        [
+         "Surprise",
+         false
+        ]
+       ]
+      }
+     }
+    },
+    {
+     "op": "layer.add_or_select",
+     "args": {
+      "name": "Joy"
+     },
+     "expect": {
+      "result": {
+       "ok": true,
+       "code": "exists",
+       "index": 1
+      },
+      "layerView": {
+       "count": 2
+      }
+     }
+    },
+    {
+     "op": "layer.add_or_select",
+     "args": {
+      "name": "Neutral"
+     },
+     "expect": {
+      "result": {
+       "code": "exists",
+       "index": 0
+      },
+      "activeLayer": 0
+     }
+    }
+   ]
+  },
+  {
+   "name": "layers_delete_returns_morphs_and_fixes_active",
+   "source": "python-port",
+   "note": "削除: そのレイヤーの FC_*（bake_state / scene.targets にあるもの。_Ex 含む）を stale_morphs で返す。アクティブの番号を調整",
+   "setup": {
+    "document": "smile",
+    "bakeState": {
+     "FC_a_Joy_R1_C2": "@current",
+     "FC_a_Neutral_R1_C2": "@current"
+    },
+    "scene": {
+     "targets": [
+      "FC_a_Joy_R1_C2_Ex",
+      "FC_a_Joy_R0_C0",
+      "FC_a_Neutral_R1_C2",
+      "FC_b_Joy_R1_C2"
+     ]
+    }
+   },
+   "steps": [
+    {
+     "op": "layer.add",
+     "args": {
+      "name": "Fear"
+     }
+    },
+    {
+     "op": "layer.set_active",
+     "args": {
+      "index": 2
+     },
+     "expect": {
+      "activeLayer": 2
+     }
+    },
+    {
+     "op": "layer.delete",
+     "args": {
+      "index": 1
+     },
+     "expect": {
+      "result": {
+       "ok": true,
+       "staleMorphs": [
+        "FC_a_Joy_R0_C0",
+        "FC_a_Joy_R1_C2",
+        "FC_a_Joy_R1_C2_Ex"
+       ]
+      },
+      "activeLayer": 1,
+      "layers": [
+       {
+        "name": "Neutral",
+        "active": false
+       },
+       {
+        "name": "Fear",
+        "active": true
+       }
+      ]
+     }
+    },
+    {
+     "op": "layer.delete",
+     "args": {
+      "index": 1
+     },
+     "expect": {
+      "result": {
+       "ok": true,
+       "staleMorphs": []
+      },
+      "activeLayer": 0
+     }
+    }
+   ]
+  },
+  {
+   "name": "layers_rename_reports_old_morphs",
+   "source": "python-port",
+   "note": "改名: 旧名の FC_* は stale_morphs（新しい名前の分は未ベイクになる）。EmotionWeights の注意を warnings に入れる",
+   "setup": {
+    "document": "smile",
+    "bakeState": {
+     "FC_a_Joy_R1_C2": "@current"
+    }
+   },
+   "steps": [
+    {
+     "op": "layer.rename",
+     "args": {
+      "index": 1,
+      "name": "Happy"
+     },
+     "expect": {
+      "result": {
+       "ok": true,
+       "staleMorphs": [
+        "FC_a_Joy_R1_C2"
+       ]
+      },
+      "layers": [
+       {
+        "name": "Neutral"
+       },
+       {
+        "name": "Happy"
+       }
+      ]
+     }
+    },
+    {
+     "op": "layer.set_active",
+     "args": {
+      "index": 1
+     }
+    },
+    {
+     "op": "noop",
+     "expect": {
+      "points": [
+       {
+        "row": 1,
+        "col": 2,
+        "bake": "unbaked",
+        "morph": "FC_a_Happy_R1_C2"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "layers_copy_from",
+   "source": "python-port",
+   "note": "他のレイヤーのポーズをコピー（空でない点だけ。キーの印も引き継ぐ。コピー元に無い点は触らない）",
+   "setup": {
+    "document": "smile"
+   },
+   "steps": [
+    {
+     "op": "layer.copy_from",
+     "args": {
+      "source": 0,
+      "dest": 1
+     },
+     "expect": {
+      "result": {
+       "ok": true,
+       "count": 3,
+       "index": 1
+      },
+      "docPoints": [
+       {
+        "layer": 1,
+        "row": 1,
+        "col": 2,
+        "isKey": true,
+        "curves": {
+         "JawOpen": 0.4
+        }
+       },
+       {
+        "layer": 1,
+        "row": 2,
+        "col": 3,
+        "isKey": false,
+        "curves": {
+         "Smile_L": 0.2
+        }
+       }
+      ]
+     }
+    },
+    {
+     "op": "layer.copy_from",
+     "args": {
+      "source": 1,
+      "dest": 1
+     },
+     "expect": {
+      "result": {
+       "ok": false,
+       "code": "same"
+      }
+     }
+    },
+    {
+     "op": "layer.copy_from",
+     "args": {
+      "source": 0,
+      "dest": 7
+     },
+     "expect": {
+      "result": {
+       "ok": false,
+       "code": "range"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "layers_switch_guard",
+   "source": "python-port",
+   "note": "アクティブレイヤーの切り替えも、未保存の編集があれば確認が要る",
+   "setup": {
+    "document": "smile"
+   },
+   "steps": [
+    {
+     "op": "select",
+     "args": {
+      "row": 1,
+      "col": 2
+     }
+    },
+    {
+     "op": "pose.set_curve",
+     "args": {
+      "name": "JawOpen",
+      "value": 0.9
+     }
+    },
+    {
+     "op": "layer.set_active",
+     "args": {
+      "index": 1
+     },
+     "expect": {
+      "result": {
+       "status": "needs_confirm",
+       "kind": "layer",
+       "layer": 1
+      },
+      "activeLayer": 0,
+      "dirty": true
+     }
+    },
+    {
+     "op": "layer.confirm_set_active",
+     "args": {
+      "choice": "cancel"
+     },
+     "expect": {
+      "result": {
+       "status": "cancelled"
+      },
+      "activeLayer": 0,
+      "dirty": true
+     }
+    },
+    {
+     "op": "layer.set_active",
+     "args": {
+      "index": 1
+     },
+     "expect": {
+      "result": {
+       "status": "needs_confirm"
+      }
+     }
+    },
+    {
+     "op": "layer.confirm_set_active",
+     "args": {
+      "choice": "save"
+     },
+     "expect": {
+      "result": {
+       "status": "selected",
+       "saved": true
+      },
+      "activeLayer": 1,
+      "dirty": false,
+      "pose": {
+       "curves": {
+        "Smile_L": 1.0
+       },
+       "bones": {}
+      },
+      "docPoints": [
+       {
+        "layer": 0,
+        "row": 1,
+        "col": 2,
+        "curves": {
+         "JawOpen": 0.9
+        }
+       }
+      ]
+     }
+    },
+    {
+     "op": "layer.set_active",
+     "args": {
+      "index": 1
+     },
+     "expect": {
+      "result": {
+       "status": "same_point",
+       "kind": "layer"
+      }
+     }
+    },
+    {
+     "op": "layer.set_active",
+     "args": {
+      "index": 9
+     },
+     "expect": {
+      "result": {
+       "status": "invalid"
+      },
+      "activeLayer": 1
+     }
+    }
+   ]
+  },
+  {
+   "name": "edit_discards_unsaved_when_selected_point_changes",
+   "source": "python-port",
+   "note": "編集中の点を別の操作が書き換えたら、編集中の値は読み直す（discardedEdits で知らせる）。別の点なら保つ",
+   "setup": {
+    "document": "smile"
+   },
+   "steps": [
+    {
+     "op": "select",
+     "args": {
+      "row": 1,
+      "col": 2
+     }
+    },
+    {
+     "op": "pose.set_curve",
+     "args": {
+      "name": "JawOpen",
+      "value": 0.9
+     }
+    },
+    {
+     "op": "clear_point",
+     "args": {
+      "row": 0,
+      "col": 0
+     },
+     "expect": {
+      "result": {
+       "ok": false
+      },
+      "dirty": true
+     }
+    },
+    {
+     "op": "unkey",
+     "args": {
+      "row": 1,
+      "col": 3
+     },
+     "expect": {
+      "result": {
+       "ok": true,
+       "discardedEdits": false
+      },
+      "dirty": true
+     }
+    },
+    {
+     "op": "paste_pose",
+     "args": {
+      "row": 1,
+      "col": 2
+     },
+     "expect": {
+      "result": {
+       "ok": false,
+       "code": "no_clipboard"
+      },
+      "dirty": true
+     }
+    },
+    {
+     "op": "clear_point",
+     "args": {
+      "row": 1,
+      "col": 2
+     },
+     "expect": {
+      "result": {
+       "ok": true,
+       "discardedEdits": true
+      },
+      "dirty": false,
+      "pose": {
+       "curves": {},
+       "bones": {}
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "validation_run_groups_and_order",
+   "source": "python-port",
+   "note": "検証: 重さ順（エラー → 警告 → 情報）に並べ、件数と要約を出す",
+   "setup": {
+    "document": "smile",
+    "scene": {
+     "curves": [
+      "Smile_L",
+      "JawOpen"
+     ],
+     "bones": [
+      "Eye_L",
+      "Eye_R"
+     ]
+    },
+    "bakeState": {
+     "FC_a_Neutral_R1_C2": "@current"
+    }
+   },
+   "steps": [
+    {
+     "op": "validation.run",
+     "expect": {
+      "issueCodes": [
+       "base_bone_missing",
+       "curve_missing",
+       "mirror_partner_missing",
+       "point_unbaked",
+       "point_unbaked",
+       "point_unbaked"
+      ],
+      "validationView": {
+       "ran": true,
+       "ok": false,
+       "counts": {
+        "error": 1,
+        "warning": 2,
+        "info": 3
+       },
+       "total": 6,
+       "summary": "エラー 1 / 警告 2 / 情報 3",
+       "groups": [
+        {
+         "severity": "error",
+         "label": "エラー"
+        },
+        {
+         "severity": "warning",
+         "label": "警告"
+        },
+        {
+         "severity": "info",
+         "label": "情報"
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "validation_before_run",
+   "source": "python-port",
+   "note": "実行前は ran = false",
+   "setup": {
+    "document": "smile"
+   },
+   "steps": [
+    {
+     "op": "noop",
+     "expect": {
+      "validationView": {
+       "ran": false,
+       "total": 0,
+       "summary": "未実行",
+       "groups": []
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "validation_clean",
+   "source": "python-port",
+   "note": "エラーも警告も無ければ ok（情報は残ってよい）",
+   "setup": {
+    "document": "neutral_only",
+    "scene": {
+     "curves": [],
+     "bones": [
+      "head"
+     ]
+    }
+   },
+   "steps": [
+    {
+     "op": "validation.run",
+     "expect": {
+      "issueCodes": [
+       "layer_empty"
+      ],
+      "validationView": {
+       "ok": true,
+       "counts": {
+        "error": 0,
+        "warning": 0,
+        "info": 1
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "validation_rename_proposals_and_apply",
+   "source": "python-port",
+   "note": "大小違いの参照は候補つきで一括改名できる。候補は選び直せる。提案に無いものは選べない",
+   "setup": {
+    "document": "case_mismatch",
+    "scene": {
+     "curves": [
+      "Smile_L",
+      "Smile_R"
+     ],
+     "bones": [
+      "head"
+     ]
+    }
+   },
+   "steps": [
+    {
+     "op": "validation.run",
+     "expect": {
+      "validationView": {
+       "proposals": [
+        {
+         "kind": "curve",
+         "old": "smile_l",
+         "candidates": [
+          "Smile_L"
+         ],
+         "new": "Smile_L",
+         "count": 1
+        }
+       ]
+      }
+     }
+    },
+    {
+     "op": "validation.set_choice",
+     "args": {
+      "kind": "curve",
+      "old": "smile_l",
+      "new": "Smile_R"
+     },
+     "expect": {
+      "result": true,
+      "validationView": {
+       "proposals": [
+        {
+         "old": "smile_l",
+         "new": "Smile_R"
+        }
+       ]
+      }
+     }
+    },
+    {
+     "op": "validation.set_choice",
+     "args": {
+      "kind": "curve",
+      "old": "nothing",
+      "new": "x"
+     },
+     "expect": {
+      "result": false
+     }
+    },
+    {
+     "op": "validation.set_choice",
+     "args": {
+      "kind": "curve",
+      "old": "smile_l",
+      "new": "Smile_L"
+     },
+     "expect": {
+      "result": true
+     }
+    },
+    {
+     "op": "validation.apply_renames",
+     "expect": {
+      "result": {
+       "ok": true,
+       "total": 2,
+       "curve": {
+        "curveReplacements": 1,
+        "workingSetReplacements": 1
+       }
+      },
+      "docPoints": [
+       {
+        "layer": 0,
+        "row": 1,
+        "col": 2,
+        "curves": {
+         "Smile_L": 0.5,
+         "Ghost": 0.3
+        }
+       }
+      ]
+     }
+    },
+    {
+     "op": "validation.apply_renames",
+     "expect": {
+      "result": {
+       "ok": false,
+       "code": "nothing"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "validation_remove_missing",
+   "source": "python-port",
+   "note": "モデルに無い参照を消す。大小違いの名前は既定では残す",
+   "setup": {
+    "document": "case_mismatch",
+    "scene": {
+     "curves": [
+      "Smile_L"
+     ],
+     "bones": []
+    }
+   },
+   "steps": [
+    {
+     "op": "validation.remove_missing",
+     "expect": {
+      "result": {
+       "ok": true,
+       "removed": 1
+      },
+      "docPoints": [
+       {
+        "layer": 0,
+        "row": 1,
+        "col": 2,
+        "curves": {
+         "smile_l": 0.5
+        }
+       }
+      ]
+     }
+    },
+    {
+     "op": "validation.remove_missing",
+     "args": {
+      "includeCaseMismatch": true
+     },
+     "expect": {
+      "result": {
+       "ok": true,
+       "removed": 2
+      },
+      "docPoints": [
+       {
+        "layer": 0,
+        "row": 1,
+        "col": 2,
+        "curves": {}
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "validation_remove_needs_scene",
+   "source": "python-port",
+   "note": "モデルの情報が無ければ削除しない",
+   "setup": {
+    "document": "case_mismatch"
+   },
+   "steps": [
+    {
+     "op": "validation.remove_missing",
+     "expect": {
+      "result": {
+       "ok": false,
+       "code": "no_scene"
+      },
+      "validationView": {
+       "canRemoveMissing": false
+      }
+     }
+    }
+   ]
+  }
+ ]
+}
