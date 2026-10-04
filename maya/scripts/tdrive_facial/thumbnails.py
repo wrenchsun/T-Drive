@@ -189,8 +189,9 @@ def capture(
     distance = _frame_distance(mesh) if mesh else 60.0
     saved_selection = cmds.ls(selection=True, long=True) or []
     cam: Optional[str] = None
+    grid = getattr(session, "scene_grid", None)
     try:
-        with _no_undo():
+        with (grid.hidden() if grid is not None else contextlib.nullcontext()), _no_undo():  # シーンの格子も写り込まない
             cmds.select(clear=True)  # 選択の表示が写り込まない
             cam = cmds.camera(name="tdFacialThumbCam")[0]
             with session.pose_scope() as apply:

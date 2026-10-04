@@ -81,6 +81,7 @@ from . import bake as bake_mod
 from . import pose_apply
 from . import preview_rig
 from . import scene as scene_mod
+from . import scene_grid as scene_grid_mod
 from . import shapes
 from .core import autofill, base_expr, evaluate, fcpose_io, naming, space
 from .core import strength as strength_mod
@@ -234,6 +235,8 @@ class FacialSession:
         self._base: Optional[BaseExpression] = None  # 土台の表情（シーンだけの下敷き。モジュールの docstring「土台の表情」）
         self._lip_try: Optional["LipTry"] = None  # リップシンクの「試す」の最中の入力（モジュールの docstring「リップシンクの『試す』」）
         self.last_lip_try: dict[str, float] = {}  # 直近の「試す」でシーンへ当てた、対応表のシェイプの値
+        self._head_joint = ""  # 直近に使った基準ボーン（長い名前）
+        self.scene_grid = scene_grid_mod.SceneGrid(self)  # シーンのビューポートに出す格子（任意。scene_grid.py）
         self._suspended: Optional["_SuspendedEdit"] = None  # 保存・出力のあいだ編集状態を一時的に抜けているときの、戻す情報（M-1）
         self.last_capture_base_ignored: list[str] = []  # 直近の `capture_from_scene` で、土台のとおりだったので取り込まなかったシェイプ
         self.last_capture_below_base: list[str] = []  # 直近の `capture_from_scene` で、シーンの値が土台より低く、取り込めなかったシェイプ（C-2）
@@ -431,6 +434,7 @@ class FacialSession:
     def close(self) -> None:
         """データを閉じる（編集状態を抜け、シーンの記録も消す）。未保存の確認は呼ぶ側。"""
         self.end_edit(quiet=True)
+        self.scene_grid.remove()
         self.presenters = None
         self.path = None
         self.source_path = None
@@ -879,6 +883,7 @@ class FacialSession:
             "key_target": ctx.selected_key(),
             "lip_target": list(ctx.selected_lip()) if ctx.selected_lip() is not None else None,
             "buffer": {"curves": curves, "bones": bones},
+            "scene_grid": self.scene_grid.export_state(),
         }
 
     def import_state(self, state: dict[str, Any]) -> bool:
@@ -909,6 +914,7 @@ class FacialSession:
             pose = fcpose_io._read_pose(buf.get("curves"), buf.get("bones"))
             self.pose.curves, self.pose.bones = pose.curves, pose.bones  # 保存していないスライダーの値
         self._changed(dirty=False)
+        self.scene_grid.import_state(state.get("scene_grid"))
         return True
 
     # ------------------------------------------------------------ 保存・出力のあいだだけ編集状態を抜ける（M-1）
@@ -917,6 +923,7 @@ class FacialSession:
 
         土台の表情・彫りの状態は控えておく（編集中の値・選んでいる点は Presenter が持っているのでそのまま）。
         戻すのは `resume_edit_after_save`。編集状態でなければ False。"""
+        self.scene_grid.suspend()  # シーンに出している格子は、保存・出力に入れない
         if self._suspended is not None:
             return True
         if not self.editing:
@@ -940,6 +947,7 @@ class FacialSession:
 
     def resume_edit_after_save(self) -> None:
         """保存・出力のあと: 抜けていた編集状態へ同じ内容で入り直す（点・編集中の値・土台の表情。シーンの変更フラグは保存の直後のまま）。"""
+        self.scene_grid.resume()
         st, self._suspended = self._suspended, None
         if st is None or self.presenters is None:
             return
@@ -3132,16 +3140,18 @@ class FacialSession:
         sel.add(node)
         return sel.getDagPath(0)
 
-    def _head_frame(self) -> tuple[tuple[float, float, float], tuple[float, float, float, float]]:
-        """基準ボーンのワールドの位置（cm）と向き（クォータニオン [x, y, z, w]）。"""
+    def _head_frame(self, joint: Optional[str] = None) -> tuple[tuple[float, float, float], tuple[float, float, float, float]]:
+        """基準ボーンのワールドの位置（cm）と向き（クォータニオン [x, y, z, w]）。joint を渡すと（あれば）その長い名前のジョイントを使う（毎回探さない）。"""
         doc = self.require()
-        meshes = self._resolve_meshes(doc)
-        joint = scene_mod.find_joint(doc.grid.base_bone, scene_mod.mesh_joints(meshes)) if doc.grid.base_bone else None
+        if joint is None or not cmds.objExists(joint):
+            meshes = self._resolve_meshes(doc)
+            joint = scene_mod.find_joint(doc.grid.base_bone, scene_mod.mesh_joints(meshes)) if doc.grid.base_bone else None
         if joint is None:
             raise FacialSessionError(f"基準ボーン「{doc.grid.base_bone}」がシーンにありません")
         tm = om.MTransformationMatrix(self._dag(joint).inclusiveMatrix())
         t = tm.translation(om.MSpace.kWorld)
         q = tm.rotation(asQuaternion=True)
+        self._head_joint = joint
         return (t.x, t.y, t.z), space.quat_normalize((q.x, q.y, q.z, q.w))
 
     @staticmethod
@@ -3150,12 +3160,26 @@ class FacialSession:
         v["XYZ".index(axis[1])] = 1.0 if axis[0] == "+" else -1.0
         return (v[0], v[1], v[2])
 
-    def _grid_center(self) -> tuple[tuple[float, float, float], tuple[float, float, float, float]]:
+    def _grid_center(self, joint: Optional[str] = None) -> tuple[tuple[float, float, float], tuple[float, float, float, float]]:
         """格子の中心のワールド位置（基準ボーン + 回した centerOffset）と基準ボーンの向き。"""
         doc = self.require()
-        pos, q = self._head_frame()
+        pos, q = self._head_frame(joint)
         off = space.rotate_vector(q, doc.grid.center_offset)
         return (pos[0] + off[0], pos[1] + off[1], pos[2] + off[2]), q
+
+    def grid_basis(self, joint: Optional[str] = None) -> tuple[tuple[float, float, float], float, str]:
+        """格子の中心（ワールド・cm）、キャラクターの前方の向き（正準空間の水平 Yaw・度）、使った基準ボーン。
+        `camera_to_angles` と、シーンに出す格子（`scene_grid`）が同じ値を使う。"""
+        doc = self.require()
+        center, q = self._grid_center(joint)
+        to_canon = space.converter(space.MAYA, space.CANONICAL)
+        fwd = to_canon.direction(space.rotate_vector(q, self._axis_vector(doc.grid.forward_axis)))
+        return center, math.degrees(math.atan2(fwd[1], fwd[0])), self._head_joint
+
+    @staticmethod
+    def grid_direction(yaw: float, pitch: float, forward_yaw: float) -> tuple[float, float, float]:
+        """格子の中心から (Yaw, Pitch) の位置（カメラが置かれる側）への、Maya のワールドの単位ベクトル。"""
+        return space.converter(space.CANONICAL, space.MAYA).direction(evaluate.compute_view_direction(forward_yaw, yaw, pitch))
 
     def view_angles(self, camera: Optional[str] = None) -> tuple[float, float]:
         """カメラの今の (Yaw, Pitch)[度]。基準ボーン（centerOffset・forwardAxis を反映）から見たもの。
@@ -3187,7 +3211,7 @@ class FacialSession:
         """カメラを、基準ボーンの中心（centerOffset 込み）から (Yaw, Pitch) の方向・distance（cm。省くと今の距離）の位置へ動かして中心を向ける。"""
         doc = self.require()
         pose_apply.assert_maya_space(doc)
-        center, q = self._grid_center()
+        center, forward_yaw, _joint = self.grid_basis()
         cam = self.camera_transform(camera)
         cam_dag = self._dag(cam)
         cur = om.MTransformationMatrix(cam_dag.inclusiveMatrix()).translation(om.MSpace.kWorld)
@@ -3195,11 +3219,7 @@ class FacialSession:
             distance = math.dist((cur.x, cur.y, cur.z), center)
             if distance < 1e-3:
                 distance = 60.0
-        to_canon = space.converter(space.MAYA, space.CANONICAL)
-        to_maya = space.converter(space.CANONICAL, space.MAYA)
-        fwd = to_canon.direction(space.rotate_vector(q, self._axis_vector(doc.grid.forward_axis)))
-        forward_yaw = math.degrees(math.atan2(fwd[1], fwd[0]))
-        d = to_maya.direction(evaluate.compute_view_direction(forward_yaw, yaw, pitch))
+        d = self.grid_direction(yaw, pitch, forward_yaw)
         pos = (center[0] + d[0] * distance, center[1] + d[1] * distance, center[2] + d[2] * distance)
         # 視線 = pos → center。カメラは -Z を向く（z 軸 = 中心から自分への向き）
         z = _normalize(d)
@@ -3245,12 +3265,14 @@ class FacialSession:
     def on_before_scene_change(self) -> None:
         """新しいシーン / 別のシーンを開く直前（PreFileNewOrOpened）: 編集状態を抜けて、今のシーンを元の姿勢へ戻す。"""
         self._suspended = None
+        self.scene_grid.remove()
         self.end_edit(quiet=True)
 
     def on_new_scene(self) -> None:
         """新しいシーン（NewSceneOpened）: 古いシーンの基準姿勢の記録は捨てる（新しいシーンへ書かない）。データは開いたまま。"""
         self._suspended = None
         self._forget_edit()
+        self.scene_grid.forget()
         if self.presenters is not None:
             self.refresh_scene(notify=True)
 
@@ -3394,6 +3416,7 @@ def on_scene_opened() -> None:
     """
     s = _current
     s._forget_edit()
+    s.scene_grid.forget()
     path = FacialSession.remembered_path()
     if not path or not Path(path).exists():
         if s.presenters is not None:

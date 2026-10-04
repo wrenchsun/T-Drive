@@ -875,6 +875,153 @@ def sec_s3b_other_deformers_warn(tmp: Path) -> None:
     s.close()
 
 
+def _world_mats(joints) -> dict:
+    from maya import cmds
+
+    return {j: cmds.getAttr(f"{j}.worldMatrix[0]") for j in joints}
+
+
+def _max_diff(a: dict, b: dict) -> float:
+    return max(abs(x - y) for j in a for x, y in zip(a[j], b[j]))
+
+
+def sec_s3c_bind_does_not_break_body(tmp: Path) -> None:
+    """S-3（体が崩れる不具合）: 体のメッシュを持つリグで、顔のスキンの bindPose の中身がでたらめでも、編集に入って体のジョイントを動かさない。"""
+    from maya import cmds
+
+    import facial_fixture
+    from tdrive_facial import scene
+
+    ids, s = fresh(tmp)
+    extra = facial_fixture.add_body(garbage_pose=True)
+    alljoints = ids["joints"] + extra["body_joints"]
+    w0 = _world_mats(alljoints)
+    raw0 = joint_state(alljoints)
+    check("S-3c: 前提: 顔も体もバインドの形", scene._deviation_from_orig(ids["face"]) <= scene.BIND_TOLERANCE and scene._deviation_from_orig(extra["body"]) <= scene.BIND_TOLERANCE)
+    s.begin_edit()
+    s.select_point(1, 2)
+    w1 = _world_mats(alljoints)
+    check("S-3c: 編集に入っても全ジョイントのワールド行列が変わらない", _max_diff(w0, w1) <= 1e-6, f"{_max_diff(w0, w1)}")
+    check("S-3c: 編集中、顔も体もバインドの形（体が崩れない）", scene._deviation_from_orig(ids["face"]) <= scene.BIND_TOLERANCE and scene._deviation_from_orig(extra["body"]) <= scene.BIND_TOLERANCE)
+    s.end_edit(quiet=True)
+    check("S-3c: 抜けると全ジョイントが元の値", joint_state(alljoints) == raw0 and _max_diff(w0, _world_mats(alljoints)) <= 1e-6)
+    s.close()
+
+
+def sec_s3d_static_scene_writes_no_joint(tmp: Path) -> None:
+    """S-3: すでにバインドの形なら、ジョイントの値を 1 つも書かない（キーも作らない）。オートキー ON でも。"""
+    from maya import cmds
+
+    import facial_fixture
+    from tdrive_facial import scene
+
+    ids, s = fresh(tmp)
+    extra = facial_fixture.add_body(garbage_pose=True)
+    alljoints = ids["joints"] + extra["body_joints"]
+    raw0 = joint_state(alljoints)
+    prev_auto = cmds.autoKeyframe(query=True, state=True)
+    cmds.autoKeyframe(state=True)
+    writes: list[str] = []
+    orig_set = cmds.setAttr
+
+    def spy(plug, *a, **kw):
+        if any(str(plug).startswith(j + ".") or str(plug).startswith(j.split("|")[-1] + ".") for j in alljoints):
+            writes.append(str(plug))
+        return orig_set(plug, *a, **kw)
+
+    cmds.setAttr = spy
+    try:
+        ref = scene.enter_reference_pose(["mini_face"])
+        entered_writes = list(writes)
+        ref.restore()
+    finally:
+        cmds.setAttr = orig_set
+        cmds.autoKeyframe(state=bool(prev_auto))
+    check("S-3d: すでにバインドの形ならジョイントの属性を書かない（入るとき・戻すとき）", not writes and not entered_writes, str(writes))
+    check("S-3d: キーが作られない", not cmds.ls(type="animCurve"))
+    check("S-3d: 値は元のまま", joint_state(alljoints) == raw0)
+    s.close()
+
+
+def sec_s3e_posed_rig_face_goes_to_bind(tmp: Path) -> None:
+    """S-3: 体が動いていて頭も回っているリグ: 顔の影響ジョイントだけがバインドへ。顔の影響でない体のジョイントはポーズのまま。戻すと完全に元。"""
+    from maya import cmds
+
+    import facial_fixture
+    from tdrive_facial import scene
+
+    ids, s = fresh(tmp)
+    extra = facial_fixture.add_body(garbage_pose=False)
+    spine, arm_l, arm_r = extra["body_joints"]
+    cmds.setAttr("root.rotate", 0, 25, 0)
+    cmds.setAttr("root.translate", 4, 0.5, -2)
+    cmds.setAttr("head.rotate", 10, -20, 15)
+    cmds.setAttr("eye_L.rotate", 5, 6, 7)
+    cmds.setAttr(f"{spine}.rotate", 12, 0, -9)
+    cmds.setAttr(f"{arm_l}.translate", 6.5, 2, 0.3)
+    cmds.setAttr(f"{arm_r}.rotate", 40, 10, 0)
+    alljoints = ids["joints"] + extra["body_joints"]
+    raw0 = joint_state(alljoints)
+    check("S-3e: 前提: 顔のメッシュがバインドから外れている", scene._deviation_from_orig(ids["face"]) > scene.BIND_TOLERANCE)
+    ref = scene.enter_reference_pose(["mini_face"])
+    check("S-3e: 顔のメッシュはバインドの形", scene._deviation_from_orig(ids["face"]) <= scene.BIND_TOLERANCE, str(scene._deviation_from_orig(ids["face"])))
+    now = joint_state(extra["body_joints"])
+    check("S-3e: 顔の影響でない体のジョイントはローカルの値のまま", all(now[j] == raw0[j] for j in extra["body_joints"]), str(now))
+    ref.restore()
+    check("S-3e: 戻すと全ジョイントが元の値", joint_state(alljoints) == raw0)
+    # 編集状態を通しても同じ
+    s.begin_edit()
+    check("S-3e: 編集に入れる・顔はバインドの形", s.editing and scene._deviation_from_orig(ids["face"]) <= scene.BIND_TOLERANCE)
+    s.end_edit(quiet=True)
+    check("S-3e: 編集を抜けると全ジョイントが元の値", joint_state(alljoints) == raw0)
+    s.close()
+
+
+def sec_s3f_shizuku_real_scene(tmp: Path) -> None:
+    """実物（assets/shizuku/shizuku_facial.mb。ある環境だけ。開くだけで保存しない）: 点を選んで編集に入っても顔以外のメッシュ・ジョイントが崩れない。"""
+    from maya import cmds
+
+    f = REPO / "assets" / "shizuku" / "shizuku_facial.mb"
+    if not f.exists():
+        return
+    from tdrive_facial import scene
+    from tdrive_facial import session as S
+
+    cmds.file(f.as_posix(), open=True, force=True, ignoreVersion=True)
+    cmds.undoInfo(state=True)
+    s = S.current()
+    s.close()
+    docs = sorted((REPO / "facial" / "shizuku").glob("*.fcpose.json")) if (REPO / "facial" / "shizuku").exists() else []
+    check("S-3f: shizuku の fcpose がある", bool(docs))
+    if not docs:
+        return
+    s.open(docs[0])
+    meshes = [cmds.ls(m, long=True)[0] for m in [s.doc.target.mesh] + list(getattr(s.doc.target, "extra_meshes", []) or []) if cmds.objExists(m)]
+    face_infl = set()
+    for m in meshes:
+        for sk in scene.skin_clusters(m):
+            face_infl.update(cmds.ls(cmds.listConnections(sk + ".matrix", source=True, destination=False) or [], long=True))
+    skinned = [t for t in (cmds.ls(type="mesh", long=True, noIntermediate=True) or []) if cmds.listConnections(t, type="skinCluster")]
+    others = [(cmds.listRelatives(t, parent=True, fullPath=True) or [t])[0] for t in skinned]
+    others = [o for o in others if o not in meshes]
+    non_face_joints = [j for j in (cmds.ls(type="joint", long=True) or []) if j not in face_infl]
+    w0 = _world_mats(non_face_joints)
+    s.begin_edit()
+    check("S-3f: 編集に入った直後、顔の影響でないジョイントのワールド行列が変わらない", _max_diff(w0, _world_mats(non_face_joints)) <= 1e-6, f"{_max_diff(w0, _world_mats(non_face_joints))}")
+    check("S-3f: 編集に入った直後、顔のメッシュはバインドの形", all((scene._deviation_from_orig(m) or 0) <= scene.BIND_TOLERANCE for m in meshes))
+    s.select_point(0, 0)  # 点のポーズ（目など設定のボーン）が当たる
+    bad = [(o, scene._deviation_from_orig(o)) for o in others]
+    bad = [(o, d) for o, d in bad if d is not None and d > scene.BIND_TOLERANCE]
+    check("S-3f: 点を選んでも顔以外のスキンメッシュがバインドから崩れない", not bad, str(bad[:5]))
+    posed = {j for b in s._bone_names(s.doc) for j in (scene.find_joint(b) and scene.joints_under(scene.find_joint(b)) or [])}
+    rest = [j for j in non_face_joints if j not in posed]
+    check("S-3f: 点を選んでも、設定のボーンと顔の影響を除くジョイントのワールド行列が変わらない", _max_diff({j: w0[j] for j in rest}, _world_mats(rest)) <= 1e-5)
+    s.end_edit(quiet=True)
+    check("S-3f: 抜けると顔以外のジョイントも元のまま", _max_diff(w0, _world_mats(non_face_joints)) <= 1e-6)
+    s.close()
+    cmds.file(new=True, force=True)
+
+
 SECTIONS = [(n[4:], f) for n, f in sorted(globals().items()) if n.startswith("sec_") and callable(f)]
 
 

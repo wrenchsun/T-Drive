@@ -622,12 +622,13 @@ def _enter(ref: Reference, extra_joints: Iterable[str]) -> None:
             if p not in poses:
                 poses.append(p)
     if poses:
-        for p in poses:
-            try:
-                cmds.dagPose(p, restore=True)
-            except RuntimeError as e:
-                raise ReferenceError_(f"バインドポーズ {p} へ戻せません（ジョイントの値が固定・接続されていないか確認してください）: {e}")
         ref.has_bind_pose = True
+        # まず測る: 顔のメッシュが今すでにバインドの形なら、どのジョイントにも触らない（体など他の部分を壊さない）。
+        # 違うときだけ、スキンが持つバインド行列（bindPreMatrix）から顔の影響ジョイントをバインドの位置へ置く。
+        # dagPose の restore は使わない（FBX 由来のシーンでは dagPose の中身が実際のバインドと食い違い、体のジョイントを壊すため）
+        devs = [_deviation_from_orig(m) for m in ref.meshes if skin_clusters(m)]
+        if any(d is None or d > BIND_TOLERANCE for d in devs):
+            _place_influences_at_bind(ref, skins, joints)
     elif skins:
         ref.warnings.append("バインドポーズ（dagPose）が無いため、今のジョイントの姿勢を基準にします")
     for j in joints:
@@ -673,6 +674,40 @@ def _enter(ref: Reference, extra_joints: Iterable[str]) -> None:
             "基準姿勢の形が、スキン前のメッシュと合いません: " + "、".join(bad)
             + "。バインドポーズ（dagPose）があるか、バインドのあとにジョイントを動かしていないか、他のデフォーマが効いていないか確認してください"
         )
+
+
+def _place_influences_at_bind(ref: Reference, skins: Sequence[str], joints: list[str]) -> None:
+    """スキンの影響ジョイントのワールド行列を、バインド時の位置（bindPreMatrix の逆行列）へ置く。影響でないジョイントは触らない。
+
+    親から順に、親の今のワールド行列との相対でローカル値を決めて write_local で書く（単位・jointOrient・回転順を通す）。
+    書く前に必ず ref._saved_joints へ控える。"""
+    bind: dict[str, om.MMatrix] = {}
+    for sk in skins:
+        for i in cmds.getAttr(sk + ".matrix", multiIndices=True) or []:
+            src = cmds.listConnections(f"{sk}.matrix[{i}]", source=True, destination=False, type="joint")
+            if not src:
+                continue
+            j = (cmds.ls(src[0], long=True) or [src[0]])[0]
+            if j not in bind:
+                bind[j] = om.MMatrix(cmds.getAttr(f"{sk}.bindPreMatrix[{i}]")).inverse()
+    for j in sorted(bind, key=lambda x: x.count("|")):  # 親が先
+        if j not in ref._saved_joints:
+            ref._saved_joints[j] = _read_raw(j)
+        if j not in joints:
+            joints.append(j)
+        p = _parent(j)
+        if p:
+            local = bind[j] * om.MMatrix(cmds.getAttr(p + ".worldInverseMatrix[0]"))
+        else:
+            local = bind[j]
+        tm = om.MTransformationMatrix(local)
+        q = tm.rotation(asQuaternion=True)
+        t = tm.translation(om.MSpace.kTransform)
+        sc = tm.scale(om.MSpace.kTransform)
+        try:
+            write_local(j, (t.x, t.y, t.z), quat_normalize((q.x, q.y, q.z, q.w)), (sc[0], sc[1], sc[2]))
+        except RuntimeError as e:
+            raise ReferenceError_(f"バインドポーズへ戻せません（{short_name(j)} の値が固定・接続されていないか確認してください）: {e}")
 
 
 def _other_deformers(mesh: str) -> list[str]:

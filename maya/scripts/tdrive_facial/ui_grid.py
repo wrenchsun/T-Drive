@@ -26,6 +26,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from tdrive import lifecycle, project
 
 from . import anim_import
+from . import scene_grid
 from . import thumbnails
 from .core.presenters import (
     ACTION_BAKE_POINT,
@@ -71,6 +72,13 @@ OK_STYLE = "color: #9aa6b8;"
 ERR_STYLE = "color: #ff8a80;"
 
 # Yaw の向きの言い方は ui.py（プレビューのヒントも同じ文言を使うため。ここから再公開）
+
+SCENE_GRID_HELP = (
+    "ビューポートに、顔のまわりの球の上に格子の点を並べて出します（UE 版の FacialController と同じ）。点をクリックしてその点を選べます。\n"
+    "色: 灰 = 空 / 緑 = キー / 水色 = 自動生成 / 黄 = 未ベイク / 桃 = ベイク後に変更あり / 橙の大きな点 = 選択中 / 赤 = 今のカメラの向き\n"
+    "頭を動かすと格子もついてきます。シーンファイルには保存されません（保存・書き出しのあいだは自動で消え、終わると戻ります）。"
+    "シェイプの書き出し・サムネイルにも写りません"
+)
 
 AXIS_HELP = (
     "横 = Yaw（左の端 = −Yaw、中央 = 正面、右の端 = +Yaw）。" + YAW_PLUS_HELP + "、" + YAW_MINUS_HELP + "\n"
@@ -472,6 +480,7 @@ class GridTab(QtWidgets.QWidget):
         self._generation = -1
         self._unsub: list[Callable[[], None]] = []
         self._tracking = False
+        self._tab_hidden = False  # hideEvent で立つ（隠れているあいだはシーンの格子の追従だけ）
         self._detached = False
         self._thumb_map: dict[tuple[int, int], QtGui.QPixmap] = {}  # (row, col) → サムネイル（アクティブレイヤー。表示中だけ読む）
         self._pix_cache: dict[str, QtGui.QPixmap] = {}  # ファイルのパス（鍵つきの名前なので中身は変わらない）→ QPixmap
@@ -517,6 +526,34 @@ class GridTab(QtWidgets.QWidget):
         row = QtWidgets.QHBoxLayout()  # カメラの角度は 2 行目（スクロールバーがあっても右端で切れない）
         row.addStretch(1)
         row.addWidget(self.camera_label)
+        v.addLayout(row)
+
+        # ---- シーンに格子を出す（任意。ビューポートの球面の上に点を並べる。文書・シーンには保存しない）
+        row = QtWidgets.QHBoxLayout()
+        self.show_scene_grid = QtWidgets.QCheckBox("シーンに格子を表示")
+        self.show_scene_grid.setToolTip(SCENE_GRID_HELP)
+        self.show_scene_grid.toggled.connect(lambda *_: self.on_scene_grid_toggled())
+        row.addWidget(self.show_scene_grid)
+        row.addWidget(QtWidgets.QLabel("大きさ"))
+        self.scene_grid_scale = QtWidgets.QDoubleSpinBox()
+        self.scene_grid_scale.setRange(scene_grid.SCALE_MIN, scene_grid.SCALE_MAX)
+        self.scene_grid_scale.setSingleStep(0.25)
+        self.scene_grid_scale.setDecimals(2)
+        self.scene_grid_scale.setSuffix(" 倍")
+        self.scene_grid_scale.setKeyboardTracking(False)
+        self.scene_grid_scale.setValue(scene_grid.DEFAULT_SCALE)
+        self.scene_grid_scale.setToolTip("格子の球の半径を、顔の大きさの何倍にするか。顔が埋まって見づらいときは大きく、遠すぎるときは小さくします")
+        self.scene_grid_scale.valueChanged.connect(lambda *_: self.on_scene_grid_scale())
+        row.addWidget(self.scene_grid_scale)
+        self.scene_grid_pick = QtWidgets.QCheckBox("クリックで点を選ぶ")
+        self.scene_grid_pick.setChecked(True)
+        self.scene_grid_pick.setToolTip(
+            "ビューポートの格子の点をクリックすると、グリッドの図でそのセルをクリックしたのと同じにその点を選びます（「カメラも動かす」も同じに効きます）。"
+            "切ると点はクリックで選べなくなります（見るだけ）"
+        )
+        self.scene_grid_pick.toggled.connect(lambda *_: self.on_scene_grid_pick())
+        row.addWidget(self.scene_grid_pick)
+        row.addStretch(1)
         v.addLayout(row)
 
         self.canvas = GridCanvas(self)
@@ -682,6 +719,7 @@ class GridTab(QtWidgets.QWidget):
         self._sync_controls()
         self._reload_thumbs()
         self.canvas.update()
+        self.session.scene_grid.refresh()  # 選択・点の状態・レイヤーの切り替えをシーンの格子へ
 
     def flush(self) -> None:
         """まとめ待ちの描き直しがあれば今すぐ行う（テスト・スモーク用）。"""
@@ -713,6 +751,8 @@ class GridTab(QtWidgets.QWidget):
         self._sync_controls()
         self._reload_thumbs()
         self._poll_camera(force=True)
+        self.session.scene_grid.on_pick = self.on_cell_clicked
+        self.session.scene_grid.refresh()
         self.canvas.updateGeometry()
         self.canvas.update()
         self.persp.refresh()
@@ -721,8 +761,16 @@ class GridTab(QtWidgets.QWidget):
     def _sync_controls(self) -> None:
         doc = self.has_doc()
         self.canvas.setEnabled(doc)
-        for w in (self.move_camera, self.all_layers, self.show_thumbs, self.btn_thumbs):
+        for w in (self.move_camera, self.all_layers, self.show_thumbs, self.btn_thumbs, self.show_scene_grid, self.scene_grid_scale, self.scene_grid_pick):
             w.setEnabled(doc)
+        sg = self.session.scene_grid
+        for w, val in ((self.show_scene_grid, sg.enabled), (self.scene_grid_pick, sg.pickable)):
+            w.blockSignals(True)
+            w.setChecked(val)
+            w.blockSignals(False)
+        self.scene_grid_scale.blockSignals(True)
+        self.scene_grid_scale.setValue(sg.scale)
+        self.scene_grid_scale.blockSignals(False)
         if not doc:
             self.title.setText("データが開かれていません")
             self.summary_label.setText("")
@@ -828,13 +876,16 @@ class GridTab(QtWidgets.QWidget):
 
     def stop_tracking(self) -> None:
         self._tracking = False
-        self.timer.stop()
+        if self._detached or not self.session.scene_grid.enabled:
+            self.timer.stop()  # シーンに格子を出しているあいだは、タブが隠れても頭に追従させるため止めない（_tick が見える間だけカメラを読む）
 
     def showEvent(self, e: QtGui.QShowEvent) -> None:
         super().showEvent(e)
+        self._tab_hidden = False
         self.start_tracking()
 
     def hideEvent(self, e: QtGui.QHideEvent) -> None:
+        self._tab_hidden = True
         self.stop_tracking()
         super().hideEvent(e)
 
@@ -842,7 +893,14 @@ class GridTab(QtWidgets.QWidget):
         if self._detached or not self.has_doc():
             self.timer.stop()
             return
+        if self._tab_hidden:  # タブは隠れている: シーンの格子の追従だけ（止めてよければ止める）
+            if not self.session.scene_grid.enabled:
+                self.timer.stop()
+                return
+            self.session.scene_grid.follow()
+            return
         self._poll_camera()
+        self.session.scene_grid.follow(self._angles)
         self.preview.tick()
 
     def _poll_camera(self, force: bool = False) -> None:
@@ -919,6 +977,28 @@ class GridTab(QtWidgets.QWidget):
         if res is None:
             return
         self.set_status(res.message or ("完了しました" if res.ok else "できませんでした"), error=not res.ok)
+
+    # ------------------------------------------------------------------ シーンの格子
+    def on_scene_grid_toggled(self) -> None:
+        on = self.show_scene_grid.isChecked()
+        try:
+            self.session.scene_grid.set_enabled(on)
+        except Exception as exc:  # noqa: BLE001  出せない（データ・基準ボーンが無い等）
+            self.show_scene_grid.blockSignals(True)
+            self.show_scene_grid.setChecked(False)
+            self.show_scene_grid.blockSignals(False)
+            self.set_status(f"シーンに格子を出せませんでした: {exc}", error=True)
+            return
+        self.session.scene_grid.on_pick = self.on_cell_clicked
+        if on and not self.timer.isActive() and not self._detached:
+            self.timer.start()  # 頭に追従させる
+        self.set_status("シーンに格子を出しました（保存はされません）" if on else "シーンの格子を消しました")
+
+    def on_scene_grid_scale(self) -> None:
+        self.session.scene_grid.set_scale(self.scene_grid_scale.value())
+
+    def on_scene_grid_pick(self) -> None:
+        self.session.scene_grid.set_pickable(self.scene_grid_pick.isChecked())
 
     # ------------------------------------------------------------------ 点のクリック
     def on_cell_clicked(self, row: int, col: int) -> None:
@@ -1134,6 +1214,10 @@ class GridTab(QtWidgets.QWidget):
         self._detached = True
         self.stop_tracking()
         self._flush_timer.stop()
+        sg = self.session.scene_grid
+        if sg.on_pick == self.on_cell_clicked:
+            sg.on_pick = None
+        sg.remove()  # パネルを閉じる・リロード: シーンの格子は消す（「出す」の設定は残り、開き直すと出る）
         for fn in self._unsub:
             fn()
         self._unsub = []

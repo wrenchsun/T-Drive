@@ -167,3 +167,39 @@ def add_lod1(name: str = "mini_face_LOD1", node: str = "bs_lod1", divisions: tup
     cmds.delete(*targets)
     cmds.select(clear=True)
     return {"lod": lod, "bs": bs, "skin": skin}
+
+
+def add_body(garbage_pose: bool = True) -> dict:
+    """`build_mini_head()` のあとに、体のメッシュ `mini_body`（root・spine・arm_L・arm_R にスキン。head・目は影響しない）を足す。
+
+    顔のスキンが指す bindPose を、**中身がでたらめな dagPose**（FBX 由来のシーンの再現。全ジョイントがメンバー）に付け替える。
+    体のジョイントのバインド値は、顔のスキンのバインド行列（bindPreMatrix）には入っていない。"""
+    cmds.select("root")
+    spine = cmds.joint(name="spine", position=(0, 4, 0))
+    arm_l = cmds.joint(name="arm_L", position=(6, 6, 0))
+    cmds.select(spine)
+    arm_r = cmds.joint(name="arm_R", position=(-6, 6, 0))
+    cmds.select(clear=True)
+    body = cmds.polyCylinder(name="mini_body", radius=3, height=8, subdivisionsX=12, subdivisionsY=6, axis=(0, 1, 0))[0]
+    cmds.move(0, 4, 0, body, absolute=True)
+    cmds.makeIdentity(body, apply=True, translate=True)
+    skin = cmds.skinCluster("root", spine, arm_l, arm_r, body, toSelectedBones=True, maximumInfluences=2, name="mini_body_skin")[0]
+    for i, p in enumerate(_vertex_positions(body)):
+        w = min(1.0, max(0.0, p[1] / 8.0))
+        cmds.skinPercent(skin, f"{body}.vtx[{i}]", transformValue=[("root", 1.0 - w), (spine, w * 0.5), (arm_l if p[0] > 0 else arm_r, w * 0.5)])
+    out = {"body": body, "body_skin": skin, "body_joints": [spine, arm_l, arm_r], "bad_pose": None}
+    if garbage_pose:
+        allj = ["root", "head", "eye_L", "eye_R", spine, arm_l, arm_r]
+        bad = cmds.dagPose(allj, save=True, bindPose=True, name="badBindPose")
+        bad = bad[0] if isinstance(bad, (list, tuple)) else bad
+        n = cmds.getAttr(bad + ".members", size=True)
+        for i in range(n):
+            cmds.setAttr(f"{bad}.xformMatrix[{i}]", 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 3.0 + i, 20.0 - i, -7.0 + 2 * i, 1, type="matrix")
+            cmds.setAttr(f"{bad}.worldMatrix[{i}]", 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 41.0 + i, 0.3, -11.0 + i, 1, type="matrix")
+        face_skin = "mini_skin"
+        for old in cmds.listConnections(face_skin + ".bindPose", source=True, destination=False, plugs=True) or []:
+            cmds.disconnectAttr(old, face_skin + ".bindPose")
+        cmds.connectAttr(bad + ".message", face_skin + ".bindPose", force=True)
+        out["bad_pose"] = bad
+    cmds.select(clear=True)
+    return out
