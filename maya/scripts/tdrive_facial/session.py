@@ -3242,6 +3242,26 @@ class FacialSession:
             except RuntimeError:
                 pass
 
+    def camera_drag_to(self, yaw: float, pitch: float, camera: Optional[str] = None) -> None:
+        """グリッドの赤い点のドラッグ用: カメラを (Yaw, Pitch) へ動かす（今の距離のまま中心を向く）。Maya の Undo には積まない。
+        正投影のカメラ・位置や回転がロック / 他とつながっているカメラは動かせない（FacialSessionError）。"""
+        cam = self.camera_transform(camera)
+        shapes = cmds.listRelatives(cam, shapes=True, type="camera") or []
+        if shapes and cmds.getAttr(shapes[0] + ".orthographic"):
+            raise FacialSessionError("正投影のカメラは、角度を指定して動かせません")
+        for a in ("tx", "ty", "tz", "rx", "ry", "rz"):
+            plug = f"{cam}.{a}"
+            if cmds.getAttr(plug, lock=True) or cmds.connectionInfo(plug, isDestination=True):
+                raise FacialSessionError("カメラの位置か回転がロックされている（または他とつながっている）ので、動かせません")
+        state = cmds.undoInfo(query=True, state=True)
+        cmds.undoInfo(stateWithoutFlush=False)  # ドラッグ中の細かい移動で Undo を埋めない
+        try:
+            self.camera_to_angles(yaw, pitch, cam)
+        except RuntimeError as exc:
+            raise FacialSessionError(f"カメラを動かせませんでした: {exc}") from exc
+        finally:
+            cmds.undoInfo(stateWithoutFlush=bool(state))
+
     def camera_to_key(self, index: int, camera: Optional[str] = None) -> float:
         """パース補正のキーの位置へカメラを動かす: 顔の正面（Yaw 0 / Pitch 0）に置き、軸が距離ならキーの距離（cm）へ、
         画角（fov）なら今の距離のまま焦点距離をキーの縦の画角に合わせる（フィルムフィットは「縦」にそろえる）。

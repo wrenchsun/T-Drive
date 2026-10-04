@@ -537,6 +537,19 @@ class GridView:
     legend: list[tuple[str, str, str]]  # (状態, 色の区分, 表示名)
 
 
+def grid_pos_to_angles(col_pos: float, row_pos: float, yaw_range: float, pitch_range: float, cols: int, rows: int) -> tuple[float, float]:
+    """格子の連続位置 → (Yaw, Pitch)。`GridPresenter.locate` の位置（赤い点の位置）の逆。
+    列・行は 0..n-1 へ収める（端の外は端）。行が大きいほど +Pitch。1 列 / 1 行のときその軸は 0。"""
+
+    def axis(pos: float, rng: float, n: int) -> float:
+        if n <= 1:
+            return 0.0
+        pos = min(max(pos, 0.0), float(n - 1))
+        return (pos / (n - 1) * 2.0 - 1.0) * rng
+
+    return axis(col_pos, yaw_range, cols), axis(row_pos, pitch_range, rows)
+
+
 @dataclass
 class CameraMarker:
     """今のカメラの角度（赤い点）。座標は格子の座標（列 0..cols-1・行 0..rows-1。行が大きいほど +Pitch = 画面の上）。"""
@@ -612,6 +625,11 @@ class GridPresenter(Observable):
         """角度に一番近い点 (row, col)。範囲の外は端の点。"""
         m = self.locate(yaw, pitch)
         return (m.nearest_row, m.nearest_col)
+
+    def angles_at(self, col_pos: float, row_pos: float) -> tuple[float, float]:
+        """格子の連続位置（列・行。locate の逆。範囲外は端へ収める）→ (Yaw, Pitch)[度]。"""
+        g = self.grid
+        return grid_pos_to_angles(col_pos, row_pos, g.yaw_range, g.pitch_range, g.cols, g.rows)
 
     def locate(self, yaw: float, pitch: float) -> CameraMarker:
         """カメラの角度 → 格子の中の位置（赤い点）・クランプの有無・属するセル。"""

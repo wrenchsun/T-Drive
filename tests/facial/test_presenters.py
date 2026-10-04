@@ -1224,3 +1224,19 @@ def test_exclude_change_marks_baked_points_changed_in_grid():
     ps.ctx.bake_exclude = None  # 古いデータ（記録なし）は変更ありにならない
     doc.exclude.curves = ["smile"]
     assert ps.grid.point_view(1, 2).bake == "baked"
+
+
+def test_grid_pos_to_angles_inverse_of_locate():
+    """格子の連続位置 → 角度は locate の逆（赤い点のドラッグ）。"""
+    g = make_set().grid
+    for yaw, pitch in ((0, 0), (37.5, -10.0), (-90, 45), (90, -45), (13.3, 22.2)):
+        mk = g.locate(yaw, pitch)
+        a = g.angles_at(mk.col_pos, mk.row_pos)
+        assert a == pytest.approx((yaw, pitch), abs=1e-6)
+
+
+def test_grid_pos_to_angles_clamps_and_single_axis():
+    assert P.grid_pos_to_angles(-5, 99, 90, 45, 5, 3) == (-90.0, 45.0)  # 端の外は端
+    assert P.grid_pos_to_angles(99, -5, 90, 45, 5, 3) == (90.0, -45.0)
+    assert P.grid_pos_to_angles(0.5, 0.5, 90, 45, 1, 1) == (0.0, 0.0)  # 1 列 / 1 行はその軸が 0
+    assert P.grid_pos_to_angles(2.5, 1.0, 90, 45, 5, 3) == pytest.approx((22.5, 0.0))

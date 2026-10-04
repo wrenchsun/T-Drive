@@ -16,6 +16,8 @@
 
 from __future__ import annotations
 
+import math
+import time
 import traceback
 import weakref
 from functools import partial
@@ -56,6 +58,9 @@ from .ui_persp import PerspectiveGroup
 from .ui_preview import PreviewGroup
 
 POLL_MS = 100  # カメラの角度を読む間隔（約 10 回 / 秒）
+DRAG_INTERVAL_MS = 30  # ドラッグ中にカメラを動かす最短の間隔（離したときは最後の位置を必ず当てる）
+DRAG_HIT_RADIUS = 10.0  # 赤い点をつかめる半径（px）
+DRAG_THRESHOLD = 4.0  # 赤い点を押してからこれ以上動かしたらドラッグ（それまでは普通のクリック）
 ANGLE_EPS = 0.01  # これ未満の角度の違いは「変わっていない」とみなす（度）
 
 # Maya の暗い UI で読める色（Qt の既定の文字色は palette から取る）
@@ -79,6 +84,8 @@ SCENE_GRID_HELP = (
     "頭を動かすと格子もついてきます。シーンファイルには保存されません（保存・書き出しのあいだは自動で消え、終わると戻ります）。"
     "シェイプの書き出し・サムネイルにも写りません"
 )
+
+DRAG_HELP = "赤い点をドラッグ（または Shift を押しながらドラッグ）すると、カメラを好きな角度へ動かせます。マスをクリックすると、その点を選びます"
 
 AXIS_HELP = (
     "横 = Yaw（左の端 = −Yaw、中央 = 正面、右の端 = +Yaw）。" + YAW_PLUS_HELP + "、" + YAW_MINUS_HELP + "\n"
@@ -115,12 +122,14 @@ class GridCanvas(QtWidgets.QWidget):
         super().__init__()
         self._tab = tab
         self._hover: Optional[tuple[int, int]] = None
+        self._press: Optional[QtCore.QPoint] = None  # 左ボタンを押した位置（ドラッグ候補）
+        self._mode = ""  # "" / "pending"（赤い点を押した。動くまで保留）/ "drag"
         self.setMouseTracking(True)
         self.setMinimumSize(260, 170)
         policy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
         policy.setHeightForWidth(True)
         self.setSizePolicy(policy)
-        self.setToolTip(AXIS_HELP)
+        self.setToolTip(AXIS_HELP + "\n" + DRAG_HELP)
 
     def sizeHint(self) -> QtCore.QSize:
         v = self._tab.current_view()
@@ -174,21 +183,97 @@ class GridCanvas(QtWidgets.QWidget):
         di = view.display_rows.index(row)
         return self.cell_rect(view, di, col).center().toPoint()
 
+    # --- 赤い点のドラッグ ---
+    def on_marker(self, pos: QtCore.QPoint) -> bool:
+        """pos が赤い点（つかめる半径の内側）か。"""
+        view = self._tab.current_view()
+        m = self._tab.current_marker()
+        if view is None or m is None:
+            return False
+        c = self.marker_position(view, m)
+        return math.hypot(pos.x() - c.x(), pos.y() - c.y()) <= DRAG_HIT_RADIUS
+
+    def angles_at(self, pos: QtCore.QPointF) -> Optional[tuple[float, float]]:
+        """画面上の位置 → (Yaw, Pitch)。赤い点の描き方（marker_position）の逆で、格子の外は端へ収める。"""
+        view = self._tab.current_view()
+        if view is None:
+            return None
+        cw, ch = self._cell_size(view)
+        col_pos = (pos.x() - self.LEFT) / cw - 0.5
+        row_pos = (view.rows - 1) - ((pos.y() - self.TOP) / ch - 0.5)
+        return self._tab.session.grid.angles_at(col_pos, row_pos)
+
+    def _drag_to(self, pos: QtCore.QPointF) -> None:
+        a = self.angles_at(pos)
+        if a is not None:
+            self._tab.drag_move(*a)
+
+    def _end_drag(self) -> None:
+        self._mode = ""
+        self._press = None
+        self.unsetCursor()
+
+    def cancel_drag(self) -> None:
+        if self._mode:
+            self._tab.drag_end()
+        self._end_drag()
+
     # --- 入力 ---
     def mousePressEvent(self, e: QtGui.QMouseEvent) -> None:
-        if e.button() == QtCore.Qt.LeftButton:
-            hit = self.cell_at(e.position().toPoint())
+        if e.button() == QtCore.Qt.LeftButton and self._tab.current_view() is not None:
+            pos = e.position().toPoint()
+            if e.modifiers() & QtCore.Qt.ShiftModifier:  # Shift + クリック / ドラッグ: どこでもカメラをそこへ
+                self._press, self._mode = pos, "drag"
+                self._tab.drag_begin()
+                self.setCursor(QtCore.Qt.ClosedHandCursor)
+                self._drag_to(e.position())
+                return
+            if self.on_marker(pos):  # 赤い点: 動かすまでは普通のクリックとして保留
+                self._press, self._mode = pos, "pending"
+                return
+            hit = self.cell_at(pos)
             if hit is not None:
                 self.cellClicked.emit(*hit)
                 return
         super().mousePressEvent(e)
 
     def mouseMoveEvent(self, e: QtGui.QMouseEvent) -> None:
-        hit = self.cell_at(e.position().toPoint())
+        pos = e.position().toPoint()
+        if self._mode:
+            if self._mode == "pending" and self._press is not None:
+                d = pos - self._press
+                if math.hypot(d.x(), d.y()) > DRAG_THRESHOLD:
+                    self._mode = "drag"
+                    self._tab.drag_begin()
+                    self.setCursor(QtCore.Qt.ClosedHandCursor)
+            if self._mode == "drag":
+                self._drag_to(e.position())
+                if not self._tab.dragging:  # カメラを動かせずに中止された
+                    self._end_drag()
+            return
+        if self.on_marker(pos) or e.modifiers() & QtCore.Qt.ShiftModifier:
+            self.setCursor(QtCore.Qt.OpenHandCursor)
+        else:
+            self.unsetCursor()
+        hit = self.cell_at(pos)
         if hit != self._hover:
             self._hover = hit
             self.update()
         super().mouseMoveEvent(e)
+
+    def mouseReleaseEvent(self, e: QtGui.QMouseEvent) -> None:
+        if e.button() == QtCore.Qt.LeftButton and self._mode:
+            mode, press = self._mode, self._press
+            if mode == "drag" and self._tab.dragging:
+                self._drag_to(e.position())
+                self._tab.drag_end()
+            self._end_drag()
+            if mode == "pending" and press is not None:  # 動かさずに離した: 普通のクリック
+                hit = self.cell_at(press)
+                if hit is not None:
+                    self.cellClicked.emit(*hit)
+            return
+        super().mouseReleaseEvent(e)
 
     def leaveEvent(self, e: QtCore.QEvent) -> None:
         if self._hover is not None:
@@ -204,7 +289,10 @@ class GridCanvas(QtWidgets.QWidget):
     def event(self, e: QtCore.QEvent) -> bool:
         if e.type() == QtCore.QEvent.ToolTip:
             hit = self.cell_at(e.pos())
-            text = self._tab.tooltip_for(*hit) if hit is not None else AXIS_HELP
+            if self.on_marker(e.pos()):
+                text = DRAG_HELP
+            else:
+                text = (self._tab.tooltip_for(*hit) if hit is not None else AXIS_HELP) + "\n" + DRAG_HELP
             QtWidgets.QToolTip.showText(e.globalPos(), text, self)
             return True
         return super().event(e)
@@ -482,6 +570,9 @@ class GridTab(QtWidgets.QWidget):
         self._tracking = False
         self._tab_hidden = False  # hideEvent で立つ（隠れているあいだはシーンの格子の追従だけ）
         self._detached = False
+        self.dragging = False  # 赤い点（または Shift）のドラッグ中（このあいだ 10 Hz の追従は赤い点を動かさない）
+        self._drag_pending: Optional[tuple[float, float]] = None
+        self._drag_last = 0.0
         self._thumb_map: dict[tuple[int, int], QtGui.QPixmap] = {}  # (row, col) → サムネイル（アクティブレイヤー。表示中だけ読む）
         self._pix_cache: dict[str, QtGui.QPixmap] = {}  # ファイルのパス（鍵つきの名前なので中身は変わらない）→ QPixmap
         self.thumb_render = None  # サムネイルの描き方の差し替え（None = playblast。テスト用）
@@ -650,6 +741,9 @@ class GridTab(QtWidgets.QWidget):
         self._flush_timer.setInterval(0)
         self._flush_timer.timeout.connect(self._flush_now)
         self._pending = False
+        self._drag_timer = QtCore.QTimer(self)  # 間隔を空けて、最後の位置を当てる
+        self._drag_timer.setSingleShot(True)
+        self._drag_timer.timeout.connect(self._drag_apply)
 
         session.listeners.append(self._on_session_changed)
         session.state_listeners.append(self.preview.on_state)  # 編集状態・プレビューの変化（軽い通知）
@@ -905,6 +999,8 @@ class GridTab(QtWidgets.QWidget):
 
     def _poll_camera(self, force: bool = False) -> None:
         """カメラの角度を読み、変わっていれば赤い点とラベルだけ更新する。"""
+        if self.dragging:  # ドラッグ中は、ドラッグの角度で描く（読み直して揺らさない）
+            return
         if not self.has_doc():
             self._angles = None
             self.camera_label.setText("カメラ: —")
@@ -934,6 +1030,64 @@ class GridTab(QtWidgets.QWidget):
             self.canvas.update()
         self.camera_label.setText("カメラ: 角度を取得できません")
         self.camera_label.setToolTip(self._angle_error)
+
+    # ------------------------------------------------------------------ 赤い点のドラッグ（点の選択・編集・文書には触らない）
+    def drag_begin(self) -> None:
+        self.dragging = True
+        self._drag_pending = None
+        self._drag_last = 0.0
+
+    def drag_move(self, yaw: float, pitch: float) -> None:
+        """カメラを (Yaw, Pitch) へ動かす。DRAG_INTERVAL_MS より速い呼び出しは間引き、最後の位置は離したときに当てる。"""
+        if not self.dragging:
+            return
+        self._drag_pending = (yaw, pitch)
+        wait = DRAG_INTERVAL_MS / 1000.0 - (time.monotonic() - self._drag_last)
+        if wait <= 0:
+            self._drag_apply()
+        elif not self._drag_timer.isActive():
+            self._drag_timer.start(int(wait * 1000) + 1)
+
+    def _drag_apply(self) -> None:
+        pending, self._drag_pending = self._drag_pending, None
+        if pending is None or not self.dragging or self._detached or not self.has_doc():
+            return
+        yaw, pitch = pending
+        self._drag_last = time.monotonic()
+        try:
+            self.session.camera_drag_to(yaw, pitch)
+        except FacialSessionError as exc:
+            self._drag_abort(str(exc))
+            return
+        except Exception as exc:  # noqa: BLE001
+            self._drag_abort(f"カメラを動かせませんでした: {exc}")
+            lifecycle.report_error("グリッドタブ: カメラのドラッグ", traceback.format_exc(), once=True)
+            return
+        self._angles = (yaw, pitch)
+        self._marker = None
+        self.camera_label.setText(f"カメラ: Yaw {yaw:.1f}° / Pitch {pitch:.1f}°")
+        self.canvas.update()
+        self.session.scene_grid.follow(self._angles)  # シーンの赤い印も遅れずに
+        self.preview.tick()
+
+    def _drag_abort(self, message: str) -> None:
+        self.dragging = False
+        self._drag_pending = None
+        self._drag_timer.stop()
+        self.set_status(message, error=True)
+        self._poll_camera(force=True)
+
+    def drag_end(self) -> None:
+        """ドラッグを終える。最後の位置を当て、あとは 10 Hz の追従へ戻す。"""
+        if not self.dragging:
+            return
+        self._drag_timer.stop()
+        self._drag_apply()
+        ok = self.dragging  # 途中で中止されていたら False
+        self.dragging = False
+        self._poll_camera(force=True)
+        if ok and self.has_doc():
+            self.set_status("カメラを動かしました（" + self.camera_label.text().removeprefix("カメラ: ") + "）")
 
     # ------------------------------------------------------------------ 確認ダイアログ（テストで差し替えられる）
     def ask_unsaved_choice(self, message: str) -> str:
@@ -1212,6 +1366,9 @@ class GridTab(QtWidgets.QWidget):
     def detach(self) -> None:
         """タイマーを止め、通知の購読をやめる（パネルを閉じる・リロードの前）。二重に呼んでも安全。"""
         self._detached = True
+        self._drag_timer.stop()
+        self.dragging = False
+        self.canvas.cancel_drag()
         self.stop_tracking()
         self._flush_timer.stop()
         sg = self.session.scene_grid
