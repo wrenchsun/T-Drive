@@ -888,9 +888,16 @@ def _create_attrs(rig: str, doc: Document, plan: Optional[_Plan] = None) -> None
         for a in RIG_TOON_ATTRS:
             _add_attr(rig, a, attributeType="double", defaultValue=0.0)
             cmds.setAttr(f"{rig}.{a}", edit=True, channelBox=True)
-    for a in ("outYaw", "outPitch", *((OUT_DISTANCE_ATTR,) if distance_layers(doc) else ()), *((OUT_PERSPECTIVE_ATTR,) if wired_persp else ())):
+    wanted_outs = ("outYaw", "outPitch", *((OUT_DISTANCE_ATTR,) if distance_layers(doc) else ()), *((OUT_PERSPECTIVE_ATTR,) if wired_persp else ()))
+    for a in wanted_outs:
         if _add_attr(rig, a, attributeType="double", defaultValue=0.0):
             cmds.setAttr(f"{rig}.{a}", edit=True, channelBox=True)
+    for a in (OUT_DISTANCE_ATTR, OUT_PERSPECTIVE_ATTR):  # 式が書かなくなった出力は消す（古い値が表示に残らないように。式は直前に消してある）
+        if a not in wanted_outs and cmds.attributeQuery(a, node=rig, exists=True):
+            try:
+                cmds.deleteAttr(f"{rig}.{a}")
+            except RuntimeError:
+                pass
     for a in ("tx", "ty", "tz", "rx", "ry", "rz", "sx", "sy", "sz", "v"):
         cmds.setAttr(f"{rig}.{a}", edit=True, lock=True, keyable=False, channelBox=False)
 

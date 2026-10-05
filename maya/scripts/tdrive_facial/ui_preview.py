@@ -101,6 +101,8 @@ class PreviewGroup(QtWidgets.QGroupBox):
         self.session = session
         self._updating = False
         self._emotion_rows: dict[str, tuple[QtWidgets.QLabel, QtWidgets.QSlider, QtWidgets.QLabel]] = {}
+        self._keyed_rows: list[tuple[str, QtWidgets.QSlider, QtWidgets.QLabel]] = []  # キーのある値（tick で追う）
+        self._distance_labels: list[QtWidgets.QLabel] = []  # 重みを距離で決めるレイヤーの「距離で決まる（今 n cm）」（tick で中身だけ更新）
         self._emotion_sig: Optional[tuple] = None  # None = まだ行を作っていない（感情レイヤーが無くても強さ・誇張の行は作る）
         self._detached = False
         self._drag = 0  # スライダーをドラッグしている間は、通知で描き直さない（つまみが跳ねる）
@@ -356,7 +358,17 @@ class PreviewGroup(QtWidgets.QGroupBox):
             self._set_slider(slider, vl, value, keyed, live)
             if name in st.distance_layers:  # 重みはカメラの距離で決まる: emotion_ は使われない
                 slider.setEnabled(False)
-                vl.setText("距離で決まる" + (f"（今 {st.out_distance:.0f} cm）" if st.out_distance is not None else ""))
+                vl.setText(self._distance_text(st.out_distance))
+        self._keyed_rows = [
+            (a, sl, lb)
+            for a, sl, lb, k in (
+                ("alpha", self.alpha_slider, self.alpha_value, st.alpha_keyed),
+                ("exaggeration", self.ex_slider, self.ex_value, st.exaggeration_keyed),
+                ("perspective", self.persp_slider, self.persp_value, st.perspective_keyed),
+                *((attr, self._emotion_rows[attr][1], self._emotion_rows[attr][2], keyed and name not in st.distance_layers) for name, attr, _v, keyed in st.emotions),
+            )
+            if k
+        ]
         self.manual_check.setEnabled(live and not st.manual_keyed)
         self.manual_check.setChecked(st.use_manual)
         for w, val in ((self.manual_yaw, st.manual_yaw), (self.manual_pitch, st.manual_pitch)):
@@ -371,6 +383,7 @@ class PreviewGroup(QtWidgets.QGroupBox):
             if w is not None:
                 w.setParent(None)
         self._emotion_rows = {}
+        self._distance_labels = []
         self.sliders.addWidget(self.alpha_label, 0, 0)
         self.sliders.addWidget(self.alpha_slider, 0, 1)
         self.sliders.addWidget(self.alpha_value, 0, 2)
@@ -397,6 +410,8 @@ class PreviewGroup(QtWidgets.QGroupBox):
             self.sliders.addWidget(slider, i, 1)
             self.sliders.addWidget(vl, i, 2)
             self._emotion_rows[attr] = (label, slider, vl)
+            if by_distance:
+                self._distance_labels.append(vl)
         self._emotion_sig = tuple((attr, n in st.distance_layers) for n, attr, _v, _k in st.emotions)
 
     @staticmethod
@@ -407,27 +422,41 @@ class PreviewGroup(QtWidgets.QGroupBox):
         slider.setEnabled(usable and not keyed)
         value_label.setText(f"{value:.2f}" + ("（キーあり）" if keyed else ""))
 
+    @staticmethod
+    def _distance_text(distance: Optional[float]) -> str:
+        return "距離で決まる" + (f"（今 {distance:.0f} cm）" if distance is not None else "")
+
     def _update_angle(self, st=None) -> None:
-        if self.session.preview_rig_node() is None:
+        """カメラを追う表示（角度・距離・画角・「距離で決まる」・キーのある値）を 1 か所で更新する。refresh と tick の両方から呼ぶ。
+        行は作り直さず、文字と値だけを置き換える。"""
+        ro = self.session.preview_readout()
+        if ro is None:
             self.angle_label.setText("")
             return
+        text = f"使っている角度: Yaw {ro['yaw']:.1f}° / Pitch {ro['pitch']:.1f}°" + ("（手動）" if ro["manual"] else "")
+        if ro["distance"] is not None:
+            text += f" / カメラの距離 {ro['distance']:.0f} cm"
+        if ro["fov"] is not None:
+            text += f" / 画角 {ro['fov']:.1f}°"
+        if self.angle_label.text() != text:
+            self.angle_label.setText(text)
+        if ro["distance"] is not None:  # スライダー横の「距離で決まる（今 n cm）」も同じ値で更新
+            label_text = self._distance_text(ro["distance"])
+            for vl in self._distance_labels:
+                if vl.text() != label_text:
+                    vl.setText(label_text)
         rig = self.session.preview_rig_node()
-        try:
-            yaw = cmds.getAttr(f"{rig}.outYaw")
-            pitch = cmds.getAttr(f"{rig}.outPitch")
-        except (RuntimeError, ValueError):
-            self.angle_label.setText("")
-            return
-        text = f"使っている角度: Yaw {yaw:.1f}° / Pitch {pitch:.1f}°"
-        persp = self.session.perspective_readout()
-        if persp:
-            text += " / " + persp
-        try:
-            if cmds.attributeQuery("outDistance", node=rig, exists=True):  # 距離で重みを決めるレイヤーがあるとき
-                text += f" / 距離 {cmds.getAttr(f'{rig}.outDistance'):.0f} cm"
-        except (RuntimeError, ValueError):
-            pass
-        self.angle_label.setText(text)
+        for attr, slider, vl in self._keyed_rows:  # キー（アニメ）のある値は時間で動く: 表示も追う
+            try:
+                val = float(cmds.getAttr(f"{rig}.{attr}"))
+            except (RuntimeError, ValueError, TypeError):
+                continue
+            pos = int(round(val * SLIDER_STEPS))
+            if slider.value() != pos:
+                slider.blockSignals(True)
+                slider.setValue(pos)
+                slider.blockSignals(False)
+            vl.setText(f"{val:.2f}（キーあり）")
 
     def tick(self) -> None:
         """グリッドタブのカメラ追従のタイマーから呼ばれる（約 10 回 / 秒）。角度の表示だけを更新する。"""

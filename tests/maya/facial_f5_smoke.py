@@ -619,6 +619,7 @@ def run() -> None:
     layers.refresh()
     # プレビューのグループ
     s.set_layer_weight_source(1, "distance", start=40.0, end=120.0, w_from=0.0, w_to=1.0)
+    s.preview_build()  # 距離レイヤーを入れたあとは作り直す（古いプレビューは距離を出さない）
     panel.select_tab("grid")
     pv.refresh()
     pump()

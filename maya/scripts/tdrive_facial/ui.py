@@ -33,8 +33,9 @@ from typing import Optional
 from maya import cmds
 from PySide6 import QtCore, QtWidgets
 
-from tdrive import lifecycle, project
+from tdrive import lifecycle, project, services
 
+from . import correction_service
 from . import scene as scene_mod
 from . import session as session_mod
 from .core import profile as profile_mod
@@ -316,10 +317,21 @@ class HeaderBar(QtWidgets.QWidget):
         )
         self.edit_btn.clicked.connect(lambda checked=False: self.on_edit_clicked(checked))
         edit_row.addWidget(self.edit_btn)
+        # 顔の補正（カメラ連動）。状態の持ち主は rig の enable で、Toon のヘッダー・プレビューの「補正あり / 補正なし」と同じもの（services 経由）
+        self.facial = QtWidgets.QCheckBox("顔の補正")
+        self.facial.clicked.connect(lambda checked=False: self.on_facial_clicked(checked))
+        edit_row.addWidget(self.facial)
         self.edit_state = QtWidgets.QLabel()
         self.edit_state.setWordWrap(True)
+        self.edit_state.setMinimumWidth(120)  # 狭い幅では折り返す
         edit_row.addWidget(self.edit_state, 1)
         v.addLayout(edit_row)
+        self.facial_msg = QtWidgets.QLabel()  # 切り替えられなかった理由（キー・ロックなど）
+        self.facial_msg.setWordWrap(True)
+        self.facial_msg.setStyleSheet(WARN_STYLE)
+        self.facial_msg.setVisible(False)
+        self._msg_state: Optional[tuple] = None
+        v.addWidget(self.facial_msg)
 
     # -------------------------------------------------------------- 表示
     def path_text(self) -> str:
@@ -338,6 +350,10 @@ class HeaderBar(QtWidgets.QWidget):
         doc = s.doc
         dirty = "  ●未保存" if s.dirty else ("  ●点に保存していない編集中の値があります" if s.has_unsaved_work else "")
         return f"データ: {where}   {doc.asset or ''}{dirty}"
+
+    def showEvent(self, event) -> None:  # noqa: N802 (Qt)
+        super().showEvent(event)
+        self.refresh()  # タブを開いたとき: Channel Box などで外から変えられた分を取り込む
 
     def refresh(self) -> None:
         s = self.session
@@ -365,8 +381,40 @@ class HeaderBar(QtWidgets.QWidget):
             self.edit_state.setText(f"<b>編集中</b>{target} = シーンが基準姿勢になっています（オフで元の姿勢に戻ります）")
             self.edit_state.setStyleSheet(WARN_STYLE)
         else:
-            self.edit_state.setText("編集していません（シーンはそのままです）")
+            if has and s.preview_state() != "none":
+                if services.state(services.FACIAL_CORRECTION)["enabled"]:
+                    text = "プレビュー中 = カメラの角度に合わせて顔を補正しています（「顔の補正」をオフにすると元の顔）"
+                else:
+                    text = "顔の補正はオフです（元の顔）"
+            else:
+                text = "編集していません（シーンは元の顔のままです）"
+            self.edit_state.setText(text)
             self.edit_state.setStyleSheet(DIM_STYLE)
+        fs = services.state(services.FACIAL_CORRECTION)
+        self.facial.blockSignals(True)
+        self.facial.setChecked(bool(fs["available"]) and bool(fs["enabled"]))
+        self.facial.setEnabled(bool(fs["available"]) and bool(fs["changeable"]))
+        self.facial.blockSignals(False)
+        self.facial.setToolTip(fs["reason"])
+        if self._msg_state is not None and self._msg_state != self._facial_key(fs):
+            self.facial_msg.setVisible(False)  # 状態が変わったら、前の「切り替えられません」は消す
+            self._msg_state = None
+
+    @staticmethod
+    def _facial_key(fs: dict) -> tuple:
+        return (bool(fs["available"]), bool(fs["enabled"]), bool(fs["changeable"]))
+
+    def on_facial_clicked(self, checked: bool) -> None:
+        """顔の補正の入り切り（プレビューの rig の enable。Toon のヘッダーや「補正あり / 補正なし」と同じ状態）。"""
+        res = services.set_enabled(services.FACIAL_CORRECTION, checked)
+        self._msg_state = None
+        self.refresh()  # 実際の状態に戻す（切り替えられなかったときも）
+        if res["ok"]:
+            self.facial_msg.setVisible(False)
+        else:
+            self.facial_msg.setText(res["message"])
+            self.facial_msg.setVisible(True)
+            self._msg_state = self._facial_key(services.state(services.FACIAL_CORRECTION))
 
     # -------------------------------------------------------------- ダイアログ（差し替えられる）
     def ask_discard(self) -> bool:
@@ -677,3 +725,6 @@ class FacialTool:
 
 def make_tool() -> FacialTool:
     return FacialTool()
+
+
+correction_service.register()  # 顔の補正の切り替えを Toon のヘッダーへ出す（tdrive.services）

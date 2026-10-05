@@ -2064,6 +2064,36 @@ class FacialSession:
         axis = self.doc.perspective.axis if self.doc.perspective is not None else "distance"
         return f"画角 {v:.1f}°" if axis == "fov" else f"距離 {v:.0f} cm"
 
+    def preview_readout(self) -> Optional[dict]:
+        """プレビューの rig の今の出力（表示用。カメラを動かすたびに読み直す）。プレビューが無ければ None。
+        yaw / pitch = 実際に使っている角度、manual = 手動の角度か、distance = カメラの距離 cm（rig が計算しているときだけ、無ければ None）、
+        fov = パース補正の軸が画角のときの画角（度。それ以外は None）。距離は 1 つだけ（距離レイヤーの出力 / 距離軸のパース補正の出力は同じ量）。"""
+        rig = self.preview_rig_node()
+        if rig is None or self.presenters is None:
+            return None
+        doc = self.doc
+        asset = doc.asset or ""
+        try:
+            out: dict = {
+                "yaw": float(cmds.getAttr(f"{rig}.outYaw")),
+                "pitch": float(cmds.getAttr(f"{rig}.outPitch")),
+                "manual": bool(cmds.getAttr(f"{rig}.useManual")),
+                "distance": None,
+                "fov": None,
+            }
+            if preview_rig.distance_layers(doc) and cmds.attributeQuery(preview_rig.OUT_DISTANCE_ATTR, node=rig, exists=True):
+                out["distance"] = float(cmds.getAttr(f"{rig}.{preview_rig.OUT_DISTANCE_ATTR}"))
+            if preview_rig.has_perspective_targets(asset) and cmds.attributeQuery(preview_rig.OUT_PERSPECTIVE_ATTR, node=rig, exists=True):
+                v = float(cmds.getAttr(f"{rig}.{preview_rig.OUT_PERSPECTIVE_ATTR}"))
+                axis = doc.perspective.axis if doc.perspective is not None else "distance"
+                if axis == "fov":
+                    out["fov"] = v
+                elif out["distance"] is None:
+                    out["distance"] = v
+        except (RuntimeError, ValueError):
+            return None
+        return out
+
     def perspective_axis_value(self, camera: Optional[str] = None) -> Optional[float]:
         """今のカメラの軸の値（距離 = cm / 画角 = 度）。パース補正が無い・カメラが無いときは None。"""
         doc = self.require()

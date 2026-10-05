@@ -16,7 +16,7 @@ from pathlib import Path
 from maya import cmds
 from PySide6 import QtCore, QtWidgets
 
-from tdrive import shell
+from tdrive import services, shell
 
 from . import environment, look, preview, project, roles, session
 from .ui_ab import ABTab
@@ -96,6 +96,7 @@ class ToonPanel(QtWidgets.QWidget):
             self.preview_tab.timer.stop()
         except RuntimeError:
             pass  # 枠ごと破棄済み
+        self.header.detach()
         if self.refresh in self.session.listeners:
             self.session.listeners.remove(self.refresh)
 
@@ -203,9 +204,55 @@ class HeaderBar(QtWidgets.QWidget):
         self.toon.toggled.connect(self.on_toggle_preview)
         row.addWidget(self.toon)
         row.addWidget(self.original)
+        # 顔の補正（FacialController）: 状態の持ち主は FacialController の側（tdrive.services 経由。直接は import しない）
+        self.facial = QtWidgets.QCheckBox("顔の補正")
+        self.facial.clicked.connect(self.on_facial_clicked)
+        row.addWidget(self.facial)
         v.addLayout(row)
+        self.facial_status = QtWidgets.QLabel()
+        self.facial_status.setWordWrap(True)
+        self.facial_status.setStyleSheet("color: #f0a040;")
+        self.facial_status.setVisible(False)
+        v.addWidget(self.facial_status)
+        self._msg_state = None
+        services.subscribe(services.FACIAL_CORRECTION, self.refresh_facial)
+        self.refresh_facial()
+
+    def detach(self) -> None:
+        services.unsubscribe(services.FACIAL_CORRECTION, self.refresh_facial)
+
+    def showEvent(self, event) -> None:  # noqa: N802 (Qt)
+        super().showEvent(event)
+        self.refresh_facial()  # タブを開いたとき: Channel Box などで外から変えられた分を取り込む
+
+    def refresh_facial(self) -> None:
+        """顔の補正のチェックを、FacialController の今の状態に合わせる（通知・タブを開いたとき・全体の更新で呼ばれる）。"""
+        st = services.state(services.FACIAL_CORRECTION)
+        usable = bool(st["available"]) and bool(st["changeable"])
+        self.facial.blockSignals(True)
+        self.facial.setChecked(bool(st["available"]) and bool(st["enabled"]))
+        self.facial.setEnabled(usable)
+        self.facial.blockSignals(False)
+        self.facial.setToolTip(st["reason"])
+        key = (bool(st["available"]), bool(st["enabled"]), bool(st["changeable"]))
+        if self._msg_state is not None and self._msg_state != key:
+            self.facial_status.setVisible(False)  # 状態が変わったら、前の「切り替えられません」は消す
+            self._msg_state = None
+
+    def on_facial_clicked(self, checked: bool) -> None:
+        res = services.set_enabled(services.FACIAL_CORRECTION, checked)
+        self._msg_state = None
+        self.refresh_facial()  # 実際の状態に戻す（切り替えられなかったときも）
+        if res["ok"]:
+            self.facial_status.setVisible(False)
+        else:
+            st = services.state(services.FACIAL_CORRECTION)
+            self.facial_status.setText(res["message"])
+            self.facial_status.setVisible(True)
+            self._msg_state = (bool(st["available"]), bool(st["enabled"]), bool(st["changeable"]))
 
     def refresh(self) -> None:
+        self.refresh_facial()
         lk = self.session.look
         where = "開発用（ツール本体）" if project.is_tool_repo() else project.root().as_posix()
         self.label.setToolTip(f"プロジェクト: {project.root().as_posix()}（T-Drive › プロジェクトを選ぶ… で変更）")

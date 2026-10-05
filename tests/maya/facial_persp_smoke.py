@@ -732,7 +732,7 @@ def run() -> None:
     pv.persp_slider.setValue(40)
     check("プレビュー: スライダーで rig の perspective が動く", abs(cmds.getAttr(rig + ".perspective") - 0.4) < 1e-6 and "0.40" in pv.persp_value.text(), pv.persp_value.text())
     pv.tick()
-    check("プレビュー: 角度の表示の横に今の軸の値（距離 45 cm）が出る", "距離 45 cm" in pv.angle_label.text(), pv.angle_label.text())
+    check("プレビュー: 角度の表示の横に今の軸の値（距離 45 cm）が出る", "カメラの距離 45 cm" in pv.angle_label.text() and pv.angle_label.text().count("距離") == 1, pv.angle_label.text())
     cmds.setKeyframe(rig, attribute="perspective", time=1, value=1.0)
     cmds.setKeyframe(rig, attribute="perspective", time=5, value=0.0)
     pv.refresh()
