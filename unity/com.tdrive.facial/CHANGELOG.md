@@ -34,4 +34,5 @@
 - `FacialCorrectionData.sourceJson`（エディタだけのシリアライズ欄）を廃止（元の JSON は `FacialSourceJson`。エディタ）
 
 ### 修正
+- 編集時のプレビュー: キャラクターを非表示（または Runner を無効）にしても FC_ の重みが残っていた。一度だけ 0 に戻し、以降は書かない
 - 左右反転の親の下で向きがずれる問題

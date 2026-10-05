@@ -99,6 +99,17 @@ namespace TDrive.Facial.Tests
         }
 
         [Test]
+        public void SaveClearsStaleWeightsOfAnInactiveCharacterToo()
+        {
+            _rig.runner.EvaluateNow(0f, 0f, Dt);
+            Assert.Greater(SerializedWeightSum(), 50f, "前提");
+            _rig.root.SetActive(false); // 非アクティブのまま古い重みが残っている状態
+            Assert.Greater(SerializedWeightSum(), 50f, "前提: 非アクティブでも重みは残る");
+            FacialSaveGuard.OnBeforeSave();
+            Assert.AreEqual(0f, SerializedWeightSum(), 1e-4f, "非アクティブな Runner の重みが保存に残る");
+        }
+
+        [Test]
         public void AssetSaveProcessorAlsoClears()
         {
             _rig.runner.EvaluateNow(0f, 0f, Dt);

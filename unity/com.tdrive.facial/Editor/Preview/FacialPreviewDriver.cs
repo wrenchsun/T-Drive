@@ -41,6 +41,8 @@ namespace TDrive.Facial.Editor
         public bool lipFeed;
 
         internal bool applied;
+        /// <summary>true = Runner が非アクティブ / 無効で、重みを戻し済み（評価しない）。</summary>
+        internal bool suspended;
         /// <summary>true の間、次の更新で必ず評価する（設定を変えたときに立てる）。</summary>
         public bool forceEval = true;
         internal double settleUntil;
@@ -243,7 +245,15 @@ namespace TDrive.Facial.Editor
         /// </summary>
         public static bool EvaluateOnce(FacialCorrectionRunner runner, FacialPreviewState st, float dt, Transform sceneCamera)
         {
-            if (runner == null || runner.data == null) return false;
+            if (runner == null) return false;
+            // 非アクティブ / 無効の Runner は評価しない。OnDisable は編集時に来ないので、ここで切り替わりを見て 1 回だけ戻す
+            if (!runner.isActiveAndEnabled)
+            {
+                if (!st.suspended) { runner.ResetWeights(); st.suspended = true; st.applied = false; }
+                return false;
+            }
+            if (st.suspended) { st.suspended = false; st.forceEval = true; } // 戻ってきた: 次の評価で再開
+            if (runner.data == null) return false;
             double now = EditorApplication.timeSinceStartup;
 
             // A/B: 補正なし = 書いた分を戻して何もしない

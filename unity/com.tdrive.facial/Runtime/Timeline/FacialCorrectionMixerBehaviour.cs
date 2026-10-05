@@ -56,7 +56,7 @@ namespace TDrive.Facial.Timeline
             }
 
             // 編集時は LateUpdate が来ない。ここで評価する（再生中は Runner の LateUpdate に任せる）
-            if (!Application.isPlaying) runner.EvaluateNow(EditViewer(runner), EditDeltaTime);
+            if (!Application.isPlaying && runner.isActiveAndEnabled) runner.EvaluateNow(EditViewer(runner), EditDeltaTime);
         }
 
         FacialFrameOverride Blend(Playable playable, int count, float total, FacialCorrectionRunner runner)

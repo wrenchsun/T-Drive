@@ -46,6 +46,106 @@ namespace TDrive.Facial.Tests
             Assert.AreEqual(0f, _rig.FcSum(), 1e-6f);
         }
 
+        // ---- 非アクティブ / 無効の Runner（編集時は OnDisable が来ない）
+
+        static readonly Vector3 Cam = new Vector3(-2f, 1.5f, 0f);
+
+        [Test]
+        public void DeactivatingTheCharacterZeroesWeightsAndStopsWriting()
+        {
+            FacialPreviewState st = ManualState(45f, 0f);
+            FacialPreviewDriver.SetOn(_rig.runner, true);
+            FacialPreviewDriver.EvaluateOnce(_rig.runner, st, Dt, null);
+            Assert.Greater(_rig.FcSum(), 50f, "前提");
+
+            _rig.root.SetActive(false);
+            FacialPreviewDriver.EvaluateOnce(_rig.runner, st, Dt, null);
+            Assert.AreEqual(0f, _rig.FcSum(), 1e-6f, "非アクティブで 0 に戻る");
+
+            st.yaw = -60f; st.forceEval = true; // 視点を変えても書かない
+            FacialPreviewDriver.EvaluateOnce(_rig.runner, st, Dt, null);
+            Assert.AreEqual(0f, _rig.FcSum(), 1e-6f, "非アクティブの間は書かない");
+
+            _rig.root.SetActive(true);
+            st.yaw = 45f;
+            FacialPreviewDriver.EvaluateOnce(_rig.runner, st, Dt, null);
+            Assert.AreEqual(50f, _rig.W(FacialTestRig.N("Neutral", 1, 1)), 0.1f, "再びアクティブで再開");
+        }
+
+        [Test]
+        public void DisablingTheRunnerComponentZeroesWeightsAndResumesOnEnable()
+        {
+            FacialPreviewState st = ManualState(45f, 0f);
+            FacialPreviewDriver.SetOn(_rig.runner, true);
+            FacialPreviewDriver.EvaluateOnce(_rig.runner, st, Dt, null);
+            Assert.Greater(_rig.FcSum(), 50f, "前提");
+
+            _rig.runner.enabled = false;
+            FacialPreviewDriver.EvaluateOnce(_rig.runner, st, Dt, null);
+            Assert.AreEqual(0f, _rig.FcSum(), 1e-6f);
+            st.yaw = 10f; st.forceEval = true;
+            FacialPreviewDriver.EvaluateOnce(_rig.runner, st, Dt, null);
+            Assert.AreEqual(0f, _rig.FcSum(), 1e-6f, "無効の間は書かない");
+
+            _rig.runner.enabled = true;
+            FacialPreviewDriver.EvaluateOnce(_rig.runner, st, Dt, null);
+            Assert.Greater(_rig.FcSum(), 50f, "有効に戻ると再開");
+        }
+
+        [Test]
+        public void DeactivatingRestoresLipSyncShapeToBaseline()
+        {
+            _rig.AddShape("bs.lip_a");
+            _rig.data.lipSync = new FacialLipSyncData
+            {
+                enabled = true, strength = 1f, follow = 0f,
+                phonemes = new[] { "A" },
+                volume = new FacialLipSyncVolumeData { min = 0f, max = 1f, from = 1f, to = 1f },
+                entries = new[]
+                {
+                    new FacialLipSyncEntryData
+                    {
+                        phoneme = "A", emotion = "",
+                        shapes = new[] { new FacialLipSyncShapeData { name = "bs.lip_a", weight = 1f } },
+                    },
+                },
+            };
+            int ia = new FacialShapeIndex(_rig.mesh).Find("bs.lip_a");
+            _rig.smr.SetBlendShapeWeight(ia, 30f); // 書く前の値（ベースライン）
+
+            FacialPreviewState st = ManualState(0f, 0f);
+            st.lipWeights = new[] { 1f }; st.lipFeed = true;
+            FacialPreviewDriver.SetOn(_rig.runner, true);
+            FacialPreviewDriver.EvaluateOnce(_rig.runner, st, Dt, null);
+            Assert.AreEqual(100f, _rig.smr.GetBlendShapeWeight(ia), 1e-2f, "前提: リップシンクが書いた");
+
+            _rig.root.SetActive(false);
+            FacialPreviewDriver.EvaluateOnce(_rig.runner, st, Dt, null);
+            Assert.AreEqual(30f, _rig.smr.GetBlendShapeWeight(ia), 1e-2f, "口は 0 でなく書く前の値へ");
+            Assert.AreEqual(0f, _rig.FcSum(), 1e-6f);
+        }
+
+        [Test]
+        public void SceneCameraModeAlsoStopsWhenInactive()
+        {
+            var cam = EditorUtility.CreateGameObjectWithHideFlags("TestCam", HideFlags.HideAndDontSave);
+            try
+            {
+                cam.transform.position = Cam;
+                FacialPreviewState st = FacialPreviewDriver.GetState(_rig.runner);
+                st.mode = FacialPreviewViewMode.SceneCamera;
+                FacialPreviewDriver.SetOn(_rig.runner, true);
+                FacialPreviewDriver.EvaluateOnce(_rig.runner, st, Dt, cam.transform);
+                Assert.Greater(_rig.FcSum(), 50f, "前提");
+                _rig.root.SetActive(false);
+                FacialPreviewDriver.EvaluateOnce(_rig.runner, st, Dt, cam.transform);
+                cam.transform.position = new Vector3(2f, 1.5f, 0f);
+                FacialPreviewDriver.EvaluateOnce(_rig.runner, st, Dt, cam.transform);
+                Assert.AreEqual(0f, _rig.FcSum(), 1e-6f);
+            }
+            finally { Object.DestroyImmediate(cam); }
+        }
+
         [Test]
         public void ABOffResetsAndOnRestores()
         {
