@@ -31,6 +31,7 @@ from .core import thumbs
 from .core import validate as V
 
 UNAVAILABLE = "この環境ではサムネイルを作れません"
+FAILED = "サムネイルを作れませんでした"
 
 Render = Callable[[str, Path, int], bool]  # (カメラの transform, 書き出す PNG のパス, 画像の大きさ) → 書けたか
 
@@ -38,7 +39,7 @@ Render = Callable[[str, Path, int], bool]  # (カメラの transform, 書き出�
 @dataclass
 class ThumbReport:
     ok: bool = True
-    unavailable: bool = False  # この環境ではビューポートが無くて作れない
+    unavailable: bool = False  # この環境ではビューポートが無くて作れない（撮れる環境で書けなかっただけなら False）
     message: str = ""
     made: list[tuple[int, int, int]] = field(default_factory=list)  # (レイヤー番号, row, col)
     failed: list[str] = field(default_factory=list)
@@ -67,18 +68,29 @@ def render_with_playblast(cam: str, path: Path, size: int) -> bool:
     panel = _model_panel()
     if panel is None:
         return False
-    base = path.with_suffix("")  # playblast は画像の形式だと `<名前>.<フレーム>.png` にする。あとで探して path へ移す
-    for stale in glob.glob(glob.escape(str(base)) + "*.png"):
+    base = path.with_suffix("")
+    esc = glob.escape(str(base))
+
+    def _candidates() -> list[str]:  # 古い書き出し先の名前（拡張子なし・<名前>.0001.png など）
+        found = [str(path), str(base)] + sorted(glob.glob(esc + ".*.png")) + sorted(glob.glob(esc + "*.png"))
+        out: list[str] = []
+        for f in found:
+            if f not in out and os.path.isfile(f):
+                out.append(f)
+        return out
+
+    for stale in _candidates():  # 前回の残りを消す（拡張子なしの名前も）
         with contextlib.suppress(OSError):
             os.remove(stale)
     original = cmds.modelPanel(panel, query=True, camera=True)
+    returned = None
     try:
         cmds.modelPanel(panel, edit=True, camera=cam)
-        cmds.playblast(
+        returned = cmds.playblast(
             frame=[cmds.currentTime(query=True)],
             format="image",
             compression="png",
-            completeFilename=str(base).replace("\\", "/"),
+            completeFilename=str(path).replace("\\", "/"),  # Maya 2026 は指定の名前のまま書く（拡張子まで含める）
             widthHeight=(size, size),
             percent=100,
             quality=100,
@@ -91,13 +103,20 @@ def render_with_playblast(cam: str, path: Path, size: int) -> bool:
     finally:
         with contextlib.suppress(RuntimeError):
             cmds.modelPanel(panel, edit=True, camera=original)
-    produced = sorted(glob.glob(glob.escape(str(base)) + "*.png"))
-    if not produced:
-        return False
-    os.replace(produced[0], path)
-    for extra in produced[1:]:
-        with contextlib.suppress(OSError):
-            os.remove(extra)
+    # 正確な path → playblast の戻り値 → 古い名前の順に探して path へ寄せる
+    produced = []
+    if path.is_file():
+        produced.append(str(path))
+    if isinstance(returned, str) and returned and os.path.isfile(returned) and returned not in produced:
+        produced.append(returned)
+    produced += [f for f in _candidates() if f not in produced]
+    if produced:
+        if os.path.abspath(produced[0]) != os.path.abspath(str(path)):
+            os.replace(produced[0], path)
+        for extra in produced[1:]:
+            if os.path.abspath(extra) != os.path.abspath(str(path)):
+                with contextlib.suppress(OSError):
+                    os.remove(extra)
     return path.is_file() and path.stat().st_size > 0
 
 
@@ -231,7 +250,6 @@ def capture(
         if rep.made:
             rep.message = f"サムネイルを {len(rep.made)} 枚作りました" + (f"（作れなかった点 {len(rep.failed)} 個）" if rep.failed else "")
         elif rep.failed:
-            rep.ok = False
-            rep.unavailable = True
-            rep.message = f"{UNAVAILABLE}（{rep.failed[0]}）"
+            rep.ok = False  # 撮れる環境（ビューポートあり）で書けなかった。「この環境では」とは言わない
+            rep.message = f"{FAILED}（{rep.failed[0]}）"
     return rep

@@ -234,6 +234,11 @@ def run() -> None:
     rep3 = thumbnails.capture(s, render=flaky)
     check("1 点の失敗: 残りは作る・失敗は報告・一時カメラは消える", rep3.ok and len(rep3.failed) == 1 and len(rep3.made) == len(layer_pts) - 1 and not cmds.ls("tdFacialThumbCam*") and not s.editing, f"{rep3.message} {rep3.failed}")
 
+    # 撮れる環境で全部の点が書けなかった: 「この環境では…」とは言わない（2026-10-05）
+    rep4 = thumbnails.capture(s, render=lambda cam, out, size: False)
+    check("全点で書けなかった: 「サムネイルを作れませんでした」（「この環境では」ではない・unavailable でない）",
+          not rep4.ok and not rep4.unavailable and rep4.message.startswith("サムネイルを作れませんでした") and "この環境では" not in rep4.message, rep4.message)
+
     # ------------------------------------------------------------ 古いサムネイルは出ない
     thumbnails.capture(s, render=fake_render)
     k_old = thumbnails.point_key(s, 0, 1, 2)
