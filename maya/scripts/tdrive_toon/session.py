@@ -13,7 +13,7 @@ from typing import Any, Iterable
 
 from maya import cmds
 
-from . import environment, features, look, preview, project, roles
+from . import environment, features, look, naming, preview, project, roles
 
 PROJECT_OPTION_VAR = "TDriveToon_ProjectRoot"  # 選んだプロジェクトフォルダ（Maya の設定に保存。docs/13 §1）
 INSTALLER_PROJECT_OPTION_VAR = "TDriveToon_InstallerProjectSeen"  # 採用済みのインストーラーのプロジェクト
@@ -48,6 +48,8 @@ class Session:
         self._undo: list[dict[str, Any]] = []  # Look のスナップショット（エディタ内 Undo。Maya の Undo とは別）
         self._redo: list[dict[str, Any]] = []
         self._undo_depth = 0
+        self.namespace_message = ""  # ネームスペースを自動で決めた理由・困りごとの一文（画面に出す）
+        self._wanted = False  # Toon 表示にしたい状態か（キャラクターが決まるまで出せなかった場合も、決まったら出す）
 
     # ------------------------------------------------------------ 状態
     def require(self) -> dict[str, Any]:
@@ -72,8 +74,12 @@ class Session:
 
     # ------------------------------------------------------------ ファイル
     def new(self, character: str, model: str = "") -> None:
-        model = model or preview.to_repo_path(cmds.file(query=True, sceneName=True) or "")
-        self.look = look.new_look(character, model or "unknown")
+        self.look = look.new_look(character, "unknown")
+        self._auto_namespace()  # 参照したキャラクターなら、モデルは参照先のファイル
+        if not model:
+            source = preview.reference_file_of(naming.namespace()) or cmds.file(query=True, sceneName=True) or ""
+            model = preview.to_repo_path(source) if source else ""
+        self.look["model"] = model or "unknown"
         self.path = project.looks_dir() / character / "look.json"
         self.edit_variant = self.shown = look.BASE
         self._undo.clear()
@@ -83,6 +89,7 @@ class Session:
 
     def open(self, path: str | Path) -> None:
         self.look = look.load(path)
+        self._auto_namespace()  # 参照したキャラクター（chr: 付き）なら、Look の名前はそのままシーンのノードを探すときに付ける
         self.path = Path(path)
         self.dirty = False
         self.edit_variant = self.shown = look.BASE
@@ -116,12 +123,150 @@ class Session:
         preview.save_preview_settings(path)
         return path
 
+    # ------------------------------------------------------------ ネームスペース（参照したキャラクター。シーンごとの設定）
+    @property
+    def namespace(self) -> str:
+        """今使っているネームスペース（なければ ""）。Look には書かず、シーンの fileInfo `tdriveToonNamespace` に覚える。"""
+        return naming.namespace()
+
+    @staticmethod
+    def _read_info(key: str) -> str:
+        try:
+            v = cmds.fileInfo(key, query=True)
+        except RuntimeError:
+            return ""
+        return naming.norm_ns(v[0]) if v else ""
+
+    def _stored_namespace(self) -> str:
+        return self._read_info(naming.NAMESPACE_KEY)
+
+    @staticmethod
+    def _store_namespace(ns: str) -> None:
+        """シーンにネームスペースを覚える（シーンの変更フラグは変えない）。"""
+        modified = bool(cmds.file(query=True, modified=True))
+        try:
+            if ns:
+                cmds.fileInfo(naming.NAMESPACE_KEY, ns)
+            else:
+                cmds.fileInfo(remove=naming.NAMESPACE_KEY)
+        except RuntimeError:
+            pass
+        finally:
+            cmds.file(modified=modified)
+
+    def restore_namespace(self) -> str:
+        """シーンに覚えたネームスペースをメモリへ戻す（ツールのリロード・シーンを開いたとき）。"""
+        return naming.set_namespace(self._stored_namespace())
+
+    def namespace_choices(self) -> list[str]:
+        """使えるネームスペースの候補。Look があれば、そのマテリアルの半数以上があるネームスペース（なしで見つかれば "" を先頭に）。
+        Look が無ければ、メッシュにマテリアルが付いているネームスペース。ネームスペースが 1 つも無いシーンは Look があるときだけ [""] か []。"""
+        names = sorted(self.look["materials"]) if self.look else []
+        if not preview.scene_namespace_list():
+            return [""] if names and preview.material_namespaces(names) else []
+        return preview.material_namespaces(names) if names else preview.scene_namespaces()
+
+    def namespace_row_visible(self) -> bool:
+        """画面の「ネームスペース」の行を出すか（ネームスペース付きの候補がある・すでに選んでいる・知らせることがあるとき。普通のシーンでは出さない）。"""
+        return bool(naming.namespace()) or bool(self.namespace_message) or any(self.namespace_choices())
+
+    def _auto_namespace(self) -> str:
+        """Look を開いた・シーンが替わったとき、Look のマテリアルがあるネームスペースを決める。決めた理由の一文を返す（`namespace_message` にも入れる）。
+
+        - シーンに覚えた選び（fileInfo）がそのネームスペースにあるなら、それを使う
+        - ネームスペースなしで見つかれば、なし
+        - FacialController が選んでいるネームスペース（fileInfo `tdFacialNamespace`）が候補にあれば、それ
+        - ネームスペース付きが 1 つだけなら、それを使う（シーンに覚える）。複数ならなしにして、選ぶよう知らせる
+        - 見つからなければなしのまま（メッセージを出す）"""
+        names = sorted(self.look["materials"]) if self.look else []
+        cands = self.namespace_choices()
+        stored = self._stored_namespace()
+        facial = self._read_info(naming.FACIAL_NAMESPACE_KEY)
+        msg = ""
+        if stored and stored in cands:
+            pick = stored
+        elif "" in cands:
+            pick = ""
+            if stored:
+                self._store_namespace("")  # 古い選びは捨てる
+        elif facial and facial in cands:
+            pick = facial
+            msg = self._sentence(pick)
+            self._store_namespace(pick)
+        elif len(cands) == 1:
+            pick = cands[0]
+            msg = self._sentence(pick)
+            self._store_namespace(pick)
+        elif len(cands) > 1:
+            pick = ""
+            msg = f"Look のマテリアルが複数のネームスペースにあります（{'、'.join(c + ':' for c in cands[:5])}）。「ネームスペース」で選んでください"
+        else:
+            pick = ""
+            if names:
+                msg = "この Look のマテリアルがシーンに見つかりません。キャラクターを読み込んでいるか確かめてください"
+        naming.set_namespace(pick)
+        if msg and msg != self.namespace_message:
+            print(f"[T-Drive] {msg}")
+        self.namespace_message = msg
+        return msg
+
+    @staticmethod
+    def _sentence(ns: str) -> str:
+        return f"ネームスペース {ns}: のキャラクターを使います" if ns else "ネームスペースなしのキャラクターを使います"
+
+    def _revalidate_namespace(self) -> None:
+        """今のネームスペースにこの Look のマテリアルが無くなっていたら（キャラクターを後から参照した・外したとき）決め直す。"""
+        if self.look is None or not self.look.get("materials"):
+            return
+        if naming.namespace() in self.namespace_choices():
+            return
+        self._auto_namespace()
+
+    def _after_namespace_change(self, was_active: bool) -> None:
+        """ネームスペースが替わったら、前のキャラクターのプレビューを片付け（元の割り当てへ戻す）、今のキャラクターで出し直す。"""
+        preview.delete_all()
+        if (was_active or self._wanted) and self.look is not None:
+            self.show(self.shown)
+        else:
+            self._changed(dirty=False)
+
+    def find_namespace(self) -> str:
+        """「自動で探す」: Look のマテリアルがあるネームスペースを探し直して使う（シーンに覚えた選びは忘れる）。理由の一文を返す。"""
+        if not self.namespace_choices():
+            raise RuntimeError("この Look のマテリアルがどのネームスペースにも見つかりません。キャラクターを読み込んでいるか確かめてください"
+                               if self.look else "ネームスペース付きのキャラクターがシーンに見つかりません")
+        before, was_active = naming.namespace(), preview.is_active()
+        self._store_namespace("")
+        self._auto_namespace()
+        if naming.namespace() != before:
+            self._after_namespace_change(was_active)
+        else:
+            self._changed(dirty=False)
+        return self.namespace_message or self._sentence(naming.namespace())
+
+    def set_namespace(self, ns: str, force: bool = False) -> str:
+        """使うネームスペースを選ぶ（Look は変えない。シーンに覚える）。候補（`namespace_choices`）以外は ValueError（force=True で通す。テスト用）。"""
+        ns = naming.norm_ns(ns)
+        if ns == naming.namespace():
+            return self._sentence(ns)
+        if not force and ns not in self.namespace_choices():
+            where = f"ネームスペース {ns}:" if ns else "ネームスペースなし"
+            what = "この Look のマテリアル" if self.look else "キャラクター"
+            raise ValueError(f"{where} に{what}がありません")
+        was_active = preview.is_active()
+        naming.set_namespace(ns)
+        self._store_namespace(ns)
+        self.namespace_message = ""
+        self._after_namespace_change(was_active)
+        return self._sentence(ns)
+
     # ------------------------------------------------------------ 部位登録
     @undoable
     def auto_register(self, overwrite: bool = False) -> dict[str, str]:
         """シーン内のマテリアルをロール推定で部位登録する。登録した {material: part} を返す。"""
         lk = self.require()
         done = {}
+        self._require_plain_names(preview.scene_materials())
         for mat in preview.scene_materials():
             if not overwrite and look.part_of(lk, mat):
                 continue
@@ -138,13 +283,30 @@ class Session:
         mats = list(materials)
         if not mats:
             raise RuntimeError("登録するマテリアルがありません（メッシュか面を選択してください）")
+        self._require_plain_names(mats)
         self._register(part, role, mats, preset_for=mats)
         self._changed()
 
     def register_selection(self, part: str, role: str) -> list[str]:
-        mats = preview.materials_on_selection()
+        mats = self.selected_materials()
         self.register(part, role, mats)
         return mats
+
+    def selected_materials(self) -> list[str]:
+        """選択中のメッシュ / 面のマテリアル（Look の名前）。選んだキャラクター（ネームスペース）のものだけ。"""
+        mats = preview.materials_on_selection()
+        if not mats and preview.materials_on_selection(current_only=False):
+            ns = naming.namespace()
+            where = f"ネームスペース {ns}:" if ns else "ネームスペースなし"
+            raise RuntimeError(f"選んだメッシュは、使っているキャラクター（{where}）のものではありません。「ネームスペース」で選び直してください")
+        return mats
+
+    @staticmethod
+    def _require_plain_names(mats) -> None:
+        """Look にはネームスペースを付けた名前を書かない（どのシーンでも同じ Look を使うため）。"""
+        bad = [m for m in mats if ":" in m]
+        if bad:
+            raise RuntimeError(f"マテリアル {bad[0]} にネームスペースが付いています。「ネームスペース」でキャラクターを選んでから登録してください")
 
     def _register(self, part: str, role: str, mats: list[str], preset_for: list[str]) -> None:
         lk = self.require()
@@ -217,6 +379,7 @@ class Session:
         if on:
             self.show(self.shown)
         else:
+            self._wanted = False
             preview.disable()
             self._sync_character_preview()  # 接地影の板も隠す
             self._changed(dirty=False)
@@ -377,8 +540,8 @@ class Session:
     def _vc_mesh(self) -> str:
         from . import view_correction
 
-        name = self.setting("viewCorrection.mesh")
-        found = cmds.ls(name, long=True) if name else []
+        name = self.setting("viewCorrection.mesh")  # Look の名前（ネームスペースなし）
+        found = cmds.ls(naming.to_scene(name), long=True) if name else []
         return found[0] if found else view_correction.mesh_for_selection()
 
     def create_view_correction(self, key: str) -> str:
@@ -387,7 +550,7 @@ class Session:
 
         mesh = self._vc_mesh()
         target = view_correction.create_target(mesh, key)
-        self.set_setting("viewCorrection.mesh", preview.short_name(mesh))
+        self.set_setting("viewCorrection.mesh", view_correction.doc_short(mesh))
         return target
 
     def register_view_correction(self, key: str) -> str:
@@ -395,7 +558,7 @@ class Session:
         from . import view_correction
 
         mesh = self._vc_mesh()
-        target = f"{preview.short_name(mesh)}_vc_{key}"
+        target = view_correction.target_name(mesh, key)
         if not cmds.objExists(target):
             raise RuntimeError(f"{target} がありません（先に「作る」）")
         alias = view_correction.register(mesh, key, target)
@@ -669,6 +832,8 @@ class Session:
     def show(self, variant: str) -> None:
         lk = self.require()
         self.shown = variant
+        self._wanted = True
+        self._revalidate_namespace()  # Look を開いたあとにキャラクターを参照した場合など
         environment.prepare_panel()
         if preview.environment_state()["profile"] is None and (name := environment.default_profile()):
             # リロード直後などで環境未設定なら既定のプロファイルを当てる（色管理・トーンマップ・ライト）
@@ -799,6 +964,10 @@ class Session:
 
 
 _current = Session()
+try:
+    _current.restore_namespace()  # ツールのリロード後も、シーンに覚えたネームスペースを使い続ける
+except RuntimeError:
+    pass  # シーンを扱えない状況（起動途中など）
 
 
 def on_scene_opened() -> None:
@@ -806,6 +975,7 @@ def on_scene_opened() -> None:
 
     編集中の Look に未保存の変更があるときは上書きしない（作業を消さない）。
     """
+    _current.restore_namespace()  # 前のシーンのネームスペースを持ち越さない
     path = preview.remembered_look_path()
     if not path or not Path(path).exists():
         return

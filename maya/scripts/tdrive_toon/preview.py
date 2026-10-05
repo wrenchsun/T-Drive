@@ -14,12 +14,13 @@ from typing import Any
 
 from maya import cmds
 
-from . import REPO_ROOT, environment, envmath, params, project, texture_orient
+from . import REPO_ROOT, environment, envmath, naming, params, project, texture_orient
 
 SHADER_FILE = (REPO_ROOT / "maya" / "shaders" / "TDriveToon.fx").as_posix()
 NODE_TYPE = "dx11Shader"
 SUFFIX = "_tdToon"
-SOURCE_ATTR = "tdSourceMaterial"  # プレビューシェーダー → 元マテリアル名
+SOURCE_ATTR = "tdSourceMaterial"  # プレビューシェーダー → 元マテリアル名（Look の名前 = ネームスペースなし）
+SOURCE_NS_ATTR = "tdSourceNamespace"  # 同 → 元マテリアルのネームスペース（参照したキャラクターのときだけ付く）
 PREVIEW_ONLY_ATTR = "tdPreviewOnly"  # プレビュー専用のメッシュ（接地影の板など）。部位登録・出力の対象外
 MASK_COLOR_SET = "tdToonMask"  # docs/03 §4
 SMOOTH_NORMAL_UV = "tdSmoothNormal"  # docs/03 §5
@@ -72,32 +73,43 @@ def ensure_plugin() -> None:
 # ---------------------------------------------------------------- シーン走査
 
 
+def _meshes_of_sg(sg: str) -> set[str]:
+    """shadingEngine に割り当てられているメッシュ（transform の完全パス。プレビュー専用のメッシュは除く）。"""
+    meshes = set()
+    for m in cmds.ls(cmds.sets(sg, query=True) or [], long=True, objectsOnly=True):
+        if cmds.nodeType(m) == "transform":
+            shapes = cmds.listRelatives(m, shapes=True, type="mesh", noIntermediate=True) or []
+            if not shapes:
+                continue  # NURBS（顔の法線プロキシ等）やメッシュ以外は対象外
+        elif cmds.nodeType(m) == "mesh":
+            m = cmds.listRelatives(m, parent=True, fullPath=True)[0]
+        else:
+            continue
+        if cmds.attributeQuery(PREVIEW_ONLY_ATTR, node=m, exists=True):
+            continue
+        meshes.add(m)
+    return meshes
+
+
 def scene_materials() -> dict[str, list[str]]:
     """メッシュに割り当てられている元マテリアル名 → メッシュ(transform)の**完全パス**一覧。割り当ての無いメッシュは対象外。
 
     完全パスで返す: 同名メッシュ（キャラクターの複製・複数読み込み）があっても曖昧にならないように。
     表示では short_name() で末尾だけにする。
+    名前は Look の名前（ネームスペースなし）。ネームスペースを選んでいるときは、そのキャラクターのマテリアルだけ（別のキャラクターは対象外）。
     """
+    ns = naming.namespace()
     result: dict[str, set[str]] = {}
     for sg in cmds.ls(type="shadingEngine"):
         shader = _surface_shader(sg)
         if not shader:
             continue
-        meshes = set()
-        for m in cmds.ls(cmds.sets(sg, query=True) or [], long=True, objectsOnly=True):
-            if cmds.nodeType(m) == "transform":
-                shapes = cmds.listRelatives(m, shapes=True, type="mesh", noIntermediate=True) or []
-                if not shapes:
-                    continue  # NURBS（顔の法線プロキシ等）やメッシュ以外は対象外
-            elif cmds.nodeType(m) == "mesh":
-                m = cmds.listRelatives(m, parent=True, fullPath=True)[0]
-            else:
-                continue
-            if cmds.attributeQuery(PREVIEW_ONLY_ATTR, node=m, exists=True):
-                continue
-            meshes.add(m)
+        scene_name = source_scene_name(shader)
+        if ns and naming.ns_of(scene_name) != ns:
+            continue
+        meshes = _meshes_of_sg(sg)
         if meshes:
-            result.setdefault(source_material(shader), set()).update(meshes)
+            result.setdefault(naming.to_doc(scene_name), set()).update(meshes)
     return {k: sorted(v) for k, v in sorted(result.items())}
 
 
@@ -116,10 +128,21 @@ def short_name(path: str) -> str:
     return path.split("|")[-1]
 
 
-def source_material(shader: str) -> str:
+def source_scene_name(shader: str) -> str:
+    """シェーダー（元マテリアルまたはプレビューシェーダー）の元マテリアルの、シーンのノード名（`chr:mat_body01`）。"""
     if cmds.attributeQuery(SOURCE_ATTR, node=shader, exists=True):
-        return cmds.getAttr(f"{shader}.{SOURCE_ATTR}")
+        doc = cmds.getAttr(f"{shader}.{SOURCE_ATTR}")
+        if cmds.attributeQuery(SOURCE_NS_ATTR, node=shader, exists=True):
+            ns = cmds.getAttr(f"{shader}.{SOURCE_NS_ATTR}")
+        else:
+            ns = naming.ns_of(shader)  # 参照したファイルの中に、プレビュー中のまま保存されていたシェーダー（`chr:mat_tdToon`）
+        return naming.to_scene(doc, ns)
     return shader
+
+
+def source_material(shader: str) -> str:
+    """元マテリアル名（Look の名前。今のネームスペースは外す）。"""
+    return naming.to_doc(source_scene_name(shader))
 
 
 def _surface_shader(sg: str) -> str | None:
@@ -132,24 +155,31 @@ def _shading_group(shader: str) -> str | None:
     return sgs[0] if sgs else None
 
 
-def materials_on_selection() -> list[str]:
-    """選択中のメッシュ / 面に割り当てられている元マテリアル名。"""
+def materials_on_selection(current_only: bool = True) -> list[str]:
+    """選択中のメッシュ / 面に割り当てられている元マテリアル名（Look の名前）。
+
+    ネームスペースを選んでいるときは、そのキャラクターのマテリアルだけ（current_only=False で別のキャラクターのものも含め、シーンの名前で返す）。
+    """
     sel = cmds.ls(selection=True, long=True) or []
     shapes = cmds.ls(sel, dagObjects=True, type="mesh", long=True, noIntermediate=True) or []
     faces = cmds.filterExpand(sel, selectionMask=34) or []
-    mats: set[str] = set()
+    names: set[str] = set()
     for sg in cmds.listConnections(shapes, type="shadingEngine") or []:
         if sh := _surface_shader(sg):
-            mats.add(source_material(sh))
+            names.add(source_scene_name(sh))
     for f in faces:
         for sg in cmds.listSets(object=f, type=1) or []:
             if cmds.nodeType(sg) == "shadingEngine" and (sh := _surface_shader(sg)):
-                mats.add(source_material(sh))
-    return sorted(mats)
+                names.add(source_scene_name(sh))
+    ns = naming.namespace()
+    if current_only:
+        return sorted(naming.to_doc(n) for n in names if not ns or naming.ns_of(n) == ns)
+    return sorted(names)
 
 
 def base_texture_of(material: str) -> str | None:
     """元マテリアルのカラーに繋がる file テクスチャのパス（リポジトリ内ならリポジトリ相対）。"""
+    material = naming.to_scene(material)  # Look の名前 → シーンのノード
     for attr in ("color", "baseColor", "base_color", "diffuseColor"):
         if not cmds.attributeQuery(attr, node=material, exists=True):
             continue
@@ -161,6 +191,7 @@ def base_texture_of(material: str) -> str | None:
 
 def source_blend(material: str) -> str:
     """元マテリアルの透明設定から D-Drive の Blend を推定する（透明度に接続 or 値あり → Transparent）。"""
+    material = naming.to_scene(material)
     for attr in ("transparency", "opacity", "transmission"):
         if not cmds.attributeQuery(attr, node=material, exists=True):
             continue
@@ -180,6 +211,82 @@ def meshes_of(material: str) -> list[str]:
     return scene_materials().get(material, [])
 
 
+# ---------------------------------------------------------------- ネームスペース（参照したキャラクター）
+
+DEFAULT_ROOT_MATERIALS = {"lambert1", "particleCloud1", "standardSurface1"}  # どのシーンにもある既定のマテリアル（キャラクターではない）
+
+
+def scene_namespace_list() -> list[str]:
+    """シーンにあるネームスペース（入れ子も。UI・shared は除く）。"""
+    return [n for n in cmds.namespaceInfo(listOnlyNamespaces=True, recurse=True) or [] if n not in ("UI", "shared")]
+
+
+def _is_material(scene_name: str) -> bool:
+    return cmds.objExists(scene_name) and cmds.attributeQuery("outColor", node=scene_name, exists=True)
+
+
+def material_namespaces(names: list[str]) -> list[str]:
+    """Look のマテリアル名（ネームスペースなし）の半数以上がシーンにあるネームスペースの一覧（ネームスペースなしで見つかれば "" を先頭に）。"""
+    names = [n for n in names if n]
+    if not names:
+        return []
+    need = max(1, (len(names) + 1) // 2)
+    spaces = ["", *scene_namespace_list()]
+    return [ns for ns in spaces if sum(1 for m in names if _is_material(naming.to_scene(m, ns))) >= need]
+
+
+def scene_namespaces() -> list[str]:
+    """メッシュに割り当てられたマテリアルがあるネームスペースの一覧（Look が無いときの候補。既定のマテリアルだけの "" は入れない）。"""
+    found: list[str] = []
+    for sg in cmds.ls(type="shadingEngine"):
+        shader = _surface_shader(sg)
+        if not shader:
+            continue
+        name = source_scene_name(shader)
+        if name in DEFAULT_ROOT_MATERIALS:
+            continue
+        ns = naming.ns_of(name)
+        if ns not in found and _meshes_of_sg(sg):
+            found.append(ns)
+    return sorted(found, key=lambda n: (n != "", n))
+
+
+def is_referenced(node: str) -> bool:
+    """ノードが参照（リファレンス）したファイルのものか。"""
+    try:
+        return bool(cmds.referenceQuery(node, isNodeReferenced=True))
+    except RuntimeError:
+        return False
+
+
+def require_writable(meshes: list[str], what: str) -> None:
+    """参照したキャラクターのメッシュには、頂点のデータ（頂点カラー・UV・法線）を書き込めない（シーンを保存しても残らない）。clear な日本語で止める。
+
+    Maya はシーンに保存できるのは参照への「編集」（接続・アトリビュートの値）だけで、メッシュの頂点のデータは参照元のファイルのもの。
+    """
+    refs = sorted({short_name(m) for m in meshes if is_referenced(m)})
+    if refs:
+        shown = "、".join(refs[:3]) + ("…" if len(refs) > 3 else "")
+        raise RuntimeError(
+            f"参照したキャラクターのメッシュには{what}を書き込めません（シーンを保存しても残らないため）。"
+            f"キャラクターのファイルを直接開いて作業してください（{shown}）"
+        )
+
+
+def reference_file_of(ns: str) -> str | None:
+    """ネームスペースを持つ参照ファイルのパス（無ければ None。入れ子の参照は最も外側で一致したもの）。"""
+    ns = naming.norm_ns(ns)
+    if not ns:
+        return None
+    for ref in cmds.file(query=True, reference=True) or []:
+        try:
+            if naming.norm_ns(cmds.referenceQuery(ref, namespace=True)) == ns:
+                return ref
+        except RuntimeError:
+            continue
+    return None
+
+
 def to_repo_path(path: str) -> str:
     """プロジェクトフォルダ基準の相対パス（外なら絶対パス）。開発用はプロジェクト = リポジトリ（docs/13 §1）。"""
     return project.to_project_path(path)
@@ -193,11 +300,34 @@ def from_repo_path(path: str) -> str:
 
 
 def preview_shader_of(material: str) -> str:
-    return f"{material}{SUFFIX}"
+    """元マテリアルのプレビューシェーダーの名前（唯一の決め方。FacialController もこれで引く）。
+
+    Look の名前（`mat_body01`）でも、シーンの名前（`chr:mat_body01`）でもよい。ネームスペース付きは `<ネームスペース>_<名前>_tdToon`
+    （プレビューのノードはシーンのもの。2 体のキャラクターで名前が重ならないようにする）。ネームスペースなしは `<名前>_tdToon`。
+    ネームスペースを含まない名前は今選んでいるネームスペースのもの（Look の名前）として扱う。
+    """
+    ns = naming.ns_of(material) if ":" in material else naming.namespace()
+    return f"{naming.prefix(ns)}{naming.to_doc(material, ns)}{SUFFIX}"
 
 
 def preview_shaders() -> list[str]:
-    return cmds.ls(f"*{SUFFIX}", type=NODE_TYPE) or []
+    """このツールが作ったプレビューシェーダー（シーンのもの）。参照したファイルの中に保存されていたもの（`chr:mat_tdToon`）は含めない。"""
+    return [n for n in cmds.ls(f"*{SUFFIX}", type=NODE_TYPE) or [] if ":" not in n]
+
+
+def _saved_preview_sgs() -> dict[str, list[str]]:
+    """参照したファイルの中に、プレビュー中のまま保存されていたシェーダー（`chr:mat_tdToon`）の SG: 元のマテリアル（シーンの名前）→ SG の一覧。
+
+    ネームスペースなしのシーンでは同じ名前のノードなのでそのまま引き継げる。参照したキャラクターでは別のノードになるので、
+    その割り当ては元の割り当てとみなして、このツールのプレビューへ移す（元の見た目では元のマテリアルへ戻る）。
+    """
+    out: dict[str, list[str]] = {}
+    for sh in cmds.ls(type=NODE_TYPE) or []:
+        if ":" in sh and sh.endswith(SUFFIX):
+            sg = _shading_group(sh)
+            if sg:
+                out.setdefault(source_scene_name(sh), []).append(sg)
+    return out
 
 
 def is_active() -> bool:
@@ -210,14 +340,18 @@ def enable(materials: dict[str, dict[str, Any]]) -> list[str]:
     ensure_plugin()
     missing = []
     scene = scene_materials()  # マテリアルごとに走査し直さない（全 SG の走査は重い）
+    saved = _saved_preview_sgs() if naming.namespace() else {}
     for mat, values in materials.items():
-        if not cmds.objExists(mat):
+        scene_mat = naming.to_scene(mat)  # Look の名前 → シーンのノード（参照したキャラクターは `chr:` 付き）
+        if not cmds.objExists(scene_mat):
             missing.append(mat)
             continue
         shader = _ensure_preview_shader(mat)
         apply_values(mat, values)
         _update_mesh_streams(shader, scene.get(mat, []), "vertexMask" in values.get("features", ["vertexMask"]))
-        _swap(_shading_group(mat), _shading_group(shader))
+        _swap(_shading_group(scene_mat), _shading_group(shader))
+        for old_sg in saved.get(scene_mat, []):
+            _swap(old_sg, _shading_group(shader))  # 参照したファイルがプレビュー中のまま保存されていた分
     apply_environment()
     return missing
 
@@ -226,7 +360,7 @@ def enable(materials: dict[str, dict[str, Any]]) -> list[str]:
 def disable() -> None:
     """元マテリアルの割り当てに戻す（プレビューシェーダーは残し、次回すぐ有効化できるようにする）。"""
     for shader in preview_shaders():
-        src = source_material(shader)
+        src = source_scene_name(shader)  # 参照したキャラクターは、割り当てを元の（参照先の）SG へ戻す
         if cmds.objExists(src):
             _swap(_shading_group(shader), _shading_group(src))
 
@@ -261,7 +395,10 @@ def _ensure_preview_shader(mat: str) -> str:
     shader = cmds.shadingNode(NODE_TYPE, asShader=True, name=name)
     cmds.setAttr(f"{shader}.shader", SHADER_FILE, type="string")
     cmds.addAttr(shader, longName=SOURCE_ATTR, dataType="string")
-    cmds.setAttr(f"{shader}.{SOURCE_ATTR}", mat, type="string")
+    cmds.setAttr(f"{shader}.{SOURCE_ATTR}", naming.to_doc(mat), type="string")
+    if naming.namespace():
+        cmds.addAttr(shader, longName=SOURCE_NS_ATTR, dataType="string")
+        cmds.setAttr(f"{shader}.{SOURCE_NS_ATTR}", naming.namespace(), type="string")
     sg = cmds.sets(renderable=True, noSurfaceShader=True, empty=True, name=f"{name}SG")
     cmds.connectAttr(f"{shader}.outColor", f"{sg}.surfaceShader", force=True)
     return shader

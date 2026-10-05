@@ -187,6 +187,7 @@ class HeaderBar(QtWidgets.QWidget):
 
         self.label = QtWidgets.QLabel()
         v.addWidget(self.label)
+        self._build_namespace_row(v)
 
         row = QtWidgets.QHBoxLayout()
         for text, fn in (("新規", self.on_new), ("開く", self.on_open), ("保存", self.on_save), ("別名保存", self.on_save_as)):
@@ -217,6 +218,83 @@ class HeaderBar(QtWidgets.QWidget):
         self._msg_state = None
         services.subscribe(services.FACIAL_CORRECTION, self.refresh_facial)
         self.refresh_facial()
+
+    def _build_namespace_row(self, v: QtWidgets.QVBoxLayout) -> None:
+        """「ネームスペース」の行（参照したキャラクター用。ネームスペース付きの候補があるときだけ出す）。"""
+        self._ns_updating = False
+        self.ns_box = QtWidgets.QWidget()
+        box = QtWidgets.QVBoxLayout(self.ns_box)
+        box.setContentsMargins(0, 0, 0, 0)
+        row = QtWidgets.QHBoxLayout()
+        row.addWidget(QtWidgets.QLabel("ネームスペース"))
+        self.ns_combo = QtWidgets.QComboBox()
+        self.ns_combo.setSizeAdjustPolicy(QtWidgets.QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.ns_combo.setMinimumContentsLength(8)
+        self.ns_combo.setToolTip(
+            "キャラクターを参照（リファレンス）で読み込むと、ノードの名前の頭に「chr:」のような名前が付きます（ネームスペース）。"
+            "どのキャラクターを使うかをここで選びます。Look には書かず、このシーンだけに覚えます"
+        )
+        self.ns_combo.activated.connect(self.on_namespace_activated)
+        row.addWidget(self.ns_combo, 1)
+        self.ns_find = QtWidgets.QPushButton("自動で探す")
+        self.ns_find.setToolTip("Look のマテリアルがあるネームスペースを探して、自動で選ぶ")
+        self.ns_find.clicked.connect(lambda *_: self.on_namespace_find())
+        row.addWidget(self.ns_find)
+        box.addLayout(row)
+        self.ns_note = QtWidgets.QLabel()
+        self.ns_note.setWordWrap(True)
+        self.ns_note.setEnabled(False)  # 薄い表示
+        self.ns_note.setVisible(False)
+        box.addWidget(self.ns_note)
+        self.ns_box.setVisible(False)
+        v.addWidget(self.ns_box)
+
+    def refresh_namespace(self) -> None:
+        """ネームスペースの行: Look のマテリアルがある候補（「（なし）」とネームスペース）。選べるのが 1 つだけなら選べない。"""
+        s = self.session
+        visible = s.namespace_row_visible()
+        self.ns_box.setVisible(visible)
+        if not visible:
+            return
+        cands = s.namespace_choices()
+        cur = s.namespace
+        self._ns_updating = True
+        try:
+            self.ns_combo.clear()
+            for c in cands:
+                self.ns_combo.addItem(f"{c}:" if c else "（なし）", c)
+            if cur in cands:
+                self.ns_combo.setCurrentIndex(cands.index(cur))
+            else:
+                self.ns_combo.addItem(f"{cur}: （見つかりません）" if cur else ("（選んでください）" if cands else "（見つかりません）"), None)
+                self.ns_combo.setCurrentIndex(self.ns_combo.count() - 1)
+            self.ns_combo.setEnabled(len(cands) > 1 or cur not in cands)
+            self.ns_find.setEnabled(bool(cands))
+        finally:
+            self._ns_updating = False
+        note = s.namespace_message
+        self.ns_note.setText(note)
+        self.ns_note.setVisible(bool(note))
+
+    def on_namespace_activated(self, index: int) -> None:
+        if self._ns_updating:
+            return
+        ns = self.ns_combo.itemData(index)
+        if ns is None:
+            self.refresh()
+            return
+        try:
+            self.session.set_namespace(ns)
+        except Exception as exc:
+            _error(self, exc)
+            self.refresh()
+
+    def on_namespace_find(self) -> None:
+        try:
+            self.session.find_namespace()
+        except Exception as exc:
+            _error(self, exc)
+            self.refresh()
 
     def detach(self) -> None:
         services.unsubscribe(services.FACIAL_CORRECTION, self.refresh_facial)
@@ -253,6 +331,7 @@ class HeaderBar(QtWidgets.QWidget):
 
     def refresh(self) -> None:
         self.refresh_facial()
+        self.refresh_namespace()
         lk = self.session.look
         where = "開発用（ツール本体）" if project.is_tool_repo() else project.root().as_posix()
         self.label.setToolTip(f"プロジェクト: {project.root().as_posix()}（T-Drive › プロジェクトを選ぶ… で変更）")
@@ -491,7 +570,11 @@ class PartsTab(QtWidgets.QWidget):
         if self.session.look is None:
             _error(self, RuntimeError("先に 新規 か 開く で Look を用意してください"))
             return
-        mats = preview.materials_on_selection()
+        try:
+            mats = self.session.selected_materials()
+        except RuntimeError as exc:
+            _error(self, exc)
+            return
         if not mats:
             _error(self, RuntimeError("メッシュか面を選択してください"))
             return

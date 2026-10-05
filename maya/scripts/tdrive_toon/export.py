@@ -22,7 +22,7 @@ from pathlib import Path
 from maya import cmds, mel
 from maya.api import OpenMaya as om
 
-from . import REPO_ROOT, mask, preview, smooth_normals
+from . import REPO_ROOT, mask, naming, preview, smooth_normals
 
 SPARE_UV = "tdUVSpare"
 FBX_OPTIONS = (
@@ -87,15 +87,45 @@ def _skeleton_roots(shapes: list[str]) -> list[str]:
     return sorted(roots)
 
 
+def _flatten_references() -> None:
+    """参照（リファレンス）を取り込み、ネームスペースをなくす。書き出し用の一時シーンだけで呼ぶ（FBX の名前・マテリアル名にネームスペースを入れないため。
+    使っているシーンでは呼ばない。FacialController の書き出しにも同じ処理がある）。"""
+    for _ in range(10):  # 入れ子の参照は、取り込むと外側に出てくる
+        refs = cmds.file(query=True, reference=True) or []
+        if not refs:
+            break
+        for r in refs:
+            try:
+                cmds.file(r, importReference=True)
+            except RuntimeError:
+                try:
+                    cmds.file(r, removeReference=True)  # 読み込まれていない参照は取り込めない
+                except RuntimeError:
+                    pass
+    spaces = [n for n in cmds.namespaceInfo(listOnlyNamespaces=True, recurse=True) or [] if n not in ("UI", "shared")]
+    for n in sorted(spaces, key=lambda x: -x.count(":")):  # 深いものから
+        try:
+            cmds.namespace(removeNamespace=n, mergeNamespaceWithRoot=True)
+        except RuntimeError:
+            pass
+
+
 def export_in_place(meshes: list[str], path: str | Path) -> dict[str, object]:
-    """開いているシーンを直接整形して書き出す（破壊的）。mayapy（tools/export_fbx_batch.py）専用。"""
+    """開いているシーンを直接整形して書き出す（破壊的）。mayapy（tools/export_fbx_batch.py）専用。
+
+    参照したキャラクター（ネームスペース付き）は、先に元のマテリアルへ戻してから取り込み、ネームスペースを外す
+    （FBX の名前は `mdl_face02`・マテリアル名は `mat_body01` のようにネームスペースなし。ネームスペースなしのシーンと同じ出力）。
+    """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    shapes = preview.mesh_shapes(meshes)
+    cmds.loadPlugin("fbxmaya", quiet=True)
+    preview.disable()  # 取り込む前に（元のマテリアルの場所はネームスペース付きの名前で探すため）
+    if cmds.file(query=True, reference=True) or any(":" in m for m in meshes):
+        _flatten_references()
+        meshes = [m if cmds.objExists(m) else naming.strip_all(m) for m in meshes]
+    shapes = preview.mesh_shapes([m for m in meshes if cmds.objExists(m)])
     if not shapes:
         raise RuntimeError("書き出すメッシュがありません")
-    cmds.loadPlugin("fbxmaya", quiet=True)
-    preview.disable()
     warnings: list[str] = []
     for shape in shapes:
         _prepare(shape, warnings)

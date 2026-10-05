@@ -42,6 +42,7 @@ def bake(meshes: list[str], tolerance: float = 1e-3) -> dict[str, int]:
     形状のヒストリがあるメッシュは焼いても後で消えるので、何もせずにエラーにする。
     """
     targets = [(shape, write_target(shape)) for shape in preview.mesh_shapes(meshes)]
+    preview.require_writable([t for _s, t in targets], "スムーズ法線（UV Set）")  # 参照したキャラクターには書けない
     blocked = {t: construction_history(t) for _s, t in targets}
     blocked = {t: h for t, h in blocked.items() if h}
     if blocked:

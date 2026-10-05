@@ -39,13 +39,11 @@ def has_mask(mesh: str) -> bool:
 
 def init(meshes: list[str]) -> list[str]:
     """Color Set tdToonMask を作って白で埋める。既にあるメッシュは触らない。作ったメッシュを返す。"""
-    created = []
-    for shape in preview.mesh_shapes(meshes):
-        if MASK in (cmds.polyColorSet(shape, query=True, allColorSets=True) or []):
-            continue
+    todo = [s for s in preview.mesh_shapes(meshes) if MASK not in (cmds.polyColorSet(s, query=True, allColorSets=True) or [])]
+    preview.require_writable(todo, "頂点カラー（Toon マスク）")  # 参照したキャラクターには書けない（保存しても残らない）
+    for shape in todo:
         _fill(shape, MASK, (1.0, 1.0, 1.0, 1.0))
-        created.append(shape)
-    return created
+    return todo
 
 
 def _fill(shape: str, color_set: str, rgba: tuple[float, float, float, float]) -> None:
@@ -66,6 +64,7 @@ def read_channel(shape: str, channel: str, color_set: str = MASK) -> list[float]
 
 
 def write_channel(shape: str, channel: str, values: list[float]) -> None:
+    preview.require_writable([shape], "頂点カラー（Toon マスク）")
     fn = _fn(shape)
     cur = fn.getVertexColors(MASK)
     i = CHANNELS.index(channel)
@@ -94,6 +93,7 @@ def begin_paint(meshes: list[str], channel: str) -> None:
     shapes = preview.mesh_shapes(meshes)
     if not shapes:
         raise RuntimeError("メッシュを選択してください")
+    preview.require_writable(shapes, "頂点カラー（Toon マスク）")
     init(shapes)
     for shape in shapes:
         values = read_channel(shape, channel)

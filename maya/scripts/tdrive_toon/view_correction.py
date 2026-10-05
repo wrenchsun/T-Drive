@@ -9,25 +9,41 @@ from __future__ import annotations
 
 from maya import cmds
 
-from . import preview
+from . import naming, preview
 
 KEYS = ("front", "threeQuarter", "side")
 KEY_LABELS = {"front": "正面", "threeQuarter": "3/4", "side": "横"}
 
 
 def _short(mesh: str) -> str:
-    return mesh.split("|")[-1]
+    """メッシュの短い名前。参照したキャラクターは `chr:` を外し、ネームスペースを平らにした頭を付ける（`chr_mdl_face02`。ノード名に `:` は使えない）。"""
+    return naming.prefix(naming.ns_of(mesh)) + naming.doc_short(mesh, naming.ns_of(mesh))
+
+
+def doc_short(mesh: str) -> str:
+    """Look に書くメッシュ名（ネームスペースなしの短い名前）。"""
+    return naming.doc_short(mesh, naming.ns_of(mesh) or None)
 
 
 def blend_shape_name(mesh: str) -> str:
     return f"tdViewCorrection_{_short(mesh)}"
 
 
+def target_name(mesh: str, key: str) -> str:
+    """彫刻用の作業メッシュのノード名（シーンのノード。ネームスペースなしのルートに置く）。"""
+    return f"{_short(mesh)}_vc_{key}"
+
+
+def alias_name(mesh: str, key: str) -> str:
+    """BlendShape のターゲット名（Look に書く名前。ネームスペースなし = どのシーンでも同じ）。"""
+    return f"{doc_short(mesh)}_vc_{key}"
+
+
 def create_target(mesh: str, key: str) -> str:
     """補正シェイプ用に顔メッシュを複製して横に置く（ヒストリ・デフォーマーなしのきれいなメッシュ）。"""
     if key not in KEYS:
         raise ValueError(key)
-    name = f"{_short(mesh)}_vc_{key}"
+    name = target_name(mesh, key)
     if cmds.objExists(name):
         raise RuntimeError(f"{name} は既にあります（彫り直すならそれを使ってください）")
     dup = cmds.duplicate(mesh, name=name)[0]
@@ -56,16 +72,20 @@ def is_target(transform: str) -> bool:
 def register(mesh: str, key: str, target: str) -> str:
     """target を mesh の補正 BlendShape（なければ作る）に追加し、ターゲット名（エイリアス）を返す。"""
     bs = blend_shape_name(mesh)
-    alias = _short(target)
+    alias = alias_name(mesh, key)
+    node_alias = target.split("|")[-1]  # Maya が付けるターゲット名（= 作業メッシュのノード名。参照したキャラクターでは alias と違う）
     if not cmds.objExists(bs):
         # スキンより前（frontOfChain）に入れて、変形前の形に対する補正にする
         cmds.blendShape(target, mesh, name=bs, frontOfChain=True)
+        index = 0
     else:
         existing = cmds.aliasAttr(bs, query=True) or []
         if alias in existing:
             return alias
         index = len(cmds.getAttr(f"{bs}.weight", multiIndices=True) or [])
         cmds.blendShape(bs, edit=True, target=(mesh, index, target, 1.0))
+    if node_alias != alias:
+        cmds.aliasAttr(alias, f"{bs}.weight[{index}]")  # Look には「ネームスペースなし」の名前を書く
     return alias
 
 

@@ -76,6 +76,7 @@ def transfer(meshes: list[str], weight: float = 1.0, selected_vertices: dict[str
     for shape in preview.mesh_shapes(meshes):
         if selected_vertices is not None and shape not in selected_vertices:
             continue  # 「選択した頂点だけ」で、このメッシュには選択頂点が無い
+        preview.require_writable([shape], "顔の法線")  # 参照したキャラクターには書けない
         src = om.MFnMesh(om.MSelectionList().add(shape).getDagPath(0))
         target = smooth_normals.write_target(shape)
         _backup(target)
@@ -110,6 +111,7 @@ def reset(meshes: list[str]) -> list[str]:
         target = smooth_normals.write_target(shape)
         if not cmds.attributeQuery(BACKUP_ATTR, node=target, exists=True):
             continue
+        preview.require_writable([target], "顔の法線")
         data = json.loads(cmds.getAttr(f"{target}.{BACKUP_ATTR}"))
         dag = om.MSelectionList().add(target).getDagPath(0)
         rows = data["rows"]
