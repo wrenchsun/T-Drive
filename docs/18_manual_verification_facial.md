@@ -251,6 +251,8 @@ FacialController（[14](14_facial_controller_spec.md)）と、それに伴う変
 
 ## G2. TimeLine のまとめ確認（D-Drive の TimeLine 自体も未検証。2026-10-03 追加）
 
+> **2026-10-05 方針**: Timeline まわりは D-Drive 側でまだ確認が取れていないので、**実際のデータ（Maya から出したカットシーンの FBX と `.fctrack`）が来てから**行う。データが無くてもできる項目（手でトラックを置く: G2-8〜G2-10、G2-12〜G2-14、I-1〜I-3、I-8、I-9）は先に行う。実データ待ち: G2-4、G2-5、G2-16、G2-17、I-7、I-12。
+
 D-Drive の TimeLine（Cutscene）は **D-Drive 側でもまだ人の確認が済んでいない**ので、T-Drive のトラックと合わせてここでまとめて確認します。
 先に土台（D-Drive だけ）→ 次に T-Drive のトラック、の順に見ると、問題が出たときにどちらの原因か切り分けられます。
 D-Drive 側の詳しい手順は D-Drive の `docs/52_manual_verification_fc.md`（§1 = FC-1、§2 = FC-2 / FC-12、§22 = T-Drive 導入後）と `docs/26_timeline.md`。
