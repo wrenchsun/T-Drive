@@ -9,5 +9,64 @@
     "suffixR": "R",
     "exclude": []
   },
-  "limits": {}
+  "limits": {},
+  "categories": [
+    {
+      "id": "eye",
+      "label": "目",
+      "patterns": [
+        "prefix:CTRL_expressions_eye"
+      ]
+    },
+    {
+      "id": "brow",
+      "label": "眉",
+      "patterns": [
+        "prefix:CTRL_expressions_brow"
+      ]
+    },
+    {
+      "id": "nose",
+      "label": "鼻",
+      "patterns": [
+        "prefix:CTRL_expressions_nose"
+      ]
+    },
+    {
+      "id": "cheek",
+      "label": "頬",
+      "patterns": [
+        "prefix:CTRL_expressions_cheek"
+      ]
+    },
+    {
+      "id": "mouth",
+      "label": "口",
+      "patterns": [
+        "prefix:CTRL_expressions_mouth",
+        "prefix:CTRL_expressions_lip"
+      ]
+    },
+    {
+      "id": "jaw",
+      "label": "あご",
+      "patterns": [
+        "prefix:CTRL_expressions_jaw"
+      ]
+    },
+    {
+      "id": "tongue",
+      "label": "舌",
+      "patterns": [
+        "prefix:CTRL_expressions_tongue"
+      ]
+    },
+    {
+      "id": "neck",
+      "label": "首",
+      "patterns": [
+        "prefix:CTRL_expressions_neck"
+      ]
+    }
+  ]
 }

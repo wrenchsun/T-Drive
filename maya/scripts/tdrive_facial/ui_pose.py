@@ -51,6 +51,15 @@ DIRTY_COLOR = "#ff9f1c"
 LABEL_WIDTH = 150
 T_RANGE = 1000.0  # 平行移動の欄の範囲（cm）
 SLIDER_STEPS = 1000
+CAT_ALL = "_all"  # タブ「すべて」
+CAT_VALUED = "_valued"  # タブ「値あり」（ポーズの値が 0 でない / 土台の表情の値がある行）
+CAT_ALL_LABEL = "すべて"
+CAT_VALUED_LABEL = "値あり"
+CAT_CHANGED_COLOR = "#ff9f1c"  # 未保存の変更がある分類のタブの文字の色（見出しの [未保存] と同じ）
+CAT_TAB_TIP = (
+    "シェイプを名前の決まりごとで分けたタブです。数字はそのタブのシェイプの数。"
+    "「値あり」は 0 でない値（土台の表情の値も含む）のシェイプだけ。オレンジの ● は保存していない変更があるタブです"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -132,6 +141,14 @@ class _CurveRowWidgets:
         self._excluded = False
         self._over: Optional[float] = None
         self._tips: list[str] = [row.name]
+        self._has_base = False
+        self.tab_visible = True  # 分類のタブで見えているか（見えないあいだは行ごと隠す。行は作り直さない）
+
+    def set_tab_visible(self, on: bool) -> None:
+        self.tab_visible = on
+        for w in (self.label, self.slider, self.spin, self.reset_btn):
+            w.setVisible(on)
+        self.base_label.setVisible(on and self._has_base)
 
     def widgets(self) -> list[QtWidgets.QWidget]:
         return [self.label, self.slider, self.spin, self.reset_btn, self.base_label]
@@ -139,6 +156,7 @@ class _CurveRowWidgets:
     def set_base(self, base: Optional[float], over: Optional[float]) -> None:
         """土台の表情の値（なければ None）と、土台と合わせて可動域を超えたときの合計（なければ None）を表示する。"""
         self._over = over
+        self._has_base = base is not None
         if base is None:
             self.base_label.setVisible(False)
             self.base_label.setText("")
@@ -146,7 +164,7 @@ class _CurveRowWidgets:
         else:
             self.base_label.setText(f"{base:+.2f}（土台）")
             self.base_label.setStyleSheet(WARN_STYLE if over is not None else BASE_STYLE)
-            self.base_label.setVisible(True)
+            self.base_label.setVisible(self.tab_visible)
         tip = f"土台と合わせて可動域を超えています（{over:.2f}）" if over is not None else ""
         self.base_label.setToolTip(tip or ("土台の表情が足している値です。シーンにはポーズの値にこれを足して当たります（データにもベイクにも入りません）" if base is not None else ""))
         self.label.setToolTip(" / ".join(self._tips + ([tip] if tip else [])))
@@ -490,6 +508,10 @@ class PoseTab(QtWidgets.QWidget):
         self._base_hidden: list[str] = []
         self._base_over: dict[str, float] = {}
         self._bone_rows: dict[str, _BoneRowWidgets] = {}
+        self._view: Optional[PoseView] = None  # 直近に描いた一覧（タブを切り替えたとき、作り直さずに出し分けるため）
+        self._cat_sig: Optional[tuple] = None
+        self._cat_ids: list[str] = []
+        self._row_shown: dict[str, bool] = {}
         self._bone_group = QtWidgets.QButtonGroup(self)
         self._bone_group.setExclusive(True)
 
@@ -608,6 +630,16 @@ class PoseTab(QtWidgets.QWidget):
         r.addWidget(self.curve_filter, 1)
         r.addWidget(self.cb_working)
         cv.addLayout(r)
+        self.cat_bar = QtWidgets.QTabBar()  # 名前の決まりごとの分類（プロファイルの categories。無ければ名前の先頭の語）
+        self.cat_bar.setExpanding(False)
+        self.cat_bar.setUsesScrollButtons(True)  # 幅 400〜480 px ではみ出す分は左右の矢印で送る
+        self.cat_bar.setDrawBase(False)
+        self.cat_bar.setElideMode(QtCore.Qt.ElideNone)
+        self.cat_bar.setFocusPolicy(QtCore.Qt.NoFocus)
+        self.cat_bar.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Fixed)  # タブの数でパネルの幅を広げない
+        self.cat_bar.setToolTip(CAT_TAB_TIP)
+        self.cat_bar.currentChanged.connect(lambda *_: self.on_category_changed())
+        cv.addWidget(self.cat_bar)
         self.curve_note = QtWidgets.QLabel()
         self.curve_note.setStyleSheet(OK_STYLE)
         self.curve_note.setWordWrap(True)
@@ -678,6 +710,10 @@ class PoseTab(QtWidgets.QWidget):
         self._flush_timer.setSingleShot(True)
         self._flush_timer.setInterval(0)
         self._flush_timer.timeout.connect(self._flush_now)
+        self._marks_timer = QtCore.QTimer(self)  # スライダーを動かしたあと、タブの ● を間引いて更新する
+        self._marks_timer.setSingleShot(True)
+        self._marks_timer.setInterval(250)
+        self._marks_timer.timeout.connect(self._sync_tab_marks)
 
         session.listeners.append(self._on_session_changed)
         session.state_listeners.append(self._on_state_changed)  # 編集状態の出入り（listeners は呼ばれない）で、案内文とボタンを追従させる
@@ -818,6 +854,9 @@ class PoseTab(QtWidgets.QWidget):
         for b in (self.btn_save, self.btn_reload, self.btn_zero, self.btn_mirror, self.btn_export, self.btn_import, self.btn_capture, self.btn_anim, self.btn_base_pick, self.btn_base_clear):
             b.setEnabled(False)
         self._curve_sig = self._bone_sig = None
+        self._view = None
+        self._row_shown = {}
+        self._sync_cat_tabs(None)
         _clear_layout(self.curve_grid)
         _clear_layout(self.bone_grid)
         self._curve_rows.clear()
@@ -883,6 +922,7 @@ class PoseTab(QtWidgets.QWidget):
                 for col, widget in enumerate(w.widgets()):
                     self.curve_grid.addWidget(widget, i, col)
             self._curve_sig = sig
+            self._row_shown = {}
         st = self.session.base_state()
         for row in view.curves:
             w = self._curve_rows[row.name]
@@ -893,12 +933,98 @@ class PoseTab(QtWidgets.QWidget):
             w.refresh(row)
             w.set_base(st.curves.get(row.name) if st.active else None, w._over)
         self._sync_base_rows(st)
+        self._view = view
+        self._sync_cat_tabs(view)
         note = f"編集した値: {view.edited_curves} 本"
         if view.hidden_curves:
             note += f"（作業セットの外に 0 でない値が {view.hidden_curves} 本あります。「作業セットだけ」を切ると見えます）"
         if not view.curves:
             note = "表示できるシェイプがありません（作業セットが空で、シーンのシェイプも読めていない）"
         self.curve_note.setText(note)
+
+    # ---- 分類のタブ（行は作り直さず、出し分けるだけ）
+    def _valued_names(self, view: PoseView) -> set[str]:
+        st = self.session.base_state()
+        base = st.curves if st.active else {}
+        return {r.name for r in view.curves if r.edited or r.name in base}
+
+    def _tab_specs(self, view: PoseView) -> list[tuple[str, str, int, int]]:
+        """[(id, 表示名, 数, 未保存の変更の数)]: すべて + 分類 + 値あり。"""
+        valued = self._valued_names(view)
+        specs = [(CAT_ALL, CAT_ALL_LABEL, len(view.curves), 0)]
+        specs += [(c.id, c.label, c.count, c.changed) for c in view.categories]
+        specs.append((CAT_VALUED, CAT_VALUED_LABEL, len(valued), sum(1 for r in view.curves if r.name in valued and r.changed)))
+        return specs
+
+    def _set_tab_texts(self, specs: list[tuple[str, str, int, int]]) -> None:
+        normal = self.cat_bar.palette().color(QtGui.QPalette.WindowText)
+        for i, (_id, label, count, changed) in enumerate(specs):
+            self.cat_bar.setTabText(i, f"{label} ({count})" + ("  ●" if changed else ""))
+            self.cat_bar.setTabTextColor(i, QtGui.QColor(CAT_CHANGED_COLOR) if changed else normal)
+
+    def _sync_cat_tabs(self, view: Optional[PoseView]) -> None:
+        bar = self.cat_bar
+        if view is None or not view.curves:
+            bar.blockSignals(True)
+            while bar.count():
+                bar.removeTab(0)
+            bar.blockSignals(False)
+            self._cat_sig, self._cat_ids = None, []
+            bar.setVisible(False)
+            return
+        specs = self._tab_specs(view)
+        sig = tuple((i, label) for i, label, _n, _c in specs)
+        if sig != self._cat_sig:
+            bar.blockSignals(True)
+            while bar.count():
+                bar.removeTab(0)
+            for _ in specs:
+                bar.addTab("")
+            self._cat_sig, self._cat_ids = sig, [i for i, *_ in specs]
+            want = getattr(self.session, "pose_category", CAT_ALL)
+            bar.setCurrentIndex(self._cat_ids.index(want) if want in self._cat_ids else 0)
+            bar.blockSignals(False)
+        self._set_tab_texts(specs)
+        bar.setVisible(True)
+        self._apply_category_rows(view)
+
+    def current_category(self) -> str:
+        i = self.cat_bar.currentIndex()
+        return self._cat_ids[i] if 0 <= i < len(self._cat_ids) else CAT_ALL
+
+    def _apply_category_rows(self, view: PoseView) -> None:
+        cur = self.current_category()
+        valued = self._valued_names(view) if cur == CAT_VALUED else set()
+        cat_of = {r.name: r.category for r in view.curves}
+        for name, w in self._curve_rows.items():
+            vis = cur == CAT_ALL or (name in valued if cur == CAT_VALUED else cat_of.get(name) == cur)
+            if self._row_shown.get(name) != vis:
+                w.set_tab_visible(vis)
+                self._row_shown[name] = vis
+
+    def select_category(self, cat_id: str) -> bool:
+        """タブを選ぶ（スクリプト・テスト用。無い id なら False）。"""
+        if cat_id not in self._cat_ids:
+            return False
+        self.cat_bar.setCurrentIndex(self._cat_ids.index(cat_id))
+        return True
+
+    def on_category_changed(self) -> None:
+        cur = self.current_category()
+        self.session.pose_category = cur  # 覚えておく（パネルを開き直す・ツールのリロードをまたぐ）
+        if self._view is not None and not self._detached:
+            self._apply_category_rows(self._view)
+
+    def _sync_tab_marks(self) -> None:
+        """スライダーを動かしたあと: タブの数字と ● だけ更新する（行の出し分けは変えない。動かしている最中に行が消えないように）。"""
+        if self._detached or not self.has_doc() or not self._cat_ids:
+            return
+        try:
+            specs = self._tab_specs(self.session.pose.view())
+        except Exception:  # noqa: BLE001  表示の更新で編集を止めない
+            return
+        if tuple(i for i, *_ in specs) == tuple(self._cat_ids):
+            self._set_tab_texts(specs)
 
     def _sync_bones(self, view: PoseView) -> None:
         rows = list(view.bones)
@@ -943,6 +1069,7 @@ class PoseTab(QtWidgets.QWidget):
         if self.has_doc():
             ctx = self.session.ctx
             self.header.setText(self._header_html(ctx.selection, ctx.layer.name, self.session.pose.dirty, ctx.selected_key(), ctx.selected_lip()))
+            self._marks_timer.start()
 
     # ------------------------------------------------------------------ 共通
     def _run(self, label: str, fn: Callable[[], object]):
@@ -1266,6 +1393,7 @@ class PoseTab(QtWidgets.QWidget):
         """通知の購読をやめる（パネルを閉じる・リロードの前）。二重に呼んでも安全。"""
         self._detached = True
         self._flush_timer.stop()
+        self._marks_timer.stop()
         try:
             anim_import.clear_base_expression(self.session)  # 土台の表情はパネルを閉じるときに外す
         except Exception:  # noqa: BLE001  後片付けで落とさない

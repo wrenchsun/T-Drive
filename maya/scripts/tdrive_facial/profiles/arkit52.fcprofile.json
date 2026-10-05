@@ -146,5 +146,65 @@
       "mouthFunnel": 0.7,
       "mouthPucker": 0.3
     }
-  }
+  },
+  "categories": [
+    {
+      "id": "eye",
+      "label": "目",
+      "patterns": [
+        "prefix:eyeBlink",
+        "prefix:eyeSquint",
+        "prefix:eyeWide"
+      ]
+    },
+    {
+      "id": "look",
+      "label": "視線",
+      "patterns": [
+        "prefix:eyeLook"
+      ]
+    },
+    {
+      "id": "brow",
+      "label": "眉",
+      "patterns": [
+        "prefix:brow"
+      ]
+    },
+    {
+      "id": "cheek",
+      "label": "頬",
+      "patterns": [
+        "prefix:cheek"
+      ]
+    },
+    {
+      "id": "nose",
+      "label": "鼻",
+      "patterns": [
+        "prefix:nose"
+      ]
+    },
+    {
+      "id": "mouth",
+      "label": "口",
+      "patterns": [
+        "prefix:mouth"
+      ]
+    },
+    {
+      "id": "jaw",
+      "label": "あご",
+      "patterns": [
+        "prefix:jaw"
+      ]
+    },
+    {
+      "id": "tongue",
+      "label": "舌",
+      "patterns": [
+        "prefix:tongue"
+      ]
+    }
+  ]
 }

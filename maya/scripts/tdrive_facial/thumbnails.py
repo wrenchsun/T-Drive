@@ -26,6 +26,7 @@ from typing import Callable, Optional
 from maya import cmds
 from tdrive import lifecycle
 
+from . import viewport
 from .core import thumbs
 from .core import validate as V
 
@@ -45,15 +46,8 @@ class ThumbReport:
 
 
 def _model_panel() -> Optional[str]:
-    """サムネイルを描くモデルパネル（フォーカス中のもの、無ければ最初のもの）。無ければ None。"""
-    try:
-        panel = cmds.getPanel(withFocus=True)
-        if panel and cmds.getPanel(typeOf=panel) == "modelPanel":
-            return panel
-        panels = cmds.getPanel(type="modelPanel") or []
-        return panels[0] if panels else None
-    except RuntimeError:
-        return None
+    """サムネイルを描くモデルパネル（`viewport.pick_panel`: フォーカス中 → 最後にフォーカスがあった → 見えているもの）。無ければ None。"""
+    return viewport.pick_panel()
 
 
 def can_capture() -> tuple[bool, str]:

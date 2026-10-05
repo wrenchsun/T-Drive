@@ -81,7 +81,9 @@ from . import bake as bake_mod
 from . import pose_apply
 from . import preview_rig
 from . import scene as scene_mod
+from . import hide_others as hide_others_mod
 from . import scene_grid as scene_grid_mod
+from . import viewport
 from . import shapes
 from .core import autofill, base_expr, evaluate, fcpose_io, naming, space
 from .core import strength as strength_mod
@@ -237,6 +239,9 @@ class FacialSession:
         self.last_lip_try: dict[str, float] = {}  # 直近の「試す」でシーンへ当てた、対応表のシェイプの値
         self._head_joint = ""  # 直近に使った基準ボーン（長い名前）
         self.scene_grid = scene_grid_mod.SceneGrid(self)  # シーンのビューポートに出す格子（任意。scene_grid.py）
+        self.hide_others = hide_others_mod.HideOthers(self)  # 「顔以外を隠す」（表示だけ。hide_others.py）
+        self.pose_category = "_all"  # ポーズタブで選んでいるシェイプの分類のタブ（文書には保存しない。リロードをまたぐ）
+        self.setup_category = "_all"  # セットアップタブの作業セットの分類
         self._suspended: Optional["_SuspendedEdit"] = None  # 保存・出力のあいだ編集状態を一時的に抜けているときの、戻す情報（M-1）
         self.last_capture_base_ignored: list[str] = []  # 直近の `capture_from_scene` で、土台のとおりだったので取り込まなかったシェイプ
         self.last_capture_below_base: list[str] = []  # 直近の `capture_from_scene` で、シーンの値が土台より低く、取り込めなかったシェイプ（C-2）
@@ -435,6 +440,7 @@ class FacialSession:
         """データを閉じる（編集状態を抜け、シーンの記録も消す）。未保存の確認は呼ぶ側。"""
         self.end_edit(quiet=True)
         self.scene_grid.remove()
+        self.hide_others.remove()
         self.presenters = None
         self.path = None
         self.source_path = None
@@ -884,6 +890,9 @@ class FacialSession:
             "lip_target": list(ctx.selected_lip()) if ctx.selected_lip() is not None else None,
             "buffer": {"curves": curves, "bones": bones},
             "scene_grid": self.scene_grid.export_state(),
+            "hide_others": self.hide_others.export_state(),
+            "pose_category": self.pose_category,
+            "setup_category": self.setup_category,
         }
 
     def import_state(self, state: dict[str, Any]) -> bool:
@@ -915,6 +924,9 @@ class FacialSession:
             self.pose.curves, self.pose.bones = pose.curves, pose.bones  # 保存していないスライダーの値
         self._changed(dirty=False)
         self.scene_grid.import_state(state.get("scene_grid"))
+        self.hide_others.import_state(state.get("hide_others"))
+        self.pose_category = str(state.get("pose_category") or "_all")
+        self.setup_category = str(state.get("setup_category") or "_all")
         return True
 
     # ------------------------------------------------------------ 保存・出力のあいだだけ編集状態を抜ける（M-1）
@@ -924,6 +936,7 @@ class FacialSession:
         土台の表情・彫りの状態は控えておく（編集中の値・選んでいる点は Presenter が持っているのでそのまま）。
         戻すのは `resume_edit_after_save`。編集状態でなければ False。"""
         self.scene_grid.suspend()  # シーンに出している格子は、保存・出力に入れない
+        self.hide_others.suspend()  # 「顔以外を隠す」の一時的な非表示も元へ戻す
         if self._suspended is not None:
             return True
         if not self.editing:
@@ -948,6 +961,7 @@ class FacialSession:
     def resume_edit_after_save(self) -> None:
         """保存・出力のあと: 抜けていた編集状態へ同じ内容で入り直す（点・編集中の値・土台の表情。シーンの変更フラグは保存の直後のまま）。"""
         self.scene_grid.resume()
+        self.hide_others.resume()
         st, self._suspended = self._suspended, None
         if st is None or self.presenters is None:
             return
@@ -2979,7 +2993,9 @@ class FacialSession:
         """モデルパネルが今使っているカメラの transform（短い名前。重複なし）。パネルが無ければ persp。"""
         out: list[str] = []
         try:
-            for panel in cmds.getPanel(type="modelPanel") or []:
+            panels = cmds.getPanel(type="modelPanel") or []
+            visible = set(cmds.getPanel(visiblePanels=True) or [])
+            for panel in sorted(panels, key=lambda p: p not in visible):  # 見えているパネルのカメラを先に
                 cam = cmds.modelPanel(panel, query=True, camera=True)
                 if not cam:
                     continue
@@ -3114,24 +3130,19 @@ class FacialSession:
     # ============================================================ カメラ（グリッドタブ用。Qt なし）
     @staticmethod
     def camera_transform(camera: Optional[str] = None) -> str:
-        """カメラの transform（長い名前）。省くと今のビュー（フォーカス中の、無ければ最初のモデルパネル。無ければ persp）のカメラ。"""
+        """カメラの transform（長い名前）。省くと今のビューのカメラ（`viewport.pick_panel` の決め方: フォーカス中 → 最後にフォーカスがあった
+        → 見えているパネルの先頭。シェイプエディタなどにフォーカスがあっても見えているビューのカメラ。パネルが無ければ persp）。"""
+        resolved = camera is None
         if camera is None:
-            camera = "persp"
-            try:
-                panel = cmds.getPanel(withFocus=True)
-                if not panel or cmds.getPanel(typeOf=panel) != "modelPanel":
-                    panels = cmds.getPanel(type="modelPanel") or []
-                    panel = panels[0] if panels else None
-                if panel:
-                    camera = cmds.modelPanel(panel, query=True, camera=True) or camera
-            except RuntimeError:
-                pass
+            camera = viewport.resolve_camera() or "persp"
         found = cmds.ls(camera, long=True) or []
         if not found:
             raise FacialSessionError(f"カメラ {camera} がシーンにありません")
         node = found[0]
         if cmds.nodeType(node) == "camera":
             node = (cmds.listRelatives(node, parent=True, fullPath=True) or [node])[0]
+        if resolved:
+            viewport.remember_camera(node)  # パネルが無く persp へ落ちたときも、読み出しの名前を合わせる
         return node
 
     @staticmethod
@@ -3241,6 +3252,7 @@ class FacialSession:
                 cmds.setAttr(shapes[0] + ".centerOfInterest", om.MDistance(distance, om.MDistance.kCentimeters).asUnits(ui_len))
             except RuntimeError:
                 pass
+        viewport.redraw()  # 別のパネル（シェイプエディタなど）にフォーカスがあっても、見えているビューを描き直す
 
     def camera_drag_to(self, yaw: float, pitch: float, camera: Optional[str] = None) -> None:
         """グリッドの赤い点のドラッグ用: カメラを (Yaw, Pitch) へ動かす（今の距離のまま中心を向く）。Maya の Undo には積まない。
@@ -3286,6 +3298,8 @@ class FacialSession:
         """新しいシーン / 別のシーンを開く直前（PreFileNewOrOpened）: 編集状態を抜けて、今のシーンを元の姿勢へ戻す。"""
         self._suspended = None
         self.scene_grid.remove()
+        self.hide_others.remove()
+        viewport.forget()
         self.end_edit(quiet=True)
 
     def on_new_scene(self) -> None:
@@ -3293,6 +3307,7 @@ class FacialSession:
         self._suspended = None
         self._forget_edit()
         self.scene_grid.forget()
+        self.hide_others.forget()
         if self.presenters is not None:
             self.refresh_scene(notify=True)
 
@@ -3437,6 +3452,7 @@ def on_scene_opened() -> None:
     s = _current
     s._forget_edit()
     s.scene_grid.forget()
+    s.hide_others.forget()
     path = FacialSession.remembered_path()
     if not path or not Path(path).exists():
         if s.presenters is not None:

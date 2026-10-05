@@ -29,6 +29,7 @@ from tdrive import lifecycle, project
 
 from . import anim_import
 from . import scene_grid
+from . import viewport
 from . import thumbnails
 from .core.presenters import (
     ACTION_BAKE_POINT,
@@ -84,6 +85,13 @@ SCENE_GRID_HELP = (
     "頭を動かすと格子もついてきます。シーンファイルには保存されません（保存・書き出しのあいだは自動で消え、終わると戻ります）。"
     "シェイプの書き出し・サムネイルにも写りません"
 )
+
+HIDE_OTHERS_HELP = (
+    "顔のメッシュ以外（髪・体・服など）を、ビューポートで見えなくします。格子の角度によっては、髪などが顔の補正の邪魔になるときに使います。\n"
+    "見た目だけを変えます。データにもシーンファイルにも残りません（保存・書き出しのあいだは自動で元に戻り、終わるとまた隠れます）。"
+    "チェックを外すと、全部元どおりに見えます。髪を見たいときなど、隠さないものは「隠すもの…」で選べます"
+)
+HIDE_PICK_HELP = "隠すメッシュを選びます（チェックを入れたものが隠れます）。髪のように、顔の補正のときに見たいものはチェックを外してください"
 
 DRAG_HELP = "赤い点をドラッグ（または Shift を押しながらドラッグ）すると、カメラを好きな角度へ動かせます。マスをクリックすると、その点を選びます"
 
@@ -462,6 +470,59 @@ class GridCanvas(QtWidgets.QWidget):
 
 
 # ---------------------------------------------------------------------------
+# 「顔以外を隠す」で隠すものを選ぶダイアログ
+# ---------------------------------------------------------------------------
+
+
+class HideOthersDialog(QtWidgets.QDialog):
+    """「隠すもの…」: シーンの表示中のメッシュ（顔のメッシュ以外）の一覧。チェックを入れたものが隠れる。"""
+
+    def __init__(self, parent: QtWidgets.QWidget, candidates: list[tuple[str, str]], hidden: set[str]) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("隠すものを選ぶ")
+        self.setMinimumWidth(360)
+        v = QtWidgets.QVBoxLayout(self)
+        note = QtWidgets.QLabel("チェックを入れたものを隠します。髪のように、顔の補正のときに見たいものはチェックを外してください（顔のメッシュは常に見えます）")
+        note.setWordWrap(True)
+        v.addWidget(note)
+        self.list = QtWidgets.QListWidget()
+        self.list.setMinimumHeight(160)
+        for short, long in candidates:
+            it = QtWidgets.QListWidgetItem(short)
+            it.setFlags(it.flags() | QtCore.Qt.ItemIsUserCheckable)
+            it.setCheckState(QtCore.Qt.Checked if short in hidden else QtCore.Qt.Unchecked)
+            it.setToolTip(long)
+            self.list.addItem(it)
+        v.addWidget(self.list, 1)
+        if not candidates:
+            v.addWidget(QtWidgets.QLabel("隠せるメッシュがありません（顔以外に表示中のメッシュがありません）"))
+        row = QtWidgets.QHBoxLayout()
+        self.btn_all = QtWidgets.QPushButton("顔以外を全部")
+        self.btn_all.setToolTip("全部にチェックを入れます（顔のメッシュ以外を全部隠す）")
+        self.btn_all.clicked.connect(lambda *_: self.set_all(True))
+        self.btn_none = QtWidgets.QPushButton("全部表示")
+        self.btn_none.setToolTip("全部のチェックを外します（隠すものを無くす）")
+        self.btn_none.clicked.connect(lambda *_: self.set_all(False))
+        row.addWidget(self.btn_all)
+        row.addWidget(self.btn_none)
+        row.addStretch(1)
+        v.addLayout(row)
+        self.buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+        self.buttons.button(QtWidgets.QDialogButtonBox.Ok).setText("決定")
+        self.buttons.button(QtWidgets.QDialogButtonBox.Cancel).setText("キャンセル")
+        self.buttons.accepted.connect(self.accept)
+        self.buttons.rejected.connect(self.reject)
+        v.addWidget(self.buttons)
+
+    def set_all(self, hide: bool) -> None:
+        for i in range(self.list.count()):
+            self.list.item(i).setCheckState(QtCore.Qt.Checked if hide else QtCore.Qt.Unchecked)
+
+    def keep_names(self) -> list[str]:
+        """チェックが外れている（隠さない）メッシュの名前。"""
+        return [self.list.item(i).text() for i in range(self.list.count()) if self.list.item(i).checkState() != QtCore.Qt.Checked]
+
+
 # 他のデータからコピーのダイアログ
 # ---------------------------------------------------------------------------
 
@@ -565,6 +626,7 @@ class GridTab(QtWidgets.QWidget):
         self._marker: Optional[CameraMarker] = None
         self._angles: Optional[tuple[float, float]] = None
         self._angle_error = ""
+        self._cam_name = ""  # いま動かしている（読んでいる）カメラの名前（ラベルに出す）
         self._generation = -1
         self._unsub: list[Callable[[], None]] = []
         self._tracking = False
@@ -612,7 +674,10 @@ class GridTab(QtWidgets.QWidget):
         row.addWidget(self.btn_thumbs)
         row.addStretch(1)
         self.camera_label = QtWidgets.QLabel()
-        self.camera_label.setToolTip("今のビューのカメラが、顔から見て Yaw / Pitch どの角度にいるか。カメラを回すと赤い点が追従します。" + YAW_PLUS_HELP)
+        self.camera_label.setToolTip(
+            "今のビューのカメラ（名前のあとに Yaw / Pitch）が、顔から見てどの角度にいるか。カメラを回すと赤い点が追従します。"
+            "シェイプエディタなどにフォーカスがあるときは、最後に操作したビューポート（無ければ見えているビューポート）のカメラです。" + YAW_PLUS_HELP
+        )
         v.addLayout(row)
         row = QtWidgets.QHBoxLayout()  # カメラの角度は 2 行目（スクロールバーがあっても右端で切れない）
         row.addStretch(1)
@@ -646,6 +711,24 @@ class GridTab(QtWidgets.QWidget):
         row.addWidget(self.scene_grid_pick)
         row.addStretch(1)
         v.addLayout(row)
+
+        # ---- 顔以外を隠す（任意。見た目だけ。文書・シーンには保存しない）
+        row = QtWidgets.QHBoxLayout()
+        self.hide_others_cb = QtWidgets.QCheckBox("顔以外を隠す")
+        self.hide_others_cb.setToolTip(HIDE_OTHERS_HELP)
+        self.hide_others_cb.toggled.connect(lambda *_: self.on_hide_others_toggled())
+        row.addWidget(self.hide_others_cb)
+        self.btn_hide_pick = QtWidgets.QPushButton("隠すもの…")
+        self.btn_hide_pick.setToolTip(HIDE_PICK_HELP)
+        self.btn_hide_pick.clicked.connect(lambda *_: self.on_hide_pick())
+        row.addWidget(self.btn_hide_pick)
+        row.addStretch(1)
+        v.addLayout(row)
+        self.hide_note = QtWidgets.QLabel()
+        self.hide_note.setWordWrap(True)
+        self.hide_note.setStyleSheet(OK_STYLE)
+        self.hide_note.setVisible(False)
+        v.addWidget(self.hide_note)
 
         self.canvas = GridCanvas(self)
         self.canvas.cellClicked.connect(self.on_cell_clicked)
@@ -847,6 +930,7 @@ class GridTab(QtWidgets.QWidget):
         self._poll_camera(force=True)
         self.session.scene_grid.on_pick = self.on_cell_clicked
         self.session.scene_grid.refresh()
+        self._apply_hide_others()
         self.canvas.updateGeometry()
         self.canvas.update()
         self.persp.refresh()
@@ -855,8 +939,12 @@ class GridTab(QtWidgets.QWidget):
     def _sync_controls(self) -> None:
         doc = self.has_doc()
         self.canvas.setEnabled(doc)
-        for w in (self.move_camera, self.all_layers, self.show_thumbs, self.btn_thumbs, self.show_scene_grid, self.scene_grid_scale, self.scene_grid_pick):
+        for w in (self.move_camera, self.all_layers, self.show_thumbs, self.btn_thumbs, self.show_scene_grid, self.scene_grid_scale, self.scene_grid_pick, self.hide_others_cb, self.btn_hide_pick):
             w.setEnabled(doc)
+        self.hide_others_cb.blockSignals(True)
+        self.hide_others_cb.setChecked(self.session.hide_others.enabled)
+        self.hide_others_cb.blockSignals(False)
+        self._sync_hide_note()
         sg = self.session.scene_grid
         for w, val in ((self.show_scene_grid, sg.enabled), (self.scene_grid_pick, sg.pickable)):
             w.blockSignals(True)
@@ -970,7 +1058,7 @@ class GridTab(QtWidgets.QWidget):
 
     def stop_tracking(self) -> None:
         self._tracking = False
-        if self._detached or not self.session.scene_grid.enabled:
+        if self._detached or not (self.session.scene_grid.enabled or self.session.hide_others.enabled):
             self.timer.stop()  # シーンに格子を出しているあいだは、タブが隠れても頭に追従させるため止めない（_tick が見える間だけカメラを読む）
 
     def showEvent(self, e: QtGui.QShowEvent) -> None:
@@ -988,14 +1076,20 @@ class GridTab(QtWidgets.QWidget):
             self.timer.stop()
             return
         if self._tab_hidden:  # タブは隠れている: シーンの格子の追従だけ（止めてよければ止める）
-            if not self.session.scene_grid.enabled:
+            if not self.session.scene_grid.enabled and not self.session.hide_others.enabled:
                 self.timer.stop()
                 return
             self.session.scene_grid.follow()
+            self._follow_hide_others()
             return
         self._poll_camera()
         self.session.scene_grid.follow(self._angles)
+        self._follow_hide_others()
         self.preview.tick()
+
+    def _cam_text(self) -> str:
+        """ラベルの頭に付ける、いま動かしているカメラの名前（「persp  」。分からなければ空）。"""
+        return f"{self._cam_name}  " if self._cam_name else ""
 
     def _poll_camera(self, force: bool = False) -> None:
         """カメラの角度を読み、変わっていれば赤い点とラベルだけ更新する。"""
@@ -1016,12 +1110,14 @@ class GridTab(QtWidgets.QWidget):
         else:
             self._angle_error = ""
             old = self._angles
-            if force or old is None or abs(old[0] - yaw) > ANGLE_EPS or abs(old[1] - pitch) > ANGLE_EPS:
+            name = viewport.last_camera_name()
+            if force or old is None or name != self._cam_name or abs(old[0] - yaw) > ANGLE_EPS or abs(old[1] - pitch) > ANGLE_EPS:
                 self._angles = (yaw, pitch)
+                self._cam_name = name
                 self._marker = None
                 m = self.current_marker()
                 out = "（範囲外）" if m is not None and m.clamped else ""
-                self.camera_label.setText(f"カメラ: Yaw {yaw:.1f}° / Pitch {pitch:.1f}°{out}")
+                self.camera_label.setText(f"カメラ: {self._cam_text()}Yaw {yaw:.1f}° / Pitch {pitch:.1f}°{out}")
                 self.canvas.update()
             return
         if self._angles is not None or force:
@@ -1065,7 +1161,8 @@ class GridTab(QtWidgets.QWidget):
             return
         self._angles = (yaw, pitch)
         self._marker = None
-        self.camera_label.setText(f"カメラ: Yaw {yaw:.1f}° / Pitch {pitch:.1f}°")
+        self._cam_name = viewport.last_camera_name()
+        self.camera_label.setText(f"カメラ: {self._cam_text()}Yaw {yaw:.1f}° / Pitch {pitch:.1f}°")
         self.canvas.update()
         self.session.scene_grid.follow(self._angles)  # シーンの赤い印も遅れずに
         self.preview.tick()
@@ -1153,6 +1250,62 @@ class GridTab(QtWidgets.QWidget):
 
     def on_scene_grid_pick(self) -> None:
         self.session.scene_grid.set_pickable(self.scene_grid_pick.isChecked())
+
+    # ------------------------------------------------------------------ 顔以外を隠す
+    def _sync_hide_note(self) -> None:
+        text = self.session.hide_others.status_text()
+        self.hide_note.setText(text)
+        self.hide_note.setVisible(bool(text))
+
+    def _apply_hide_others(self) -> None:
+        """開き直したとき・データが変わったとき: 設定どおりに隠し直す（失敗しても表示を止めない）。"""
+        h = self.session.hide_others
+        if not h.enabled:
+            return
+        try:
+            h.apply()
+        except Exception as exc:  # noqa: BLE001
+            h.last_error = str(exc)
+        self._sync_hide_note()
+
+    def _follow_hide_others(self) -> None:
+        h = self.session.hide_others
+        if h.enabled:
+            before = len(h.hidden_names())
+            h.follow()
+            if len(h.hidden_names()) != before:
+                self._sync_hide_note()
+
+    def on_hide_others_toggled(self) -> None:
+        on = self.hide_others_cb.isChecked()
+        try:
+            self.session.hide_others.set_enabled(on)
+        except Exception as exc:  # noqa: BLE001  隠せない（データ・顔のメッシュが無い等）
+            self.hide_others_cb.blockSignals(True)
+            self.hide_others_cb.setChecked(False)
+            self.hide_others_cb.blockSignals(False)
+            self.set_status(f"顔以外を隠せませんでした: {exc}", error=True)
+            self._sync_hide_note()
+            return
+        if on and not self.timer.isActive() and not self._detached:
+            self.timer.start()  # 増えたメッシュに追従させる
+        self._sync_hide_note()
+        self.set_status("顔以外を隠しました（見た目だけ。チェックを外すと元に戻ります）" if on else "隠していたものを元に戻しました")
+
+    def make_hide_dialog(self) -> HideOthersDialog:
+        h = self.session.hide_others
+        cands = h.candidates()
+        return HideOthersDialog(self, cands, {s for s, _l in cands if s not in h.keep})
+
+    def on_hide_pick(self) -> None:
+        if not self.has_doc():
+            return
+        dlg = self.make_hide_dialog()
+        if not self.run_dialog(dlg):
+            return
+        self.session.hide_others.set_keep(dlg.keep_names())
+        self._sync_hide_note()
+        self.set_status("隠すものを決めました" + ("" if self.session.hide_others.enabled else "（「顔以外を隠す」にチェックを入れると隠れます）"))
 
     # ------------------------------------------------------------------ 点のクリック
     def on_cell_clicked(self, row: int, col: int) -> None:
@@ -1375,6 +1528,7 @@ class GridTab(QtWidgets.QWidget):
         if sg.on_pick == self.on_cell_clicked:
             sg.on_pick = None
         sg.remove()  # パネルを閉じる・リロード: シーンの格子は消す（「出す」の設定は残り、開き直すと出る）
+        self.session.hide_others.remove()  # 隠していたものも元へ戻す（設定は残り、開き直すとまた隠す）
         for fn in self._unsub:
             fn()
         self._unsub = []

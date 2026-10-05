@@ -47,6 +47,24 @@
           { "type": "object", "minProperties": 1, "additionalProperties": { "type": "number" }, "description": "シェイプ名 → 重み（複数）" }
         ]
       }
+    },
+    "categories": {
+      "type": "array",
+      "description": "シェイプの分類（任意。ポーズタブ・セットアップタブのタブ分け）。並び順 = タブの並び。最初に当たった分類に入り、どれにも当たらない名前は「その他」へ。無いときは名前の先頭の語で自動に分ける",
+      "items": {
+        "type": "object",
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1, "description": "分類の識別子（重複しない）" },
+          "label": { "type": "string", "description": "タブに出す名前（日本語）" },
+          "patterns": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "ノード名を除いたターゲット名（bs.eye_close_L → eye_close_L）への規則。prefix:xxx（前方一致）/ contains:xxx（部分一致）/ exact:xxx または接頭辞なし（完全一致）。大文字小文字は区別しない。左右の接尾辞は関係しない"
+          }
+        },
+        "additionalProperties": true
+      }
     }
   },
   "additionalProperties": true

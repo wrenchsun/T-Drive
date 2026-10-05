@@ -16,6 +16,7 @@ from tdrive import lifecycle, project
 
 from . import scene as scene_mod
 from .session import NoLookError
+from .core import categories as cat_mod
 from .core import profile as profile_mod
 from .core.model import FILL_MODES, MIRROR_AXES
 from .ui_grid import YAW_PLUS_HELP
@@ -73,6 +74,8 @@ class SetupTab(QtWidgets.QWidget):
         self.session = session
         self._updating = False
         self._list_sig: dict[str, tuple] = {}
+        self._ws_cat_of: dict[str, str] = {}
+        self._ws_cat_sig: Optional[tuple] = None
 
         outer = QtWidgets.QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -490,6 +493,15 @@ class SetupTab(QtWidgets.QWidget):
         flt.setPlaceholderText("絞り込み")
         flt.setClearButtonEnabled(True)
         col.addWidget(flt)
+        if kind == "curve":  # シェイプは名前の決まりごとで分けて見られる（プロファイルの分類。無ければ名前の先頭の語）
+            self.curve_cat = QtWidgets.QComboBox()
+            self.curve_cat.setToolTip(
+                "シェイプを名前の決まりごと（目・眉・口…）で分けて、そのグループだけを一覧に出します。"
+                "かっこの中は「作業セットに入れた数 / グループの数」。下の「表示中を全部オン / オフ」は、いま一覧に出ているものだけに効きます"
+            )
+            self.curve_cat.addItem(cat_mod.ALL_LABEL, cat_mod.ALL_ID)
+            self.curve_cat.currentIndexChanged.connect(lambda *_: self.on_ws_category_changed())
+            col.addWidget(self.curve_cat)
         lst = QtWidgets.QListWidget()
         lst.setMinimumHeight(160)
         lst.itemChanged.connect(lambda item, k=kind: self.on_ws_item_changed(k, item))
@@ -498,7 +510,7 @@ class SetupTab(QtWidgets.QWidget):
         col.addWidget(lst, 1)
         row = QtWidgets.QHBoxLayout()
         on = QtWidgets.QPushButton("表示中を全部オン")
-        off = QtWidgets.QPushButton("全部オフ")
+        off = QtWidgets.QPushButton("表示中を全部オフ")
         on.clicked.connect(lambda *_, k=kind: self.on_ws_bulk(k, True))
         off.clicked.connect(lambda *_, k=kind: self.on_ws_bulk(k, False))
         row.addWidget(on)
@@ -731,6 +743,8 @@ class SetupTab(QtWidgets.QWidget):
             ("bone", self.bone_list, scene_bones, ws.bones),
         ):
             names = list(avail) + [n for n in chosen if n not in avail]  # モデルに無い名前も（外せるように）見せる
+            if kind == "curve":
+                self._sync_ws_categories(names, set(chosen))
             sig = (tuple(names), tuple(avail))
             if self._list_sig.get(kind) != sig:
                 self._list_sig[kind] = sig
@@ -754,6 +768,35 @@ class SetupTab(QtWidgets.QWidget):
                     it.setCheckState(want)
             self._apply_filter(kind)
 
+    def _sync_ws_categories(self, names: list[str], chosen: set[str]) -> None:
+        """シェイプの分類の選択肢（名前の一覧・プロファイルが変わったときだけ作り直す。数字は毎回更新）。"""
+        groups = cat_mod.categorize(names, self.session.profile)
+        self._ws_cat_of = {n: gid for gid, _l, members in groups for n in members}
+        shown = [] if len(groups) <= 1 else groups
+        sig = tuple((gid, label) for gid, label, _m in shown)
+        combo = self.curve_cat
+        combo.blockSignals(True)
+        try:
+            if sig != self._ws_cat_sig:
+                self._ws_cat_sig = sig
+                combo.clear()
+                combo.addItem(cat_mod.ALL_LABEL, cat_mod.ALL_ID)
+                for gid, label, _m in shown:
+                    combo.addItem(label, gid)
+                i = combo.findData(self.session.setup_category)
+                combo.setCurrentIndex(i if i >= 0 else 0)
+            for gid, label, members in shown:
+                j = combo.findData(gid)
+                if j >= 0:
+                    combo.setItemText(j, f"{label} ({sum(1 for n in members if n in chosen)}/{len(members)})")
+            combo.setVisible(bool(shown))
+        finally:
+            combo.blockSignals(False)
+
+    def on_ws_category_changed(self) -> None:
+        self.session.setup_category = self.curve_cat.currentData() or cat_mod.ALL_ID
+        self._apply_filter("curve")
+
     def _list_of(self, kind: str):
         return self.curve_list if kind == "curve" else self.bone_list
 
@@ -763,9 +806,13 @@ class SetupTab(QtWidgets.QWidget):
     def _apply_filter(self, kind: str) -> None:
         text = self._filter_of(kind).text().strip().lower()
         lst = self._list_of(kind)
+        cat = (self.curve_cat.currentData() if kind == "curve" and not self.curve_cat.isHidden() else None) or cat_mod.ALL_ID
         for i in range(lst.count()):
             it = lst.item(i)
-            it.setHidden(bool(text) and text not in it.text().lower())
+            hide = bool(text) and text not in it.text().lower()
+            if cat != cat_mod.ALL_ID and self._ws_cat_of.get(it.data(QtCore.Qt.UserRole)) != cat:
+                hide = True
+            it.setHidden(hide)
 
     # ============================================================ 操作
     def _run(self, fn, *args, **kwargs):

@@ -1,10 +1,10 @@
 """命名規則プロファイル `.fcprofile.json`（Maya 非依存）。形式は docs/14 §4.4、UE 版の `UFacialNamingProfile` に合わせる。
 
 - 持つもの: 標準シェイプ名の一覧（不足チェック用）、ミラー規則（L/R の接尾辞と除外パターン）、シェイプごとの可動域、
-  リップシンクの音素 → シェイプ名（`lipSync`。任意）
+  リップシンクの音素 → シェイプ名（`lipSync`。任意）、シェイプの分類（`categories`。任意。ポーズタブのタブ分け。規則は core/categories.py）
 - 読み込み: 知らないキーは `extra` に保持して書き戻す。欠けたキーは UE 版の既定値（接尾辞 `_L` / `_R`、一覧・可動域は空）。
   `version` が新しいときは ProfileVersionWarning を出して読める所だけ読む
-- 書き出し: キーの順は固定（format → version → name → description → standardCurves → mirror → limits → lipSync（あれば）→ 知らないキー）。
+- 書き出し: キーの順は固定（format → version → name → description → standardCurves → mirror → limits → lipSync（あれば）→ categories（あれば）→ 知らないキー）。
   UTF-8（BOM なし）・改行 `\\n`・末尾に改行 1 つ。数値は整数と等しい浮動小数を整数で書く
 - プリセット（ツールに同梱。`tdrive_facial/profiles/*.fcprofile.json`）: ARKit 52、VRChat ビセム、MetaHuman、shizuku
 - プロファイルを選ぶと mirror と limits が Document に入る（`apply_to_document`）。UE 版では手で写す必要があった（R-15 の未実装部分）
@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Optional, Union
 
+from .categories import Category
 from .model import Document, SourcePose
 
 FORMAT_PROFILE = "FacialNamingProfile"
@@ -64,6 +65,8 @@ class NamingProfile:
     limits: dict[str, Limit] = field(default_factory=dict)
     # リップシンク: 音素の名前 → {シェイプ名: 重み}（JSON では文字列 1 つ = {名前: 1.0} でもよい）。順番 = 音素の並び。空 = 持たない
     lip_sync: dict[str, dict[str, float]] = field(default_factory=dict)
+    # シェイプの分類（ポーズタブのタブ）。並び順 = タブの並び。最初に当たった分類に入る（core/categories.py）。空 = 持たない（自動の分け方）
+    categories: list[Category] = field(default_factory=list)
     extra: dict[str, Any] = field(default_factory=dict)  # 知らないキー（トップレベル）
 
     @property
@@ -88,7 +91,7 @@ def _extra(d: dict, known: tuple[str, ...]) -> dict[str, Any]:
     return {k: copy.deepcopy(v) for k, v in d.items() if k not in known}
 
 
-_PROFILE_KEYS = ("format", "version", "name", "description", "standardCurves", "mirror", "limits", "lipSync")
+_PROFILE_KEYS = ("format", "version", "name", "description", "standardCurves", "mirror", "limits", "lipSync", "categories")
 _MIRROR_KEYS = ("suffixL", "suffixR", "exclude")
 
 
@@ -129,6 +132,7 @@ def from_dict(d: Any) -> NamingProfile:
         mirror=mirror,
         limits=limits,
         lip_sync=_read_lip_sync(d.get("lipSync")),
+        categories=_read_categories(d.get("categories")),
         extra=_extra(d, _PROFILE_KEYS),
     )
 
@@ -148,6 +152,31 @@ def _read_lip_sync(raw: Any) -> dict[str, dict[str, float]]:
             warnings.warn(f"プロファイルの lipSync「{phoneme}」を読み飛ばしました（シェイプ名が読めません）", UserWarning, stacklevel=3)
             continue
         out[phoneme] = shapes
+    return out
+
+
+_CATEGORY_KEYS = ("id", "label", "patterns")
+
+
+def _read_categories(raw: Any) -> list[Category]:
+    """`categories`: [{id, label, patterns}]。id が無い・重複する項目は読み飛ばす。"""
+    out: list[Category] = []
+    if not isinstance(raw, list):
+        return out
+    seen: set[str] = set()
+    for item in raw:
+        if not isinstance(item, dict) or not isinstance(item.get("id"), str) or not item["id"] or item["id"] in seen:
+            warnings.warn("プロファイルの categories の項目を読み飛ばしました（id が無い・重複）", UserWarning, stacklevel=3)
+            continue
+        seen.add(item["id"])
+        out.append(
+            Category(
+                id=item["id"],
+                label=item["label"] if isinstance(item.get("label"), str) else "",
+                patterns=_strs(item.get("patterns")),
+                extra=_extra(item, _CATEGORY_KEYS),
+            )
+        )
     return out
 
 
@@ -187,6 +216,10 @@ def to_dict(profile: NamingProfile) -> dict[str, Any]:
             p: (next(iter(s)) if len(s) == 1 and next(iter(s.values())) == 1.0 else dict(s))
             for p, s in profile.lip_sync.items()
         }
+    if profile.categories:  # 無いときは出さない
+        out["categories"] = [
+            {"id": c.id, "label": c.label, "patterns": list(c.patterns), **copy.deepcopy(c.extra)} for c in profile.categories
+        ]
     for k, v in profile.extra.items():
         out[k] = copy.deepcopy(v)
     return out

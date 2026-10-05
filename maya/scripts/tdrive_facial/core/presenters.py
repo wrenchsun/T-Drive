@@ -35,6 +35,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Iterator, Mapping, Optional, Sequence, Union
 
 from . import autofill, fcpose_io, naming, space
+from .categories import categorize
 from . import validate as V
 from .evaluate import (
     KINDA_SMALL_NUMBER,
@@ -1034,6 +1035,20 @@ class CurveRow:
     in_working_set: bool
     missing: bool  # モデルに無い名前（scene が分かるときだけ True になりうる）
     explicit_limit: bool  # 可動域が明示されている（False = 既定の 0〜1）
+    category: str = ""  # 分類の id（`categories.categorize`。文字列の絞り込みの前の一覧で決まる）
+    changed: bool = False  # 保存済みのポーズと違う（未保存の変更）
+
+
+@dataclass
+class CategoryView:
+    """ポーズタブのタブ 1 つ分（シェイプの分類）。"""
+
+    id: str
+    label: str
+    total: int  # 一覧（文字列の絞り込みの前）のシェイプ数
+    count: int  # 文字列の絞り込みに当たった数（タブの数字）
+    edited: int  # 0 でない値の数
+    changed: int  # 未保存の変更の数
 
 
 @dataclass
@@ -1068,6 +1083,7 @@ class PoseView:
     edited_curves: int
     edited_bones: int
     lip: Optional[tuple[str, str]] = None  # 編集の対象がリップシンクのマスのとき (音素, 感情)（このとき selection / key_index は None。ボーンは保存されない）
+    categories: list[CategoryView] = field(default_factory=list)  # 分類ごとのタブ。分けられない（1 つ以下）ときは空
 
 
 @dataclass
@@ -1520,6 +1536,14 @@ class PosePresenter(Observable):
         names_b, hidden_b = self._listed_names("bone")
         wc, wb = set(self._working("curve")), set(self._working("bone"))
         sc, sb = self._scene_names("curve"), self._scene_names("bone")
+        groups = categorize(names_c, ctx.profile)
+        cat_of = {n: gid for gid, _label, members in groups for n in members}
+        sp = ctx.saved_pose()
+        saved = sp.curves if sp is not None else {}
+
+        def _changed(n: str) -> bool:
+            return abs(self.curves.get(n, 0.0) - saved.get(n, 0.0)) > CURVE_SAVE_EPS
+
         curves = [
             CurveRow(
                 name=n,
@@ -1530,6 +1554,8 @@ class PosePresenter(Observable):
                 in_working_set=n in wc,
                 missing=sc is not None and n not in sc,
                 explicit_limit=has_limit(ctx.doc, ctx.profile, n),
+                category=cat_of.get(n, ""),
+                changed=_changed(n),
             )
             for n in names_c
             if self._match(self.curve_filter, n)
@@ -1551,6 +1577,20 @@ class PosePresenter(Observable):
                     missing=sb is not None and n not in sb,
                 )
             )
+        shown = {r.name for r in curves}
+        cat_views = [
+            CategoryView(
+                id=gid,
+                label=label,
+                total=len(members),
+                count=sum(1 for n in members if n in shown),
+                edited=sum(1 for n in members if abs(self.curves.get(n, 0.0)) > CURVE_SAVE_EPS),
+                changed=sum(1 for n in members if _changed(n)),
+            )
+            for gid, label, members in groups
+        ]
+        if len(cat_views) <= 1:
+            cat_views = []
         dirty = self.dirty
         return PoseView(
             selection=ctx.selection,
@@ -1572,6 +1612,7 @@ class PosePresenter(Observable):
             hidden_bones=hidden_b,
             edited_curves=sum(1 for v in self.curves.values() if abs(v) > CURVE_SAVE_EPS),
             edited_bones=sum(1 for b in self.bones.values() if not _is_bone_identity(b)),
+            categories=cat_views,
         )
 
 

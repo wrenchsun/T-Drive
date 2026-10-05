@@ -108,13 +108,17 @@ def _parent(node: str) -> Optional[str]:
     return p[0] if p else None
 
 
+# 「顔以外を隠す」（hide_others.py）が一時的に overrideVisibility で隠しているノード（長い名前）。本当に隠れているものとは区別する
+TOOL_HIDDEN: set[str] = set()
+
+
 def _is_hidden(transform: str) -> bool:
-    """自分または祖先の visibility が切れている / 表示レイヤーで非表示。"""
+    """自分または祖先の visibility が切れている / 表示レイヤーで非表示（ツールが「顔以外を隠す」で一時的に隠しているものは数えない）。"""
     n: Optional[str] = transform
     while n:
         if cmds.attributeQuery("visibility", node=n, exists=True) and not cmds.getAttr(n + ".visibility"):
             return True
-        if cmds.attributeQuery("overrideEnabled", node=n, exists=True) and cmds.getAttr(n + ".overrideEnabled"):
+        if n not in TOOL_HIDDEN and cmds.attributeQuery("overrideEnabled", node=n, exists=True) and cmds.getAttr(n + ".overrideEnabled"):
             if not cmds.getAttr(n + ".overrideVisibility"):
                 return True
         n = _parent(n)

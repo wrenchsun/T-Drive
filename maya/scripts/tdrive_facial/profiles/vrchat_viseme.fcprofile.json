@@ -58,5 +58,14 @@
     "ih": "vrc.v_ih",
     "oh": "vrc.v_oh",
     "ou": "vrc.v_ou"
-  }
+  },
+  "categories": [
+    {
+      "id": "viseme",
+      "label": "ビセム（口の形）",
+      "patterns": [
+        "prefix:v_"
+      ]
+    }
+  ]
 }
