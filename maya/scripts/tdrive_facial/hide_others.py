@@ -1,14 +1,19 @@
 """「顔以外を隠す」: グリッドの角度によっては髪などが顔の補正の邪魔になるので、顔のメッシュ以外を一時的に見えなくする（表示だけ。任意）。
 
-しくみ: 隠すメッシュの transform に `overrideEnabled = 1` / `overrideVisibility = 0`（ドローイングオーバーライド）を書き、元の値を覚えておいて戻す。
-`visibility` は触らない（キーが付いている・他とつながっている・ロックされているかもしれないため）。
+しくみ: 隠すメッシュごとに、次の順で最初に書けるものを使い、元の値を覚えておいて戻す。
+  (a) transform の `overrideEnabled = 1` / `overrideVisibility = 0`（ドローイングオーバーライド）
+  (b) (a) が書けない（表示レイヤーにつながっている・ロックされている）とき、その下のメッシュの shape の同じ 2 つの属性
+      （表示レイヤーがつながるのは transform なので、shape は自由なことが多い。shape が全部書けるときだけ使う）
+  (c) (b) も書けないとき、transform の `lodVisibility`
+  (d) それも書けなければ触らずに飛ばし、数と名前を知らせる
+`visibility` は触らない（キーが付いている・他とつながっている・ロックされているかもしれないため）。表示レイヤー自身の設定も触らない。
 **isolateSelect（ビューごとの「選択物だけ表示」）は使わない**: パネルを作らない mayapy で試せない・パネルごとにしか効かない・
 `<パネル名>ViewSelectedSet` というセットがシーンに残る（シーンが変更扱いになり保存される）・あとで作られた物（シーンの格子など）が見えなくなるため。
 
 - 隠す対象: 表示中のメッシュ（中間でない shape を持つ transform）のうち、文書の対象メッシュ（顔 + extraMeshes + LOD）でないもの。
   プレビュー専用（tdPreviewOnly）・もともと非表示のものは対象にしない。ジョイント・ロケータ・カメラ・シーンの格子は元から対象外（メッシュではない）
 - 「隠さないもの」（`keep`。名前で覚える）に入れたメッシュは隠さない。髪を見たいときは「隠すもの…」でチェックを外す
-- `overrideEnabled` / `overrideVisibility` がロックされている・他のノード（表示レイヤーなど）とつながっているメッシュは、触らずに飛ばし、数と名前を知らせる（`status_text`）
+- (a)(b)(c) のどれも書けないメッシュは、触らずに飛ばし、数と名前を知らせる（`status_text`）
 - **シーンには残さない**: 保存・出力の直前に元へ戻し（`suspend`）、直後に隠し直す（`resume`）。ツールのリロード・パネルを閉じる / データを閉じる・
   新しいシーン / シーンを開くで元へ戻る。Maya の Undo に積まず、変更フラグも元へ戻す（`scene_grid._quiet`）
 - 設定（出す / 隠さないもの）は文書に保存しない。ツールのリロードをまたいで引き継ぐ（`export_state` / `import_state`）
@@ -20,6 +25,7 @@ from __future__ import annotations
 import contextlib
 import time
 import traceback
+from dataclasses import dataclass
 from typing import Optional
 
 from maya import cmds
@@ -31,12 +37,24 @@ from .scene_grid import _quiet
 SUSPEND_TIMEOUT = 15.0  # 保存・出力が失敗して「直後」の通知が来なかったとき、これだけ経ったら隠し直す（秒）
 SCAN_INTERVAL = 1.5  # follow が見直す間隔（秒）
 ATTRS = ("overrideEnabled", "overrideVisibility")
+KIND_XF, KIND_SHAPE, KIND_LOD = "xf", "shape", "lod"  # 書いた場所: transform のオーバーライド / shape のオーバーライド / transform の lodVisibility
 
 _active: Optional["HideOthers"] = None
 
 
 class HideOthersError(RuntimeError):
     """顔以外を隠せない（データ・顔のメッシュが無い等）。"""
+
+
+@dataclass
+class _Rec:
+    """隠したときに書いたノード 1 つ分の記録（元の値）。キーはそのノードの uuid。"""
+
+    long: str  # 書いたノードの長い名前（transform または shape）
+    kind: str
+    prev_e: int = 0  # 元の overrideEnabled（lod のときは使わない）
+    prev_v: bool = True  # 元の overrideVisibility
+    prev_lod: bool = True  # 元の lodVisibility
 
 
 def _reload_cleanup() -> None:
@@ -57,15 +75,33 @@ class HideOthers:
         self.keep: set[str] = set()  # 隠さないメッシュの名前（短い名前）
         self.skipped: list[str] = []  # 触れなくて隠せなかったメッシュ（短い名前）
         self.last_error = ""
-        self._applied: dict[str, tuple[str, int, bool]] = {}  # uuid → (長い名前, 元の overrideEnabled, 元の overrideVisibility)
+        self._applied: dict[str, _Rec] = {}  # 書いたノードの uuid → 元の値
         self._suspended = False
         self._suspended_at = 0.0
         self._next_scan = 0.0
 
     # ------------------------------------------------------------------ 状態
     def hidden_names(self) -> list[str]:
-        """いま隠している（このツールが overrideVisibility を書いている）メッシュの短い名前。"""
-        return sorted(scene_mod.short_name(long) for long, _e, _v in self._applied.values())
+        """いま隠している（このツールが非表示を書いている）メッシュ（transform）の短い名前。"""
+        return sorted(scene_mod.short_name(o) for o in self._owners())
+
+    def _owner(self, uid: str, rec: _Rec) -> Optional[str]:
+        """記録のメッシュ（transform）の今の長い名前。ノードが無くなっていれば None。"""
+        cur = (cmds.ls(uid, long=True) or [None])[0]
+        if cur is None:
+            return None
+        if rec.kind != KIND_SHAPE:
+            return cur
+        parents = cmds.listRelatives(cur, parent=True, fullPath=True) or []
+        return parents[0] if parents else None
+
+    def _owners(self) -> set[str]:
+        out: set[str] = set()
+        for uid, rec in self._applied.items():
+            o = self._owner(uid, rec)
+            if o:
+                out.add(o)
+        return out
 
     def export_state(self) -> dict:
         return {"on": self.enabled, "keep": sorted(self.keep)}
@@ -84,7 +120,7 @@ class HideOthers:
         """グリッドタブに出す一行（隠している数・触れなかったもの）。出していなければ空。"""
         if not self.enabled:
             return ""
-        n = len(self._applied)
+        n = len(self._owners())
         parts = [f"顔以外のメッシュ {n} 個を隠しています" if n else "隠すメッシュはありません"]
         if self.skipped:
             parts.append(
@@ -194,12 +230,53 @@ class HideOthers:
 
     # ------------------------------------------------------------------ 隠す・戻す
     @staticmethod
-    def _writable(xf: str) -> bool:
-        for a in ATTRS:
-            plug = f"{xf}.{a}"
-            if cmds.getAttr(plug, lock=True) or cmds.connectionInfo(plug, isDestination=True):
+    def _free(node: str, attrs) -> bool:
+        """属性（と drawOverride 全体）がロックされておらず、他のノード（表示レイヤー・キーなど）からつながれていない。"""
+        for a in attrs:
+            plug = f"{node}.{a}"
+            if not cmds.objExists(plug) or cmds.getAttr(plug, lock=True) or cmds.connectionInfo(plug, isDestination=True):
                 return False
         return True
+
+    @classmethod
+    def _override_free(cls, node: str) -> bool:
+        return cls._free(node, ("drawOverride", *ATTRS))
+
+    @staticmethod
+    def _shapes_of(xf: str) -> list[str]:
+        return [
+            s
+            for s in cmds.listRelatives(xf, shapes=True, fullPath=True, type="mesh") or []
+            if not cmds.getAttr(s + ".intermediateObject")
+        ]
+
+    def _hide_one(self, long: str) -> bool:
+        """メッシュ（transform）を (a)(b)(c) の順で隠す。どれも書けなければ False（何も書かない）。"""
+        recs: list[tuple[str, _Rec]] = []
+        if self._override_free(long):  # (a)
+            recs.append((self._uuid(long), _Rec(long, KIND_XF, int(cmds.getAttr(long + ".overrideEnabled")), bool(cmds.getAttr(long + ".overrideVisibility")))))
+        else:
+            shapes = self._shapes_of(long)
+            if shapes and all(self._override_free(sh) for sh in shapes):  # (b)
+                for sh in shapes:
+                    recs.append((self._uuid(sh), _Rec(sh, KIND_SHAPE, int(cmds.getAttr(sh + ".overrideEnabled")), bool(cmds.getAttr(sh + ".overrideVisibility")))))
+            elif self._free(long, ("lodVisibility",)):  # (c)
+                recs.append((self._uuid(long), _Rec(long, KIND_LOD, prev_lod=bool(cmds.getAttr(long + ".lodVisibility")))))
+        if not recs:
+            return False
+        for uid, rec in recs:
+            if rec.kind == KIND_LOD:
+                cmds.setAttr(rec.long + ".lodVisibility", 0)
+            else:
+                cmds.setAttr(rec.long + ".overrideEnabled", 1)
+                cmds.setAttr(rec.long + ".overrideVisibility", 0)
+            self._applied[uid] = rec
+            scene_mod.TOOL_HIDDEN.add(rec.long)
+        return True
+
+    @staticmethod
+    def _uuid(node: str) -> str:
+        return (cmds.ls(node, uuid=True) or [""])[0]
 
     def apply(self) -> None:
         """今の設定に合わせて隠す・戻す（増えた分を隠し、隠さなくなった分・無くなった分を戻す）。"""
@@ -212,37 +289,32 @@ class HideOthers:
         skipped: list[str] = []
         _active = self
         with _quiet():
-            for uid, (long, _e, _v) in list(self._applied.items()):
-                cur = (cmds.ls(uid, long=True) or [None])[0]
-                if cur is None or cur not in want_long:
+            for uid, rec in list(self._applied.items()):
+                owner = self._owner(uid, rec)
+                if owner is None or owner not in want_long:
                     self._restore_one(uid)
-            done = {rec[0] for rec in self._applied.values()}
+            done = self._owners()
             for short, long in want:
                 if long in done:
                     continue
-                if not self._writable(long):
+                if not self._hide_one(long):
                     skipped.append(short)
-                    continue
-                uid = (cmds.ls(long, uuid=True) or [""])[0]
-                prev_e = int(cmds.getAttr(long + ".overrideEnabled"))
-                prev_v = bool(cmds.getAttr(long + ".overrideVisibility"))
-                cmds.setAttr(long + ".overrideEnabled", 1)
-                cmds.setAttr(long + ".overrideVisibility", 0)
-                self._applied[uid] = (long, prev_e, prev_v)
-                scene_mod.TOOL_HIDDEN.add(long)
         self.skipped = skipped
         self.last_error = ""
 
     def _restore_one(self, uid: str) -> None:
-        long, prev_e, prev_v = self._applied.pop(uid)
-        scene_mod.TOOL_HIDDEN.discard(long)
+        rec = self._applied.pop(uid)
+        scene_mod.TOOL_HIDDEN.discard(rec.long)
         cur = (cmds.ls(uid, long=True) or [None])[0]
         if cur is None:
             return
         scene_mod.TOOL_HIDDEN.discard(cur)
         with contextlib.suppress(RuntimeError):
-            cmds.setAttr(cur + ".overrideVisibility", prev_v)
-            cmds.setAttr(cur + ".overrideEnabled", prev_e)
+            if rec.kind == KIND_LOD:
+                cmds.setAttr(cur + ".lodVisibility", rec.prev_lod)
+            else:
+                cmds.setAttr(cur + ".overrideVisibility", rec.prev_v)
+                cmds.setAttr(cur + ".overrideEnabled", rec.prev_e)
 
     def restore(self) -> None:
         """隠したものを全部、元の値へ戻す。"""

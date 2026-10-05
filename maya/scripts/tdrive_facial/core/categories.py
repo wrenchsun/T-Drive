@@ -1,19 +1,21 @@
-"""シェイプの分類（命名規則プロファイルの `categories`。Maya 非依存）。ポーズタブ・セットアップタブがタブ / 絞り込みに使う。
+"""シェイプの分類（ポーズタブ・セットアップタブのタブ / 絞り込み。Maya 非依存）。
 
+既定の分け方（`prefix_groups`。プロジェクトの命名規則に依らない）:
+- 名前の **最初の `_` の前** を分類とする（ノード名 `bs.` は除く。`bs.eye_close_L` → `eye`）。そのままの綴りを表示名にする
+- 大文字小文字は区別せずにまとめる（`Eye_x` と `eye_y` は同じタブ。表示名は多いほうの綴り）
+- `_` が無い名前・メンバーが 1 本だけの接頭辞は「その他」へ。タブの数に上限は無い（タブの帯は横に送れる）
+- 並びは、シェイプの一覧で最初に出てきた順（「その他」は最後）
+- 接頭辞のグループが 2 つに満たなければ分けない（呼ぶ側は「すべて」だけにする）
+
+プロファイルの `categories`（任意）は、カスタムの分け方を決めたいプロジェクト向けの上書き。あればそれを使う（既定は上の `_` の規則）。
 規則（パターンは文字列。大文字小文字は区別しない）:
-- 照合する名前は **ノード名を除いたターゲット名**（`bs.eye_close_L` → `eye_close_L`）。左右の接尾辞（_L / _R / Left / Right）は規則に関係しない
-- `prefix:eye_`   … その文字で始まる
-- `contains:Look` … その文字を含む
-- `exact:jaw`、または接頭辞なしの文字列 … 完全一致
-- 並びの早い分類が優先（最初に当たった分類に入る）。どれにも当たらない名前は最後の「その他」へ
-
-プロファイルに分類が無いときの自動の分け方（`auto_groups`）: 名前の先頭の語（最初の `_` の前。`_` が無ければ camelCase の頭の小文字の並び）でまとめる。
-2 本以上の語だけを 1 グループにし、1 本だけの語は「その他」へ寄せる。グループ（その他を含む）が 2〜12 個に収まらなければ分けず「すべて」1 つ。
+- 照合する名前は **ノード名を除いたターゲット名**（`bs.eye_close_L` → `eye_close_L`）。左右の接尾辞は規則に関係しない
+- `prefix:eye_`（その文字で始まる）/ `contains:Look`（含む）/ `exact:jaw` または接頭辞なしの文字列（完全一致）
+- 並びの早い分類が優先。どれにも当たらない名前は最後の「その他」へ
 """
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Optional
 
@@ -21,10 +23,7 @@ OTHER_ID = "_other"
 OTHER_LABEL = "その他"
 ALL_ID = "_all"
 ALL_LABEL = "すべて"
-AUTO_PREFIX = "auto:"
-AUTO_MIN_GROUPS = 2
-AUTO_MAX_GROUPS = 12
-AUTO_MIN_MEMBERS = 2
+MIN_GROUPS = 2  # 接頭辞のグループがこれ未満ならタブを出さない
 
 
 @dataclass
@@ -68,61 +67,46 @@ def category_of(name: str, categories: Iterable[Category]) -> Optional[str]:
     return None
 
 
-_CAMEL_HEAD = re.compile(r"^[a-z]+")
-
-
-def head_token(name: str) -> str:
-    """自動の分け方の鍵: 最初の `_` の前。`_` が無ければ camelCase の頭（`eyeBlinkLeft` → `eye`）。取れなければ空。"""
+def prefix_of(name: str) -> str:
+    """最初の `_` の前（ノード名は除く）。`_` が無い・先頭が `_` なら空。"""
     t = strip_node(name)
-    if "_" in t:
-        return t.split("_", 1)[0]
-    m = _CAMEL_HEAD.match(t)
-    if m and m.end() < len(t):  # 小文字の並びのあとに大文字が続くときだけ頭として使う
-        return m.group(0)
-    return ""
+    return t.split("_", 1)[0] if "_" in t else ""
 
 
-def auto_groups(names: list[str]) -> list[tuple[str, str, list[str]]]:
-    """プロファイルの分類が無いときの自動の分け方。分けられなければ空のリスト（呼ぶ側が「すべて」1 つにする）。"""
-    heads: dict[str, list[str]] = {}
-    order: list[str] = []
+def prefix_groups(names: list[str]) -> list[tuple[str, str, list[str]]]:
+    """既定の分け方。分けられなければ空のリスト（呼ぶ側が「すべて」1 つにする）。id は小文字の接頭辞。"""
+    members: dict[str, list[str]] = {}
+    spell: dict[str, dict[str, int]] = {}
     singles: list[str] = []
     for n in names:
-        h = head_token(n)
-        key = h.lower()
-        if not key:
+        p = prefix_of(n)
+        if not p:
             singles.append(n)
             continue
-        if key not in heads:
-            heads[key] = []
-            order.append(key)
-        heads[key].append(n)
+        key = p.lower()
+        members.setdefault(key, []).append(n)  # dict は挿入順 = 最初に出てきた順
+        sp = spell.setdefault(key, {})
+        sp[p] = sp.get(p, 0) + 1  # 綴りごとの数（同数なら先に出たほう）
     groups: list[tuple[str, str, list[str]]] = []
-    labels: dict[str, str] = {}
-    for n in names:
-        h = head_token(n)
-        if h and h.lower() not in labels:
-            labels[h.lower()] = h
-    for key in order:
-        if len(heads[key]) >= AUTO_MIN_MEMBERS:
-            groups.append((AUTO_PREFIX + key, labels[key], heads[key]))
+    for key, mem in members.items():
+        if len(mem) >= 2:
+            sp = spell[key]
+            groups.append((key, max(sp, key=sp.__getitem__), mem))
         else:
-            singles.extend(heads[key])
-    if len(groups) < AUTO_MIN_GROUPS:
+            singles.extend(mem)
+    if len(groups) < MIN_GROUPS:
         return []
     if singles:
         rank = {n: i for i, n in enumerate(names)}
         groups.append((OTHER_ID, OTHER_LABEL, sorted(singles, key=rank.__getitem__)))
-    if len(groups) > AUTO_MAX_GROUPS:
-        return []
     return groups
 
 
 def categorize(curve_names: Iterable[str], profile: Any = None) -> list[tuple[str, str, list[str]]]:
     """シェイプ名を分類ごとに分ける。戻り: [(分類の id, 表示名, [名前（入力の順）]), …]（空の分類は出さない）。
 
-    - プロファイルに `categories` があればそれ（当たらなかった名前は最後の「その他」）
-    - 無ければ自動の分け方（`auto_groups`）。分けられなければ [("_all", "すべて", 全部)]
+    - プロファイルに `categories` があればそれ（任意の上書き。当たらなかった名前は最後の「その他」）
+    - 無ければ `_` の前で分ける（`prefix_groups`）。分けられなければ [("_all", "すべて", 全部)]
     - 名前が 1 つも無ければ空のリスト
     """
     names = list(dict.fromkeys(curve_names))
@@ -139,7 +123,7 @@ def categorize(curve_names: Iterable[str], profile: Any = None) -> list[tuple[st
         if rest:
             out.append((OTHER_ID, OTHER_LABEL, rest))
         return out
-    auto = auto_groups(names)
+    auto = prefix_groups(names)
     return auto if auto else [(ALL_ID, ALL_LABEL, names)]
 
 

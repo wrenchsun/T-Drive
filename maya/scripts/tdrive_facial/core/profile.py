@@ -1,7 +1,7 @@
 """命名規則プロファイル `.fcprofile.json`（Maya 非依存）。形式は docs/14 §4.4、UE 版の `UFacialNamingProfile` に合わせる。
 
 - 持つもの: 標準シェイプ名の一覧（不足チェック用）、ミラー規則（L/R の接尾辞と除外パターン）、シェイプごとの可動域、
-  リップシンクの音素 → シェイプ名（`lipSync`。任意）、シェイプの分類（`categories`。任意。ポーズタブのタブ分け。規則は core/categories.py）
+  リップシンクの音素 → シェイプ名（`lipSync`。任意）、シェイプの分類（`categories`。任意の上書き。既定のタブ分けは名前の最初の `_` の前。規則は core/categories.py）
 - 読み込み: 知らないキーは `extra` に保持して書き戻す。欠けたキーは UE 版の既定値（接尾辞 `_L` / `_R`、一覧・可動域は空）。
   `version` が新しいときは ProfileVersionWarning を出して読める所だけ読む
 - 書き出し: キーの順は固定（format → version → name → description → standardCurves → mirror → limits → lipSync（あれば）→ categories（あれば）→ 知らないキー）。
@@ -65,7 +65,7 @@ class NamingProfile:
     limits: dict[str, Limit] = field(default_factory=dict)
     # リップシンク: 音素の名前 → {シェイプ名: 重み}（JSON では文字列 1 つ = {名前: 1.0} でもよい）。順番 = 音素の並び。空 = 持たない
     lip_sync: dict[str, dict[str, float]] = field(default_factory=dict)
-    # シェイプの分類（ポーズタブのタブ）。並び順 = タブの並び。最初に当たった分類に入る（core/categories.py）。空 = 持たない（自動の分け方）
+    # シェイプの分類（ポーズタブのタブ）。並び順 = タブの並び。最初に当たった分類に入る（core/categories.py）。空 = 持たない（既定の `_` の前で分ける。同梱プリセットは持たない）
     categories: list[Category] = field(default_factory=list)
     extra: dict[str, Any] = field(default_factory=dict)  # 知らないキー（トップレベル）
 

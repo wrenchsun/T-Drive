@@ -493,10 +493,10 @@ class SetupTab(QtWidgets.QWidget):
         flt.setPlaceholderText("絞り込み")
         flt.setClearButtonEnabled(True)
         col.addWidget(flt)
-        if kind == "curve":  # シェイプは名前の決まりごとで分けて見られる（プロファイルの分類。無ければ名前の先頭の語）
+        if kind == "curve":  # シェイプは名前の最初の _ の前で分けて見られる（プロファイルに categories があればそれ）
             self.curve_cat = QtWidgets.QComboBox()
             self.curve_cat.setToolTip(
-                "シェイプを名前の決まりごと（目・眉・口…）で分けて、そのグループだけを一覧に出します。"
+                "シェイプを名前の「_」より前の言葉（eye・mouth など）で分けて、そのグループだけを一覧に出します。"
                 "かっこの中は「作業セットに入れた数 / グループの数」。下の「表示中を全部オン / オフ」は、いま一覧に出ているものだけに効きます"
             )
             self.curve_cat.addItem(cat_mod.ALL_LABEL, cat_mod.ALL_ID)

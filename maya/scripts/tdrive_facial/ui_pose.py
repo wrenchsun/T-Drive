@@ -57,7 +57,7 @@ CAT_ALL_LABEL = "すべて"
 CAT_VALUED_LABEL = "値あり"
 CAT_CHANGED_COLOR = "#ff9f1c"  # 未保存の変更がある分類のタブの文字の色（見出しの [未保存] と同じ）
 CAT_TAB_TIP = (
-    "シェイプを名前の決まりごとで分けたタブです。数字はそのタブのシェイプの数。"
+    "シェイプ名の「_」より前の言葉（eye・mouth など）で分けたタブです。数字は、いま一覧に出ているそのタブのシェイプの数。"
     "「値あり」は 0 でない値（土台の表情の値も含む）のシェイプだけ。オレンジの ● は保存していない変更があるタブです"
 )
 
@@ -630,7 +630,7 @@ class PoseTab(QtWidgets.QWidget):
         r.addWidget(self.curve_filter, 1)
         r.addWidget(self.cb_working)
         cv.addLayout(r)
-        self.cat_bar = QtWidgets.QTabBar()  # 名前の決まりごとの分類（プロファイルの categories。無ければ名前の先頭の語）
+        self.cat_bar = QtWidgets.QTabBar()  # 名前の最初の _ の前の分類（プロファイルに categories があればそれ）
         self.cat_bar.setExpanding(False)
         self.cat_bar.setUsesScrollButtons(True)  # 幅 400〜480 px ではみ出す分は左右の矢印で送る
         self.cat_bar.setDrawBase(False)
@@ -981,10 +981,19 @@ class PoseTab(QtWidgets.QWidget):
             for _ in specs:
                 bar.addTab("")
             self._cat_sig, self._cat_ids = sig, [i for i, *_ in specs]
-            want = getattr(self.session, "pose_category", CAT_ALL)
-            bar.setCurrentIndex(self._cat_ids.index(want) if want in self._cat_ids else 0)
             bar.blockSignals(False)
         self._set_tab_texts(specs)
+        # 一覧に出せる行が 0 本の分類のタブは隠す（すべて・値あり は常に出す）。選んでいたタブが消えたら「すべて」へ
+        bar.blockSignals(True)
+        for i, (cid, _label, count, _c) in enumerate(specs):
+            bar.setTabVisible(i, cid in (CAT_ALL, CAT_VALUED) or count > 0)
+        want = getattr(self.session, "pose_category", CAT_ALL)
+        j = self._cat_ids.index(want) if want in self._cat_ids else 0
+        if not bar.isTabVisible(j):
+            j = 0
+        if bar.currentIndex() != j:
+            bar.setCurrentIndex(j)
+        bar.blockSignals(False)
         bar.setVisible(True)
         self._apply_category_rows(view)
 
@@ -1004,7 +1013,7 @@ class PoseTab(QtWidgets.QWidget):
 
     def select_category(self, cat_id: str) -> bool:
         """タブを選ぶ（スクリプト・テスト用。無い id なら False）。"""
-        if cat_id not in self._cat_ids:
+        if cat_id not in self._cat_ids or not self.cat_bar.isTabVisible(self._cat_ids.index(cat_id)):
             return False
         self.cat_bar.setCurrentIndex(self._cat_ids.index(cat_id))
         return True

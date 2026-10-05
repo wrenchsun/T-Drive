@@ -44,30 +44,48 @@ def test_empty_names():
     assert C.categorize([], None) == []
 
 
-def test_fallback_groups_by_head_token():
+def test_default_groups_by_text_before_first_underscore():
     names = ["bs.eye_a", "bs.eye_b", "bs.mouth_a", "bs.mouth_b", "bs.mouth_c", "bs.solo"]
     g = C.categorize(names, None)
-    assert [(i, l) for i, l, _n in g] == [("auto:eye", "eye"), ("auto:mouth", "mouth"), (C.OTHER_ID, "その他")]
-    assert g[2][2] == ["bs.solo"]  # 1 本だけの語は「その他」へ
+    assert [(i, l) for i, l, _n in g] == [("eye", "eye"), ("mouth", "mouth"), (C.OTHER_ID, "その他")]
+    assert g[2][2] == ["bs.solo"]  # `_` が無い名前は「その他」へ
+    assert C.prefix_of("bs.eye_close_L") == "eye" and C.prefix_of("jawOpen") == "" and C.prefix_of("_x") == ""
 
 
-def test_fallback_camel_case_head():
-    names = ["eyeBlinkLeft", "eyeWideLeft", "jawOpen", "jawLeft", "mouthClose", "mouthFunnel"]
+def test_default_groups_no_camel_case_split():
+    names = ["eyeBlinkLeft", "eyeWideLeft", "jawOpen", "jawLeft", "mouthClose", "mouthFunnel"]  # ARKit 風: `_` が無い
+    assert C.categorize(names, None) == [(C.ALL_ID, "すべて", names)]
+
+
+def test_default_groups_case_insensitive_label_most_frequent_spelling():
+    names = ["Eye_x", "eye_y", "eye_z", "mouth_a", "MOUTH_b"]
     g = C.categorize(names, None)
-    assert [l for _i, l, _n in g] == ["eye", "jaw", "mouth"]
-    assert C.head_token("smile") == "" and C.head_token("jawOpen") == "jaw" and C.head_token("a_b") == "a"
+    assert [(i, l, n) for i, l, n in g] == [("eye", "eye", ["Eye_x", "eye_y", "eye_z"]), ("mouth", "mouth", ["mouth_a", "MOUTH_b"])]  # 同数なら先に出た綴り
+    assert C.categorize(["Eye_x", "Eye_y", "eye_z", "m_a", "m_b"], None)[0][1] == "Eye"
 
 
-def test_fallback_too_few_or_too_many_groups_is_single_all():
+def test_default_groups_order_singles_and_no_upper_limit():
+    names = ["b_1", "a_1", "z_1", "a_2", "b_2", "solo_1", "plain", "z_2"]
+    g = C.categorize(names, None)
+    assert [i for i, _l, _n in g] == ["b", "a", "z", C.OTHER_ID]  # 最初に出た順・「その他」は最後
+    assert g[-1][2] == ["solo_1", "plain"]  # 1 本だけの接頭辞 + `_` なし（一覧の順）
+    many = [f"g{i}_{j}" for i in range(40) for j in range(2)]
+    assert len(C.categorize(many, None)) == 40  # 上限なし
+
+
+def test_default_groups_fewer_than_two_groups_is_single_all():
     assert C.categorize(["a_1", "a_2", "b_1"], None) == [(C.ALL_ID, "すべて", ["a_1", "a_2", "b_1"])]  # 2 本以上の語が 1 つだけ
-    many = [f"g{i}_{j}" for i in range(13) for j in range(2)]
-    assert C.categorize(many, None) == [(C.ALL_ID, "すべて", many)]  # 13 グループ
-    ok = [f"g{i}_{j}" for i in range(12) for j in range(2)]
-    assert len(C.categorize(ok, None)) == 12
+    assert C.categorize(["a", "b"], None) == [(C.ALL_ID, "すべて", ["a", "b"])]
 
 
-def test_profile_without_categories_uses_fallback():
+def test_profile_without_categories_uses_default():
     assert C.categorize(["x"], P.NamingProfile(name="t")) == [(C.ALL_ID, "すべて", ["x"])]
+
+
+def test_profile_categories_still_override_default():
+    p = prof(("e", "目", ["prefix:eye_"]))
+    g = C.categorize(["eye_a", "mouth_a", "mouth_b"], p)
+    assert g == [("e", "目", ["eye_a"]), (C.OTHER_ID, "その他", ["mouth_a", "mouth_b"])]
 
 
 def test_profile_round_trip_is_byte_exact():
@@ -96,32 +114,30 @@ def test_bundled_profiles_round_trip():
         assert P.dumps(P.loads(t)) == t, f.name
 
 
-def test_shizuku_every_standard_curve_in_a_real_category():
+def test_bundled_profiles_have_no_categories_block():
+    for f in PRESET_DIR.glob("*.fcprofile.json"):
+        assert "categories" not in json.loads(f.read_text(encoding="utf-8")), f.name  # 既定の `_` の規則を上書きしない
+
+
+def test_shizuku_standard_curves_one_tab_per_prefix():
     p = P.load(PRESET_DIR / "shizuku.fcprofile.json")
-    assert p.categories
+    assert not p.categories
     g = C.categorize(p.standard_curves, p)
-    assert C.OTHER_ID not in [i for i, _l, _n in g], [n for i, _l, n in g if i == C.OTHER_ID]
+    assert [(i, l, len(n)) for i, l, n in g] == [
+        ("lipsync", "lipSync", 5), ("look", "look", 7), ("specular", "specular", 6), ("eye", "eye", 12), ("brow", "brow", 7),
+        ("jaw", "jaw", 4), ("mouth", "mouth", 24), ("cheek", "cheek", 3), ("other", "other", 5), (C.OTHER_ID, "その他", 2),
+    ]
+    by = {i: n for i, _l, n in g}
+    assert by[C.OTHER_ID] == ["bs.LookingUp", "bs.LookingDown"]  # `_` が無い名前
+    assert "bs.look_left" in by["look"] and "bs.lipSync_a" in by["lipsync"] and "bs.specular_up" in by["specular"]
     assert sum(len(n) for _i, _l, n in g) == len(p.standard_curves)
-    labels = [l for _i, l, _n in g]
-    assert {"目", "眉", "口", "あご", "頬", "視線", "リップシンク", "ハイライト", "その他の表現"} <= set(labels)
-    by = {i: n for i, _l, n in g}
-    assert "bs.LookingUp" in by["look"] and "bs.lipSync_a" in by["lipsync"] and "bs.specular_up" in by["specular"]
 
 
-def test_arkit_and_vrchat_are_fully_categorized():
-    a = P.load(PRESET_DIR / "arkit52.fcprofile.json")
-    g = C.categorize(a.standard_curves, a)
-    assert C.OTHER_ID not in [i for i, _l, _n in g] and sum(len(n) for _i, _l, n in g) == 52
-    by = {i: n for i, _l, n in g}
-    assert "eyeLookUpLeft" in by["look"] and "eyeBlinkLeft" in by["eye"] and "tongueOut" in by["tongue"]
-    v = P.load(PRESET_DIR / "vrchat_viseme.fcprofile.json")
-    assert [i for i, _l, _n in C.categorize(v.standard_curves, v)] == ["viseme"]
-
-
-def test_metahuman_profile_has_categories_for_ctrl_names():
-    m = P.load(PRESET_DIR / "metahuman.fcprofile.json")
-    g = C.categorize(["CTRL_expressions_browDownL", "CTRL_expressions_jawOpen", "CTRL_expressions_mouthCloseD"], m)
-    assert [i for i, _l, _n in g] == ["brow", "mouth", "jaw"]
+def test_arkit_and_vrchat_and_metahuman_have_no_tabs():
+    for name in ("arkit52", "vrchat_viseme", "metahuman"):
+        p = P.load(PRESET_DIR / f"{name}.fcprofile.json")
+        g = C.categorize(p.standard_curves or ["CTRL_expressions_browDownL", "CTRL_expressions_jawOpen"], p)
+        assert C.is_trivial(g), name  # `_` の前が 1 種類・`_` が無い → 「すべて」だけ
 
 
 # ---------------------------------------------------------------------------
@@ -161,3 +177,22 @@ def test_pose_view_categories_counts_filter_and_changed():
 def test_pose_view_single_group_has_no_tabs():
     ps = _pose_set(["a", "b", "c"], None)
     assert ps.pose.view().categories == []
+
+
+def test_pose_view_default_prefix_tabs_follow_working_set_rows():
+    from tdrive_facial.core import model as m
+    names = ["bs.eye_a", "bs.eye_b", "bs.mouth_a", "bs.mouth_b", "bs.cheek_a", "bs.cheek_b"]
+    ps = _pose_set(names, None)
+    v = ps.pose.view()
+    assert [(c.id, c.count) for c in v.categories] == [("eye", 2), ("mouth", 2), ("cheek", 2)]
+    # 作業セットを eye + mouth に絞る（作業セットだけ = 既定）: タブも件数も、一覧に出る行だけで決まる
+    ps.ctx.doc.working_set = m.WorkingSet(curves=["bs.eye_a", "bs.eye_b", "bs.mouth_a", "bs.mouth_b"], bones=[])
+    ps.pose.set_working_set_only(True)
+    v = ps.pose.view()
+    assert [(c.id, c.count) for c in v.categories] == [("eye", 2), ("mouth", 2)]
+    assert {r.name for r in v.curves} == {"bs.eye_a", "bs.eye_b", "bs.mouth_a", "bs.mouth_b"} and all(r.category for r in v.curves)
+    ps.pose.set_filter("eye")  # 文字列の絞り込みは件数だけ変える（0 本のタブを隠すのは UI の仕事）
+    assert [(c.id, c.count) for c in ps.pose.view().categories] == [("eye", 2), ("mouth", 0)]
+    ps.pose.set_filter("")
+    ps.ctx.doc.working_set = m.WorkingSet(curves=["bs.eye_a", "bs.eye_b", "bs.mouth_a", "bs.cheek_a"], bones=[])
+    assert ps.pose.view().categories == []  # 接頭辞のグループが 1 つだけ（mouth・cheek は 1 本ずつで「その他」）→ タブなし

@@ -299,18 +299,82 @@ def sec_02_hide_others(tmp: Path) -> None:
     h.import_state({"on": True, "keep": ["mini_brow"]})
     check("リロードの引き継ぎ: 隠さないもの（名前）も戻る", h.keep == {"mini_brow"} and ov("mini_brow")[:2] == (0, True) and ov("mini_body")[:2] == (1, False), f"{h.keep} {ov('mini_brow')} {ov('mini_body')}")
     h.set_keep(set())
-    # ロック・つながり
+    # 表示レイヤーに入っているメッシュ（実モデルと同じ。transform の drawOverride が layer.drawInfo から来る）: shape の override で隠す
     h.set_enabled(False)
-    cmds.setAttr("mini_body.overrideVisibility", lock=True)
-    layer = cmds.createDisplayLayer(["mini_brow"], name="hairLayer", noRecurse=True)
+    layer = facial_fixture.add_display_layer(("mini_brow", "mini_body"), "meshLayer")
+    shapes = {x: cmds.listRelatives(x, shapes=True, noIntermediate=True, fullPath=True)[0] for x in ("mini_brow", "mini_body")}
+    cmds.setAttr(shapes["mini_brow"] + ".overrideEnabled", 1)  # shape にも元の override（リファレンス表示）: 戻すとき、そのままでなければならない
+    cmds.setAttr(shapes["mini_brow"] + ".overrideDisplayType", 2)
+    cmds.setAttr(shapes["mini_brow"] + ".overrideColor", 7)
+    lay_attrs = ("visibility", "displayType", "color", "enabled", "shading", "texturing", "playback", "hideOnPlayback")
+    lay_before = {a: cmds.getAttr(f"{layer}.{a}") for a in lay_attrs}
+    lay_conn = sorted(cmds.listConnections(layer + ".drawInfo", plugs=True, source=False, destination=True) or [])
+    b2 = {n: ov(n) for n in ("mini_brow", "mini_body", *shapes.values())}
+    cmds.file(modified=False)
+    undo_b = (cmds.undoInfo(query=True, undoName=True), cmds.undoInfo(query=True, redoName=True))
     h.set_enabled(True)
-    check("ロックされている・表示レイヤーにつながっているメッシュは触らず、飛ばす", h.hidden_names() == [] and sorted(h.skipped) == ["mini_body", "mini_brow"], f"{h.hidden_names()} {h.skipped}")
-    check("飛ばしたものを状態の一行に出す", "2 個は隠せませんでした" in h.status_text() and "mini_body" in h.status_text(), h.status_text())
+    check("表示レイヤー: transform の drawOverride はつながっている（以前はこれで「隠せませんでした」）", cmds.connectionInfo("mini_brow.drawOverride", isDestination=True))
+    check("表示レイヤー: 隠せる（飛ばさない）・状態の一行は方法に触れない", h.hidden_names() == ["mini_body", "mini_brow"] and h.skipped == [] and h.status_text() == "顔以外のメッシュ 2 個を隠しています", f"{h.hidden_names()} {h.skipped} {h.status_text()}")
+    check("表示レイヤー: shape が overrideEnabled = 1・overrideVisibility = 0", all(ov(sh)[:2] == (1, False) for sh in shapes.values()))
+    check("表示レイヤー: transform の override・visibility・表示レイヤー自身の設定・つながりは触らない", ov("mini_brow") == b2["mini_brow"] and ov("mini_body") == b2["mini_body"] and {a: cmds.getAttr(f"{layer}.{a}") for a in lay_attrs} == lay_before and sorted(cmds.listConnections(layer + ".drawInfo", plugs=True, source=False, destination=True) or []) == lay_conn)
+    check("表示レイヤー: Undo に積まない・変更フラグを立てない", (cmds.undoInfo(query=True, undoName=True), cmds.undoInfo(query=True, redoName=True)) == undo_b and not cmds.file(query=True, modified=True))
+    check("表示レイヤー: 隠しているメッシュも「表示中のメッシュ」（検出が崩れない）・候補にも残る", {"mini_brow", "mini_body"} <= {scene_mod.short_name(m) for m in scene_mod.list_visible_meshes()} and sorted(c[0] for c in h.candidates()) == ["mini_body", "mini_brow"])
+    check("表示レイヤー: TOOL_HIDDEN に shape も入る", all(sh in scene_mod.TOOL_HIDDEN for sh in shapes.values()))
+    h._next_scan = 0.0
+    h.follow()
+    check("表示レイヤー: 1.5 秒の見直しで二重に書かない・数が変わらない", len(h._applied) == 2 and h.status_text() == "顔以外のメッシュ 2 個を隠しています")
+    h.suspend()
+    check("表示レイヤー: 保存・出力の直前に元へ戻る（shape の元の override のまま）", all(ov(n) == b2[n] for n in b2), str({n: (ov(n), b2[n]) for n in b2 if ov(n) != b2[n]}))
+    f2 = tmp / "saved_layer.ma"
+    cmds.file(rename=str(f2))
+    cmds.file(save=True, type="mayaAscii")
+    h.resume()
+    t2 = f2.read_text(encoding="utf-8", errors="replace")
+    check("表示レイヤー: 保存したファイルに非表示の override が入らない・保存のあと隠れ直す", ".ovv" not in t2 and all(ov(sh)[:2] == (1, False) for sh in shapes.values()) and not cmds.file(query=True, modified=True))
+    st = h.export_state()
+    h.remove()
+    h.enabled = False
+    check("表示レイヤー: リロード前に元へ正確に戻る", all(ov(n) == b2[n] for n in b2))
+    h.import_state(st)
+    check("表示レイヤー: リロードの引き継ぎでまた隠れる", h.enabled and all(ov(sh)[:2] == (1, False) for sh in shapes.values()))
+    h.set_keep({"mini_brow"})
+    check("表示レイヤー: 隠さないものにすると、その shape だけ元の値へ戻る", ov(shapes["mini_brow"]) == b2[shapes["mini_brow"]] and ov(shapes["mini_body"])[:2] == (1, False))
+    h.set_keep(set())
     h.set_enabled(False)
-    check("飛ばしたものは何も変わっていない", cmds.getAttr("mini_body.overrideVisibility") and cmds.getAttr("mini_body.overrideVisibility", lock=True))
-    cmds.setAttr("mini_body.overrideVisibility", lock=False)
+    check("表示レイヤー: チェックを外すと全部元の値・表示レイヤーも元のまま", all(ov(n) == b2[n] for n in b2) and {a: cmds.getAttr(f"{layer}.{a}") for a in lay_attrs} == lay_before and not scene_mod.TOOL_HIDDEN)
+    # transform がロックされているだけ（レイヤー無し）でも shape で隠せる
     cmds.delete(layer)
-    cmds.setAttr("mini_brow.overrideEnabled", 0)  # 表示レイヤーを消しても値は 1 のまま残る
+    cmds.setAttr("mini_brow.overrideEnabled", 0)  # 表示レイヤーを消しても値は残る
+    cmds.setAttr(shapes["mini_brow"] + ".overrideEnabled", 0)
+    cmds.setAttr(shapes["mini_brow"] + ".overrideDisplayType", 0)
+    cmds.setAttr("mini_body.overrideVisibility", lock=True)
+    h.set_enabled(True)
+    check("transform がロックされているメッシュは shape で隠す・ロックは触らない", ov(shapes["mini_body"])[:2] == (1, False) and cmds.getAttr("mini_body.overrideVisibility") and cmds.getAttr("mini_body.overrideVisibility", lock=True) and h.skipped == [], f"{h.skipped}")
+    h.set_enabled(False)
+    check("ロック: 戻すとき shape が元の値", ov(shapes["mini_body"]) == b2[shapes["mini_body"]])
+    # shape も使えない → lodVisibility
+    layer = facial_fixture.add_display_layer(("mini_body",), "lodLayer")
+    cmds.setAttr(shapes["mini_body"] + ".overrideVisibility", lock=True)
+    h.set_enabled(True)
+    check("shape も使えないメッシュは lodVisibility で隠す（transform・shape は触らない）", cmds.getAttr("mini_body.lodVisibility") == 0 and ov(shapes["mini_body"])[:2] == (b2[shapes["mini_body"]][0], b2[shapes["mini_body"]][1]) and "mini_body" in h.hidden_names(), f"{h.hidden_names()} {h.skipped}")
+    check("lodVisibility: 状態の一行・TOOL_HIDDEN", h.status_text().startswith("顔以外のメッシュ 2 個を隠しています") and "|mini_body" in scene_mod.TOOL_HIDDEN, h.status_text())
+    h.set_enabled(False)
+    check("lodVisibility: 元の 1 へ戻る", cmds.getAttr("mini_body.lodVisibility") == 1 and not scene_mod.TOOL_HIDDEN)
+    # どれも使えない → 飛ばす
+    cmds.setAttr("mini_body.lodVisibility", lock=True)
+    h.set_enabled(True)
+    check("どれも書けないメッシュは触らず飛ばす", h.hidden_names() == ["mini_brow"] and h.skipped == ["mini_body"] and cmds.getAttr("mini_body.lodVisibility") == 1, f"{h.hidden_names()} {h.skipped}")
+    check("飛ばしたものを状態の一行に出す", "1 個は隠せませんでした" in h.status_text() and "mini_body" in h.status_text(), h.status_text())
+    h.set_enabled(False)
+    cmds.setAttr("mini_body.lodVisibility", lock=False)
+    cmds.setAttr("mini_body.overrideVisibility", lock=False)
+    cmds.setAttr(shapes["mini_body"] + ".overrideVisibility", lock=False)
+    cmds.delete(layer)
+    cmds.setAttr("mini_body.overrideEnabled", 0)
+    cmds.setAttr("mini_body.overrideVisibility", 1)
+    cmds.setAttr(shapes["mini_body"] + ".overrideEnabled", 0)
+    cmds.setAttr(shapes["mini_body"] + ".overrideVisibility", 1)
+    cmds.setAttr("mini_brow.overrideEnabled", 0)
     # 新しいメッシュが増えたら追従
     h.set_enabled(True)
     cmds.polyCube(name="extraProp")
@@ -404,22 +468,11 @@ EXTRA = ["bs.eye_close_L", "bs.eye_close_R", "bs.eye_wide", "bs.mouth_up", "bs.c
 
 
 def cat_setup(tmp: Path, with_profile: bool = True):
-    from tdrive_facial.core import categories as C
     from tdrive_facial.core import profile as P
 
     ids, s = fresh(tmp)
-    if with_profile:
-        prof = P.NamingProfile(
-            name="minicat",
-            standard_curves=["bs.mouth_open", "bs.smile_L"],
-            categories=[
-                C.Category("eye", "目", ["prefix:eye_"]),
-                C.Category("brow", "眉", ["prefix:brow_"]),
-                C.Category("mouth", "口", ["prefix:mouth_", "prefix:smile_"]),
-                C.Category("cheek", "頬", ["prefix:cheek_"]),
-                C.Category("look", "視線", ["prefix:look_"]),
-            ],
-        )
+    if with_profile:  # 分類（categories）は持たない: タブ分けは名前の最初の _ の前（プロファイルに依らない）
+        prof = P.NamingProfile(name="minicat", standard_curves=["bs.mouth_open", "bs.smile_L"])
         P.save(prof, P.project_profiles_dir(tmp, "mini") / "minicat.fcprofile.json")
         res = s.apply_profile("minicat")
         assert res.ok, res.message
@@ -441,6 +494,15 @@ def rows_visible(tab) -> list[str]:
     return sorted(n for n, w in tab._curve_rows.items() if not w.label.isHidden())
 
 
+def tab_texts(tab) -> list[str]:
+    """見えているタブの文字（隠れたタブは含まない）。"""
+    return [tab.cat_bar.tabText(i) for i in range(tab.cat_bar.count()) if tab.cat_bar.isTabVisible(i)]
+
+
+def tab_text(tab, cat_id: str) -> str:
+    return tab.cat_bar.tabText(tab._cat_ids.index(cat_id))
+
+
 def sec_04_pose_tabs(tmp: Path) -> None:
     from tdrive_facial import ui_pose
 
@@ -452,34 +514,35 @@ def sec_04_pose_tabs(tmp: Path) -> None:
     tab.show()
     APP.processEvents()
     tab.flush()
-    labels = [tab.cat_bar.tabText(i) for i in range(tab.cat_bar.count())]
-    check("タブ: すべて + 分類（プロファイルの順）+ 値あり。数字つき", labels == ["すべて (10)", "目 (3)", "眉 (1)", "口 (4)", "頬 (1)", "視線 (1)", "値あり (2)"], str(labels))
+    labels = tab_texts(tab)
+    check("タブ: すべて + 名前の最初の _ の前（出てきた順・1 本だけは「その他」）+ 値あり。数字つき", labels == ["すべて (10)", "mouth (2)", "smile (2)", "eye (3)", "その他 (3)", "値あり (2)"], str(labels))
     rows_before = dict(tab._curve_rows)
     check("すべて: 全部の行が見える", len(rows_visible(tab)) == 10)
     tab.select_category("eye")
-    check("目: 目のシェイプだけ見える", rows_visible(tab) == ["bs.eye_close_L", "bs.eye_close_R", "bs.eye_wide"], str(rows_visible(tab)))
+    check("eye: eye_ のシェイプだけ見える", rows_visible(tab) == ["bs.eye_close_L", "bs.eye_close_R", "bs.eye_wide"], str(rows_visible(tab)))
     check("タブの切り替えで行を作り直さない（同じウィジェット）", all(tab._curve_rows[n] is w for n, w in rows_before.items()) and len(tab._curve_rows) == len(rows_before))
     tab.select_category("mouth")
-    check("口（mouth_ と smile_）", rows_visible(tab) == ["bs.mouth_open", "bs.mouth_up", "bs.smile_L", "bs.smile_R"], str(rows_visible(tab)))
+    check("mouth", rows_visible(tab) == ["bs.mouth_open", "bs.mouth_up"], str(rows_visible(tab)))
+    tab.select_category("_other")
+    check("その他: 1 本だけの接頭辞（brow・cheek・look）", rows_visible(tab) == ["bs.brow_up", "bs.cheek_puff", "bs.look_left"], str(rows_visible(tab)))
     tab.select_category("_valued")
     check("値あり: 0 でない値のシェイプだけ（この点は mouth_open と smile_L）", rows_visible(tab) == ["bs.mouth_open", "bs.smile_L"], str(rows_visible(tab)))
     check("選んだタブをセッションが覚えている", s.pose_category == "_valued")
-    # 絞り込みはタブの中で効く
-    tab.select_category("mouth")
-    tab.curve_filter.setText("smile")
+    # 絞り込みはタブの中で効く。0 本になった分類のタブは隠れる
+    tab.select_category("smile")
+    tab.curve_filter.setText("_L")
     tab.flush()
     APP.processEvents()
-    check("絞り込みはタブの中で効く（口 × smile）", rows_visible(tab) == ["bs.smile_L", "bs.smile_R"], str(rows_visible(tab)))
-    labels = [tab.cat_bar.tabText(i) for i in range(tab.cat_bar.count())]
-    check("絞り込み中: タブの数字は当たった数（口 (2)・目 (0)）", "口 (2)" in labels and "目 (0)" in labels, str(labels))
+    check("絞り込みはタブの中で効く（smile × _L）", rows_visible(tab) == ["bs.smile_L"], str(rows_visible(tab)))
+    labels = tab_texts(tab)
+    check("絞り込み中: 当たった数・0 本のタブ（mouth）は隠れる（look_left も大文字小文字を無視して当たる）", labels == ["すべて (3)", "smile (1)", "eye (1)", "その他 (1)", "値あり (1)"], str(labels))
     tab.curve_filter.setText("")
     tab.flush()
     # 未保存の変更の ●
     tab.select_category("eye")
     tab.set_curve("bs.eye_wide", 0.5)
     tab._sync_tab_marks()
-    labels = [tab.cat_bar.tabText(i) for i in range(tab.cat_bar.count())]
-    check("未保存の変更があるタブに ● が付く（目だけ）", labels[1] == "目 (3)  ●" and "●" not in labels[0] and "●" not in labels[2], str(labels))
+    check("未保存の変更があるタブに ● が付く（eye だけ）", tab_text(tab, "eye") == "eye (3)  ●" and all("●" not in tab_text(tab, i) for i in ("_all", "mouth", "smile", "_other")), str(tab_texts(tab)))
     tab.select_category("_valued")
     tab.refresh()
     check("値あり: 動かした行が加わる（3 本）", rows_visible(tab) == ["bs.eye_wide", "bs.mouth_open", "bs.smile_L"], str(rows_visible(tab)))
@@ -516,7 +579,7 @@ def sec_04_pose_tabs(tmp: Path) -> None:
 
 
 def sec_05_pose_tabs_fallback(tmp: Path) -> None:
-    """プロファイルが無いとき: 名前の先頭の語で自動に分ける。"""
+    """プロファイルが無くても同じ（タブ分けはプロファイルに依らない）。分けられないときはタブなし。"""
     from tdrive_facial import ui_pose
 
     ids, s = cat_setup(tmp, with_profile=False)
@@ -524,14 +587,10 @@ def sec_05_pose_tabs_fallback(tmp: Path) -> None:
     s.select_point(1, 2)
     tab = ui_pose.PoseTab(s)
     tab.flush()
-    labels = [tab.cat_bar.tabText(i) for i in range(tab.cat_bar.count())]
-    check(
-        "プロファイル無し: 先頭の語で自動に分ける（eye / mouth / smile…）",
-        labels[0] == "すべて (10)" and any(l.startswith("eye (3)") for l in labels) and any(l.startswith("mouth (") for l in labels) and labels[-1].startswith("値あり"),
-        str(labels),
-    )
-    tab.select_category("auto:eye")
-    check("自動の分類でも出し分けられる", rows_visible(tab) == ["bs.eye_close_L", "bs.eye_close_R", "bs.eye_wide"], str(rows_visible(tab)))
+    labels = tab_texts(tab)
+    check("プロファイル無し: 名前の最初の _ の前で分ける（mouth / smile / eye…）", labels == ["すべて (10)", "mouth (2)", "smile (2)", "eye (3)", "その他 (3)", "値あり (2)"], str(labels))
+    tab.select_category("eye")
+    check("同じように出し分けられる", rows_visible(tab) == ["bs.eye_close_L", "bs.eye_close_R", "bs.eye_wide"], str(rows_visible(tab)))
     tab.detach()
     s.end_edit(quiet=True)
     s.close()
@@ -541,7 +600,7 @@ def sec_05_pose_tabs_fallback(tmp: Path) -> None:
     s.select_point(1, 2)
     tab = ui_pose.PoseTab(s)
     tab.flush()
-    labels = [tab.cat_bar.tabText(i) for i in range(tab.cat_bar.count())]
+    labels = tab_texts(tab)
     check("分けられないとき（合成モデルの 4 本）: 「すべて」と「値あり」だけ", labels == ["すべて (4)", "値あり (2)"], str(labels))
     tab.detach()
     s.end_edit(quiet=True)
@@ -562,37 +621,106 @@ def sec_06_setup_categories(tmp: Path) -> None:
     setup.refresh()
     combo = setup.curve_cat
     labels = [combo.itemText(i) for i in range(combo.count())]
-    check("作業セット: 分類の選択肢（数字 = 入れた数 / 全体）", labels[0] == "すべて" and "目 (3/3)" in labels and "口 (1/4)" in labels, str(labels))
+    check("作業セット: 分類の選択肢（数字 = 入れた数 / 全体。名前の最初の _ の前）", labels[0] == "すべて" and "eye (3/3)" in labels and "mouth (1/2)" in labels and "smile (0/2)" in labels and labels[-1].startswith("その他"), str(labels))
 
     def shown() -> list[str]:
         return sorted(setup.curve_list.item(i).text() for i in range(setup.curve_list.count()) if not setup.curve_list.item(i).isHidden())
 
     combo.setCurrentIndex(combo.findData("eye"))
-    check("目を選ぶと目のシェイプだけが一覧に出る", shown() == ["bs.eye_close_L", "bs.eye_close_R", "bs.eye_wide"], str(shown()))
+    check("eye を選ぶと eye_ のシェイプだけが一覧に出る", shown() == ["bs.eye_close_L", "bs.eye_close_R", "bs.eye_wide"], str(shown()))
     check("選んだ分類をセッションが覚えている", s.setup_category == "eye")
     setup.on_ws_bulk("curve", False)
     setup.refresh()
-    check("表示中を全部オフ: 見えている分類（目）だけ外れる", sorted(s.doc.working_set.curves) == sorted(n for n in EXTRA if not n.startswith("bs.eye_")), str(s.doc.working_set.curves))
+    check("表示中を全部オフ: 見えている分類（eye）だけ外れる", sorted(s.doc.working_set.curves) == sorted(n for n in EXTRA if not n.startswith("bs.eye_")), str(s.doc.working_set.curves))
     labels = [combo.itemText(i) for i in range(combo.count())]
-    check("数字が更新される（目 (0/3)）", "目 (0/3)" in labels, str(labels))
+    check("数字が更新される（eye (0/3)）", "eye (0/3)" in labels, str(labels))
     setup.on_ws_bulk("curve", True)
     setup.refresh()
-    check("表示中を全部オン: 見えている分類（目）だけ作業セットへ", sorted(s.doc.working_set.curves) == sorted(EXTRA), str(s.doc.working_set.curves))
+    check("表示中を全部オン: 見えている分類（eye）だけ作業セットへ", sorted(s.doc.working_set.curves) == sorted(EXTRA), str(s.doc.working_set.curves))
+    combo.setCurrentIndex(combo.findData("smile"))
+    setup.curve_filter.setText("_L")
+    check("分類 × 文字列の絞り込み", shown() == ["bs.smile_L"], str(shown()))
+    setup.on_ws_bulk("curve", True)
+    check("絞り込み中の「表示中を全部オン」: 見えている行（smile_L）だけ", sorted(s.doc.working_set.curves) == sorted([*EXTRA, "bs.smile_L"]), str(s.doc.working_set.curves))
+    check("絞り込みで空になっても分類は選び直せる", combo.isEnabled() and combo.count() >= 4)
     combo.setCurrentIndex(combo.findData("mouth"))
-    setup.curve_filter.setText("smile")
-    check("分類 × 文字列の絞り込み", shown() == ["bs.smile_L", "bs.smile_R"], str(shown()))
+    check("別の分類へ替えると、その分類 × 絞り込み（mouth × _L = 0 本）", shown() == [], str(shown()))
     setup.curve_filter.setText("")
     check("ボタンの文言", any(b.text() == "表示中を全部オフ" for b in setup.findChildren(QtWidgets.QPushButton)))
     combo.setCurrentIndex(0)
     check("すべてへ戻すと全部出る", len(shown()) >= 10)
-    combo.setCurrentIndex(combo.findData("look"))
+    combo.setCurrentIndex(combo.findData("eye"))
     sa = setup.findChild(QtWidgets.QScrollArea)
     sa.verticalScrollBar().setValue(sa.verticalScrollBar().maximum())
     shot(setup, "setup_categories.png")
     st = s.export_state()
-    check("引き継ぎ: 作業セットの分類も", st["setup_category"] == "look")
+    check("引き継ぎ: 作業セットの分類も", st["setup_category"] == "eye")
     setup2 = ui_setup.SetupTab(s)
-    check("開き直すと同じ分類", setup2.curve_cat.currentData() == "look", str(setup2.curve_cat.currentData()))
+    check("開き直すと同じ分類", setup2.curve_cat.currentData() == "eye", str(setup2.curve_cat.currentData()))
+    s.close()
+
+
+def sec_07_pose_tabs_working_set(tmp: Path) -> None:
+    """「作業セットだけ」: タブと数字は、一覧に出る行だけで決まる。0 本のタブは隠れ、選んでいたタブが消えたら「すべて」へ。"""
+    from tdrive_facial import ui_pose
+
+    ids, s = cat_setup(tmp)
+    s.set_working_set(curves=["bs.eye_close_L", "bs.eye_close_R", "bs.eye_wide", "bs.mouth_open", "bs.mouth_up"], bones=[])  # eye と mouth だけ
+    s.begin_edit()
+    s.select_point(1, 2)
+    tab = ui_pose.PoseTab(s)
+    tab.resize(480, 900)
+    tab.show()
+    APP.processEvents()
+    tab.flush()
+    visible_all = lambda: [tab.cat_bar.tabText(i) for i in range(tab.cat_bar.count()) if tab.cat_bar.isTabVisible(i)]  # noqa: E731
+    check("作業セットだけ: タブは作業セットの接頭辞だけ（件数も作業セットの行）", visible_all() == ["すべて (5)", "eye (3)", "mouth (2)", "値あり (1)"], str(visible_all()))
+    for cid in ("eye", "mouth"):
+        tab.select_category(cid)
+        check(f"作業セットだけ: {cid} のタブの件数 = 一覧の行数（空のタブを開かない）", len(rows_visible(tab)) == int(tab_text(tab, cid).split("(")[1].split(")")[0]) > 0, str(rows_visible(tab)))
+    check("作業セットだけ: 作業セットにない分類（smile・その他）のタブは出ない", not any(t.startswith(("smile", "その他")) for t in visible_all()))
+    shot(tab, "pose_tabs_workset.png")
+    # チェックを外すと全部のタブ・入れると戻る
+    tab.select_category("mouth")
+    tab.cb_working.setChecked(False)
+    tab.flush()
+    check("作業セットだけを外す: 全シェイプのタブ（数字も全体）・選んでいた mouth は残る", visible_all() == ["すべて (10)", "eye (3)", "mouth (2)", "smile (2)", "その他 (3)", "値あり (2)"] and tab.current_category() == "mouth", str(visible_all()))
+    tab.select_category("smile")
+    tab.cb_working.setChecked(True)
+    tab.flush()
+    check("作業セットだけに戻す: smile のタブが消え、選んでいたタブは「すべて」へ（行も全部出る）", visible_all() == ["すべて (5)", "eye (3)", "mouth (2)", "値あり (1)"] and tab.current_category() == "_all" and len(rows_visible(tab)) == 5, f"{visible_all()} {tab.current_category()} {rows_visible(tab)}")
+    # セットアップタブで作業セットを変える（ポーズタブが開いたまま）
+    tab.select_category("eye")
+    s.set_working_set(curves=["bs.mouth_open", "bs.mouth_up", "bs.cheek_puff", "bs.look_left", "bs.smile_L", "bs.smile_R"], bones=[])
+    tab.flush()
+    APP.processEvents()
+    check("作業セットを変える: タブも作り直す（eye が消えて「すべて」へ・mouth / smile / その他）", visible_all() == ["すべて (6)", "mouth (2)", "smile (2)", "その他 (2)", "値あり (2)"] and tab.current_category() == "_all", f"{visible_all()} {tab.current_category()}")
+    check("作業セットを変える: 行は作業セットだけ", len(rows_visible(tab)) == 6, str(rows_visible(tab)))
+    # 文字列の絞り込みとの組み合わせ: 0 本のタブは隠れる・選んでいたタブが消えたら「すべて」・外せば戻る
+    tab.select_category("smile")
+    tab.curve_filter.setText("mouth")
+    tab.flush()
+    check("絞り込みで 0 本になったタブは隠れる・選んでいたタブも消えて「すべて」", visible_all() == ["すべて (2)", "mouth (2)", "値あり (1)"] and tab.current_category() == "_all", f"{visible_all()} {tab.current_category()}")
+    tab.curve_filter.setText("")
+    tab.flush()
+    check("絞り込みを外すと、覚えていたタブ（smile）へ戻る", tab.current_category() == "smile" and rows_visible(tab) == ["bs.smile_L", "bs.smile_R"], f"{tab.current_category()} {rows_visible(tab)}")
+    # 値のある行は、作業セットの外でも消さない: 作業セットの外の値は「0 でない値が n 本あります」と知らせる
+    tab.cb_working.setChecked(True)
+    tab.select_category("_all")
+    s.pose.set_curve("bs.eye_wide", 0.4)
+    tab.flush()
+    check("作業セットの外に値があるシェイプ: 一覧には出さず、件数で知らせる（「作業セットだけ」を切ると見える）", "bs.eye_wide" not in tab._curve_rows and "1 本あります" in tab.curve_note.text(), tab.curve_note.text())
+    tab.cb_working.setChecked(False)
+    tab.flush()
+    check("作業セットだけを外すと、その値のシェイプが見える（値あり にも入る）", "bs.eye_wide" in rows_visible(tab) and any(t.startswith("値あり (3)") for t in visible_all()), str(visible_all()))
+    # データを読み込み直す・点を替える
+    tab.cb_working.setChecked(True)
+    tab.flush()
+    s.select_point(2, 1) if hasattr(s, "select_point") else None
+    tab.flush()
+    check("点を替えても、タブは作業セットの行だけ", all(not t.startswith("eye") for t in visible_all()), str(visible_all()))
+    tab.detach()
+    s.end_edit(quiet=True)
     s.close()
 
 

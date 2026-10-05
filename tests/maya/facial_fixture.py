@@ -203,3 +203,9 @@ def add_body(garbage_pose: bool = True) -> dict:
         out["bad_pose"] = bad
     cmds.select(clear=True)
     return out
+
+
+def add_display_layer(meshes=("mini_brow", "mini_body"), name: str = "meshLayer") -> str:
+    """メッシュの transform を表示レイヤーに入れる（実モデルと同じ: transform の drawOverride が layer.drawInfo から来る。shape は自由）。"""
+    present = [m for m in meshes if cmds.objExists(m)]
+    return cmds.createDisplayLayer(present, name=name, noRecurse=True)
