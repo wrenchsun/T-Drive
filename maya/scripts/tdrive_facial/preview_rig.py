@@ -76,6 +76,7 @@ ASSET_ATTR = "tdFacialAsset"
 CREATED_ATTR = "tdFacialCreated"  # この rig が作ったノード名の JSON 配列
 TARGETS_ATTR = "tdFacialTargets"  # {ターゲット名: [weight の plug, ...]} の JSON
 SIGNATURE_ATTR = "tdFacialSignature"
+LAYERS_ATTR = "tdFacialLayers"  # 作ったときのレイヤー名の JSON 配列（改名でキーを新しい名前のアトリビュートへ付け替えるため）
 EMOTION_PREFIX = "emotion_"
 KEYABLE_FIXED = ("alpha", "useManual", "manualYaw", "manualPitch")
 FADE_EPSILON = evaluate.KINDA_SMALL_NUMBER  # evaluate_correction の「範囲の外」の判定
@@ -113,12 +114,16 @@ def rig_name(asset: str) -> str:
 
 def emotion_attrs(doc: Document) -> dict[int, str]:
     """レイヤー番号（Neutral を除く）→ rig の感情アトリビュート名 `emotion_<Layer>`（記号は `_` へ。衝突したら番号を付ける）。"""
+    return _emotion_attrs_of([layer.name for layer in doc.layers])
+
+
+def _emotion_attrs_of(layer_names: Sequence[str]) -> dict[int, str]:
     out: dict[int, str] = {}
     used: set[str] = set()
-    for i, layer in enumerate(doc.layers):
+    for i, layer_name in enumerate(layer_names):
         if i == 0:
             continue
-        name = EMOTION_PREFIX + _safe(layer.name)
+        name = EMOTION_PREFIX + _safe(layer_name)
         if name in used:
             name = f"{name}_{i}"
         used.add(name)
@@ -152,6 +157,21 @@ def _require(asset: str) -> str:
     if rig is None:
         raise PreviewRigError(f"プレビュー用ノード {rig_name(asset)} がありません（build してください）")
     return rig
+
+
+def has_attr(rig: str, attr: str) -> bool:
+    """rig にそのアトリビュートがあるか（作ったあとに足されたレイヤーの emotion_<名前> などは無いことがある）。"""
+    return bool(rig) and cmds.objExists(rig) and cmds.attributeQuery(attr, node=rig, exists=True)
+
+
+def read_attr(rig: str, attr: str, default=0.0):
+    """rig のアトリビュートの値。無い・読めないときは default（例外にしない）。"""
+    if not has_attr(rig, attr):
+        return default
+    try:
+        return cmds.getAttr(f"{rig}.{attr}")
+    except (RuntimeError, ValueError):
+        return default
 
 
 def _read_json(rig: str, attr: str, default):
@@ -824,7 +844,10 @@ def _plan(doc: Document, own_nodes: Iterable[str] = ()) -> _Plan:
     template = "\n".join(L) + "\n"
     plug_by_alias = {t.alias: t.plugs for t in (*wired, *persp)}
     sig = hashlib.sha1(
-        (template + "|" + joint + "|" + "|".join(f"{k}={','.join(v)}" for k, v in sorted(plug_by_alias.items()))).encode("utf-8")
+        (
+            template + "|" + joint + "|" + "|".join(f"{k}={','.join(v)}" for k, v in sorted(plug_by_alias.items()))
+            + "|emo=" + ",".join(emotion_attrs(doc).values())  # 感情レイヤーの増減・改名（ベイクの無い空のレイヤーも）で古くなる
+        ).encode("utf-8")
     ).hexdigest()[:16]
     return _Plan(
         doc.asset, joint, targets, ex_targets, sharp, distance, layer_attrs, inten, dampen, template, sig, skipped, persp, persp_axis, persp_values, interp, link
@@ -862,6 +885,37 @@ def _add_attr(rig: str, name: str, **kw) -> bool:
     return True
 
 
+def _sync_emotion_attrs(rig: str, doc: Document) -> None:
+    """レイヤー一覧に合わせて emotion_<名前> を整える: 改名は renameAttr（キーが付いていく）→ 足りない分を足す（値 0）→ 余った分を消す（キーも一緒に）。"""
+    wanted = emotion_attrs(doc)
+    try:
+        old_names = json.loads(cmds.getAttr(f"{rig}.{LAYERS_ATTR}") or "[]") if cmds.attributeQuery(LAYERS_ATTR, node=rig, exists=True) else []
+    except (ValueError, RuntimeError):
+        old_names = []
+    new_names = [layer.name for layer in doc.layers]
+    if old_names and len(old_names) == len(new_names):  # 同じ数で名前だけ違う = 改名
+        old_attrs = _emotion_attrs_of(old_names)
+        for i, new_attr in wanted.items():
+            old_attr = old_attrs.get(i)
+            if old_attr and old_attr != new_attr and has_attr(rig, old_attr) and not has_attr(rig, new_attr) and old_attr not in wanted.values():
+                try:
+                    cmds.renameAttr(f"{rig}.{old_attr}", new_attr)
+                except RuntimeError:
+                    pass
+    for attr in wanted.values():
+        _add_attr(rig, attr, attributeType="double", minValue=0.0, maxValue=1.0, defaultValue=0.0, keyable=True)
+    for attr in cmds.listAttr(rig, userDefined=True) or []:  # 消したレイヤーの分: キーのカーブごと消す
+        if not attr.startswith(EMOTION_PREFIX) or attr in wanted.values():
+            continue
+        curves = cmds.listConnections(f"{rig}.{attr}", source=True, destination=False, type="animCurve") or []
+        if curves:  # 空のリストを cmds.delete に渡さない
+            cmds.delete(curves)
+        try:
+            cmds.deleteAttr(f"{rig}.{attr}")
+        except RuntimeError:
+            pass
+
+
 def _create_attrs(rig: str, doc: Document, plan: Optional[_Plan] = None) -> None:
     if _add_attr(rig, PREVIEW_ONLY_ATTR, attributeType="bool", defaultValue=True):
         cmds.setAttr(f"{rig}.{PREVIEW_ONLY_ATTR}", True)
@@ -881,8 +935,7 @@ def _create_attrs(rig: str, doc: Document, plan: Optional[_Plan] = None) -> None
     _add_attr(rig, "useManual", attributeType="bool", defaultValue=False, keyable=True)
     _add_attr(rig, "manualYaw", attributeType="double", defaultValue=0.0, keyable=True)
     _add_attr(rig, "manualPitch", attributeType="double", defaultValue=0.0, keyable=True)
-    for _, attr in emotion_attrs(doc).items():
-        _add_attr(rig, attr, attributeType="double", minValue=0.0, maxValue=1.0, defaultValue=0.0, keyable=True)
+    _sync_emotion_attrs(rig, doc)
     wired_persp = plan is not None and bool(plan.persp)
     if wired_persp and plan.persp_axis == "fov":  # 画角の軸: カメラのレンズの値を読む入れ物
         for a in (CAM_FOCAL_ATTR, CAM_FILM_ATTR):
@@ -1022,6 +1075,7 @@ def _build_ex(doc: Document, camera: Optional[str], created: list[str]) -> Build
     _write_json(rig, CREATED_ATTR, [rig, cam_dm, head_dm, expr])
     _write_json(rig, TARGETS_ATTR, plan.plug_map())
     cmds.setAttr(f"{rig}.{SIGNATURE_ATTR}", plan.signature, type="string")
+    _write_json(rig, LAYERS_ATTR, [layer.name for layer in doc.layers])
     cmds.setAttr(f"{rig}.{ASSET_ATTR}", asset, type="string")
     if plan.material_link:
         _connect_material(rig, doc)
@@ -1097,11 +1151,13 @@ def set_camera(asset: str, camera: Optional[str] = None) -> str:
 
 def set_enabled(asset: str, enabled: bool) -> None:
     """補正あり / なし（enable。A/B 比較）。キーが打ってあれば、そのキーが優先される。"""
-    cmds.setAttr(f"{_require(asset)}.enable", bool(enabled))
+    rig = _require(asset)
+    if has_attr(rig, "enable"):
+        cmds.setAttr(f"{rig}.enable", bool(enabled))
 
 
 def is_enabled(asset: str) -> bool:
-    return bool(cmds.getAttr(f"{_require(asset)}.enable"))
+    return bool(read_attr(_require(asset), "enable", True))
 
 
 def current_weights(asset: str) -> dict[str, float]:
@@ -1117,7 +1173,7 @@ def current_weights(asset: str) -> dict[str, float]:
 def current_angles(asset: str) -> tuple[float, float]:
     """rig の outYaw / outPitch（実際に使っている角度。useManual のときは手動の値）。"""
     rig = _require(asset)
-    return float(cmds.getAttr(f"{rig}.outYaw")), float(cmds.getAttr(f"{rig}.outPitch"))
+    return float(read_attr(rig, "outYaw", 0.0)), float(read_attr(rig, "outPitch", 0.0))
 
 
 # ---------------------------------------------------------------------------

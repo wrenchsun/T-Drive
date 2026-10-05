@@ -3074,6 +3074,8 @@ class FacialSession:
         if name not in allowed:
             raise FacialSessionError(f"プレビューのアトリビュート「{name}」は変えられません")
         plug = f"{rig}.{name}"
+        if not preview_rig.has_attr(rig, name):  # 作ったあとに足したレイヤーなど
+            raise FacialSessionError("このレイヤーの値はまだプレビューにありません。プレビューを作り直すと使えます")
         if (cmds.keyframe(plug, query=True, keyframeCount=True) or 0) > 0 or cmds.listConnections(plug, source=True, destination=False):
             raise FacialSessionError(f"{name} にはキーが打ってあるため値を変えられません（Maya のチャンネルボックスで変えてください）")
         if name == "useManual":
@@ -3094,36 +3096,40 @@ class FacialSession:
         rig = self._preview_rig_or_raise()
         st.rig = rig
 
-        def info(attr: str) -> tuple[float, bool]:
+        def info(attr: str, default: float = 0.0) -> tuple[float, bool]:
+            if not preview_rig.has_attr(rig, attr):  # rig に無い（作ったあとに足したレイヤーなど）: 例外にせず既定値
+                return default, False
             plug = f"{rig}.{attr}"
             keyed = (cmds.keyframe(plug, query=True, keyframeCount=True) or 0) > 0 or bool(
                 cmds.listConnections(plug, source=True, destination=False)
             )
             return float(cmds.getAttr(plug)), keyed
 
-        st.enabled = bool(cmds.getAttr(f"{rig}.enable"))
-        st.alpha, st.alpha_keyed = info("alpha")
-        st.use_manual = bool(cmds.getAttr(f"{rig}.useManual"))
+        st.enabled = bool(preview_rig.read_attr(rig, "enable", True))
+        st.alpha, st.alpha_keyed = info("alpha", 1.0)
+        st.use_manual = bool(preview_rig.read_attr(rig, "useManual", False))
         st.manual_yaw, ky = info("manualYaw")
         st.manual_pitch, kp = info("manualPitch")
         st.manual_keyed = ky or kp
-        st.out_yaw = float(cmds.getAttr(f"{rig}.outYaw"))
-        st.out_pitch = float(cmds.getAttr(f"{rig}.outPitch"))
-        if cmds.attributeQuery(preview_rig.EXAGGERATION_ATTR, node=rig, exists=True):
-            st.exaggeration, st.exaggeration_keyed = info(preview_rig.EXAGGERATION_ATTR)
+        st.out_yaw = float(preview_rig.read_attr(rig, "outYaw", 0.0))
+        st.out_pitch = float(preview_rig.read_attr(rig, "outPitch", 0.0))
+        if preview_rig.has_attr(rig, preview_rig.EXAGGERATION_ATTR):
+            st.exaggeration, st.exaggeration_keyed = info(preview_rig.EXAGGERATION_ATTR, 1.0)
         st.has_extreme = preview_rig.has_extreme_targets(doc.asset or "")
-        if cmds.attributeQuery(preview_rig.PERSPECTIVE_ATTR, node=rig, exists=True):
-            st.perspective, st.perspective_keyed = info(preview_rig.PERSPECTIVE_ATTR)
+        if preview_rig.has_attr(rig, preview_rig.PERSPECTIVE_ATTR):
+            st.perspective, st.perspective_keyed = info(preview_rig.PERSPECTIVE_ATTR, 1.0)
         st.has_perspective = preview_rig.has_perspective_targets(doc.asset or "")
         st.perspective_axis = doc.perspective.axis if doc.perspective is not None else "distance"
-        if st.has_perspective and cmds.attributeQuery(preview_rig.OUT_PERSPECTIVE_ATTR, node=rig, exists=True):
-            st.perspective_value = float(cmds.getAttr(f"{rig}.{preview_rig.OUT_PERSPECTIVE_ATTR}"))
+        if st.has_perspective and preview_rig.has_attr(rig, preview_rig.OUT_PERSPECTIVE_ATTR):
+            st.perspective_value = float(preview_rig.read_attr(rig, preview_rig.OUT_PERSPECTIVE_ATTR, 0.0))
         st.distance_layers = [doc.layers[i].name for i in preview_rig.distance_layers(doc)]
-        if st.distance_layers and cmds.attributeQuery(preview_rig.OUT_DISTANCE_ATTR, node=rig, exists=True):
-            st.out_distance = float(cmds.getAttr(f"{rig}.{preview_rig.OUT_DISTANCE_ATTR}"))
+        if st.distance_layers and preview_rig.has_attr(rig, preview_rig.OUT_DISTANCE_ATTR):
+            st.out_distance = float(preview_rig.read_attr(rig, preview_rig.OUT_DISTANCE_ATTR, 0.0))
         for li, attr in preview_rig.emotion_attrs(doc).items():
             v, keyed = info(attr)
             st.emotions.append((doc.layers[li].name, attr, v, keyed))
+            if not preview_rig.has_attr(rig, attr):  # まだ rig に無い（プレビューを作り直すと入る）
+                st.emotions_missing.append(attr)
         try:
             cam = preview_rig.get_camera(doc.asset or "")
         except preview_rig.PreviewRigError:
@@ -3636,6 +3642,7 @@ class PreviewStatus:
     out_distance: Optional[float] = None  # カメラと格子の中心の距離（cm）。距離で重みを決めるレイヤーがあるときだけ
     distance_layers: list[str] = field(default_factory=list)  # 重みをカメラの距離で決めているレイヤー（emotion_ は使われない）
     emotions: list[tuple[str, str, float, bool]] = field(default_factory=list)  # (レイヤー名, rig のアトリビュート名, 値, キーあり)
+    emotions_missing: list[str] = field(default_factory=list)  # emotions のうち rig にまだ無いアトリビュート（作り直すと入る）
     editing: bool = False  # 編集中は補正が止まっている
     warnings: list[str] = field(default_factory=list)
     material_link: str = ""  # マテリアル連携の一行（連携がオフのときは空）

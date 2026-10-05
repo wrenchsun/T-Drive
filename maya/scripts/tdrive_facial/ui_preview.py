@@ -355,8 +355,10 @@ class PreviewGroup(QtWidgets.QGroupBox):
             self.persp_value.setText(f"{st.perspective:.2f}（パース補正のシェイプなし）")
         for name, attr, value, keyed in st.emotions:
             label, slider, vl = self._emotion_rows[attr]
-            self._set_slider(slider, vl, value, keyed, live)
-            if name in st.distance_layers:  # 重みはカメラの距離で決まる: emotion_ は使われない
+            self._set_slider(slider, vl, value, keyed, live and attr not in st.emotions_missing)
+            if attr in st.emotions_missing:  # rig にまだ無い: 作り直すまで使えない
+                vl.setText("プレビューを作り直すと使えます")
+            elif name in st.distance_layers:  # 重みはカメラの距離で決まる: emotion_ は使われない
                 slider.setEnabled(False)
                 vl.setText(self._distance_text(st.out_distance))
         self._keyed_rows = [
