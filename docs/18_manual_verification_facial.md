@@ -213,9 +213,9 @@ FacialController（[14](14_facial_controller_spec.md)）と、それに伴う変
 
 | # | 手順 | 期待結果 | 自動 | 結果 | 結果メモ |
 |---|---|---|---|---|---|
-| E4-1 | D-Drive のプロジェクト（`file:` 参照ではないもの）で、Tools › D-Drive › Update › 更新ウィンドウ ›「URL を入力して追加」に `https://github.com/wrenchsun/T-Drive.git?path=unity/com.tdrive.facial` を入れる | 最新の `vX.Y.Z` で導入され、「パッケージ」の一覧に T-Drive Facial が出る。CHANGELOG の欄に「互換性」の節が出る | ❌ 未確認（リリース後） | [ ] | |
-| E4-2 | D-Drive が 1.4.0 より古い状態で、更新ウィンドウの「依存の確認」/ Validation › Run All | 「T-Drive Facial は D-Drive v1.4.0 以降に対応」の警告が出る。D-Drive 1.4.0 以降では出ない | 一部 ✅（宣言の形式をテスト） | [ ] | |
-| E4-3 | T-Drive の新しい版が出たあと、更新チェック → 版を上げる → 元に戻す | D-Drive と同じ操作でできる | ❌ 未確認 | [ ] | |
+| E4-1 | D-Drive のプロジェクト（`file:` 参照ではないもの）で、Tools › D-Drive › Update › 更新ウィンドウ ›「URL を入力して追加」に `https://github.com/wrenchsun/T-Drive.git?path=unity/com.tdrive.facial` を入れる | 最新の `vX.Y.Z` で導入され、「パッケージ」の一覧に T-Drive Facial が出る。CHANGELOG の欄に「互換性」の節が出る | ❌ 未確認（リリース後） | [x] | 2026-10-05 ユーザー確認 OK（仮のタグ v0.4.90 を D-Drive のローカルブランチ tdrive-link-test（origin/main、D-Drive 1.3.1）で導入。manifest に #v0.4.90 付きで追加、一覧に T-Drive Facial、CHANGELOG に互換性の節。1 回目は PC の DNS 不調で「導入に失敗しました」の警告（壊れない）、再試行で成功） |
+| E4-2 | D-Drive が 1.4.0 より古い状態で、更新ウィンドウの「依存の確認」/ Validation › Run All | 「T-Drive Facial は D-Drive v1.4.0 以降に対応」の警告が出る。D-Drive 1.4.0 以降では出ない | 一部 ✅（宣言の形式をテスト） | [x] | 2026-10-05 ユーザー確認 OK（D-Drive 1.3.1 で「依存の確認」・行の「依存に注意」・Validation の Warning が出る。「1.4.0 以降では出ない」は D-Drive 1.4.0 が出てから） |
+| E4-3 | T-Drive の新しい版が出たあと、更新チェック → 版を上げる → 元に戻す | D-Drive と同じ操作でできる | ❌ 未確認 | [x] | 2026-10-05 ユーザー確認 OK（仮のタグ v0.4.91 へ更新（事前確認の警告 → それでも更新）→ 前の参照に戻す（赤い表示）→ もう一度で入れ替わり。プレリリース v0.4.92-rc.1 へ更新すると参照は rc.1 のまま） |
 | E4-4 | D-Drive の無いプロジェクトで、Package Manager › Add package from git URL に `…?path=unity/com.tdrive.facial#vX.Y.Z` | 導入でき、コンパイルエラーが無い（D-Drive 用のブリッジは外れる） | ❌ 未確認 | [ ] | |
 | E4-5 | リリースの前に `check_release.py` を実行 | Unity パッケージの版が本体の版と違う / パッケージの CHANGELOG に「互換性」が無いと止まる | ✅ | [ ] | |
 
