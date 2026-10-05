@@ -1,13 +1,32 @@
 {
   "name": "com.tdrive.facial",
   "displayName": "T-Drive Facial",
-  "version": "0.4.92-rc.1",
+  "version": "0.4.93",
   "unity": "6000.3",
   "description": "T-Drive Facial: 視点（カメラ）の角度に応じて顔のブレンドシェイプを補正する FacialController の Unity ランタイム。Maya の T-Drive で作った .fcpose を取り込み、角度 → 補正シェイプの重みを計算する。D-Drive（com.ddrive.core）が無くても動く。",
-  "keywords": ["tdrive", "facial", "blendshape", "toon"],
-  "author": { "name": "wrenchsun" },
+  "keywords": [
+    "tdrive",
+    "facial",
+    "blendshape",
+    "toon"
+  ],
+  "author": {
+    "name": "wrenchsun"
+  },
   "dependencies": {},
   "ddriveUpdate": {
-    "compatibleWith": { "com.ddrive.core": "1.4.0" }
+    "compatibleWith": {
+      "com.ddrive.core": "1.4.0"
+    },
+    "requires": {
+      "com.ddrive.core": "1.4.0",
+      "com.x": {
+        "min": "1.0.0"
+      },
+      "com.tdrive.notinstalled": "1.0.0"
+    },
+    "below": {
+      "com.ddrive.core": "2.0.0"
+    }
   }
 }
