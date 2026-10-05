@@ -44,24 +44,25 @@ namespace TDrive.Facial.Editor
             FacialCore.PointAngles(g.yawRange, g.pitchRange, g.cols, g.rows, row, col, out yaw, out pitch);
         }
 
-        /// <summary>角度 → 図の中の位置（セルの中心を点の角度とする）。範囲の外は図の端へ寄せる。</summary>
+        /// <summary>角度 → 図の中の位置（セルの中心 = 整数の位置）。範囲の外は図の端のセルの中心へ寄せる（Maya の marker_position と同じ）。</summary>
         public static Vector2 AngleToPosition(Rect area, FacialGridData g, double yaw, double pitch)
         {
-            double fu = FractionOf(yaw, g.yawRange, g.cols);
-            double fv = FractionOf(pitch, g.pitchRange, g.rows);
+            FacialGridMarker m = FacialGridMapping.Locate(yaw, pitch, g.yawRange, g.pitchRange, g.cols, g.rows);
             float cw = g.cols > 0 ? area.width / g.cols : 0f;
             float ch = g.rows > 0 ? area.height / g.rows : 0f;
-            float x = area.x + (float)(fu + 0.5) * cw;
-            float y = area.y + (float)((g.rows - 1 - fv) + 0.5) * ch; // 上が +Pitch
-            return new Vector2(Mathf.Clamp(x, area.xMin, area.xMax), Mathf.Clamp(y, area.yMin, area.yMax));
+            float x = area.x + (float)(m.ColPosClamped + 0.5) * cw;
+            float y = area.y + (float)((g.rows - 1 - m.RowPosClamped) + 0.5) * ch; // 上が +Pitch
+            return new Vector2(x, y);
         }
 
-        // 角度 → 連続した点の番号（0〜n-1）。範囲の外は端の少し外まで許し、1 点だけの軸は 0
-        static double FractionOf(double angle, double range, int n)
+        /// <summary>図の中の位置 → 角度（AngleToPosition の逆。格子の外は端へ収める。Maya の angles_at と同じ）。</summary>
+        public static void PositionToAngles(Rect area, FacialGridData g, Vector2 pos, out double yaw, out double pitch)
         {
-            if (n <= 1 || range <= 1e-9) return 0.0;
-            double f = (angle / range + 1.0) * 0.5 * (n - 1);
-            return System.Math.Max(-0.5, System.Math.Min(n - 1 + 0.5, f));
+            float cw = g.cols > 0 ? area.width / g.cols : 1f;
+            float ch = g.rows > 0 ? area.height / g.rows : 1f;
+            double colPos = (pos.x - area.x) / cw - 0.5;
+            double rowPos = (g.rows - 1) - ((pos.y - area.y) / ch - 0.5);
+            FacialGridMapping.PosToAngles(colPos, rowPos, g.yawRange, g.pitchRange, g.cols, g.rows, out yaw, out pitch);
         }
 
         // ---------------------------------------------------------------- カメラの位置（Runner の視点の逆）
@@ -104,6 +105,73 @@ namespace TDrive.Facial.Editor
                 new Vec3(basePos.x, basePos.y, basePos.z), new Quat(baseRot.x, baseRot.y, baseRot.z, baseRot.w), forwardAxis,
                 new Vec3(viewerPos.x, viewerPos.y, viewerPos.z), new Vec3(centerOffset.x, centerOffset.y, centerOffset.z),
                 out yaw, out pitch);
+        }
+
+        // ---------------------------------------------------------------- 世界の向きで渡す版（左右反転の親でも Runner と同じ角度になる）
+
+        /// <summary>基準ボーンから、格子の中心と前方向（どちらも世界）を求める。左右反転（スケール -1）の親は Runner と同じ MirrorSafeDirections。</summary>
+        public static void BoneFrame(Transform bone, FacialGridData g, out Vector3 center, out Vector3 worldForward)
+        {
+            Vec3 axis;
+            bool haveAxis = FacialSpace.TryAxisVector(g.forwardAxis, out axis);
+            if (!haveAxis) axis = new Vec3(0, 0, 1);
+            if (bone.localToWorldMatrix.determinant < 0f && haveAxis)
+            {
+                Vector3 wo;
+                FacialCorrectionRunner.MirrorSafeDirections(bone, axis, g.centerOffset, out worldForward, out wo);
+                center = bone.position + wo;
+            }
+            else
+            {
+                worldForward = bone.rotation * new Vector3((float)axis.X, (float)axis.Y, (float)axis.Z);
+                center = bone.position + bone.rotation * g.centerOffset;
+            }
+        }
+
+        /// <summary>中心 center・前方向 worldForward の頭を、角度 (yaw, pitch)・距離 distance で見るカメラの位置と向き。</summary>
+        public static void CameraPoseFromFrame(Vector3 center, Vector3 worldForward, double yaw, double pitch, float distance,
+            out Vector3 camPos, out Quaternion camRot)
+        {
+            Vec3 fc = UnityToCanonical.Direction(new Vec3(worldForward.x, worldForward.y, worldForward.z));
+            double forwardYaw = System.Math.Atan2(fc.Y, fc.X) * (180.0 / System.Math.PI);
+            Vec3 du = CanonicalToUnity.Direction(FacialCore.ComputeViewDirection(forwardYaw, yaw, pitch));
+            Vector3 dir = new Vector3((float)du.X, (float)du.Y, (float)du.Z);
+            camPos = center + dir * distance;
+            Vector3 look = -dir;
+            camRot = look.sqrMagnitude > 1e-12f ? Quaternion.LookRotation(look, Vector3.up) : Quaternion.identity;
+        }
+
+        /// <summary>視点の位置から (yaw, pitch) を求める（CameraPoseFromFrame の逆。Runner の角度計算と同じ式）。</summary>
+        public static void ViewAnglesFromFrame(Vector3 center, Vector3 worldForward, Vector3 viewerPos, out double yaw, out double pitch)
+        {
+            FacialSpace.ComputeViewAnglesFromWorldVectors(UnityToCanonical, new Vec3(center.x, center.y, center.z), new Vec3(0, 0, 0),
+                new Vec3(worldForward.x, worldForward.y, worldForward.z), new Vec3(viewerPos.x, viewerPos.y, viewerPos.z), out yaw, out pitch);
+        }
+
+        /// <summary>今のカメラ位置から中心までの距離（近すぎて意味がないときは fallback）。ドラッグ・クリックでこの距離を保つ。</summary>
+        public static float KeepDistance(Vector3 camPos, Vector3 center, float fallback)
+        {
+            float d = Vector3.Distance(camPos, center);
+            return d < 1e-3f ? fallback : d;
+        }
+
+        // ---------------------------------------------------------------- 表示用の文字（Maya の fmt_angle・カメラのラベルと同じ）
+
+        /// <summary>軸の見出し用の角度（+22.5° / 0° / -45°。ハイフンは半角マイナス）。</summary>
+        public static string FormatAngle(double v)
+        {
+            if (System.Math.Abs(v) < 1e-6) return "0°";
+            string t = v.ToString("+0.0;-0.0", System.Globalization.CultureInfo.InvariantCulture);
+            if (t.EndsWith(".0")) t = t.Substring(0, t.Length - 2);
+            return t + "°";
+        }
+
+        /// <summary>右上の読み出し。「カメラ: Scene ビュー  Yaw 37.5° / Pitch -10.0°」（範囲外なら末尾に「（範囲外）」）。</summary>
+        public static string FormatCameraReadout(string cameraName, double yaw, double pitch, bool outOfRange)
+        {
+            var ci = System.Globalization.CultureInfo.InvariantCulture;
+            return "カメラ: " + (string.IsNullOrEmpty(cameraName) ? "" : cameraName + "  ")
+                + "Yaw " + yaw.ToString("0.0", ci) + "° / Pitch " + pitch.ToString("0.0", ci) + "°" + (outOfRange ? "（範囲外）" : "");
         }
 
         /// <summary>Yaw を -180〜180 に畳む（ターンテーブルの積算用）。</summary>

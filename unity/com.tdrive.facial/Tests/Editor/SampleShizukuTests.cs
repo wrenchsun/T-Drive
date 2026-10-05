@@ -77,7 +77,11 @@ namespace TDrive.Facial.Tests
 
         List<string> ExpectedNames()
         {
-            return _data.layers.SelectMany(l => l.morphNames ?? new string[0]).Where(n => !string.IsNullOrEmpty(n)).Distinct().ToList();
+            // 角度の補正（全レイヤー）+ パース補正のキー（サンプルにあれば）
+            var names = _data.layers.SelectMany(l => l.morphNames ?? new string[0]);
+            if (_data.perspective.keys != null)
+                names = names.Concat(_data.perspective.keys.Select(k => k.morphName));
+            return names.Where(n => !string.IsNullOrEmpty(n)).Distinct().ToList();
         }
 
         string NameAt(int layer, int row, int col) { return _data.layers[layer].morphNames[row * _data.grid.cols + col]; }
@@ -182,7 +186,8 @@ namespace TDrive.Facial.Tests
             Assert.AreEqual(15, neutral, "Neutral は 5x3 の全点");
             int joy = LayerIndex("Joy") >= 0 ? _data.layers[LayerIndex("Joy")].morphNames.Count(n => !string.IsNullOrEmpty(n)) : 0;
             Assert.Greater(joy, 0, "Joy レイヤーに点がある");
-            Assert.AreEqual(neutral + joy, ExpectedNames().Count);
+            int persp = _data.perspective.keys != null ? _data.perspective.keys.Count(k => !string.IsNullOrEmpty(k.morphName)) : 0;
+            Assert.AreEqual(neutral + joy + persp, ExpectedNames().Count, "角度の補正 + パース補正のキー（ポーズあり）");
         }
 
         [Test]

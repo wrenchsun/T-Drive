@@ -28,6 +28,7 @@
 - U-1 / U-2 / U-4 / U-5 / U-6 / U-7 / U-8 / U-9、E-5〜E-7 / E-9〜E-14（詳細は docs/19）
 
 ### 変更
+- グリッドのウィンドウを Maya のグリッドタブと同じ操作に（赤い点が Scene ビューのカメラに追従、赤い点のドラッグ / Shift + ドラッグ / Shift + クリックでカメラを任意の角度へ、マスのクリックは距離を保つ、「カメラも動かす」、角度の表示、色と凡例）
 - E-1: D-Drive ブリッジを基本（`TDrive.Facial.DDrive`。1.3.1 でコンパイル可）と FC（`TDrive.Facial.DDrive.FC`。`TDRIVE_FACIAL_DDRIVE_FC || TDRIVE_DDRIVE_FC_FORCE`）に分割
 - E-4: 編集時の `ResetWeights` は結んだ FC_ をすべて 0 にする
 - `FacialCorrectionData.sourceJson`（エディタだけのシリアライズ欄）を廃止（元の JSON は `FacialSourceJson`。エディタ）
