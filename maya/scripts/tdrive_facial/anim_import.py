@@ -313,7 +313,7 @@ def pose_from_current_frame(
                 cur: dict[str, tuple] = {}
                 joints = scene_mod.mesh_joints(meshes)
                 for j in joints:
-                    cur[scene_mod.short_name(j)] = scene_mod.read_local(j)
+                    cur[scene_mod.doc_short(j)] = scene_mod.read_local(j)
                 with _Reference(session, meshes) as ref:
                     for name, base in ref.bones.items():
                         if name in doc.exclude.bones or name not in cur:

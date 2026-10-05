@@ -177,17 +177,96 @@ def _bake_warnings(doc: Document) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
+def _strip_ns_path(path: str) -> str:
+    """`|chr:grp|chr:mesh` → `|grp|mesh`。"""
+    return "|".join(p.rpartition(":")[2] for p in path.split("|"))
+
+
+def flatten_references() -> None:
+    """参照（リファレンス）を取り込み、ネームスペースをなくす。書き出し用の一時シーンだけで呼ぶ（FBX の名前にネームスペースを入れないため。
+    使っているシーンでは呼ばない）。"""
+    for _ in range(10):  # 入れ子の参照は、取り込むと外側に出てくる
+        refs = cmds.file(query=True, reference=True) or []
+        if not refs:
+            break
+        for r in refs:
+            try:
+                cmds.file(r, importReference=True)
+            except RuntimeError:
+                try:
+                    cmds.file(r, removeReference=True)  # 読み込まれていない参照は取り込めない
+                except RuntimeError:
+                    pass
+    spaces = [n for n in cmds.namespaceInfo(listOnlyNamespaces=True, recurse=True) or [] if n not in ("UI", "shared")]
+    for n in sorted(spaces, key=lambda x: -x.count(":")):  # 深いものから
+        try:
+            cmds.namespace(removeNamespace=n, mergeNamespaceWithRoot=True)
+        except RuntimeError:
+            pass
+
+
+TOON_SUFFIX = "_tdToon"  # Toon のプレビューシェーダー `<元マテリアル>_tdToon`（tdrive_toon.preview.SUFFIX と同じ）。SG は `<名前>SG`
+TOON_SOURCE_ATTR = "tdSourceMaterial"
+
+
+def restore_original_materials() -> dict[str, int]:
+    """書き出し用の一時シーンで、Toon のプレビューのシェーダーに付いているメッシュ（面）を元のマテリアルへ戻し、プレビューのノードを消す
+    （FBX に `_tdToon` のマテリアル名・シェーダーの中身を入れず、元のマテリアル名とテクスチャを残すため。使っているシーンでは呼ばない）。
+
+    Toon の記録（`tdSourceMaterial`、無ければ名前の `_tdToon` を外したもの）で元のマテリアルを決め、その shadingEngine へ戻す。
+    dx11Shader のプラグインが無いと、プレビューのノードは `unknown` ノードになる（属性・接続が消える）ので、名前だけでも見つける。
+    戻り: {"restored": 戻したマテリアルの数, "deleted": 消したノードの数}。プレビューが無ければ何もしない。"""
+    shaders = [n for n in cmds.ls(f"*{TOON_SUFFIX}") or [] if cmds.nodeType(n) not in ("shadingEngine", "transform", "mesh")]
+    sgs = [n for n in cmds.ls(f"*{TOON_SUFFIX}SG", type="shadingEngine") or []]
+    for sg in cmds.ls(type="shadingEngine") or []:  # 名前が違っても、プレビューのシェーダーを使っている SG
+        src = cmds.listConnections(sg + ".surfaceShader", source=True, destination=False) or []
+        if src and src[0] in shaders and sg not in sgs:
+            sgs.append(sg)
+    restored = 0
+    for sg in sgs:
+        src = cmds.listConnections(sg + ".surfaceShader", source=True, destination=False) or []
+        pre = src[0] if src else (sg[:-2] if sg.endswith("SG") else sg)
+        orig = pre[: -len(TOON_SUFFIX)] if pre.endswith(TOON_SUFFIX) else pre
+        if cmds.objExists(pre) and cmds.attributeQuery(TOON_SOURCE_ATTR, node=pre, exists=True):
+            orig = cmds.getAttr(f"{pre}.{TOON_SOURCE_ATTR}") or orig
+        members = cmds.sets(sg, query=True) or []
+        dst = None
+        if cmds.objExists(orig):
+            dst = next(iter(cmds.listConnections(orig + ".outColor", type="shadingEngine") or []), None)
+        if members and dst and dst != sg:
+            cmds.sets(members, edit=True, forceElement=dst)
+            restored += 1
+    doomed: list[str] = []
+    for sg in sgs:
+        src = cmds.listConnections(sg + ".surfaceShader", source=True, destination=False) or []
+        for sh in src:
+            doomed += [f for f in cmds.listConnections(sh, type="file") or []]
+        doomed.append(sg)
+    doomed += shaders
+    doomed = [n for n in dict.fromkeys(doomed) if cmds.objExists(n)]
+    if doomed:
+        cmds.delete(doomed)
+    return {"restored": restored, "deleted": len(doomed)}
+
+
 def export_in_place(meshes: list[str], path: str | Path, sculpt_prefix: str = naming.DEFAULT_SCULPT_PREFIX) -> dict[str, Any]:
-    """開いているシーンを直接整形して FBX を書き出す（破壊的）。mayapy（tools/export_facial_fbx_batch.py）専用。"""
+    """開いているシーンを直接整形して FBX を書き出す（破壊的）。mayapy（tools/export_facial_fbx_batch.py）専用。
+
+    参照したキャラクター（ネームスペース付き）は、先に取り込んでネームスペースを外す（FBX の名前は `mdl_face02` のようにネームスペースなし。
+    メッシュの名前は渡された長い名前からネームスペースを外して探す）。"""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
+    if cmds.file(query=True, reference=True) or any(":" in m for m in meshes):
+        flatten_references()
+        meshes = [m if cmds.objExists(m) else _strip_ns_path(m) for m in meshes]
     meshes = [m for m in meshes if cmds.objExists(m)]
     if not meshes:
         raise ExportError("書き出すメッシュがありません")
     cmds.loadPlugin("fbxmaya", quiet=True)
+    materials = restore_original_materials()  # Toon のプレビューを外し、元のマテリアルで書き出す
     # --- 作業用ノードを消す（プレビューの rig と補助ノード・tdPreviewOnly の transform）
     for rig in preview_rig.list_rigs():
-        preview_rig.delete(cmds.getAttr(f"{rig}.{preview_rig.ASSET_ATTR}"))
+        preview_rig.delete_node(rig)
     only = [
         t
         for t in cmds.ls(type="transform", long=True) or []
@@ -234,6 +313,7 @@ def export_in_place(meshes: list[str], path: str | Path, sculpt_prefix: str = na
         "fc": {scene_mod.short_name(m): n for m, n in fc.items()},
         "fc_ex": {scene_mod.short_name(m): n for m, n in fc_ex.items()},
         "excluded_fcs": excluded,
+        "toon_restored": materials["restored"],
     }
 
 
@@ -353,7 +433,7 @@ class UnityExportJob:
         if not self.fbx.exists():
             raise ExportError(f"FBX ができていません: {self.fbx}")
         fcpose_io.save(self._doc, self.fcpose)
-        face = scene_mod.short_name(self.meshes[0])
+        face = scene_mod.doc_short(self.meshes[0])
         out = UnityExportResult(
             fbx=self.fbx,
             fcpose=self.fcpose,
@@ -379,7 +459,7 @@ class UnityExportJob:
         out: dict[str, int] = {}
         for m in self._doc.target.lod_meshes if self._doc.target is not None else []:
             try:
-                short = scene_mod.short_name(scene_mod.resolve_mesh(m.mesh))
+                short = scene_mod.doc_short(scene_mod.resolve_mesh(m.mesh))
             except ValueError:
                 continue
             if short in exported:

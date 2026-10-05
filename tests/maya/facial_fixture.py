@@ -209,3 +209,63 @@ def add_display_layer(meshes=("mini_brow", "mini_body"), name: str = "meshLayer"
     """メッシュの transform を表示レイヤーに入れる（実モデルと同じ: transform の drawOverride が layer.drawInfo から来る。shape は自由）。"""
     present = [m for m in meshes if cmds.objExists(m)]
     return cmds.createDisplayLayer(present, name=name, noRecurse=True)
+
+
+def reference_mini_head(tmp, namespace: str = "chr", *, new_scene: bool = True, rig_file=None, count: int = 1, namespaces=None) -> dict:
+    """合成の頭を一時ファイル（.ma）に保存し、新しいシーンへネームスペース付きで参照する（キャラクターを参照して使う本番の形）。
+
+    `namespace` で 1 体、`namespaces=["chrA", "chrB"]` で複数体（同じファイルを別のネームスペースで）。rig_file を渡すとそのファイルを参照する
+    （無ければ作る）。戻り: {"file": パス, "ns": ネームスペース, "face": "<ns>:mini_face", ...（`build_mini_head` のキーに接頭辞を付けたもの）}。"""
+    import os
+
+    path = rig_file
+    if path is None:
+        ids = build_mini_head()
+        path = os.path.join(str(tmp), "rig.ma")
+        cmds.file(rename=path)
+        cmds.file(save=True, type="mayaAscii")
+        cmds.file(new=True, force=True)
+    elif new_scene:
+        cmds.file(new=True, force=True)
+    cmds.undoInfo(state=True)
+    spaces = list(namespaces) if namespaces else [namespace]
+    for ns in spaces:
+        parent, _, leaf = ns.rpartition(":")
+        if parent:  # 入れ子: 親のネームスペースを現在にして、その中へ参照する
+            cmds.namespace(add=parent)
+            cmds.namespace(set=parent)
+        cmds.file(str(path), reference=True, namespace=leaf)
+        cmds.namespace(set=":")
+    ns = spaces[0]
+
+    def p(n: str) -> str:
+        return f"{ns}:{n}"
+
+    return {
+        "file": str(path),
+        "ns": ns,
+        "spaces": spaces,
+        "face": p("mini_face"),
+        "brow": p("mini_brow"),
+        "bs": p("bs"),
+        "joints": [p(j) for j in ("root", "head", "eye_L", "eye_R")],
+        "skin": p("mini_skin"),
+    }
+
+
+def add_toon_standin(ns: str = "") -> dict:
+    """Toon のプレビューの状態の代役: 元のマテリアル `mat_x`（lambert）を顔・眉に付け、Toon のプレビューのように `mat_x_tdToon`（シェーダー）と
+    `mat_x_tdToonSG` を作ってメッシュをそちらへ移す（プレビューのシェーダーは tdSourceMaterial で元の名前を持つ）。dx11Shader は使わない。"""
+    pre = f"{ns}:" if ns else ""
+    meshes = [f"{pre}mini_face", f"{pre}mini_brow"]
+    orig = cmds.shadingNode("lambert", asShader=True, name="mat_x")
+    orig_sg = cmds.sets(renderable=True, noSurfaceShader=True, empty=True, name="mat_xSG")
+    cmds.connectAttr(f"{orig}.outColor", f"{orig_sg}.surfaceShader", force=True)
+    cmds.sets(meshes, edit=True, forceElement=orig_sg)
+    pv = cmds.shadingNode("lambert", asShader=True, name="mat_x_tdToon")
+    cmds.addAttr(pv, longName="tdSourceMaterial", dataType="string")
+    cmds.setAttr(f"{pv}.tdSourceMaterial", "mat_x", type="string")
+    pv_sg = cmds.sets(renderable=True, noSurfaceShader=True, empty=True, name="mat_x_tdToonSG")
+    cmds.connectAttr(f"{pv}.outColor", f"{pv_sg}.surfaceShader", force=True)
+    cmds.sets(meshes, edit=True, forceElement=pv_sg)
+    return {"orig": orig, "orig_sg": orig_sg, "preview": pv, "preview_sg": pv_sg, "meshes": meshes}

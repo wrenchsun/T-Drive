@@ -115,6 +115,8 @@ class SceneInfo:
     recorded_bone_parents: Optional[Mapping[str, str]] = None  # 前に記録した親（UE 版の RecordedBoneParents に当たる）
     target_info: Mapping[str, TargetInfo] = field(default_factory=dict)  # ターゲット名 → 情報
     mesh_infos: Optional[Mapping[str, MeshInfo]] = None  # 文書に書いたメッシュ名（顔・extraMeshes・LOD）→ 情報
+    target_mesh_found: Optional[bool] = None  # 顔のメッシュ（target.mesh）がシーンで見つかったか（None = 調べていない）
+    namespace_choices: Collection[str] = ()  # 見つからないとき、同じ名前のメッシュがあるネームスペースの候補（呼ぶ側の表記のまま）
 
 
 # ---------------------------------------------------------------------------
@@ -356,6 +358,7 @@ def validate(
         _check_missing(KIND_CURVE, _with_lip_refs(doc, curve_refs), set(scene.curves), doc, add)
     if scene.bones is not None:
         _check_missing(KIND_BONE, bone_refs, set(scene.bones), doc, add)
+    _check_target_mesh(doc, scene, add)
     _check_mirror(doc, scene, profile, curve_refs, bone_refs, add)
     _check_bone_parents(doc, scene, bone_refs, add)
 
@@ -1107,6 +1110,29 @@ def _check_part_strength(doc: Document, add) -> None:
                     name=e.pattern,
                 )
             )
+
+
+def _check_target_mesh(doc: Document, scene: SceneInfo, add) -> None:
+    """顔のメッシュがシーンに無い（参照したキャラクターのネームスペースを選んでいないことが多い）。"""
+    t = doc.target
+    if t is None or not t.mesh or scene.target_mesh_found is not False:
+        return
+    choices = tuple(scene.namespace_choices or ())
+    hint = (
+        f"同じ名前のメッシュが別のネームスペース（{'、'.join(choices[:5])}）にあります。セットアップの「ネームスペース」で選んでください"
+        if choices
+        else "キャラクターを参照（リファレンス）で読み込んでいるときは、セットアップの「ネームスペース」を確かめてください"
+    )
+    add(
+        Issue(
+            "target_mesh_missing",
+            SEVERITY_ERROR,
+            f"対象のメッシュ「{t.mesh}」がシーンにありません。{hint}",
+            name=t.mesh,
+            suggestion=choices[0] if choices else "",
+            candidates=choices,
+        )
+    )
 
 
 def _check_lod_meshes(doc: Document, scene: SceneInfo, curve_refs, add) -> None:

@@ -324,7 +324,7 @@ def bake(
                 state[m][name] = validate.pose_hash(pose)  # パース補正のキーも pose_hash（= perspective_key_hash）
                 excl[m][name] = sig
                 total += len(idx)
-                pm = rep.per_mesh.setdefault(scene.short_name(m), {"targets": 0, "vertices": 0})
+                pm = rep.per_mesh.setdefault(scene.doc_short(m), {"targets": 0, "vertices": 0})
                 pm["targets"] += 1
                 pm["vertices"] += len(idx)
                 if m == meshes[0]:
@@ -362,6 +362,15 @@ def bake(
                     for t in scene.target_indices(other)
                     if naming.is_fc_name(t) and (t in written or _is_orphan(doc, t, live, live_ex, persp_live))
                 ]
+                if stale and scene.is_referenced(other):
+                    # 参照したキャラクターのファイルにある補正シェイプは消さない（ファイルの中身はこのシーンから変えない）
+                    dup = [t for t in stale if t in written]
+                    if dup:
+                        rep.warnings.append(
+                            f"参照したキャラクター（{scene.short_name(other)}）に、同じ名前の補正シェイプが {len(dup)} 個あります。二重に効かないように、"
+                            "キャラクターのファイル側のシェイプを消すか、ファイルを開いて直接ベイクしてください"
+                        )
+                    continue
                 if stale:
                     scene.delete_targets(other, stale)
                     other_state = scene.get_bake_state(other)
@@ -372,7 +381,7 @@ def bake(
                             other_excl.pop(t, None)
                         scene.set_bake_state(other, other_state)
                         scene.set_bake_exclude(other, other_excl)
-                    rep.notes.append(f"{scene.short_name(other)} にあった古い補正シェイプ {len(stale)} 個を消しました（{scene.short_name(nodes[m])} に移しました）")
+                    rep.notes.append(f"{scene.doc_short(other)} にあった古い補正シェイプ {len(stale)} 個を消しました（{scene.doc_short(nodes[m])} に移しました）")
             # 状態は消えたターゲットのぶんも掃除する
             for n in [k for k in state[m] if k not in scene.target_indices(nodes[m])]:
                 state[m].pop(n, None)

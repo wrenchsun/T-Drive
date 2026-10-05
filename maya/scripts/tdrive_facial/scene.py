@@ -99,8 +99,121 @@ def no_undo():
 
 
 def short_name(path: str) -> str:
-    """`|a|b|c` → `c`（名前空間は残す）。"""
+    """`|a|b|c` → `c`（ネームスペースは残す。外すのは `doc_short`）。"""
     return path.split("|")[-1]
+
+# ---------------------------------------------------------------------------
+# ネームスペース（参照したキャラクターの `chr:mdl_face02` など。データの名前は常に「ネームスペースなし」）
+# ---------------------------------------------------------------------------
+#
+# .fcpose の名前（メッシュ・ボーン・`bs.eye_close_L`）にネームスペースは書かない（同じデータを Unity・別のネームスペースのシーンで使うため）。
+# シーンのノードを引くときは必ず `to_scene`、シーンの名前をデータへ書く・検証へ渡すときは `to_doc` / `doc_short` を通す。
+# 今のネームスペースはシーンごとの設定（fileInfo `tdFacialNamespace`。session が読み書きする）。このモジュールは今の値だけを持つ。
+
+NAMESPACE_KEY = "tdFacialNamespace"
+_NS = ""
+
+
+def _norm_ns(ns: str) -> str:
+    return (ns or "").strip().strip(":")
+
+
+def namespace() -> str:
+    """今使っているネームスペース（`chr` や入れ子の `a:b`。無いときは ""）。"""
+    return _NS
+
+
+def set_namespace(ns: str) -> str:
+    """今のネームスペースを変える（メモリだけ。シーンへの記録は session）。正規化した値を返す。"""
+    global _NS
+    _NS = _norm_ns(ns)
+    return _NS
+
+
+def _flat(ns: str) -> str:
+    return re.sub(r"[^0-9A-Za-z_]", "_", ns)
+
+
+def _map_part(part: str, ns: str) -> str:
+    if not part or not ns or part.startswith(ns + ":"):
+        return part  # すでにシーンの名前
+    return f"{ns}:{part}"
+
+
+def to_scene(name: str, ns: Optional[str] = None) -> str:
+    """データの名前 → シーンのノード名（ネームスペースを付ける）。`|a|b` のような長い名前は各階層に付ける。付いているものはそのまま。"""
+    ns = _NS if ns is None else _norm_ns(ns)
+    if not ns or not name:
+        return name
+    return "|".join(_map_part(p, ns) for p in name.split("|"))
+
+
+def to_doc(name: str, ns: Optional[str] = None) -> str:
+    """シーンのノード名 → データの名前（今のネームスペースを外す。他のネームスペースのものはそのまま）。"""
+    ns = _NS if ns is None else _norm_ns(ns)
+    if not ns or not name:
+        return name
+    pre = ns + ":"
+    return "|".join(p[len(pre):] if p.startswith(pre) else p for p in name.split("|"))
+
+
+def doc_short(path: str) -> str:
+    """`|a|chr:b` → `b`（短い名前からネームスペースを外した、データの名前）。"""
+    return to_doc(short_name(path))
+
+
+def to_scene_node(name: str, ns: Optional[str] = None) -> str:
+    """blendShape のノードの名前（`bs` / `tdFacial_<メッシュ>`）→ シーンの名前。このツールが作る `tdFacial_*` はネームスペースを名前に埋める
+    （参照したキャラクターのノードにはネームスペースが付くが、ツールのノードはシーンのもの。2 体のキャラクターで名前が重ならないように）。"""
+    ns = _NS if ns is None else _norm_ns(ns)
+    if not ns or not name:
+        return name
+    if name.startswith(FRONT_BLEND_SHAPE_PREFIX):
+        return FRONT_BLEND_SHAPE_PREFIX + _flat(ns) + "_" + name[len(FRONT_BLEND_SHAPE_PREFIX):]
+    return to_scene(name, ns)
+
+
+def to_doc_node(name: str, ns: Optional[str] = None) -> str:
+    """`to_scene_node` の逆。"""
+    ns = _NS if ns is None else _norm_ns(ns)
+    if not ns or not name:
+        return name
+    pre = FRONT_BLEND_SHAPE_PREFIX + _flat(ns) + "_"
+    if name.startswith(pre):
+        return FRONT_BLEND_SHAPE_PREFIX + name[len(pre):]
+    return to_doc(name, ns)
+
+
+def ns_of(node: str) -> str:
+    """ノード（長い名前でも短い名前でも）のネームスペース。無ければ ""。"""
+    leaf = short_name(node)
+    return leaf.rpartition(":")[0] if ":" in leaf else ""
+
+
+def mesh_namespaces(name: str) -> list[str]:
+    """データのメッシュ名がシーンにあるネームスペースの一覧（ネームスペースなしで見つかれば "" を先頭に入れる）。入れ子も探す。"""
+    if not name:
+        return []
+    base = name.split("|")[-1] if "|" in name else name
+    out: list[str] = []
+
+    def is_mesh(n: str) -> bool:
+        try:
+            if cmds.nodeType(n) == "mesh":
+                return True
+            return bool(cmds.listRelatives(n, shapes=True, type="mesh"))
+        except RuntimeError:
+            return False
+
+    if any(is_mesh(n) for n in cmds.ls(name, long=True) or []):
+        out.append("")
+    for space in cmds.namespaceInfo(listOnlyNamespaces=True, recurse=True) or []:  # `*:` は入れ子（a:b:name）に合わない。ネームスペースを順に調べる
+        if space in ("UI", "shared") or space in out:
+            continue
+        if any(is_mesh(n) for n in cmds.ls(f"{space}:{base}", long=True) or []):
+            out.append(space)
+    return out
+
 
 
 def _parent(node: str) -> Optional[str]:
@@ -158,7 +271,7 @@ def resolve_mesh(name: str) -> str:
     """メッシュ名（短い名前でもよい）→ transform の長い名前。見つからない・複数あって決められないときは ValueError。"""
     if not name:
         raise ValueError("メッシュ名が空です")
-    found = cmds.ls(name, long=True) or []
+    found = cmds.ls(to_scene(name), long=True) or []
     xfs: list[str] = []
     for f in found:
         if cmds.nodeType(f) == "mesh":
@@ -166,7 +279,9 @@ def resolve_mesh(name: str) -> str:
         if cmds.listRelatives(f, shapes=True, type="mesh") and f not in xfs:
             xfs.append(f)
     if not xfs:
-        raise ValueError(f"メッシュ {name} がシーンにありません")
+        ns = namespace()
+        hint = f"（今のネームスペース: {ns}:）" if ns else ""
+        raise ValueError(f"メッシュ {name} がシーンにありません{hint}")
     if len(xfs) > 1:
         visible = [x for x in xfs if not _is_hidden(x)]
         if len(visible) == 1:
@@ -214,21 +329,48 @@ def _blend_shape_before_skin(mesh: str) -> list[str]:
     return out
 
 
+def is_referenced(node: str) -> bool:
+    """ノードが参照（リファレンス）で読み込んだものか。"""
+    try:
+        return bool(cmds.referenceQuery(node, isNodeReferenced=True))
+    except RuntimeError:
+        return False
+
+
+def has_tool_data(node: str) -> bool:
+    """blendShape ノードに、このツールのベイクの記録か FC_* / fcs_* のターゲットがあるか。"""
+    if cmds.attributeQuery(BAKE_STATE_ATTR, node=node, exists=True):
+        return True
+    return any(naming.is_fc_name(a) or naming.is_sculpt_name(a) for a in target_indices(node))
+
+
+def front_node_name(mesh: str) -> str:
+    """ツールが作る、スキンより前の blendShape の名前。ネームスペースがあれば名前に埋める（`to_scene_node` と同じ決まり）。"""
+    return to_scene_node(f"{FRONT_BLEND_SHAPE_PREFIX}{doc_short(mesh)}")
+
+
 def primary_blend_shape(mesh: str, create: bool = False) -> Optional[str]:
     """FC_* を足す先の blendShape（スキンより前のもの）。
 
-    create=True で、スキンより前の blendShape が無ければ `tdFacial_<mesh>` をスキンより前（frontOfChain）に作る
-    （スキンの後ろの blendShape に FC_* を入れると、補正がスキニングの後に足されて頭の動きと食い違う。S-6）。
+    - 参照（リファレンス）で読み込んだ blendShape には足さない。キャラクターのファイルが更新されたとき、シーンに残る編集（ターゲットの
+      並び・エイリアスの一覧の上書き）が食い違うため。スキンより前の blendShape がシーン側（参照でない）にあればそれ。
+    - 参照の blendShape しか無いときは、シーン側に `tdFacial_<メッシュ>` をスキンより前（frontOfChain）に作る（create=True）。
+      キャラクターのファイルにすでにこのツールの FC_* があるときだけは、そのノードをそのまま使う（二重に効かないように）。
+    create=True で、スキンより前の blendShape が無ければ `tdFacial_<mesh>` を作る（スキンの後ろの blendShape に FC_* を入れると、
+    補正がスキニングの後に足されて頭の動きと食い違う。S-6）。
     create=False のときは、スキンより前が無ければ出力に近い最初のもの（読むだけ）。無ければ None。
     """
     nodes = _blend_shape_before_skin(mesh)
-    if nodes:
-        return nodes[0]
+    local = [n for n in nodes if not is_referenced(n)]
+    if local:
+        return local[0]
+    own = [n for n in nodes if has_tool_data(n)]
+    if own:
+        return own[0]
     if not create:
-        nodes = blend_shapes(mesh)
+        nodes = nodes or blend_shapes(mesh)
         return nodes[0] if nodes else None
-    name = f"{FRONT_BLEND_SHAPE_PREFIX}{short_name(mesh)}"
-    return cmds.blendShape(mesh_shape(mesh), name=name, frontOfChain=True)[0]
+    return cmds.blendShape(mesh_shape(mesh), name=front_node_name(mesh), frontOfChain=True)[0]
 
 
 def target_indices(node: str) -> dict[str, int]:
@@ -290,8 +432,8 @@ class CurveRef:
 
 
 def curve_name(node: str, alias: str) -> str:
-    """（ノード, ターゲット名）→ ソースの名前 `bs.eye_close_L`。"""
-    return f"{node}.{alias}"
+    """（ノード, ターゲット名）→ ソースの名前 `bs.eye_close_L`（データの名前。ネームスペースは外す）。"""
+    return f"{to_doc_node(node)}.{alias}"
 
 
 def parse_curve_name(name: str) -> tuple[Optional[str], str]:
@@ -303,12 +445,13 @@ def parse_curve_name(name: str) -> tuple[Optional[str], str]:
 
 
 def resolve_curve(name: str, mesh: str) -> Optional[CurveRef]:
-    """ソースの名前 → CurveRef。見つからなければ None。
+    """ソースの名前（データの名前）→ CurveRef。見つからなければ None。
 
     ノード名付き: そのノードのターゲット。ノード名なし: メッシュの blendShape のうち最初に見つかったもの。
     """
     node, target = parse_curve_name(name)
     if node is not None:
+        node = to_scene_node(node)
         if not cmds.objExists(node) or cmds.nodeType(node) != "blendShape":
             return None
         idx = target_indices(node).get(target)
@@ -401,21 +544,21 @@ def mesh_joints(meshes: Iterable[str]) -> list[str]:
 
 
 def joint_parents(joints: Iterable[str]) -> dict[str, str]:
-    """短い名前 → 親の短い名前（親がジョイントでなければ ""）。"""
+    """データの名前 → 親のデータの名前（親がジョイントでなければ ""）。"""
     out: dict[str, str] = {}
     for j in joints:
         p = _parent(j)
-        out[short_name(j)] = short_name(p) if p and cmds.nodeType(p) == "joint" else ""
+        out[doc_short(j)] = doc_short(p) if p and cmds.nodeType(p) == "joint" else ""
     return out
 
 
 def find_joint(name: str, among: Optional[Iterable[str]] = None) -> Optional[str]:
-    """短い名前（または長い名前）のジョイント。among（長い名前の集まり）があればその中を優先する。"""
+    """データの名前（または長い名前）のジョイント。among（長い名前の集まり）があればその中を優先する。"""
     if among is not None:
         for j in among:
-            if j == name or short_name(j) == name:
+            if j == name or doc_short(j) == name or short_name(j) == name:
                 return j
-    found = cmds.ls(name, type="joint", long=True) or []
+    found = cmds.ls(to_scene(name), type="joint", long=True) or []
     return found[0] if found else None
 
 
@@ -458,7 +601,7 @@ def detect_base_bone(names: Sequence[str]) -> str:
 
 def detect_base_bone_for(meshes: Iterable[str]) -> str:
     """メッシュの骨格から基準ボーンを検出する。"""
-    return detect_base_bone([short_name(j) for j in mesh_joints(meshes)])
+    return detect_base_bone([doc_short(j) for j in mesh_joints(meshes)])
 
 
 # ---------------------------------------------------------------------------
@@ -637,7 +780,7 @@ def _enter(ref: Reference, extra_joints: Iterable[str]) -> None:
         ref.warnings.append("バインドポーズ（dagPose）が無いため、今のジョイントの姿勢を基準にします")
     for j in joints:
         t, q, s = read_local(j)
-        ref.bones[short_name(j)] = BoneRef(j, t, q, s, _read_raw(j))
+        ref.bones[doc_short(j)] = BoneRef(j, t, q, s, _read_raw(j))
 
     # --- blendShape の重み: 控える → 切り離す → 0 にする
     for m in ref.meshes:
@@ -1036,7 +1179,8 @@ def bake_state_for(mesh: str) -> dict[str, str]:
 def build_scene_info(doc: Document) -> validate.SceneInfo:
     """`validate.validate` に渡す SceneInfo を、doc.target のメッシュから集める。
 
-    メッシュが無い・見つからないときは各欄が None（その検査は飛ばされる）。
+    名前はすべてデータの名前（ネームスペースを外したもの）。
+    メッシュが無い・見つからないときは各欄が None（その検査は飛ばされる。見つからないことは target_mesh_found = False で伝える）。
     curves は FC_* を除くシェイプ名（fcs_* は含む）、targets は FC_* / fcs_*、bones・bone_parents は顔メッシュのスキンの骨格。
     """
     info = validate.SceneInfo()
@@ -1045,11 +1189,14 @@ def build_scene_info(doc: Document) -> validate.SceneInfo:
     try:
         mesh = resolve_mesh(doc.target.mesh)
     except ValueError:
+        info.target_mesh_found = False  # 検証が target_mesh_missing を出す（ネームスペースの選び間違いのことが多い）
+        info.namespace_choices = [n for n in mesh_namespaces(doc.target.mesh) if n != namespace()]
         return info
+    info.target_mesh_found = True
     prefix = doc.sculpt_shapes.prefix if doc.sculpt_shapes is not None else naming.DEFAULT_SCULPT_PREFIX
     info.curves = curve_names(mesh)
     joints = mesh_joints([mesh])
-    info.bones = [short_name(j) for j in joints]
+    info.bones = [doc_short(j) for j in joints]
     info.bone_parents = joint_parents(joints)
     tgs = fc_targets(mesh, prefix)
     info.targets = [t.alias for t in tgs]

@@ -44,7 +44,7 @@ def _selected_joints() -> list[str]:
     """選択中のジョイント（短い名前）。"""
     out: list[str] = []
     for n in cmds.ls(selection=True, long=True, type="joint") or []:
-        s = scene_mod.short_name(n)
+        s = scene_mod.doc_short(n)  # データの名前（ネームスペースを外す）
         if s not in out:
             out.append(s)
     return out
@@ -115,6 +115,26 @@ class SetupTab(QtWidgets.QWidget):
 
     def _build_target(self) -> None:
         f = self._group("対象のメッシュ")
+        ns_row = QtWidgets.QHBoxLayout()
+        self.ns_combo = QtWidgets.QComboBox()
+        self.ns_combo.setSizeAdjustPolicy(QtWidgets.QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.ns_combo.setMinimumContentsLength(8)
+        self.ns_combo.setToolTip(
+            "キャラクターを参照（リファレンス）で読み込むと、ノードの名前の頭に「chr:」のような名前が付きます（ネームスペース）。"
+            "どのキャラクターを使うかをここで選びます。データには書かず、このシーンだけに覚えます"
+        )
+        self.ns_combo.activated.connect(self.on_namespace_activated)
+        ns_row.addWidget(self.ns_combo, 1)
+        self.ns_find = QtWidgets.QPushButton("自動で探す")
+        self.ns_find.setToolTip("顔のメッシュがあるネームスペースを探して、自動で選ぶ")
+        self.ns_find.clicked.connect(lambda *_: self.on_namespace_find())
+        ns_row.addWidget(self.ns_find)
+        f.addRow("ネームスペース", ns_row)
+        self.ns_note = QtWidgets.QLabel()
+        self.ns_note.setWordWrap(True)
+        self.ns_note.setStyleSheet(DIM_STYLE)
+        self.ns_note.setVisible(False)
+        f.addRow(self.ns_note)
         row = QtWidgets.QHBoxLayout()
         self.mesh = QtWidgets.QComboBox()
         self.mesh.setSizeAdjustPolicy(QtWidgets.QComboBox.AdjustToMinimumContentsLengthWithIcon)
@@ -599,6 +619,7 @@ class SetupTab(QtWidgets.QWidget):
         else:
             self.mesh.insertItem(0, "（未設定）", None)
             self.mesh.setCurrentIndex(0)
+        self._refresh_namespace(doc)
         self._refresh_lod()
         self.extra_list.clear()
         for name in extras:
@@ -610,6 +631,29 @@ class SetupTab(QtWidgets.QWidget):
                 it.setForeground(QtCore.Qt.gray)
             it.setData(QtCore.Qt.UserRole, name)
             self.extra_list.addItem(it)
+
+    def _refresh_namespace(self, doc) -> None:
+        """ネームスペースの行: 顔のメッシュがある候補（「（なし）」とネームスペース）。選べるのが 1 つだけなら選べない。"""
+        cands = self.session.namespace_choices()
+        cur = self.session.namespace
+        was, self._updating = self._updating, True
+        try:
+            self.ns_combo.clear()
+            for c in cands:
+                self.ns_combo.addItem(f"{c}:" if c else "（なし）", c)
+            if cur in cands:
+                self.ns_combo.setCurrentIndex(cands.index(cur))
+            else:
+                label = f"{cur}: （見つかりません）" if cur else "（見つかりません）"
+                self.ns_combo.addItem(label, None)
+                self.ns_combo.setCurrentIndex(self.ns_combo.count() - 1)
+            self.ns_combo.setEnabled(len(cands) > 1 or cur not in cands)
+            self.ns_find.setEnabled(bool(doc.target and doc.target.mesh))
+        finally:
+            self._updating = was
+        note = self.session.namespace_message
+        self.ns_note.setText(note)
+        self.ns_note.setVisible(bool(note))
 
     def _refresh_lod(self) -> None:
         """LOD のメッシュの表。行（メッシュの並び）が変わったときだけ作り直す（LOD 番号のスピンボックスの通知の途中で、自分を消さないため）。"""
@@ -840,6 +884,18 @@ class SetupTab(QtWidgets.QWidget):
             self._run(self.session.set_target, mesh=name)
         else:
             self.refresh()
+
+    def on_namespace_activated(self, index: int) -> None:
+        if self._updating:
+            return
+        ns = self.ns_combo.itemData(index)
+        if ns is None:
+            self.refresh()
+            return
+        self._run(self.session.set_namespace, ns)
+
+    def on_namespace_find(self) -> None:
+        self._run(self.session.find_namespace)
 
     def on_mesh_from_selection(self) -> None:
         sel = _selected_mesh_transforms()

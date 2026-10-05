@@ -105,7 +105,10 @@ def _safe(text: str) -> str:
 
 
 def rig_name(asset: str) -> str:
-    return f"{RIG_PREFIX}{_safe(asset)}"
+    """プレビューの rig の名前。キャラクターのネームスペースがあれば名前に埋める（同じキャラクターを 2 体読み込んでも重ならない。
+    rig は参照ではなくシーンのノードなので、ネームスペースの中には作らない）。"""
+    ns = scene_mod.namespace()
+    return f"{RIG_PREFIX}{_safe(ns) + '_' if ns else ''}{_safe(asset)}"
 
 
 def emotion_attrs(doc: Document) -> dict[int, str]:
@@ -136,7 +139,7 @@ def exists(asset: str) -> bool:
 
 
 def list_rigs() -> list[str]:
-    """シーンにある FacialController のプレビュー rig（transform）すべて。"""
+    """シーンにある FacialController のプレビュー rig（transform）すべて（どのネームスペースのキャラクターのものも）。"""
     out = []
     for n in cmds.ls(type="transform") or []:
         if cmds.attributeQuery(ASSET_ATTR, node=n, exists=True) and cmds.attributeQuery(PREVIEW_ONLY_ATTR, node=n, exists=True):
@@ -949,6 +952,12 @@ def delete(asset: str) -> bool:
     rig = find_rig(asset)
     if rig is None:
         return False
+    delete_node(rig)
+    return True
+
+
+def delete_node(rig: str) -> None:
+    """rig の transform（`list_rigs` で見つけたもの）を、作ったノードごと消す。ネームスペースの違う rig も消せる。"""
     plugs = _all_plugs(rig)
     helpers = _helper_nodes(rig)
     _disconnect_material(rig)  # Toon の受け口との接続を外して 0 に戻す
@@ -956,7 +965,6 @@ def delete(asset: str) -> bool:
     _delete_nodes(helpers)
     _zero_plugs(plugs)
     _delete_nodes([rig])
-    return True
 
 
 def build_ex(doc: Document, camera: Optional[str] = None) -> BuildReport:

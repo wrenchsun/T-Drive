@@ -244,6 +244,7 @@ class FacialSession:
         self.setup_category = "_all"  # セットアップタブの作業セットの分類
         self._suspended: Optional["_SuspendedEdit"] = None  # 保存・出力のあいだ編集状態を一時的に抜けているときの、戻す情報（M-1）
         self.last_capture_base_ignored: list[str] = []  # 直近の `capture_from_scene` で、土台のとおりだったので取り込まなかったシェイプ
+        self.namespace_message = ""  # ネームスペースを決めたときの一文（画面に出す。「ネームスペース chr: のキャラクターを使います」など）
         self.last_capture_below_base: list[str] = []  # 直近の `capture_from_scene` で、シーンの値が土台より低く、取り込めなかったシェイプ（C-2）
 
     # ------------------------------------------------------------ 状態
@@ -346,6 +347,7 @@ class FacialSession:
         self._redo.clear()
         self._applied = None
         self.last_apply = None
+        self._auto_namespace(doc)
         self.refresh_scene(notify=False)
 
     def new(
@@ -367,6 +369,8 @@ class FacialSession:
         doc = Document(meta=_maya_meta("T-Drive Maya"))
         doc.asset = character
         mesh_name = mesh or self._detect_mesh()
+        if mesh_name:
+            self._adopt_namespace_of(mesh_name)  # 選んだメッシュにネームスペースがあれば、データには外した名前を書いてシーンの設定にする
         doc.target = Target(mesh=self._stored_mesh_name(mesh_name) if mesh_name else "")
         if extra_meshes:
             doc.target.extra_meshes = [self._stored_mesh_name(m) for m in extra_meshes]
@@ -399,6 +403,8 @@ class FacialSession:
             dirty = True
         if doc.target is None:
             found = self._detect_mesh()
+            if found:
+                self._adopt_namespace_of(found)
             doc.target = Target(mesh=self._stored_mesh_name(found) if found else "")
             dirty = True
         if converted is not None:
@@ -468,12 +474,148 @@ class FacialSession:
     # ------------------------------------------------------------ メッシュ・基準ボーンの検出
     @staticmethod
     def _stored_mesh_name(mesh: str) -> str:
-        """文書に書くメッシュ名: 短い名前で一意ならそれ、そうでなければ長い名前。"""
-        long_names = cmds.ls(mesh, long=True) or []
+        """文書に書くメッシュ名（ネームスペースは外す）: 短い名前で一意ならそれ、そうでなければ長い名前。"""
+        long_names = cmds.ls(scene_mod.to_scene(mesh), long=True) or []
         if not long_names:
             return mesh
-        short = scene_mod.short_name(long_names[0])
-        return short if len(cmds.ls(short)) == 1 else long_names[0]
+        short = scene_mod.doc_short(long_names[0])
+        return short if len(cmds.ls(scene_mod.to_scene(short))) == 1 else scene_mod.to_doc(long_names[0])
+
+    # ------------------------------------------------------------ ネームスペース（参照したキャラクター。シーンごとの設定）
+    @property
+    def namespace(self) -> str:
+        """今使っているネームスペース（なければ ""）。データには書かず、シーンの fileInfo `tdFacialNamespace` に覚える。"""
+        return scene_mod.namespace()
+
+    @staticmethod
+    def _stored_namespace() -> str:
+        try:
+            v = cmds.fileInfo(scene_mod.NAMESPACE_KEY, query=True)
+        except RuntimeError:
+            return ""
+        return scene_mod._norm_ns(v[0]) if v else ""
+
+    @staticmethod
+    def _store_namespace(ns: str) -> None:
+        """シーンにネームスペースを覚える（シーンの変更フラグは変えない）。"""
+        modified = bool(cmds.file(query=True, modified=True))
+        try:
+            if ns:
+                cmds.fileInfo(scene_mod.NAMESPACE_KEY, ns)
+            else:
+                cmds.fileInfo(remove=scene_mod.NAMESPACE_KEY)
+        except RuntimeError:
+            pass
+        finally:
+            cmds.file(modified=modified)
+
+    def _adopt_namespace_of(self, mesh: str) -> None:
+        """メッシュ（シーンの名前でもデータの名前でもよい）が今のネームスペースの外にあれば、そのメッシュのネームスペースにする。"""
+        found = cmds.ls(mesh, long=True) or []
+        if found:
+            ns = scene_mod.ns_of(found[0])
+        else:
+            cands = scene_mod.mesh_namespaces(mesh)
+            if scene_mod.namespace() in cands or len(cands) != 1:
+                return
+            ns = cands[0]
+        if ns != scene_mod.namespace():
+            scene_mod.set_namespace(ns)
+            self._store_namespace(ns)
+
+    def namespace_choices(self) -> list[str]:
+        """顔のメッシュがあるネームスペースの候補（ネームスペースなしで見つかれば "" を先頭に）。メッシュが未設定なら空。"""
+        doc = self.doc
+        if doc is None or doc.target is None or not doc.target.mesh:
+            return []
+        return scene_mod.mesh_namespaces(doc.target.mesh)
+
+    def _auto_namespace(self, doc: Document) -> str:
+        """データを開いた・シーンが替わったとき、顔のメッシュからネームスペースを決める。決めた理由の一文を返す（`namespace_message` にも入れる）。
+
+        - シーンに覚えた選び（fileInfo）がそのネームスペースにメッシュがあるなら、それを使う
+        - ネームスペースなしでメッシュがあれば、なし
+        - ネームスペース付きが 1 つだけなら、自動でそれを使う（シーンに覚える）
+        - 複数ならなしにして、選ぶよう知らせる。見つからなければ何もしない（検証が target_mesh_missing を出す）"""
+        mesh = doc.target.mesh if doc.target is not None else ""
+        self.namespace_message = ""
+        if not mesh:
+            scene_mod.set_namespace(self._stored_namespace())
+            return ""
+        cands = scene_mod.mesh_namespaces(mesh)
+        stored = self._stored_namespace()
+        msg = ""
+        if stored and stored in cands:
+            pick = stored
+        elif "" in cands:
+            pick = ""
+        elif len(cands) == 1:
+            pick = cands[0]
+            msg = f"ネームスペース {pick}: のキャラクターを使います"
+            self._store_namespace(pick)
+        elif len(cands) > 1:
+            pick = ""
+            msg = f"同じ名前のメッシュが複数のネームスペースにあります（{'、'.join(c + ':' for c in cands[:5])}）。セットアップの「ネームスペース」で選んでください"
+        else:
+            pick = ""
+        scene_mod.set_namespace(pick)
+        self.namespace_message = msg
+        if msg:
+            print(f"[T-Drive] {msg}")
+        return msg
+
+    def find_namespace(self) -> CommandResult:
+        """「自動で探す」: 顔のメッシュがあるネームスペースを探し直して使う（シーンに覚えた選びは忘れる）。"""
+        doc = self.require()
+        cands = self.namespace_choices()
+        if not cands:
+            return CommandResult(
+                ok=False,
+                code="mesh_not_found",
+                message=f"メッシュ「{doc.target.mesh if doc.target else ''}」がどのネームスペースにも見つかりません。キャラクターを読み込んでいるか確かめてください",
+            )
+        before = scene_mod.namespace()
+        self.end_edit(quiet=True)
+        self._store_namespace("")
+        self._auto_namespace(doc)
+        self._after_namespace_change(before)
+        if self.namespace_message.startswith("同じ名前"):
+            return CommandResult(ok=False, code="ambiguous_namespace", message=self.namespace_message)
+        return CommandResult(message=self.namespace_message or self._namespace_sentence())
+
+    def _namespace_sentence(self) -> str:
+        ns = scene_mod.namespace()
+        return f"ネームスペース {ns}: のキャラクターを使います" if ns else "ネームスペースなしのキャラクターを使います"
+
+    def set_namespace(self, ns: str, force: bool = False) -> CommandResult:
+        """使うネームスペースを選ぶ（データは変えない。シーンに覚える）。候補（`namespace_choices`）以外は失敗（force=True で通す。テスト用）。
+        編集状態は抜ける。シーンに出した格子・隠した表示は戻す（新しいキャラクターで出し直される）。"""
+        doc = self.require()
+        ns = scene_mod._norm_ns(ns)
+        if ns == scene_mod.namespace():
+            return CommandResult(message=self._namespace_sentence())
+        if not force and ns not in self.namespace_choices():
+            where = f"ネームスペース {ns}:" if ns else "ネームスペースなし"
+            return CommandResult(ok=False, code="namespace_not_found", message=f"{where} にメッシュ「{doc.target.mesh if doc.target else ''}」がありません")
+        before = scene_mod.namespace()
+        self.end_edit(quiet=True)
+        scene_mod.set_namespace(ns)
+        self._store_namespace(ns)
+        self.namespace_message = ""
+        self._after_namespace_change(before)
+        return CommandResult(message=self._namespace_sentence())
+
+    def _after_namespace_change(self, before: str) -> None:
+        if scene_mod.namespace() == before:
+            self.refresh_scene(notify=True)
+            return
+        self._head_joint = ""
+        self._applied = None
+        self.scene_grid.remove()
+        self.hide_others.remove()
+        self.refresh_scene(notify=True, call_listeners=False)
+        self._sync_preview()
+        self._changed(dirty=False)
 
     @staticmethod
     def _detect_mesh() -> str:
@@ -893,12 +1035,18 @@ class FacialSession:
             "hide_others": self.hide_others.export_state(),
             "pose_category": self.pose_category,
             "setup_category": self.setup_category,
+            "namespace": scene_mod.namespace(),
         }
 
     def import_state(self, state: dict[str, Any]) -> bool:
         """`export_state` の結果で、リロード前の状態を作り直す（新しいモジュールのセッションで呼ぶ）。戻り: 復元できたか。"""
         doc = fcpose_io.from_dict(state["doc"])
         path = Path(state["path"]) if state.get("path") else None
+        ns = scene_mod._norm_ns(str(state.get("namespace") or ""))
+        if ns:  # リロードで消えるのはメモリだけ（シーンの fileInfo は残る）。念のため入れ直す
+            scene_mod.set_namespace(ns)
+            if self._stored_namespace() != ns:
+                self._store_namespace(ns)
         self._install(doc, path, confirmed=bool(state.get("path_confirmed")), dirty=bool(state.get("dirty")))
         self.converted_from = copy.deepcopy(state.get("converted_from"))
         self.source_path = Path(state["source_path"]) if state.get("source_path") else None
@@ -1701,14 +1849,25 @@ class FacialSession:
         doc = self.require()
         new_mesh = doc.target.mesh if doc.target else ""
         new_extra = list(doc.target.extra_meshes) if doc.target else []
+        before_ns = scene_mod.namespace()
         try:
+            if mesh:
+                self._adopt_namespace_of(mesh)  # 別のネームスペースのメッシュを選んだら、そのキャラクターに切り替える
             if mesh is not None:
                 new_mesh = self._stored_mesh_name(scene_mod.resolve_mesh(mesh)) if mesh else ""
             if extra_meshes is not None:
                 new_extra = [self._stored_mesh_name(scene_mod.resolve_mesh(m)) for m in extra_meshes]
         except ValueError as e:
+            if scene_mod.namespace() != before_ns:  # 切り替えたネームスペースを元へ
+                scene_mod.set_namespace(before_ns)
+                self._store_namespace(before_ns)
             return CommandResult(ok=False, code="mesh_not_found", message=str(e))
         self.end_edit(quiet=True)
+        if scene_mod.namespace() != before_ns:
+            self._head_joint = ""
+            self.scene_grid.remove()
+            self.hide_others.remove()
+            self.namespace_message = self._namespace_sentence()
         if doc.target is None:
             doc.target = Target()
         doc.target.mesh = new_mesh
@@ -3364,7 +3523,9 @@ class FacialSession:
         self._forget_edit()
         self.scene_grid.forget()
         self.hide_others.forget()
+        scene_mod.set_namespace("")  # 新しいシーンにはネームスペースの記録が無い
         if self.presenters is not None:
+            self._auto_namespace(self.presenters.ctx.doc)
             self.refresh_scene(notify=True)
 
 
@@ -3509,9 +3670,11 @@ def on_scene_opened() -> None:
     s._forget_edit()
     s.scene_grid.forget()
     s.hide_others.forget()
+    scene_mod.set_namespace(s._stored_namespace())  # ネームスペースはシーンごとの設定
     path = FacialSession.remembered_path()
     if not path or not Path(path).exists():
         if s.presenters is not None:
+            s._auto_namespace(s.presenters.ctx.doc)
             s.refresh_scene(notify=True)  # 開いたままのデータ: 新しいシーンの事情を取り直す
         return
     if s.has_unsaved_work:
