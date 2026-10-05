@@ -6,6 +6,11 @@
 ## [Unreleased]
 
 ### 互換性
+- （リリース前に記入）
+
+## [0.4.90] - 2026-10-05
+
+### 互換性
 - MINOR: Python の公開モジュール名は転送モジュールで維持（`tdrive_toon.lifecycle` / `project` / `updater` / `ui_update` / `mcp_bridge` は `tdrive` に移したが、同じモジュールを返すので既存の import はそのまま動く）。Look・パラメータ契約に変更なし
 
 ### 追加
