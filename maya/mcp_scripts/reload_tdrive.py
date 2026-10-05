@@ -4,7 +4,7 @@
 **編集中の Look（未保存の変更・エディタ内 Undo を含む）とプレビュー環境（プロファイル・ライト）は引き継ぐ**。
 以前はファイルから開き直していたため、未保存の変更が消えていた（2026-09-28 修正）。
 **FacialController の開いているデータ（未保存の変更・保存先・Undo・選択・編集中の値）も引き継ぐ**（docs/19 M-3）。
-基準姿勢の編集状態はリロードの前に抜けてシーンを元へ戻す（リロード後に必要なら入り直す）。
+基準姿勢の編集状態はリロードの前に抜けてシーンを元へ戻し、編集中だったならリロード後に入り直して同じポーズを当て直す。
 """
 
 import sys
@@ -27,8 +27,15 @@ facial_carry = None
 old_facial = sys.modules.get("tdrive_facial.session")
 if old_facial is not None:
     try:
-        old_facial.current().end_edit(quiet=True)  # 基準姿勢のまま引き継がない（シーンを元の姿勢へ戻してから）
-        facial_carry = old_facial.current().export_state()
+        cur = old_facial.current()
+        edit_info = None  # 編集状態だったか（あとで入り直す）。古いコードのセッションでも動くよう属性で読む
+        if getattr(cur, "editing", False):
+            base = getattr(cur, "_base", None)
+            edit_info = {"base": {"name": base.name, "curves": dict(base.curves)} if base is not None else None}
+        cur.end_edit(quiet=True)  # 基準姿勢のまま引き継がない（シーンを元の姿勢へ戻してから）
+        facial_carry = cur.export_state()
+        if facial_carry is not None:
+            facial_carry["edit"] = edit_info
     except Exception as exc:  # noqa: BLE001  引き継げなければ目立つように知らせる（黙って消さない）
         cmds.warning(f"[T-Drive] FacialController のデータを引き継げませんでした。未保存の変更は失われます: {exc}")
 env = dict(getattr(old_preview, "_env", {})) if old_preview is not None else {}

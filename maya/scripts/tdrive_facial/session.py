@@ -923,10 +923,36 @@ class FacialSession:
             pose = fcpose_io._read_pose(buf.get("curves"), buf.get("bones"))
             self.pose.curves, self.pose.bones = pose.curves, pose.bones  # 保存していないスライダーの値
         self._changed(dirty=False)
+        self._resume_edit_after_reload(state.get("edit"))  # 格子・隠すメッシュより先に（基準姿勢の記録へ入れない）
         self.scene_grid.import_state(state.get("scene_grid"))
         self.hide_others.import_state(state.get("hide_others"))
         self.pose_category = str(state.get("pose_category") or "_all")
         self.setup_category = str(state.get("setup_category") or "_all")
+        return True
+
+    def _resume_edit_after_reload(self, edit: Optional[dict[str, Any]]) -> bool:
+        """リロードの前に編集状態だったなら、基準姿勢へ入り直して編集中の値（+ 土台の表情）を当てる。戻り: 入り直したか。
+
+        edit は reload_tdrive.py が `end_edit` の前に控えた {"base": {"name", "curves"} | None}（None / 無し = 編集状態ではなかった）。
+        「試す」「彫り」は戻さない。入り直せなければ編集状態を抜けて（値は残る）知らせる。シーンの変更フラグは触らない。"""
+        if not edit or self.presenters is None:
+            return False
+        modified = bool(cmds.file(query=True, modified=True))
+        try:
+            self.begin_edit()
+            b = edit.get("base")
+            if b and b.get("curves"):
+                self._base = BaseExpression(str(b.get("name") or "土台"), {str(n): float(w) for n, w in b["curves"].items()})
+            self._apply_buffer()
+        except Exception as exc:  # noqa: BLE001  入り直せなくても引き継ぎは成功させる（シーンは元の姿勢のまま）
+            self.end_edit(quiet=True)
+            msg = f"リロードのあと、基準姿勢にしてポーズを当て直せませんでした。今はシーンにポーズが当たっていません（値は残っています）: {exc}"
+            lifecycle.report_error(msg, traceback.format_exc(), once=False)
+            cmds.warning(f"[T-Drive] {msg}")
+            return False
+        finally:
+            cmds.file(modified=modified)
+        self._notify_state()
         return True
 
     # ------------------------------------------------------------ 保存・出力のあいだだけ編集状態を抜ける（M-1）

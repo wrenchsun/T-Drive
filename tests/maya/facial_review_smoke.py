@@ -226,6 +226,7 @@ def sec_m3_reload_keeps_unsaved_facial_data(tmp: Path) -> None:
     from tdrive_facial.core import fcpose_io
 
     ids, s = fresh(tmp)
+    orig_j, orig_w = joint_state(ids["joints"]), weight_state(ids["bs"])
     s.set_grid(cols=7)  # 未保存の変更（Undo にも積まれる）
     s.set_edge_fade(12)
     s.begin_edit()
@@ -250,9 +251,104 @@ def sec_m3_reload_keeps_unsaved_facial_data(tmp: Path) -> None:
     check("M-3: 選択中の点・レイヤーが残る", s2.ctx.selection == sel and s2.ctx.active_layer == layer_i)
     check("M-3: 編集中（保存していない）のスライダーの値が残る", abs(s2.pose.curves.get("bs.mouth_open", 0) - 0.77) < 1e-9, str(s2.pose.curves))
     check("M-3: エディタ内 Undo の履歴が残り、戻せる", len(s2._undo) == n_undo and s2.undo() and s2.undo() and s2.doc.grid.cols == 3, f"{len(s2._undo)}")
+    check("M-3: 編集状態でなかったなら、リロード後も編集状態にならない（シーンは元の姿勢のまま）", not s2.editing and joint_state(ids["joints"]) == orig_j and weight_state(ids["bs"]) == orig_w)
     s2.redo()
     s2.redo()
     s2.close()
+
+
+def sec_m3b_reload_reenters_edit(tmp: Path) -> None:
+    """M-3: 編集状態でリロードしたら、リロード後に入り直して同じポーズ（基準姿勢 + 編集中の値 + 土台）がシーンに当たる。点・キー・マスとも。"""
+    import runpy
+
+    from maya import cmds
+
+    from tdrive import project
+    from tdrive_facial.core.model import SourcePose
+
+    for kind in ("point", "key", "lip"):
+        ids, s = fresh(tmp)
+        bs, joints = ids["bs"], ids["joints"]
+        s.set_perspective_enabled(True)
+        s.add_perspective_key(30.0, SourcePose({"bs.brow_up": 0.5}, {}))
+        s.add_lip_phoneme("A")
+        s.set_lip_cell_pose("A", "", SourcePose({"bs.mouth_open": 1.0}, {}))
+        cmds.setAttr(f"{bs}.weight[0]", 0.15)
+        orig_w, orig_j = weight_state(bs), joint_state(joints)
+        if kind == "point":
+            s.select_point(1, 2)
+        elif kind == "key":
+            s.select_key(0)
+        else:
+            s.select_lip_cell("A")
+        s.set_curve("bs.smile_R", 0.41)  # 保存していないスライダーの値
+        s.set_base_expression("smile", {"bs.brow_up": 0.3})
+        tgt = (s.ctx.selection, s.ctx.selected_key(), s.ctx.selected_lip())
+        buf = dict(s.pose.curves)
+        edit_w, edit_j = weight_state(bs), joint_state(joints)
+        check(f"M-3b {kind} 前提: 編集中・未保存の値あり・シーンは基準姿勢", s.editing and s.pose.dirty and abs(buf.get("bs.smile_R", 0) - 0.41) < 1e-9, str(buf))
+
+        runpy.run_path(str(REPO / "maya" / "mcp_scripts" / "reload_tdrive.py"))
+        project.set_root(tmp)
+        from tdrive_facial import session as S2
+        from tdrive_facial import ui as fui2
+
+        s2 = S2.current()
+        check(f"M-3b {kind}: リロード後に編集状態へ入り直す（新しいモジュール）", s2 is not s and s2.editing)
+        if not s2.editing:
+            s2.close()
+            cmds.file(new=True, force=True)
+            continue
+        check(f"M-3b {kind}: 同じ対象・編集中の値・未保存の印", (s2.ctx.selection, s2.ctx.selected_key(), s2.ctx.selected_lip()) == tgt and dict(s2.pose.curves) == buf and s2.dirty, f"{s2.ctx.selection} {s2.pose.curves}")
+        check(f"M-3b {kind}: シーンの重み・ジョイントがリロード前と同じ（基準姿勢 + 値 + 土台）", weight_state(bs) == edit_w and joint_state(joints) == edit_j, f"{weight_state(bs)} vs {edit_w}")
+        check(f"M-3b {kind}: 土台の表情も戻る", s2.base_expression_name == "smile")
+        hb = fui2.HeaderBar(s2)
+        hb.refresh()
+        check(f"M-3b {kind}: ヘッダーが「編集中」・●未保存", "編集中" in hb.edit_state.text() and "●未保存" in hb.path_text(), hb.edit_state.text())
+        s2.end_edit(quiet=True)
+        check(f"M-3b {kind}: 抜けると元の姿勢へ戻る", weight_state(bs) == orig_w and joint_state(joints) == orig_j)
+        s2.close()
+        cmds.file(new=True, force=True)
+
+
+def sec_m3c_reenter_failure_keeps_values(tmp: Path) -> None:
+    """M-3: 入り直せなかったら、例外にせず編集状態の外のまま値を残し、知らせる。"""
+    import runpy
+
+    from maya import cmds
+
+    from tdrive import project
+
+    ids, s = fresh(tmp)
+    s.select_point(1, 2)
+    s.set_curve("bs.smile_R", 0.41)
+    orig_w = None
+    runpy.run_path(str(REPO / "maya" / "mcp_scripts" / "reload_tdrive.py"))
+    project.set_root(tmp)
+    from tdrive.lifecycle import add_error_listener
+    from tdrive_facial import session as S2
+
+    s2 = S2.current()
+    s2.end_edit(quiet=True)
+    orig_w = weight_state(ids["bs"])
+    msgs: list[str] = []
+    add_error_listener(lambda summary, detail: msgs.append(summary))
+
+    def boom():
+        raise S2.FacialSessionError("基準姿勢にできません: テスト")
+
+    s2.begin_edit = boom  # 入り直しの失敗を作る
+    try:
+        ok = s2._resume_edit_after_reload({"base": None})
+    except Exception as exc:  # noqa: BLE001
+        ok = None
+        check("M-3c: 入り直しの失敗で例外を出さない", False, repr(exc))
+    del s2.begin_edit
+    check("M-3c: 失敗は False・編集状態の外・値が残る・シーンは元のまま", ok is False and not s2.editing and abs(s2.pose.curves.get("bs.smile_R", 0) - 0.41) < 1e-9 and weight_state(ids["bs"]) == orig_w)
+    check("M-3c: 知らせるメッセージが出る", any("当て直せませんでした" in m for m in msgs), str(msgs))
+    check("M-3c: 編集状態でなかった印（None）なら何もしない", s2._resume_edit_after_reload(None) is False and not s2.editing)
+    s2.close()
+    cmds.file(new=True, force=True)
 
 
 def sec_m4_restore_does_not_delete_own_control(tmp: Path) -> None:
