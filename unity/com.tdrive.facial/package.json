@@ -1,9 +1,9 @@
 {
   "name": "com.tdrive.facial",
   "displayName": "T-Drive Facial",
-  "version": "0.4.95",
+  "version": "0.4.96",
   "unity": "6000.3",
-  "description": "T-Drive Facial: Unity runtime of FacialController (camera-angle based facial blend shape correction). Imports .fcpose authored in Maya T-Drive. Works without D-Drive (com.ddrive.core).",
+  "description": "T-Drive Facial: Unity runtime of FacialController (camera-angle based facial blend shape correction). Imports .fcpose authored in Maya T-Drive. Works without D-Drive (com.ddrive.core).,
   "keywords": [
     "tdrive",
     "facial",
