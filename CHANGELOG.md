@@ -9,6 +9,7 @@
 - MINOR: Python の公開モジュール名は転送モジュールで維持（`tdrive_toon.lifecycle` / `project` / `updater` / `ui_update` / `mcp_bridge` は `tdrive` に移したが、同じモジュールを返すので既存の import はそのまま動く）。Look・パラメータ契約に変更なし
 
 ### 追加
+- Unity パッケージ: D-Drive 1.4.0 の実行順の検査から FacialCorrectionRunner を除外すると宣言（`FacialCameraExecutionOrderExemption`。カメラを読むだけのため）
 - Toon: 機能「顔の角度連動（線と陰）」（`_ToonFacialAngle` ほか 3 つ。顔の向きに合わせて輪郭線の太さと陰の境目を変える。角度は FacialController が渡す）（F5-9）
 - **FacialController**（エディタ › FacialController タブ。マニュアル: docs/DesignerManual/facial.html）: カメラの角度に応じて顔を補正するデータを Maya で作り、Unity で再生する
   - Maya: セットアップ / グリッド / ポーズ / シェイプ / レイヤー（感情）/ 検証 / 出力 の各タブ、自動生成（ミラー・補間）、ベイク（`FC_*` シェイプ）、カメラ連動のプレビュー、土台の表情、格子のサムネイル、シェイプ作成支援（この角度で彫る・左右に分ける・ミラー・中間形 / 誇張形・組み合わせ補正・別メッシュへ写す・整理）

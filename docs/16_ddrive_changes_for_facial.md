@@ -29,6 +29,8 @@
 >
 > **T-Drive 側の対応（2026-10-03、FT-6）**: FC-5 と FC-3 に対応済み。ローカルブランチ `tdrive-facial` は origin/main `59111a7` を取り込み済み。
 >
+> **T-Drive 側の対応（2026-10-06、D-Drive 1.4.0 の `ICameraExecutionOrderExemptionProvider` = P-15 確認 Q-4 / docs/42 §5.14 E-23）**: Runner は実行順 10000 でカメラを読むだけなので、D-Drive の実行順の検査（契約 G-1）の Warning を `FacialCameraExecutionOrderExemption`（`Bridges/DDrive/FC/Editor/`）で除外すると宣言した。理由つきで Validation に Info が出る。Runner の実行順は変えない。
+>
 > 注: D-Drive の版はまだ 1.3.1（1.4.0 のタグは未発行）。新しい型を使うコードは、版の条件付きのアセンブリ（レビュー指摘 E-1）に置く。
 >
 > D-Drive 側の人による確認項目は D-Drive の `docs/52_manual_verification_fc.md`（T-Drive と合わせて見る項目は同 §22）。T-Drive 側の確認項目は [18](18_manual_verification_facial.md) G 節。

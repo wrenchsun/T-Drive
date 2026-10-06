@@ -290,6 +290,7 @@ D-Drive 側の詳しい手順は D-Drive の `docs/52_manual_verification_fc.md`
 | G2-16 | Maya のプレビューの強さ・感情にキーを打って出力タブで `.fctrack` を書き出し、D-Drive のカットシーンの置き場所（`Assets/SourceAssets/Cutscene/<分類>/`）へ `<ショット>__<モデル>.fctrack` として置く（FBX を先に取り込んだ場合 / `.fctrack` を先に置いた場合の両方） | カットシーンの Timeline に `<モデル>_Facial(auto)` トラックとクリップができ、Bindings に SameAsTrack の行が 1 つ足される。再生すると Maya のキーどおりに強さ・感情が変わる。先に置いた場合は警告が出て、あとで「Tools › T-Drive › Facial › .fctrack を Timeline に反映し直す」で入る | 一部 ✅（トラックの作成・更新・結び付け・カーブの再生をメモリ上でテスト。実ファイルでの自動反映は未確認） | [ ] | |
 | G2-17 | `.fctrack` を置き直す（Maya でキーを変えて再出力） | `(auto)` のトラックだけ更新され、手で足したトラック・クリップ、クリップに手で入れた値は残る。Binding が重複しない | ✅（メモリ上） | [ ] | |
 | G2-18 | モデルの Prefab に「Facial Model Instance Bridge」を付けて（Runner のインスペクターのボタン）、キャラクターを出す → 返す → 出し直す | 出し直したキャラクターでも補正が正しく掛かり、最初のフレームから正しい形。返却時に補正のシェイプが残らない | ✅（D-Drive のプールの借りる / 返すを使ったテスト。ModelsManager 経由は未確認） | [ ] | |
+| G2-19 | D-Drive 1.4.0 以上のプロジェクトで T-Drive を導入し、CutsceneData が 1 件以上ある状態で Tools > D-Drive > Validation > Run All | `FacialCorrectionRunner` に実行順の Warning が出ず、Info「実行順の検査から除外: 1 型 — TDrive.Facial.FacialCorrectionRunner（理由: …。宣言元: …）」が 1 件出る | ✅ 宣言の中身（テスト） | [ ] | |
 
 ## I. コードレビューの修正の確認（[19](19_code_review_2026-10-03.md)。2026-10-03 追加）
 

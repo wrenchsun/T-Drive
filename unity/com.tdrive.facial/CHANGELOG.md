@@ -16,6 +16,7 @@
   - `exaggeration` カーブを含む `.fctrack` は、古い版のパッケージでは読めない
 
 ### 追加
+- D-Drive 1.4.0 以降: `FacialCameraExecutionOrderExemption`（`ICameraExecutionOrderExemptionProvider`）で、Runner（実行順 10000・カメラを読むだけ）を D-Drive の実行順の検査から除外すると宣言
 - F5-11: 補間の種類（`quality.interpolation` = bilinear / catmullRom、調整値「補間」）
 - F5-9: マテリアル出力が `_ToonFacialAngles` も書く（`writeToonAngles`。初期値オン）
 - F5-8: リップシンクの対応表（`.fcpose` の `lipSync`。音素 × 感情 → 口のシェイプ）。`Runner.SetLipSync` / `SetLipSyncByIndex` / `ClearLipSync`（音素の強さ・声量を渡す。追従 `follow` つき）、調整値「リップシンクの強さ」「追従」、インスペクターの状態とプレビュー、検証「口のシェイプがメッシュに無い」。口のシェイプは書く前の値へ戻す（無効化・プール返却・保存の前）。解析とのつなぎ `FacialULipSyncBridge`（uLipSync があるときだけコンパイルされる別アセンブリ `TDrive.Facial.ULipSync`）。`.fcpose` の取り込みの版は上げていない（`lipSync` が無ければ何もしない）
