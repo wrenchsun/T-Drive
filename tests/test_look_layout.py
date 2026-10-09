@@ -161,3 +161,19 @@ def test_average_rgb():
     assert L.average_rgb([(1, 0, 0, 1), (0, 0, 1, 1)]) == [0.5, 0.0, 0.5]
     assert L.average_rgb([(1, 0, 0, 0), (0, 1, 0, 1)]) == [0.0, 1.0, 0.0]  # 透明は数えない
     assert L.average_rgb([]) == [1.0, 1.0, 1.0]
+
+
+# ---------------------------------------------------------------- テクスチャのドロップ（E-10）
+def test_path_from_uri():
+    assert L.path_from_uri("file:///C:/proj/tex/a%20b.png") == "C:/proj/tex/a b.png"
+    assert L.path_from_uri("file://server/share/x.png") == "//server/share/x.png"
+    assert L.path_from_uri("file:///home/me/x.png") == "/home/me/x.png"
+    assert L.path_from_uri("https://example.com/x.png") is None
+    assert L.path_from_uri("# comment") is None and L.path_from_uri("") is None
+
+
+def test_first_image_from_uri_list_skips_non_images():
+    text = "# c\r\nfile:///C:/a/readme.txt\r\nfile:///C:/a/hair.TGA\r\nfile:///C:/a/b.png\r\n"
+    assert L.first_image_from_uri_list(text) == "C:/a/hair.TGA"
+    assert L.first_image_from_uri_list("file:///C:/a/x.txt") is None
+    assert L.is_image_path("a.PNG") and not L.is_image_path("a.fbx")

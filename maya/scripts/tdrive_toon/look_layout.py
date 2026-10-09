@@ -219,6 +219,41 @@ def average_rgb(pixels) -> list[float]:
     return [round(c / n, 4) for c in acc] if n else [1.0, 1.0, 1.0]
 
 
+# ---------------------------------------------------------------- テクスチャのドロップ（E-10。Qt 非依存）
+IMAGE_EXTENSIONS = (".png", ".tga", ".tif", ".tiff", ".exr", ".psd", ".jpg", ".jpeg", ".bmp")
+
+
+def is_image_path(path: str) -> bool:
+    return path.lower().endswith(IMAGE_EXTENSIONS)
+
+
+def path_from_uri(uri: str) -> str | None:
+    """`file:///C:/a/b.png`（text/uri-list の 1 行）→ `C:/a/b.png`。file: 以外・空は None。"""
+    from urllib.parse import unquote, urlparse
+
+    u = (uri or "").strip()
+    if not u or u.startswith("#"):
+        return None
+    parsed = urlparse(u)
+    if parsed.scheme != "file":
+        return None
+    path = unquote(parsed.path)
+    if parsed.netloc and parsed.netloc != "localhost":  # file://server/share/x.png（UNC）
+        return f"//{parsed.netloc}{path}"
+    if len(path) > 2 and path[0] == "/" and path[2] == ":":  # /C:/a → C:/a
+        path = path[1:]
+    return path or None
+
+
+def first_image_from_uri_list(text: str) -> str | None:
+    """text/uri-list（複数行）から最初の画像ファイルのパス。"""
+    for line in (text or "").splitlines():
+        path = path_from_uri(line)
+        if path and is_image_path(path):
+            return path
+    return None
+
+
 # ---------------------------------------------------------------- 記憶（optionVar。Maya が無ければ記憶しない）
 def pref_get(name: str, default):
     try:

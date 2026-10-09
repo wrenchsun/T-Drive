@@ -723,7 +723,7 @@ class ParamRow:
         self.base_btn.clicked.connect(lambda: tab.clear_override(key))
         # 右クリック: コピー / 貼り付け / ↺ / base に戻す（E-4）。数値欄は Qt 標準の編集メニューのまま
         targets = [self.label, self.editor]
-        for name in ("slider", "path"):
+        for name in ("slider", "path", "thumb"):
             if hasattr(self, name):
                 targets.append(getattr(self, name))
         for w in targets:
@@ -787,12 +787,17 @@ class ParamRow:
             w = QtWidgets.QWidget()
             h = QtWidgets.QHBoxLayout(w)
             h.setContentsMargins(0, 0, 0, 0)
-            self.path = QtWidgets.QLineEdit()
+            self.thumb = ui_look_dialogs.TextureThumb()
+            self.thumb.clicked.connect(self._zoom_texture)
+            self.thumb.dropped.connect(self._drop_texture)
+            self.path = ui_look_dialogs.TexturePathEdit()
             self.path.setPlaceholderText(TEXTURE_PLACEHOLDER.get(self.key, "なし"))
             self.path.editingFinished.connect(self._on_path)
+            self.path.dropped.connect(self._drop_texture)
             browse = QtWidgets.QToolButton()
             browse.setText("…")
             browse.clicked.connect(self._browse)
+            h.addWidget(self.thumb)
             h.addWidget(self.path, 1)
             h.addWidget(browse)
             return w
@@ -887,6 +892,9 @@ class ParamRow:
         if self.kind == params.COLOR:
             self._fill_color_menu(menu)
             menu.addSeparator()
+        elif self.kind == params.TEXTURE:
+            self._fill_texture_menu(menu)
+            menu.addSeparator()
 
     def _fill_color_menu(self, menu: QtWidgets.QMenu) -> None:
         copy_hex = menu.addAction("16 進をコピー")
@@ -897,6 +905,49 @@ class ParamRow:
         copy_hex.triggered.connect(lambda *_: QtWidgets.QApplication.clipboard().setText(format_hex(self._color)))
         copy_f.triggered.connect(lambda *_: QtWidgets.QApplication.clipboard().setText(format_floats(self._color)))
         paste.triggered.connect(lambda *_: self._paste_color())
+
+    # ---------------------------------------------------------- テクスチャ（E-10）
+    def _texture_value(self) -> str | None:
+        """今表示しているパス（プロジェクト基準）。混在・未設定は None。"""
+        text = self.path.text().strip()
+        return None if not text or text == MIXED else text
+
+    def _fill_texture_menu(self, menu: QtWidgets.QMenu) -> None:
+        value = self._texture_value()
+        folder = Path(project.from_project_path(value)).parent if value else None
+        open_a = menu.addAction("フォルダを開く")
+        open_a.setEnabled(folder is not None and folder.is_dir())
+        open_a.triggered.connect(lambda *_: self._open_texture_folder())
+        copy_a = menu.addAction("パスをコピー")
+        copy_a.setEnabled(value is not None)
+        copy_a.triggered.connect(lambda *_: QtWidgets.QApplication.clipboard().setText(self._texture_value() or ""))
+        clear_a = menu.addAction("クリア")
+        clear_a.setEnabled(value is not None or self.path.text() == MIXED)
+        clear_a.triggered.connect(lambda *_: self._clear_texture())
+
+    def _open_texture_folder(self) -> None:
+        value = self._texture_value()
+        if not value:
+            return
+        folder = Path(project.from_project_path(value)).parent
+        try:
+            os.startfile(str(folder))  # noqa: S606  Windows のエクスプローラーで開く
+        except OSError as exc:
+            QtWidgets.QMessageBox.warning(self.editor, "T-Drive Toon", f"フォルダを開けません: {exc}")
+
+    def _clear_texture(self) -> None:
+        self.tab.begin()
+        self.tab.set(self.key, None)
+
+    def _zoom_texture(self) -> None:
+        value = self._texture_value()
+        if value:
+            ui_look_dialogs.TextureZoomDialog(self.editor, value).exec()
+
+    def _drop_texture(self, path: str) -> None:
+        """Explorer・Maya の file ノードからのドロップ。プロジェクト基準のパスにして差し替える。"""
+        self.tab.begin()
+        self.tab.set(self.key, preview.to_repo_path(path))
 
     def _paste_color(self) -> None:
         text = QtWidgets.QApplication.clipboard().text()
@@ -976,6 +1027,7 @@ class ParamRow:
                 self.color_btn.setStyleSheet(f"background-color: rgb({r},{g},{b}); color: {fg}; border: 1px solid #888;")
         elif k == params.TEXTURE:
             self.path.setText(MIXED if mixed else (value or ""))
+            self.thumb.set_path(None if mixed else value, mixed)
             missing = not mixed and bool(value) and not Path(project.from_project_path(value)).exists()
             self.path.setStyleSheet("border: 1px solid #ff6060; color: #ff9090;" if missing else "")
             self.path.setToolTip(

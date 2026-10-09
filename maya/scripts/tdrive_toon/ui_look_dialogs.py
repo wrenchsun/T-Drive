@@ -11,7 +11,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 
 from . import params, presets, project
 from .look_layout import (
-    GROUP_LABELS, SHADE2_KEY, SHADE_DEFAULTS, SHADE_KEY, SHADE_RANGES, average_rgb, build_groups, shade_pair,
+    GROUP_LABELS, SHADE2_KEY, SHADE_DEFAULTS, SHADE_KEY, SHADE_RANGES, average_rgb, build_groups, first_image_from_uri_list, is_image_path, shade_pair,
 )
 
 
@@ -179,3 +179,152 @@ class ShadeFromBaseDialog(QtWidgets.QDialog):
         self.chip.setAlignment(QtCore.Qt.AlignCenter)
         self.tab.set(SHADE_KEY, shade, live=live)
         self.tab.set(SHADE2_KEY, shade2, live=live)
+
+
+# ---------------------------------------------------------------- E-10 テクスチャ欄
+THUMB_SIZE = 48
+ZOOM_MAX = 512
+_THUMBS: dict[str, tuple[float, QtGui.QPixmap]] = {}  # 絶対パス → (更新時刻, サムネイル)
+
+
+def thumbnail(path: str) -> QtGui.QPixmap | None:
+    """プロジェクト基準のパスのサムネイル。パスごとにキャッシュし、ファイルが更新されたら読み直す。読めなければ None。"""
+    import os
+
+    full = project.from_project_path(path)
+    try:
+        mtime = os.path.getmtime(full)
+    except OSError:
+        _THUMBS.pop(full, None)
+        return None
+    hit = _THUMBS.get(full)
+    if hit is not None and hit[0] == mtime:
+        return hit[1]
+    img = QtGui.QImage(full)
+    if img.isNull():
+        _THUMBS.pop(full, None)
+        return None
+    pix = QtGui.QPixmap.fromImage(img.scaled(THUMB_SIZE, THUMB_SIZE, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation))
+    _THUMBS[full] = (mtime, pix)
+    return pix
+
+
+def dropped_texture_path(mime: QtCore.QMimeData) -> str | None:
+    """ドロップされたものからテクスチャのパス（絶対）。Explorer のファイル（text/uri-list）か、Maya の file ノード名（文字）。"""
+    if mime.hasUrls():
+        path = first_image_from_uri_list("\n".join(u.toString() for u in mime.urls()))
+        if path:
+            return path
+    if mime.hasText():
+        text = mime.text().strip()
+        path = first_image_from_uri_list(text)
+        if path:
+            return path
+        node = text.splitlines()[0].strip() if text else ""
+        if node:
+            try:
+                from maya import cmds
+
+                if cmds.objExists(node) and cmds.nodeType(node) == "file":
+                    tex = cmds.getAttr(f"{node}.fileTextureName")
+                    if tex and is_image_path(tex):
+                        return tex
+            except Exception:  # noqa: BLE001  Maya が無い・ノード名でない
+                pass
+            if is_image_path(node) and Path(node).is_file():
+                return node
+    return None
+
+
+class TextureZoomDialog(QtWidgets.QDialog):
+    """テクスチャを大きく表示する（原寸。大きければ 512px までに縮める）。"""
+
+    def __init__(self, parent: QtWidgets.QWidget, path: str) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(path)
+        v = QtWidgets.QVBoxLayout(self)
+        label = QtWidgets.QLabel()
+        img = QtGui.QImage(project.from_project_path(path))
+        if img.isNull():
+            label.setText("読み込めません")
+        else:
+            if max(img.width(), img.height()) > ZOOM_MAX:
+                img = img.scaled(ZOOM_MAX, ZOOM_MAX, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
+            label.setPixmap(QtGui.QPixmap.fromImage(img))
+        v.addWidget(label)
+        v.addWidget(QtWidgets.QLabel(f"{path}（{img.width()}×{img.height()} 表示）" if not img.isNull() else path))
+
+
+class TextureThumb(QtWidgets.QLabel):
+    """48px のサムネイル。クリックで拡大。ファイルが無い / 読めないときは灰色の枡。ドロップを受ける。"""
+
+    clicked = QtCore.Signal()
+    dropped = QtCore.Signal(str)
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setFixedSize(THUMB_SIZE, THUMB_SIZE)
+        self.setAlignment(QtCore.Qt.AlignCenter)
+        self.setAcceptDrops(True)
+        self.path: str | None = None
+        self.set_path(None)
+
+    def set_path(self, path: str | None, mixed: bool = False) -> None:
+        self.path = path
+        pix = thumbnail(path) if path and not mixed else None
+        if pix is not None:
+            self.setPixmap(pix)
+            self.setStyleSheet("border: 1px solid #666;")
+            self.setCursor(QtCore.Qt.PointingHandCursor)
+            self.setToolTip("クリックで大きく表示 / ここにファイルをドロップで差し替え")
+        else:
+            self.setPixmap(QtGui.QPixmap())
+            self.setText("—" if mixed else "")
+            self.setStyleSheet("background-color: #555; border: 1px solid #666; color: #ccc;")
+            self.setCursor(QtCore.Qt.ArrowCursor)
+            self.setToolTip("ファイルをドロップで差し替え" if not path else f"読めません: {path}")
+
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802
+        if event.button() == QtCore.Qt.LeftButton and self.pixmap() is not None and not self.pixmap().isNull():
+            self.clicked.emit()
+        super().mouseReleaseEvent(event)
+
+    def dragEnterEvent(self, event) -> None:  # noqa: N802
+        if dropped_texture_path(event.mimeData()):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event) -> None:  # noqa: N802
+        path = dropped_texture_path(event.mimeData())
+        if path:
+            event.acceptProposedAction()
+            self.dropped.emit(path)
+        else:
+            event.ignore()
+
+
+class TexturePathEdit(QtWidgets.QLineEdit):
+    """パス欄。Explorer のファイル / Maya の file ノード名のドロップを受ける（普通の文字のドロップは今までどおり）。"""
+
+    dropped = QtCore.Signal(str)
+
+    def dragEnterEvent(self, event) -> None:  # noqa: N802
+        if dropped_texture_path(event.mimeData()):
+            event.acceptProposedAction()
+        else:
+            super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event) -> None:  # noqa: N802
+        if dropped_texture_path(event.mimeData()):
+            event.acceptProposedAction()
+        else:
+            super().dragMoveEvent(event)
+
+    def dropEvent(self, event) -> None:  # noqa: N802
+        path = dropped_texture_path(event.mimeData())
+        if path:
+            event.acceptProposedAction()
+            self.dropped.emit(path)
+        else:
+            super().dropEvent(event)
