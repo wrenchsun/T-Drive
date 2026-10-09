@@ -5,7 +5,7 @@
 | 項目 | 仕様 |
 |---|---|
 | 配布形態 | Maya モジュール（`tools/install_maya_module.ps1` が `Documents/maya/modules/TDriveToon.mod` を生成し、リポジトリの `maya/` を指す） |
-| 起動時処理 | `userSetup.py`: メインメニュー「T-Drive」追加（F0-1 で「T-Drive Toon」から改名）、MCP 用 commandPort `:7001` を開く（`TDRIVE_MCP_PORT=0` で無効） |
+| 起動時処理 | `userSetup.py`: メインメニュー Tools › T-Drive 追加（F0-1 で「T-Drive Toon」から改名）、MCP 用 commandPort `:7001` を開く（`TDRIVE_MCP_PORT=0` で無効） |
 | エディタ | メニュー「Tools › T-Drive › エディタ」（E-1。それまでは「T-Drive › エディタ」）。ドッキング可能な 1 ウィンドウ、タブ 4 つ（部位 / ルック / A/B / プレビュー） |
 | 前提 | VP2 レンダリングエンジン = **DirectX 11**、カラーマネジメント ON・ビュー変換 = Un-tone-mapped (sRGB)。違う場合は起動時に警告し、ビュー変換はワンクリックで合わせる（[09](09_render_parity.md) §2） |
 

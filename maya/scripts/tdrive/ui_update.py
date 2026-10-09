@@ -304,7 +304,7 @@ def startup_check() -> None:
         return  # 開発用は案内しない
     applied = project.read_config().get("lastAppliedToolVersion")
     if not project.is_tool_repo() and applied != updater.installed_version():
-        _message("T-Drive Toon を更新しました。<hl>T-Drive › 更新…</hl> で「プロジェクトの Look を確認する」を押してください")
+        _message("T-Drive Toon を更新しました。<hl>Tools › T-Drive › 更新…</hl> で「プロジェクトの Look を確認する」を押してください")
     state = updater.read_state(git)
     if not updater.should_auto_check(state):
         return
@@ -320,7 +320,7 @@ def startup_check() -> None:
             import maya.utils
 
             maya.utils.executeDeferred(
-                _message, f"T-Drive Toon の新しい版 v{updater.fmt(versions[0])} があります（<hl>T-Drive › 更新…</hl>）"
+                _message, f"T-Drive Toon の新しい版 v{updater.fmt(versions[0])} があります（<hl>Tools › T-Drive › 更新…</hl>）"
             )
 
     threading.Thread(target=work, name="TDriveToonUpdateCheck", daemon=True).start()

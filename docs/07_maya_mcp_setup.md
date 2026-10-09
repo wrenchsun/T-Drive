@@ -59,7 +59,7 @@ Claude Code ──stdio──> uv run maya-mcp==0.6.1 (tools/maya_mcp_launcher.p
 
 - commandPort は `":7001"`（ホスト省略）で開くためループバックのみ待ち受け。
 - commandPort は Maya 上で任意 Python を実行できる。信頼できないプロセスが動く環境では
-  `TDRIVE_MCP_PORT=0` にして、必要な時だけメニュー「T-Drive Toon > MCP ポートを開く」で開く。
+  `TDRIVE_MCP_PORT=0` にして、必要な時だけメニュー「Tools › T-Drive › MCP ポートを開く」で開く。
 
 ## よく使う MCP スクリプト
 

@@ -9,6 +9,7 @@
 - MINOR: Python の公開モジュール名は転送モジュールで維持（`tdrive_toon.lifecycle` / `project` / `updater` / `ui_update` / `mcp_bridge` は `tdrive` に移したが、同じモジュールを返すので既存の import はそのまま動く）。Look・パラメータ契約に変更なし
 
 ### 追加
+- Toon: ルックタブのグループを折りたたみ式に、見出しにその部位での機能のオン/オフのチェック・○/△・「?」（マニュアルの該当節）。小見出しのチェックでサブ機能の行を出し入れ。「すべて開く / 閉じる」、開閉は覚える（E-2。Look・契約の変更なし）
 - Unity パッケージ: D-Drive 1.4.0 の実行順の検査から FacialCorrectionRunner を除外すると宣言（`FacialCameraExecutionOrderExemption`。カメラを読むだけのため）
 - Toon: 機能「顔の角度連動（線と陰）」（`_ToonFacialAngle` ほか 3 つ。顔の向きに合わせて輪郭線の太さと陰の境目を変える。角度は FacialController が渡す）（F5-9）
 - **FacialController**（エディタ › FacialController タブ。マニュアル: docs/DesignerManual/facial.html）: カメラの角度に応じて顔を補正するデータを Maya で作り、Unity で再生する
@@ -20,6 +21,7 @@
 - サンプルモデル shizuku の取り込み手順（S-1。`tools/setup_sample_shizuku.py`。モデルはリポジトリに含めない）
 
 ### 変更
+- Maya のメニューを **Tools › T-Drive › …** に移動（E-1。Unity の Tools › T-Drive と揃えた。「Tools」は他のツールと共用で、無ければ作る。トップの「T-Drive」は無くなる）。互換性: MINOR 相当（メニューの場所の変更。Python API の変更なし）
 - エディタを 2 段タブに（F0-1）: ウィンドウとドッキングの見出しは「T-Drive <版>」、1 段目のタブは Toon（これまでのエディタ）と FacialController（準備中）。メインメニューは「T-Drive Toon」から「T-Drive」に改名し、Toon 表示 ON/OFF はサブメニュー「Toon」へ。Toon の動作は変わらない
 
 ### 修正

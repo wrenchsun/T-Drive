@@ -8,7 +8,7 @@
 
 画面の準備ができてから行うもの（executeDeferred）:
 - MCP 用の commandPort を localhost:7001 で開く（環境変数 TDRIVE_MCP_PORT=0 で無効化）
-- メインメニュー「T-Drive」、更新の確認
+- メインメニュー Tools › T-Drive、更新の確認
 - 起動と同時にシーンが開いていたら、Look を開いてテクスチャを読み込み直す
 
 mayapy / バッチ（Unity 出力の別プロセス・スモークテスト）では何もしない。

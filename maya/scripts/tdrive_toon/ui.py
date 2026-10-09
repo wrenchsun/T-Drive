@@ -334,7 +334,7 @@ class HeaderBar(QtWidgets.QWidget):
         self.refresh_namespace()
         lk = self.session.look
         where = "開発用（ツール本体）" if project.is_tool_repo() else project.root().as_posix()
-        self.label.setToolTip(f"プロジェクト: {project.root().as_posix()}（T-Drive › プロジェクトを選ぶ… で変更）")
+        self.label.setToolTip(f"プロジェクト: {project.root().as_posix()}（Tools › T-Drive › プロジェクトを選ぶ… で変更）")
         if lk is None:
             self.label.setText(f"プロジェクト: {where}\nLook: （未作成）— 新規 か 開く から始めてください")
         else:

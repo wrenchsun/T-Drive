@@ -23,7 +23,7 @@ T-Drive/
 │   ├─ tdrive/                     ★ 新規: 共通の殻（ウィンドウ・メニュー・プロジェクト・更新・ライフサイクル）
 │   │   ├─ __init__.py             REPO_ROOT / __version__
 │   │   ├─ shell.py                2 段タブのウィンドウ（workspaceControl）。ツールを登録して並べる
-│   │   ├─ menu.py                 メインメニュー「T-Drive」
+│   │   ├─ menu.py                 メインメニュー Tools › T-Drive（E-1 で Tools の中へ）
 │   │   ├─ tool.py                 ツールの約束（Tool プロトコル: id / label / build_widget / on_scene_opened / on_scene_saved / undo / redo）
 │   │   └─ lifecycle.py project.py updater.py ui_update.py mcp_bridge.py   （tdrive_toon から移す。tdrive_toon には同名の薄い転送モジュールを残す）
 │   ├─ tdrive_toon/                既存（Toon）。ui.py の EditorWindow の中身を「ToonTool」として殻に載せる
