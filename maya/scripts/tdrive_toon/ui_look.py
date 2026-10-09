@@ -14,7 +14,7 @@ from pathlib import Path
 
 from . import REPO_ROOT, features, look, params, preview, project, roles, session
 from .look_layout import (  # noqa: F401  COMMON_ROWS / GROUP_LABELS などは ui_ab・他のモジュールも参照する
-    COMMON_ROWS, GROUP_FEATURE, GROUP_LABELS, MANUAL_PAGE, PARAM_HELP, PREVIEW_BADGE, SUB_FEATURES, TEXTURE_ROWS,
+    COMMON_ROWS, MODE_DETAIL, MODE_PREF, MODE_SIMPLE, SIMPLE_KEYS, GROUP_FEATURE, GROUP_LABELS, MANUAL_PAGE, PARAM_HELP, PREVIEW_BADGE, SUB_FEATURES, TEXTURE_ROWS,
     anchor_of, build_groups, feature_of_key, pref_get, pref_set, row_passes, section_pref, split_group,
 )
 
@@ -142,6 +142,14 @@ class LookTab(QtWidgets.QWidget):
         self.close_all_btn.clicked.connect(lambda *_: self.set_all_expanded(False))
         self.toolbar.addWidget(self.open_all_btn)
         self.toolbar.addWidget(self.close_all_btn)
+        self.mode = QtWidgets.QComboBox()
+        self.mode.addItem("かんたん", MODE_SIMPLE)
+        self.mode.addItem("詳細", MODE_DETAIL)
+        self.mode.setToolTip("かんたん = よく使う項目だけ（影・線・固定色・リム・髪ハイライト・ベース色）。詳細 = 全部。検索中は両方から探します")
+        saved = pref_get(MODE_PREF, MODE_DETAIL)
+        self.mode.setCurrentIndex(max(0, self.mode.findData(saved)))
+        self.mode.currentIndexChanged.connect(self._on_mode)
+        self.toolbar.addWidget(self.mode)
         self.search = QtWidgets.QLineEdit()
         self.search.setPlaceholderText("検索（名前・Unity 名・説明）")
         self.search.setClearButtonEnabled(True)
@@ -298,11 +306,12 @@ class LookTab(QtWidgets.QWidget):
 
     def _apply_visibility(self) -> None:
         """行・小見出し・セクションの表示を 1 か所で決める。
-        表示の可否 = 機能がオン AND 検索に一致（AND モード。E-9）。
+        表示の可否 = 機能がオン AND モード（かんたん / 詳細。検索中は無視）AND 検索に一致。
         オフの機能は値の行だけ隠す。見出し（グループ・小見出し）は残す（どこでオンにするか迷わない）。
         検索中は、一致する行を持つグループだけ出して開く（開閉の記憶は上書きしない）。"""
         query = self.search.text()
-        passes = {key: row_passes(key, row.label.text(), query) for key, row in self.rows.items()}
+        mode = self.mode.currentData()
+        passes = {key: row_passes(key, row.label.text(), query, mode) for key, row in self.rows.items()}
         for key, row in self.rows.items():
             row.set_visible(passes[key] and self.feature_on(feature_of_key(key)))
         for block, keys in self.sub_blocks.values():
@@ -310,6 +319,10 @@ class LookTab(QtWidgets.QWidget):
         for group, sec in self.sections.items():
             sec.setVisible(any(passes[k] for k in self.group_keys[group]))
             sec.set_forced_open(bool(query.strip()))
+
+    def _on_mode(self, *_) -> None:
+        pref_set(MODE_PREF, self.mode.currentData())
+        self._apply_visibility()
 
     def _on_search(self, *_) -> None:
         self._apply_visibility()

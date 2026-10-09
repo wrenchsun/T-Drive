@@ -81,3 +81,22 @@ def test_search_senn_shows_only_outline_group_rows():
     hits = {g: [r[0] for r in rows if L.row_passes(r[0], r[1], "線")] for g, rows in L.build_groups().items()}
     assert len(hits["Outline"]) >= 5  # 線色・線幅など
     assert not hits["Rim"] and not hits["Shadow"] and not hits["Color"] and not hits["Tint"]  # 部分一致なので「法線」「視線」の行は混ざる
+
+
+def test_simple_keys_exist_in_contract_and_rows():
+    rows = {r[0] for rr in L.build_groups().values() for r in rr}
+    assert len(L.SIMPLE_KEYS) == 13 and len(set(L.SIMPLE_KEYS)) == 13
+    for k in L.SIMPLE_KEYS:
+        assert k in rows, k
+        if k.startswith("_Toon"):
+            assert k in params.PARAMS_BY_UNITY, k  # 契約に実在する
+
+
+def test_simple_mode_filters_rows_but_search_looks_in_both():
+    rows = [r for rr in L.build_groups().values() for r in rr]
+    simple = [r[0] for r in rows if L.row_passes(r[0], r[1], "", L.MODE_SIMPLE)]
+    assert simple == [k for k in (r[0] for r in rows) if k in L.SIMPLE_KEYS]
+    assert len([r for r in rows if L.row_passes(r[0], r[1], "", L.MODE_DETAIL)]) == len(rows)
+    # 検索中はモードを無視（かんたんでも詳細の項目が見つかる）
+    assert L.row_passes("_ToonRimPower", "リムの鋭さ", "鋭さ", L.MODE_SIMPLE)
+    assert not L.row_passes("_ToonRimPower", "リムの鋭さ", "", L.MODE_SIMPLE)

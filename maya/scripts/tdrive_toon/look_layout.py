@@ -66,6 +66,14 @@ SUB_ANCHOR = {
     "outlineScreenSpace": "outline-screen-space", "outlineSmoothNormal": "smooth-normal", "selfShadow": "self-shadow",
     "maskMap": "mask-map",
 }
+# 「かんたん」モードで出す項目（E-9。契約の Param には足さない）。検索中は詳細の全項目から探す
+SIMPLE_KEYS = (
+    "_ToonShadeColor", "_ToonShadeThreshold", "_ToonShadeFeather", "_ToonShadowStrength",
+    "_ToonOutlineColor", "_ToonOutlineWidth", "_ToonTintColor", "_ToonTintStrength",
+    "_ToonRimColor", "_ToonRimStrength", "_ToonHairHighlightColor", "common.albedoTint", "common.albedo",
+)
+MODE_SIMPLE, MODE_DETAIL = "simple", "detail"
+MODE_PREF = "tdriveLookMode"
 PREVIEW_BADGE = {"full": "○", "partial": "△", "none": "×"}
 MANUAL_PAGE = "look-params.html"
 
@@ -106,9 +114,11 @@ def matches(query: str, key: str, label: str) -> bool:
     return any(q in text.casefold() for text in (label, key, PARAM_HELP.get(key, "")))
 
 
-def row_passes(key: str, label: str, query: str) -> bool:
-    """機能のオン/オフ以外の理由（検索・モード）でこの行を出すか。"""
-    return matches(query, key, label)
+def row_passes(key: str, label: str, query: str, mode: str = MODE_DETAIL) -> bool:
+    """機能のオン/オフ以外の理由（検索・モード）でこの行を出すか。検索中は両モードから探す（モードは無視）。"""
+    if query.strip():
+        return matches(query, key, label)
+    return mode != MODE_SIMPLE or key in SIMPLE_KEYS
 
 
 # ---------------------------------------------------------------- 記憶（optionVar。Maya が無ければ記憶しない）
