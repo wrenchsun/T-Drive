@@ -7,13 +7,14 @@
 from __future__ import annotations
 
 import json
+import os
 import webbrowser
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from pathlib import Path
 
-from . import REPO_ROOT, features, look, params, preview, project, roles, session
+from . import REPO_ROOT, features, look, look_layout, params, presets, preview, project, roles, session, ui_look_dialogs
 from .look_layout import (  # noqa: F401  COMMON_ROWS / GROUP_LABELS などは ui_ab・他のモジュールも参照する
     COMMON_ROWS, MODE_DETAIL, MODE_PREF, MODE_SIMPLE, SIMPLE_KEYS, GROUP_FEATURE, GROUP_LABELS, MANUAL_PAGE, PARAM_HELP, PREVIEW_BADGE, SUB_FEATURES, TEXTURE_ROWS,
     anchor_of, build_groups, collect_values, feature_of_key, format_floats, format_hex, parse_color, pref_get, pref_set, row_passes, section_pref, split_group,
@@ -204,6 +205,14 @@ class LookTab(QtWidgets.QWidget):
         self.variant.currentIndexChanged.connect(self.on_variant)
         top.addWidget(self.variant)
         top.addStretch(1)
+        self.preset_btn = QtWidgets.QToolButton()
+        self.preset_btn.setText("プリセット ▼")
+        self.preset_btn.setToolTip("名前を付けて保存した値のセット（プロジェクトの presets フォルダ）。選んでいる部位 / マテリアルへ適用します")
+        self.preset_btn.setPopupMode(QtWidgets.QToolButton.InstantPopup)
+        self.preset_menu = QtWidgets.QMenu(self.preset_btn)
+        self.preset_menu.aboutToShow.connect(self._fill_preset_menu)  # 開くたびに一覧を作り直す
+        self.preset_btn.setMenu(self.preset_menu)
+        top.addWidget(self.preset_btn)
         # ショートカット（Ctrl+Z / Ctrl+Y）はエディタ全体で効くよう EditorWindow 側で登録している
         for text, fn, key in (("元に戻す", self.session.undo, "Ctrl+Z"), ("やり直す", self.session.redo, "Ctrl+Y")):
             b = QtWidgets.QPushButton(f"{text} ({key})")
@@ -592,6 +601,75 @@ class LookTab(QtWidgets.QWidget):
         menu = QtWidgets.QMenu(self.tree)
         self.fill_edit_menu(menu, self.all_keys(), f"「{target}」の全項目", target)
         menu.exec(self.tree.viewport().mapToGlobal(pos))
+
+    # -------------------------------------------------------------- 名前付きプリセット（E-5）
+    def _fill_preset_menu(self) -> None:
+        menu = self.preset_menu
+        menu.clear()
+        has_target = self.target is not None and self.session.look is not None
+        try:
+            entries = presets.list_presets()
+        except OSError as exc:
+            entries = []
+            menu.addAction(f"（プリセットフォルダを読めません: {exc}）").setEnabled(False)
+        for e in entries:
+            if e.ok:
+                act = menu.addAction(e.label if e.label == e.name else f"{e.label}（{e.name}）")
+                act.setEnabled(has_target)
+                act.setToolTip(str(e.path))
+                act.triggered.connect(lambda *_, path=e.path: self.apply_preset(path))
+            else:
+                act = menu.addAction(f"{e.name}（読めません）")
+                act.setEnabled(False)
+                act.setToolTip(e.error)
+        if not entries:
+            menu.addAction("（プリセットはまだありません）").setEnabled(False)
+        menu.addSeparator()
+        save = menu.addAction("保存…")
+        save.setEnabled(has_target)
+        save.triggered.connect(lambda *_: self.save_preset())
+        open_dir = menu.addAction("フォルダを開く")
+        open_dir.triggered.connect(lambda *_: self.open_preset_folder())
+
+    def apply_preset(self, path) -> None:
+        """プリセットを選んでいる部位 / マテリアルへ（含まれるキーだけ上書き。貼り付けと同じ経路。1 Undo）。"""
+        if not self.target or self.session.look is None:
+            return
+        try:
+            preset = presets.load(path)
+        except presets.PresetError as exc:
+            QtWidgets.QMessageBox.warning(self, "T-Drive Toon", f"プリセットを読めません: {Path(path).name}\n{exc}")
+            return
+        for w in preset.warnings:
+            print(f"T-Drive: プリセット {Path(path).name}: {w}")
+        self.apply_flat(preset.flat, len(preset.dropped), self.target, "適用")
+
+    def save_preset(self) -> None:
+        if not self.target or self.session.look is None:
+            return
+        dlg = ui_look_dialogs.PresetSaveDialog(self)
+        if dlg.exec() != QtWidgets.QDialog.Accepted:
+            return
+        name = presets.safe_name(dlg.name.text())
+        if presets.path_of(name).exists() and not ui_look_dialogs.ask_overwrite(self, name):
+            return
+        target = self.target
+        flat = collect_values(lambda k: self.session.values(target, k), look_layout.keys_of_groups(None, dlg.groups()))
+        data = presets.build(dlg.label.text().strip() or name, dlg.groups(), flat)
+        try:
+            path = presets.save(name, data)
+        except OSError as exc:
+            QtWidgets.QMessageBox.warning(self, "T-Drive Toon", f"保存できません: {exc}")
+            return
+        self.notify(f"プリセットを保存しました: {path.name}")
+
+    def open_preset_folder(self) -> None:
+        folder = presets.presets_dir()
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+            os.startfile(str(folder))  # noqa: S606  Windows のエクスプローラーで開く
+        except OSError as exc:
+            QtWidgets.QMessageBox.warning(self, "T-Drive Toon", f"フォルダを開けません: {exc}")
 
     def reset(self, key: str) -> None:
         if self.target:

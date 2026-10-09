@@ -15,6 +15,7 @@
 - Toon: 色の操作（ピッカーのドラッグ中にビューポートへ反映、キャンセルで元に戻る。色ボタンの右クリックに 16 進 / 0〜1 の数値のコピー・貼り付け）（E-7）
 - Toon: スライダーの操作感（ダブルクリックで ↺、Shift ドラッグで 1/10、ホイールはフォーカス時だけ、数値欄の Enter / Esc、ラベルのツールチップに範囲と既定値）（E-8）
 - Toon: ルックタブの右クリック（項目・グループ見出し・左ツリーの部位 / マテリアル）にコピー / 貼り付け / ↺ / base に戻す。クリップボードは JSON、使えない値は捨てて件数を知らせる、1 回の貼り付け = 1 Undo（E-4。Look・契約の変更なし）
+- Toon: 名前付きプリセット（ルックタブ上部の「プリセット ▼」。含めるグループを選んで `presets/<名前>.json` に保存、選んでいる部位 / マテリアルへ適用（1 Undo）、フォルダを開く。壊れた JSON は警告だけ。Look には何も残さない）（E-5）
 - Unity パッケージ: D-Drive 1.4.0 の実行順の検査から FacialCorrectionRunner を除外すると宣言（`FacialCameraExecutionOrderExemption`。カメラを読むだけのため）
 - Toon: 機能「顔の角度連動（線と陰）」（`_ToonFacialAngle` ほか 3 つ。顔の向きに合わせて輪郭線の太さと陰の境目を変える。角度は FacialController が渡す）（F5-9）
 - **FacialController**（エディタ › FacialController タブ。マニュアル: docs/DesignerManual/facial.html）: カメラの角度に応じて顔を補正するデータを Maya で作り、Unity で再生する
