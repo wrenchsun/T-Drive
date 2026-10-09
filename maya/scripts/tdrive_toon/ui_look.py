@@ -42,6 +42,91 @@ def open_manual(anchor: str) -> None:
     webbrowser.open(uri)
 
 
+class _WheelOnFocusMixin:
+    """ホイールはフォーカスがあるときだけ値を変える（パネルをスクロール中の誤操作を防ぐ。E-8）。"""
+
+    def wheelEvent(self, event) -> None:  # noqa: N802
+        if self.hasFocus():
+            super().wheelEvent(event)
+        else:
+            event.ignore()  # 親（スクロール領域）へ渡す
+
+
+class ToonSlider(_WheelOnFocusMixin, QtWidgets.QSlider):
+    """ダブルクリックで ↺（doubleClicked）、Shift を押しながらドラッグで 1/10 の細かさ、ホイールはフォーカス時だけ。"""
+
+    doubleClicked = QtCore.Signal()
+    FINE = 0.1
+
+    def __init__(self, *args) -> None:
+        super().__init__(*args)
+        self.setFocusPolicy(QtCore.Qt.StrongFocus)
+        self.setToolTip("ドラッグで変更 / Shift を押しながらで 1/10 の細かさ / ダブルクリックで既定値に戻す / ホイールはクリックしてフォーカスしてから")
+        self._manual = False  # Shift を押した後は、ドラッグの終わりまでこちらで動かす（ハンドルが飛ばないように）
+        self._last_x = 0.0
+        self._virtual = 0.0
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802
+        self._manual = False
+        super().mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802
+        self._manual = False
+        super().mouseReleaseEvent(event)
+
+    def mouseDoubleClickEvent(self, event) -> None:  # noqa: N802
+        self.doubleClicked.emit()
+        event.accept()
+
+    def mouseMoveEvent(self, event) -> None:  # noqa: N802
+        if not self.isSliderDown():
+            return super().mouseMoveEvent(event)
+        x = event.position().x()
+        shift = bool(event.modifiers() & QtCore.Qt.ShiftModifier)
+        if shift and not self._manual:
+            self._manual, self._last_x, self._virtual = True, x, float(self.value())
+        if self._manual:
+            span = max(1, self.width() - self.style().pixelMetric(QtWidgets.QStyle.PM_SliderLength))
+            per_px = (self.maximum() - self.minimum()) / span
+            self._virtual += (x - self._last_x) * per_px * (self.FINE if shift else 1.0)
+            self._virtual = min(max(self._virtual, self.minimum()), self.maximum())
+            self._last_x = x
+            self.setValue(int(round(self._virtual)))
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+
+class ToonSpin(_WheelOnFocusMixin, QtWidgets.QDoubleSpinBox):
+    """Enter で確定（editingFinished）、Esc でフォーカスしたときの値に戻す、ホイールはフォーカス時だけ。"""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setFocusPolicy(QtCore.Qt.StrongFocus)
+        self._at_focus = 0.0
+
+    def focusInEvent(self, event) -> None:  # noqa: N802
+        self._at_focus = self.value()
+        super().focusInEvent(event)
+
+    def keyPressEvent(self, event) -> None:  # noqa: N802
+        if event.key() == QtCore.Qt.Key_Escape:
+            self.blockSignals(True)
+            self.setValue(self._at_focus)
+            self.blockSignals(False)
+            self.lineEdit().deselect()
+            self.clearFocus()
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+
+class ToonIntSpin(_WheelOnFocusMixin, QtWidgets.QSpinBox):
+    def __init__(self) -> None:
+        super().__init__()
+        self.setFocusPolicy(QtCore.Qt.StrongFocus)
+
+
 class Section(QtWidgets.QWidget):
     """折りたたみセクション: 見出し（▼/▶ + タイトル + 機能チェック + ○/△ + 「?」）と中身。"""
 
@@ -361,7 +446,8 @@ class LookTab(QtWidgets.QWidget):
             values = self.session.values(self.target, key)
             mixed = any(v != values[0] for v in values)
             overridden = any(self.session.is_overridden(m, key) for m in mats)
-            row.show_value(values[0], mixed, overridden)
+            defaults = [self.session.default_value(m, key) for m in mats] if row.kind in (params.FLOAT, "int") else None
+            row.show_value(values[0], mixed, overridden, defaults)
 
     # -------------------------------------------------------------- 操作
     def on_variant(self) -> None:
@@ -413,6 +499,7 @@ class ParamRow:
         self.tab, self.key, self.kind, self.lo, self.hi = tab, key, kind, float(lo), float(hi)
         self._color = [1.0, 1.0, 1.0, 1.0]
         self._mixed = False
+        self._shown: float | None = None  # 数値欄に表示している値（混在のときは None）
         self.visible = True
         self.label = QtWidgets.QLabel(label)
         self.label.setFixedWidth(170)  # グループをまたいでスライダーの開始位置を揃える
@@ -448,21 +535,22 @@ class ParamRow:
             w = QtWidgets.QWidget()
             h = QtWidgets.QHBoxLayout(w)
             h.setContentsMargins(0, 0, 0, 0)
-            self.slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+            self.slider = ToonSlider(QtCore.Qt.Horizontal)
             self.slider.setRange(0, 1000)
-            self.spin = QtWidgets.QDoubleSpinBox()
+            self.spin = ToonSpin()
             self.spin.setRange(self.lo, self.hi)
             self.spin.setDecimals(3)
             self.spin.setSingleStep((self.hi - self.lo) / 100)
             self.slider.sliderPressed.connect(self.tab.begin)
             self.slider.valueChanged.connect(self._on_slider)
             self.slider.sliderReleased.connect(lambda: self.tab.set(self.key, round(self.spin.value(), 4)))
+            self.slider.doubleClicked.connect(lambda *_: self.tab.reset(self.key))
             self.spin.editingFinished.connect(self._on_spin)
             h.addWidget(self.slider, 1)
             h.addWidget(self.spin)
             return w
         if k == "int":
-            self.ispin = QtWidgets.QSpinBox()
+            self.ispin = ToonIntSpin()
             self.ispin.setRange(int(self.lo), int(self.hi))
             self.ispin.editingFinished.connect(self._on_int)
             return self.ispin
@@ -515,6 +603,8 @@ class ParamRow:
     def _on_spin(self) -> None:
         if self.spin.specialValueText() and self.spin.value() == self.spin.minimum():
             return  # 混在表示のまま
+        if self._shown is not None and abs(self.spin.value() - round(self._shown, self.spin.decimals())) < 1e-9:
+            return  # Esc で戻した・変えずに Enter / フォーカス移動: 何も起きない（Undo を積まない）
         self.tab.begin()
         self.tab.set(self.key, round(self.spin.value(), 4))
 
@@ -604,8 +694,15 @@ class ParamRow:
             self.tab.set(self.key, preview.to_repo_path(path))
 
     # ---------------------------------------------------------- 値の表示
-    def show_value(self, value, mixed: bool, overridden: bool) -> None:
-        notes = [self.key, PARAM_HELP.get(self.key, ""), "部位内で値が異なる（操作すると揃う）" if mixed else "", "バリアントで上書き中" if overridden else ""]
+    def _range_note(self, defaults: list | None) -> str:
+        """ラベルのツールチップ: 「範囲 lo〜hi / 既定 x」（数値の項目だけ。既定 = ロールのプリセット値か契約の既定値）。"""
+        if self.kind not in (params.FLOAT, "int") or not defaults:
+            return ""
+        default = "マテリアルで異なる" if any(d != defaults[0] for d in defaults) else f"{defaults[0]:g}"
+        return f"範囲 {self.lo:g}〜{self.hi:g} / 既定 {default}"
+
+    def show_value(self, value, mixed: bool, overridden: bool, defaults: list | None = None) -> None:
+        notes = [self.key, self._range_note(defaults), PARAM_HELP.get(self.key, ""), "部位内で値が異なる（操作すると揃う）" if mixed else "", "バリアントで上書き中" if overridden else ""]
         self.label.setToolTip(" / ".join(n for n in notes if n))
         self.label.setStyleSheet("color: #f0c060; font-weight: bold;" if overridden else "")
         self.base_btn.setVisible(overridden and self.visible)
@@ -613,6 +710,7 @@ class ParamRow:
         if k == params.FLOAT:
             self.spin.blockSignals(True)
             self.slider.blockSignals(True)
+            self._shown = None if mixed else float(value)
             if mixed:
                 self.spin.setSpecialValueText(MIXED)
                 self.spin.setValue(self.spin.minimum())
