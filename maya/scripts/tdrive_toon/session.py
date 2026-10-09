@@ -417,7 +417,7 @@ class Session:
     # キャラクター単位のプレビュー（影用ライト・透かしバッファ・画面上の線の部位の表）に効く機能
     _PREVIEW_FEATURES = ("selfShadow", "seeThroughOutline", "outlineScreenSpace", "outline")
 
-    def material_feature_state(self, target: str, feature_id: str) -> tuple[list[bool | None], list[bool]]:
+    def material_feature_state(self, target, feature_id: str) -> tuple[list[bool | None], list[bool]]:
         """部位 / マテリアルの、各マテリアルの上書き（None = 全体に従う）と有効かどうか（docs/11 §2.1）。"""
         lk = self.require()
         mats = self.materials_of(target)
@@ -425,7 +425,7 @@ class Session:
                 [look.material_enabled(lk, m, feature_id) for m in mats])
 
     @undoable
-    def set_material_feature(self, target: str, feature_id: str, value: bool | None) -> None:
+    def set_material_feature(self, target, feature_id: str, value: bool | None) -> None:
         """部位 / マテリアル単位で機能を上書きする（None = 全体に従う）。そのマテリアルのプレビューだけ描き直す。"""
         lk = self.require()
         mats = self.materials_of(target)
@@ -441,7 +441,7 @@ class Session:
         self._changed()
 
     @undoable
-    def set_part_feature(self, target: str, feature_id: str, on: bool) -> None:
+    def set_part_feature(self, target, feature_id: str, on: bool) -> None:
         """機能タブの一覧表のマス: その部位 / マテリアルで機能を有効（on）にする。
 
         全体と同じ状態なら上書きを消し（全体どおり）、違えば上書きにする（docs/11 §4、4-13）。
@@ -667,12 +667,9 @@ class Session:
         self._changed(dirty=False)
 
     # ------------------------------------------------------------ 編集
-    def materials_of(self, target: str) -> list[str]:
-        """target は部位名かマテリアル名。"""
-        lk = self.require()
-        if target in lk["parts"]:
-            return list(lk["parts"][target]["materials"])
-        return [target]
+    def materials_of(self, target) -> list[str]:
+        """target は部位名かマテリアル名、またはその列（E-12。各ターゲットのマテリアルを合わせて重複を除く）。"""
+        return look.materials_of_targets(self.require(), target)
 
     def value(self, material: str, key: str) -> Any:
         mat = look.merged(self.require(), self.edit_variant)[material]  # 編集中の値（オフの機能でも保存値を見せる）
@@ -682,7 +679,7 @@ class Session:
             return mat["common"].get(key.split(".", 1)[1])
         return mat["specific"].get(key)
 
-    def set_value(self, target: str, key: str, value: Any, notify: bool = True) -> None:
+    def set_value(self, target, key: str, value: Any, notify: bool = True) -> None:
         self.require()
         for mat in self.materials_of(target):
             self._set_one(mat, key, value)
@@ -702,7 +699,7 @@ class Session:
             return  # スクリーンスペースの部位が無ければ線幅・線色は背面押し出しだけ（スライダーのたびに作り直さない）
         self._sync_character_preview()
 
-    def values(self, target: str, key: str) -> list[Any]:
+    def values(self, target, key: str) -> list[Any]:
         """target（部位 or マテリアル）に属する各マテリアルの、編集先バリアントでの値。"""
         return [self.value(m, key) for m in self.materials_of(target)]
 
@@ -733,7 +730,7 @@ class Session:
             return preset.get("common", {}).get(field, params.COMMON_FIELDS[field])
         return preset.get("specific", {}).get(key, params.PARAMS_BY_UNITY[key].default)
 
-    def set_values(self, target: str, values: dict[str, Any]) -> None:
+    def set_values(self, target, values: dict[str, Any]) -> None:
         """複数のキーを 1 回の編集（1 Undo・1 回の通知）で設定する。貼り付け・プリセットの適用（E-4 / E-5）。"""
         self.require()
         if not values:
@@ -746,10 +743,10 @@ class Session:
             self._sync_if_preview_key(key)
         self._changed()
 
-    def reset_value(self, target: str, key: str) -> None:
+    def reset_value(self, target, key: str) -> None:
         self.reset_values(target, [key])
 
-    def reset_values(self, target: str, keys: list[str]) -> None:
+    def reset_values(self, target, keys: list[str]) -> None:
         """keys をロールのプリセット値（無ければ既定値）に戻す。1 回の編集（1 Undo）。"""
         if not keys:
             return
@@ -760,11 +757,11 @@ class Session:
             self._sync_if_preview_key(key)
         self._changed()
 
-    def clear_override(self, target: str, key: str) -> None:
+    def clear_override(self, target, key: str) -> None:
         """バリアントの上書きを外して base の値に戻す。"""
         self.clear_overrides(target, [key])
 
-    def clear_overrides(self, target: str, keys: list[str]) -> None:
+    def clear_overrides(self, target, keys: list[str]) -> None:
         """keys のバリアント上書きを外して base の値に戻す（1 Undo）。base 編集中・キーが空なら何もしない。"""
         if self.edit_variant == look.BASE or not keys:
             return

@@ -328,3 +328,72 @@ def test_screen_space_outline_parts_table():
     look.set_feature(lk, "outline", False)  # 輪郭線そのものがオフなら線幅 0
     assert look.screen_space_outline_parts(lk)[2]["width"] == 0.0
     assert params.PARAMS_BY_UNITY["_ToonOutlineScreenSpace"].toggle
+
+
+# ---------------------------------------------------------------- E-12: target に列を渡せる
+def _multi_look():
+    lk = look.new_look("unitychan", "assets/unitychan/unitychan.fbx")
+    look.register_part(lk, "face", "face", ["face"])
+    look.register_part(lk, "hair", "hair", ["hair"])
+    look.register_part(lk, "cloth", "cloth", ["body", "skirt"])
+    return lk
+
+
+def test_target_names_and_materials_of_targets():
+    lk = _multi_look()
+    assert look.target_names("hair") == ["hair"]
+    assert look.target_names(None) == [] and look.target_names([]) == []
+    assert look.target_names(["hair", "face", "hair"]) == ["hair", "face"]
+    assert look.materials_of_targets(lk, "hair") == ["hair"]  # str はそのまま
+    assert look.materials_of_targets(lk, "cloth") == ["body", "skirt"]
+    assert look.materials_of_targets(lk, ["hair", "cloth"]) == ["hair", "body", "skirt"]
+    assert look.materials_of_targets(lk, ["cloth", "body", "hair"]) == ["body", "skirt", "hair"]  # 部位とその中のマテリアル = 重複なし
+    assert look.materials_of_targets(lk, ("face", "face")) == ["face"]
+
+
+def _session_with_stub_maya(monkeypatch):
+    """session は maya を import する。スタブの maya で import し、他のテストに漏れないよう後で元に戻す。"""
+    import importlib
+    import sys
+    from unittest import mock
+
+    saved = {k: v for k, v in sys.modules.items() if k == "maya" or k.startswith("maya.") or k.startswith("tdrive_toon")}
+    for k in saved:
+        monkeypatch.delitem(sys.modules, k)
+    fake = mock.MagicMock()
+    monkeypatch.setitem(sys.modules, "maya", fake)
+    monkeypatch.setitem(sys.modules, "maya.cmds", fake.cmds)
+    try:
+        sess = importlib.import_module("tdrive_toon.session")
+    finally:
+        pass
+    return sess
+
+
+def test_session_accepts_str_or_sequence_of_targets(monkeypatch):
+    sess_mod = _session_with_stub_maya(monkeypatch)
+    s = sess_mod.Session()
+    s.look = _multi_look()
+    s.checkpoint = lambda: None
+    s._changed = lambda dirty=True: None
+    s._set_one = lambda m, k, v: look.set_value(s.look, m, k, v, variant=s.edit_variant)  # プレビューには触れない
+    s._sync_if_preview_key = lambda key: None
+    assert s.materials_of("hair") == ["hair"]
+    assert s.materials_of(["hair", "cloth"]) == ["hair", "body", "skirt"]
+    s.set_value(["hair", "cloth"], "_ToonOutlineWidth", 2.5)
+    assert s.values(["hair", "cloth"], "_ToonOutlineWidth") == [2.5, 2.5, 2.5]
+    assert s.values("face", "_ToonOutlineWidth") != [2.5]  # 選んでいない部位は変わらない
+    s.set_value("body", "_ToonOutlineWidth", 1.0)
+    assert s.values(["hair", "cloth"], "_ToonOutlineWidth") == [2.5, 1.0, 2.5]  # 違う値は混在（UI は「—」）
+    s.set_values(["hair", "face"], {"_ToonOutlineWidth": 0.7})
+    assert s.values(["hair", "face"], "_ToonOutlineWidth") == [0.7, 0.7]
+    s.default_value = lambda m, k: 0.1
+    s.reset_values(["hair", "cloth"], ["_ToonOutlineWidth"])
+    assert s.values(["hair", "cloth"], "_ToonOutlineWidth") == [0.1, 0.1, 0.1]
+    # バリアントの上書きを複数ターゲットから外す
+    look.add_variant(s.look, "B", "テスト")
+    s.edit_variant = "B"
+    s.set_value(["hair", "face"], "_ToonOutlineWidth", 3.0)
+    assert s.is_overridden("hair", "_ToonOutlineWidth") and s.is_overridden("face", "_ToonOutlineWidth")
+    s.clear_overrides(["hair", "face"], ["_ToonOutlineWidth"])
+    assert not s.is_overridden("hair", "_ToonOutlineWidth") and not s.is_overridden("face", "_ToonOutlineWidth")

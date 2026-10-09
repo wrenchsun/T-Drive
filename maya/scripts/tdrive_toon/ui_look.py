@@ -8,19 +8,72 @@ from __future__ import annotations
 
 import json
 import os
+import weakref
 import webbrowser
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from pathlib import Path
 
-from . import REPO_ROOT, features, look, look_layout, params, presets, preview, project, roles, session, ui_look_dialogs
+from . import REPO_ROOT, features, lifecycle, look, look_layout, params, presets, preview, project, roles, session, ui_look_dialogs
 from .look_layout import (  # noqa: F401  COMMON_ROWS / GROUP_LABELS などは ui_ab・他のモジュールも参照する
     COMMON_ROWS, MODE_DETAIL, MODE_PREF, MODE_SIMPLE, SIMPLE_KEYS, GROUP_FEATURE, GROUP_LABELS, MANUAL_PAGE, PARAM_HELP, PREVIEW_BADGE, SUB_FEATURES, TEXTURE_ROWS,
     anchor_of, build_groups, collect_values, feature_of_key, format_floats, format_hex, parse_color, pref_get, pref_set, row_passes, section_pref, split_group,
 )
 
 MIXED = "—"
+CHIP_SIZE = 12  # ツリーの行の左のベース色チップ（px）
+FOLLOW_DELAY_MS = 50  # 選択の変化をまとめる間隔（ドラッグ中に連発しない）
+
+# ---------------------------------------------------------------- ビューポートの選択に追従（E-11）
+# scriptJob は 1 つだけ（新しい LookTab が作られたら古いのを kill）。Maya へ渡す関数はモジュールの関数で、LookTab は弱参照
+_follow_job: list[int] = []
+_follow_tab = None  # weakref.ref(LookTab) か None
+
+
+def kill_follow_job() -> None:
+    """追従の scriptJob を消す（タブを閉じるとき・ツールのリロードの前）。"""
+    global _follow_tab
+    _follow_tab = None
+    jobs = list(_follow_job)
+    _follow_job.clear()
+    try:
+        from maya import cmds
+
+        for job in jobs:
+            if cmds.scriptJob(exists=job):
+                cmds.scriptJob(kill=job, force=True)
+    except Exception:  # noqa: BLE001  Maya 外・終了処理中
+        pass
+
+
+@lifecycle.guarded(None, name="ルックタブの選択追従")
+def _on_viewport_selection() -> None:
+    tab = _follow_tab() if _follow_tab is not None else None
+    if tab is None:
+        kill_follow_job()
+        return
+    try:
+        tab.schedule_follow()
+    except RuntimeError:  # タブの Qt オブジェクトが破棄済み
+        kill_follow_job()
+
+
+lifecycle.keep_alive(_on_viewport_selection)
+lifecycle.on_reload(kill_follow_job)
+
+
+def register_follow_job(tab: "LookTab") -> None:
+    """二重登録しない: 既にあれば先に kill してから登録し直す。Maya が無ければ何もしない。"""
+    global _follow_tab
+    kill_follow_job()
+    try:
+        from maya import cmds
+
+        _follow_job.append(cmds.scriptJob(event=["SelectionChanged", _on_viewport_selection], protected=False))
+        _follow_tab = weakref.ref(tab)
+    except Exception:  # noqa: BLE001  Maya 外
+        pass
 
 # テクスチャ未設定のときの意味（パラメータで違う。docs/03 §7.2 の既定値）
 TEXTURE_PLACEHOLDER = {
@@ -190,7 +243,9 @@ class LookTab(QtWidgets.QWidget):
     def __init__(self, s: session.Session) -> None:
         super().__init__()
         self.session = s
-        self.target: str | None = None
+        self.targets: list[str] = []  # ツリーで選んでいる部位 / マテリアル（E-12。複数可）
+        self._selecting = False  # 自分でビューポートの選択を変えている間は追従しない（ループ防止）
+        self._chip_cache: dict[str, tuple[int, int, int]] = {}
         self.rows: dict[str, ParamRow] = {}
         self.feature_checks: dict[str, QtWidgets.QCheckBox] = {}
         self.sections: dict[str, Section] = {}
@@ -199,6 +254,11 @@ class LookTab(QtWidgets.QWidget):
 
         v = QtWidgets.QVBoxLayout(self)
         top = QtWidgets.QHBoxLayout()
+        self.follow = QtWidgets.QCheckBox("選択に追従")
+        self.follow.setToolTip("ビューポートでメッシュ / フェースを選ぶと、そのマテリアル（部位内が 1 つなら部位）を左のツリーで選ぶ")
+        self.follow.setChecked(bool(pref_get(look_layout.FOLLOW_PREF, 1)))
+        self.follow.toggled.connect(self._on_follow_toggled)
+        top.addWidget(self.follow)
         top.addWidget(QtWidgets.QLabel("編集先:"))
         self.variant = QtWidgets.QComboBox()
         self.variant.setToolTip("base = 基本の値。バリアントを選ぶとその案への上書きとして書き込む（A/B タブで比較）")
@@ -227,6 +287,8 @@ class LookTab(QtWidgets.QWidget):
         split = QtWidgets.QSplitter()
         self.tree = QtWidgets.QTreeWidget()
         self.tree.setHeaderLabels(["部位 / マテリアル"])
+        self.tree.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)  # Ctrl / Shift で複数（E-12）
+        self.tree.setIconSize(QtCore.QSize(CHIP_SIZE, CHIP_SIZE))
         self.tree.itemSelectionChanged.connect(self.on_target)
         self.tree.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.tree.customContextMenuRequested.connect(self._tree_menu)
@@ -274,6 +336,19 @@ class LookTab(QtWidgets.QWidget):
         split.addWidget(right)
         split.setSizes([200, 560])
         v.addWidget(split, 1)
+        self._follow_timer = QtCore.QTimer(self)
+        self._follow_timer.setSingleShot(True)
+        self._follow_timer.timeout.connect(self._follow_now)
+        register_follow_job(self)
+
+    @property
+    def target(self) -> str | None:
+        """先頭のターゲット（互換。複数選択のときは targets を使う）。"""
+        return self.targets[0] if self.targets else None
+
+    def detach(self) -> None:
+        """タブを閉じるとき: 追従の scriptJob を消す。"""
+        kill_follow_job()
 
     # -------------------------------------------------------------- 構築
     def _build_rows(self) -> None:
@@ -359,8 +434,7 @@ class LookTab(QtWidgets.QWidget):
             self.variant.setCurrentIndex(max(0, self.variant.findData(self.session.edit_variant)))
         self.variant.blockSignals(False)
 
-        if lk is None or (self.target and self.target not in lk["parts"] and self.target not in lk["materials"]):
-            self.target = None
+        self.targets = [t for t in self.targets if lk is not None and (t in lk["parts"] or t in lk["materials"])]
         self.tree.blockSignals(True)
         self.tree.clear()
         if lk:
@@ -372,10 +446,11 @@ class LookTab(QtWidgets.QWidget):
                     child = QtWidgets.QTreeWidgetItem([m])
                     child.setData(0, QtCore.Qt.UserRole, m)
                     item.addChild(child)
-                    child.setSelected(m == self.target)
+                    child.setSelected(m in self.targets and m != part)  # 部位と同名のマテリアルは部位の選択と重ねない
                 item.setExpanded(True)
-                item.setSelected(part == self.target)
+                item.setSelected(part in self.targets)
         self.tree.blockSignals(False)
+        self._chip_cache.clear()
         self.refresh_values()
 
     def feature_on(self, fid: str | None) -> bool:
@@ -383,7 +458,7 @@ class LookTab(QtWidgets.QWidget):
         lk = self.session.look
         if lk is None or fid is None:
             return True
-        mats = self.session.materials_of(self.target) if self.target else []
+        mats = self.session.materials_of(self.targets) if self.targets else []
         if mats:  # 部位ごとの上書きを含む（docs/11 §2.1）
             return any(look.material_enabled(lk, m, fid) for m in mats)
         return look.enabled(lk, fid)
@@ -397,8 +472,8 @@ class LookTab(QtWidgets.QWidget):
                 cb.setCheckState(QtCore.Qt.Unchecked)
             elif f.required:
                 cb.setCheckState(QtCore.Qt.Checked)
-            elif self.target and f.material_scope:
-                _ov, eff = self.session.material_feature_state(self.target, fid)
+            elif self.targets and f.material_scope:
+                _ov, eff = self.session.material_feature_state(self.targets, fid)
                 partial = len(set(eff)) > 1
                 cb.setTristate(partial)
                 cb.setCheckState(QtCore.Qt.PartiallyChecked if partial else (QtCore.Qt.Checked if eff[0] else QtCore.Qt.Unchecked))
@@ -434,12 +509,14 @@ class LookTab(QtWidgets.QWidget):
 
     def toggle_feature(self, fid: str) -> None:
         """見出しのチェック: 全部オンならオフへ、それ以外（オフ・混在）はオンへ（機能タブの部位の列と同じ）。"""
-        if not self.target or self.session.look is None:
+        if not self.targets or self.session.look is None:
             return
         try:
-            _ov, eff = self.session.material_feature_state(self.target, fid)
+            _ov, eff = self.session.material_feature_state(self.targets, fid)
             on = not all(eff)
-            if self.target in self.session.look["parts"]:
+            if len(self.targets) > 1:  # 複数: 全部に同じ値（1 Undo）
+                self.session.set_part_feature(self.targets, fid, on)
+            elif self.target in self.session.look["parts"]:
                 self.session.set_part_feature(self.target, fid, on)
             else:
                 self.session.set_material_feature(self.target, fid, on)
@@ -454,16 +531,21 @@ class LookTab(QtWidgets.QWidget):
     def refresh_values(self) -> None:
         self._update_checks()
         self._apply_visibility()
-        enabled = self.target is not None and self.session.look is not None
+        self._update_chips()
+        enabled = bool(self.targets) and self.session.look is not None
         self.panel.setEnabled(enabled)
         if not enabled:
-            self.title.setText("左で部位かマテリアルを選んでください（部位を選ぶと所属マテリアルへ一括で設定）")
+            self.title.setText("左で部位かマテリアルを選んでください（部位を選ぶと所属マテリアルへ一括で設定。Ctrl / Shift で複数選択）")
             return
-        mats = self.session.materials_of(self.target)
-        kind = "部位" if self.target in self.session.look["parts"] else "マテリアル"
-        self.title.setText(f"{kind}: <b>{self.target}</b>（{', '.join(mats)}） / 編集先: <b>{self.session.edit_variant}</b>")
+        mats = self.session.materials_of(self.targets)
+        variant = f" / 編集先: <b>{self.session.edit_variant}</b>"
+        if len(self.targets) > 1:
+            self.title.setText(f"<b>{look_layout.targets_title(self.targets)}</b>（マテリアル {len(mats)} 件）{variant}")
+        else:
+            kind = "部位" if self.target in self.session.look["parts"] else "マテリアル"
+            self.title.setText(f"{kind}: <b>{self.target}</b>（{', '.join(mats)}）{variant}")
         for key, row in self.rows.items():
-            values = self.session.values(self.target, key)
+            values = self.session.values(self.targets, key)
             mixed = any(v != values[0] for v in values)
             overridden = any(self.session.is_overridden(m, key) for m in mats)
             defaults = [self.session.default_value(m, key) for m in mats] if row.kind in (params.FLOAT, "int") else None
@@ -476,13 +558,99 @@ class LookTab(QtWidgets.QWidget):
             self.session.set_edit_variant(name)
 
     def select_target(self, target: str) -> None:
-        self.target = target
+        self.targets = [target]
         self.refresh()
 
     def on_target(self) -> None:
-        items = self.tree.selectedItems()
-        self.target = items[0].data(0, QtCore.Qt.UserRole) if items else None
+        picked = {i.data(0, QtCore.Qt.UserRole) for i in self.tree.selectedItems()}
+        self.targets = list(dict.fromkeys(t for t in self._tree_order() if t in picked))  # ツリーの上から順（部位と同名のマテリアルは 1 つに）
         self.refresh_values()
+
+    def _tree_order(self) -> list[str]:
+        names: list[str] = []
+        for i in range(self.tree.topLevelItemCount()):
+            top = self.tree.topLevelItem(i)
+            names.append(top.data(0, QtCore.Qt.UserRole))
+            names += [top.child(j).data(0, QtCore.Qt.UserRole) for j in range(top.childCount())]
+        return names
+
+    # -------------------------------------------------------------- ツリーのベース色チップ（E-11）
+    def _update_chips(self) -> None:
+        lk = self.session.look
+        if lk is None:
+            return
+        merged = look.merged(lk, self.session.edit_variant)
+
+        def tint(mat: str):
+            return merged.get(mat, {}).get("common", {}).get("albedoTint")
+
+        for i in range(self.tree.topLevelItemCount()):
+            top = self.tree.topLevelItem(i)
+            part = top.data(0, QtCore.Qt.UserRole)
+            mats = lk["parts"].get(part, {}).get("materials", [])
+            self._set_chip(top, part, tint(mats[0]) if mats else None)  # 部位は先頭マテリアルの色
+            for j in range(top.childCount()):
+                child = top.child(j)
+                name = child.data(0, QtCore.Qt.UserRole)
+                self._set_chip(child, name, tint(name))
+
+    def _set_chip(self, item: QtWidgets.QTreeWidgetItem, name: str, rgba) -> None:
+        rgb = look_layout.chip_rgb(rgba)
+        if self._chip_cache.get(name) == rgb:
+            return
+        self._chip_cache[name] = rgb
+        pix = QtGui.QPixmap(CHIP_SIZE, CHIP_SIZE)
+        pix.fill(QtGui.QColor(*rgb))
+        painter = QtGui.QPainter(pix)
+        painter.setPen(QtGui.QColor(90, 90, 90))
+        painter.drawRect(0, 0, CHIP_SIZE - 1, CHIP_SIZE - 1)
+        painter.end()
+        item.setIcon(0, QtGui.QIcon(pix))
+
+    # -------------------------------------------------------------- ビューポートの選択に追従（E-11）
+    def _on_follow_toggled(self, on: bool) -> None:
+        pref_set(look_layout.FOLLOW_PREF, 1 if on else 0)
+        if on:
+            self.schedule_follow()
+
+    def schedule_follow(self) -> None:
+        """SelectionChanged から呼ばれる。短い時間内の連続した変化は 1 回にまとめる。"""
+        if self._selecting or not self.follow.isChecked():
+            return
+        self._follow_timer.start(FOLLOW_DELAY_MS)
+
+    def _follow_now(self) -> None:
+        lk = self.session.look
+        if lk is None or self._selecting or not self.follow.isChecked():
+            return
+        faces, objects = preview.selection_materials()
+        target = look_layout.follow_target(lk, faces, objects)
+        if target is None or self.targets == [target]:
+            return  # 登録されていないマテリアル / もう選んでいる
+        if self.targets and set(self.session.materials_of(target)) <= set(self.session.materials_of(self.targets)):
+            return  # 選んでいる範囲の中（複数選択を壊さない。「ビューポートで選ぶ」の後に選び直さない）
+        self.select_target(target)  # 追従は単一選択に置き換える
+
+    def _end_selecting(self) -> None:
+        self._selecting = False
+
+    def select_in_viewport(self, targets: list[str]) -> None:
+        """ツリーの右クリック「ビューポートで選ぶ」: そのマテリアルが付いたフェースを選択（追従が選び直さないよう止める）。"""
+        from maya import cmds
+
+        mats = self.session.materials_of(targets)
+        members = preview.faces_of_materials(mats)
+        if not members:
+            self.notify("ビューポートで選べるメッシュがありません")
+            return
+        self._selecting = True
+        try:
+            cmds.select(members, replace=True)
+        finally:
+            # SelectionChanged は Maya がひと息ついてから届く。その分を見送ってから追従を戻す
+            QtCore.QTimer.singleShot(FOLLOW_DELAY_MS * 4, self._end_selecting)
+        self._follow_timer.stop()
+        self.notify(f"{len(mats)} 件のマテリアルのフェースを選びました")
 
     def _reload_textures(self) -> None:
         n = preview.reload_textures()
@@ -496,10 +664,10 @@ class LookTab(QtWidgets.QWidget):
 
     def set(self, key: str, value, live: bool = False) -> None:
         """live=True はスライダー操作中。画面全体の再描画通知を間引く。"""
-        if self.target is None:
+        if not self.targets:
             return
         try:
-            self.session.set_value(self.target, key, value, notify=not live)
+            self.session.set_value(self.targets, key, value, notify=not live)
         except Exception as exc:
             _warn(self, exc)
 
@@ -516,9 +684,9 @@ class LookTab(QtWidgets.QWidget):
     def all_keys(self) -> list[str]:
         return [k for keys in self.group_keys.values() for k in keys]
 
-    def copy_keys(self, keys: list[str], target: str | None = None) -> None:
-        """keys の今の値をクリップボードへ JSON で（メモ帳に貼って中身が見える）。"""
-        target = target or self.target
+    def copy_keys(self, keys: list[str], target=None) -> None:
+        """keys の今の値をクリップボードへ JSON で（メモ帳に貼って中身が見える）。複数選択のときは先頭のマテリアルの値。"""
+        target = target or self.targets
         if not target or self.session.look is None:
             return
         flat = collect_values(lambda k: self.session.values(target, k), keys)
@@ -536,9 +704,9 @@ class LookTab(QtWidgets.QWidget):
             return None
         return look.filter_pasteable(payload)
 
-    def paste_keys(self, keys: list[str] | None = None, target: str | None = None) -> None:
-        """クリップボードの値を target（既定 = 選択中）へ。keys があればその範囲だけ（行・グループ）。1 回の貼り付け = 1 Undo。"""
-        target = target or self.target
+    def paste_keys(self, keys: list[str] | None = None, target=None) -> None:
+        """クリップボードの値を target（既定 = 選択中の全部）へ。keys があればその範囲だけ（行・グループ）。1 回の貼り付け = 1 Undo。"""
+        target = target or self.targets
         if not target or self.session.look is None:
             return
         parsed = self.clipboard_flat()
@@ -550,9 +718,9 @@ class LookTab(QtWidgets.QWidget):
             flat = look.restrict_keys(flat, keys)
         self.apply_flat(flat, len(dropped), target, "貼り付け")
 
-    def apply_flat(self, flat: dict, dropped: int, target: str | None = None, verb: str = "適用") -> None:
-        """検証済みの値を target へ 1 回の編集で書く（貼り付け・プリセット共通）。"""
-        target = target or self.target
+    def apply_flat(self, flat: dict, dropped: int, target=None, verb: str = "適用") -> None:
+        """検証済みの値を target（str か列）へ 1 回の編集で書く（貼り付け・プリセット共通）。"""
+        target = target or self.targets
         if not target or self.session.look is None:
             return
         if not flat:
@@ -566,17 +734,17 @@ class LookTab(QtWidgets.QWidget):
         self.notify(f"{len(flat)} 件を{verb}し、{dropped} 件を捨てました")
 
     def reset_keys(self, keys: list[str]) -> None:
-        if self.target and keys:
-            self.session.reset_values(self.target, keys)
+        if self.targets and keys:
+            self.session.reset_values(self.targets, keys)
 
     def clear_override_keys(self, keys: list[str]) -> None:
-        if self.target and keys:
-            self.session.clear_overrides(self.target, keys)
+        if self.targets and keys:
+            self.session.clear_overrides(self.targets, keys)
 
-    def fill_edit_menu(self, menu: QtWidgets.QMenu, keys: list[str], what: str, target: str | None = None) -> None:
+    def fill_edit_menu(self, menu: QtWidgets.QMenu, keys: list[str], what: str, target=None) -> None:
         """コピー / 貼り付け / ↺ / base に戻す（base は編集先がバリアントのときだけ）を menu に足す。
         target を渡すとツリー用（その部位 / マテリアルへのコピー・貼り付けだけ）。"""
-        enabled = (target or self.target) is not None and self.session.look is not None
+        enabled = bool(target or self.targets) and self.session.look is not None
         copy_a = menu.addAction(f"{what}をコピー")
         paste_a = menu.addAction(f"{what}に貼り付け")
         copy_a.setEnabled(enabled)
@@ -602,16 +770,25 @@ class LookTab(QtWidgets.QWidget):
         item = self.tree.itemAt(pos)
         if item is None:
             return
-        target = item.data(0, QtCore.Qt.UserRole)
+        name = item.data(0, QtCore.Qt.UserRole)
+        picked = {i.data(0, QtCore.Qt.UserRole) for i in self.tree.selectedItems()}
+        # 選択済みの行を右クリックしたら選択全体へ、そうでなければその行だけへ
+        many = name in picked and len(picked) > 1
+        target = [t for t in self._tree_order() if t in picked] if many else name
+        what = f"選択中の {len(target)} 件" if many else f"「{name}」"
         menu = QtWidgets.QMenu(self.tree)
-        self.fill_edit_menu(menu, self.all_keys(), f"「{target}」の全項目", target)
+        self.fill_edit_menu(menu, self.all_keys(), f"{what}の全項目", target)
+        menu.addSeparator()
+        sel_a = menu.addAction("ビューポートで選ぶ")
+        sel_a.setEnabled(self.session.look is not None)
+        sel_a.triggered.connect(lambda *_, t=target: self.select_in_viewport(t if isinstance(t, list) else [t]))
         menu.exec(self.tree.viewport().mapToGlobal(pos))
 
     # -------------------------------------------------------------- 名前付きプリセット（E-5）
     def _fill_preset_menu(self) -> None:
         menu = self.preset_menu
         menu.clear()
-        has_target = self.target is not None and self.session.look is not None
+        has_target = bool(self.targets) and self.session.look is not None
         try:
             entries = presets.list_presets()
         except OSError as exc:
@@ -638,7 +815,7 @@ class LookTab(QtWidgets.QWidget):
 
     def apply_preset(self, path) -> None:
         """プリセットを選んでいる部位 / マテリアルへ（含まれるキーだけ上書き。貼り付けと同じ経路。1 Undo）。"""
-        if not self.target or self.session.look is None:
+        if not self.targets or self.session.look is None:
             return
         try:
             preset = presets.load(path)
@@ -647,10 +824,10 @@ class LookTab(QtWidgets.QWidget):
             return
         for w in preset.warnings:
             print(f"T-Drive: プリセット {Path(path).name}: {w}")
-        self.apply_flat(preset.flat, len(preset.dropped), self.target, "適用")
+        self.apply_flat(preset.flat, len(preset.dropped), self.targets, "適用")
 
     def save_preset(self) -> None:
-        if not self.target or self.session.look is None:
+        if not self.targets or self.session.look is None:
             return
         dlg = ui_look_dialogs.PresetSaveDialog(self)
         if dlg.exec() != QtWidgets.QDialog.Accepted:
@@ -658,7 +835,7 @@ class LookTab(QtWidgets.QWidget):
         name = presets.safe_name(dlg.name.text())
         if presets.path_of(name).exists() and not ui_look_dialogs.ask_overwrite(self, name):
             return
-        target = self.target
+        target = self.targets
         flat = collect_values(lambda k: self.session.values(target, k), look_layout.keys_of_groups(None, dlg.groups()))
         data = presets.build(dlg.label.text().strip() or name, dlg.groups(), flat)
         try:
@@ -678,11 +855,11 @@ class LookTab(QtWidgets.QWidget):
 
     # -------------------------------------------------------------- 影色をベース色から作る（E-6）
     def open_shade_dialog(self) -> None:
-        if not self.target or self.session.look is None:
+        if not self.targets or self.session.look is None:
             return
-        tints = self.session.values(self.target, "common.albedoTint")
+        tints = self.session.values(self.targets, "common.albedoTint")
         base = list(tints[0][:3]) if tints and isinstance(tints[0], list) else [1.0, 1.0, 1.0]
-        maps = self.session.values(self.target, "common.albedo")
+        maps = self.session.values(self.targets, "common.albedo")
         map_rgb = None
         if maps and maps[0]:
             map_rgb = ui_look_dialogs.map_average_color(maps[0])
@@ -691,12 +868,12 @@ class LookTab(QtWidgets.QWidget):
         dlg.open()
 
     def reset(self, key: str) -> None:
-        if self.target:
-            self.session.reset_value(self.target, key)
+        if self.targets:
+            self.session.reset_value(self.targets, key)
 
     def clear_override(self, key: str) -> None:
-        if self.target:
-            self.session.clear_override(self.target, key)
+        if self.targets:
+            self.session.clear_override(self.targets, key)
 
 
 class ParamRow:

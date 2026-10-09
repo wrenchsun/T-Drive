@@ -97,6 +97,7 @@ class ToonPanel(QtWidgets.QWidget):
         except RuntimeError:
             pass  # 枠ごと破棄済み
         self.header.detach()
+        self.look_tab.detach()  # 選択追従の scriptJob を消す（E-11）
         if self.refresh in self.session.listeners:
             self.session.listeners.remove(self.refresh)
 

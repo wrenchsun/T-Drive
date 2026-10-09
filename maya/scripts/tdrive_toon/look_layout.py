@@ -254,6 +254,47 @@ def first_image_from_uri_list(text: str) -> str | None:
     return None
 
 
+# ---------------------------------------------------------------- ビューポートの選択に追従・複数選択（E-11 / E-12。Qt 非依存）
+FOLLOW_PREF = "tdriveLookFollowSelection"
+
+
+def follow_target(look, face_materials, object_materials) -> str | None:
+    """ビューポートの選択に対応するルックタブのターゲット（部位 or マテリアル名）。無ければ None（何もしない）。
+
+    フェースを選んでいればそのフェースのマテリアルを優先し、無ければ選んだオブジェクトのマテリアル。
+    Look に登録されていないマテリアルは飛ばして、最初に見つかった登録済みのものを使う。
+    部位内のマテリアルが 1 つだけならその部位、複数ならそのマテリアル。
+    """
+    if not look:
+        return None
+    registered = look.get("materials", {})
+    for names in (face_materials, object_materials):
+        for m in names or ():
+            if m not in registered:
+                continue
+            for part, info in look.get("parts", {}).items():
+                if m in info["materials"]:
+                    return part if len(info["materials"]) == 1 else m
+            return m
+    return None
+
+
+def targets_title(targets, limit: int = 3) -> str:
+    """複数ターゲットの見出し（「3 件を編集中: hair, cloth, face, …」）。"""
+    names = list(targets)
+    shown = ", ".join(names[:limit]) + (", …" if len(names) > limit else "")
+    return f"{len(names)} 件を編集中: {shown}"
+
+
+def chip_rgb(rgba) -> tuple[int, int, int]:
+    """ベース色（0〜1 の RGBA）→ ツリーのチップの色（0〜255）。読めない値は白。"""
+    try:
+        r, g, b = (min(max(float(x), 0.0), 1.0) for x in list(rgba)[:3])
+    except (TypeError, ValueError):
+        return 255, 255, 255
+    return int(round(r * 255)), int(round(g * 255)), int(round(b * 255))
+
+
 # ---------------------------------------------------------------- 記憶（optionVar。Maya が無ければ記憶しない）
 def pref_get(name: str, default):
     try:

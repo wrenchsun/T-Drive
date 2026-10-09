@@ -469,6 +469,22 @@ def register_part(
     look["parts"] = {k: v for k, v in look["parts"].items() if v["materials"] or k == part}
 
 
+def target_names(target) -> list[str]:
+    """編集の対象（部位 / マテリアル名 1 つ、またはその列。E-12）→ 重複を除いた名前の列（順序は保つ）。None・空は空。"""
+    if target is None:
+        return []
+    names = [target] if isinstance(target, str) else list(target)
+    return list(dict.fromkeys(n for n in names if n))
+
+
+def materials_of_targets(look: dict[str, Any], target) -> list[str]:
+    """target（部位名・マテリアル名、またはその列）に属するマテリアル名（重複なし）。部位でない名前はマテリアルとして扱う。"""
+    mats: list[str] = []
+    for name in target_names(target):
+        mats += look["parts"][name]["materials"] if name in look["parts"] else [name]
+    return list(dict.fromkeys(mats))
+
+
 def part_of(look: dict[str, Any], material: str) -> str | None:
     for name, part in look.get("parts", {}).items():
         if material in part["materials"]:

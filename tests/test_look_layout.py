@@ -177,3 +177,40 @@ def test_first_image_from_uri_list_skips_non_images():
     assert L.first_image_from_uri_list(text) == "C:/a/hair.TGA"
     assert L.first_image_from_uri_list("file:///C:/a/x.txt") is None
     assert L.is_image_path("a.PNG") and not L.is_image_path("a.fbx")
+
+
+# ---------------------------------------------------------------- E-11 / E-12
+def _follow_look():
+    from tdrive_toon import look
+
+    lk = look.new_look("unitychan", "assets/unitychan/unitychan.fbx")
+    look.register_part(lk, "face", "face", ["face"])
+    look.register_part(lk, "hair", "hair", ["hair"])
+    look.register_part(lk, "cloth", "cloth", ["body", "skirt"])
+    return lk
+
+
+def test_follow_target_part_when_single_material_else_material():
+    lk = _follow_look()
+    assert L.follow_target(lk, [], ["hair"]) == "hair"  # 部位内が 1 つ → 部位
+    assert L.follow_target(lk, [], ["skirt"]) == "skirt"  # 複数 → マテリアル
+    assert L.follow_target(lk, [], ["body", "skirt"]) == "body"  # 複数を選んでいたら先頭
+
+
+def test_follow_target_face_selection_wins_and_unknown_is_ignored():
+    lk = _follow_look()
+    assert L.follow_target(lk, ["face"], ["hair", "skirt"]) == "face"  # フェースのマテリアルを優先
+    assert L.follow_target(lk, ["unknown"], ["hair"]) == "hair"  # フェース側が未登録ならオブジェクト側
+    assert L.follow_target(lk, ["unknown"], ["nope"]) is None  # どれも未登録 → 何もしない
+    assert L.follow_target(lk, [], []) is None
+    assert L.follow_target(None, ["hair"], ["hair"]) is None
+    assert L.follow_target({}, ["hair"], []) is None
+
+
+def test_targets_title_and_chip_rgb():
+    assert L.targets_title(["hair", "cloth"]) == "2 件を編集中: hair, cloth"
+    assert L.targets_title(["a", "b", "c", "d"]) == "4 件を編集中: a, b, c, …"
+    assert L.chip_rgb([1, 0.5, 0, 1]) == (255, 128, 0)
+    assert L.chip_rgb([2, -1, 0.2]) == (255, 0, 51)  # 範囲外は丸める
+    assert L.chip_rgb(None) == (255, 255, 255) and L.chip_rgb([1]) == (255, 255, 255)
+    assert L.FOLLOW_PREF == "tdriveLookFollowSelection"

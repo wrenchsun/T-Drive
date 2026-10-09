@@ -177,6 +177,50 @@ def materials_on_selection(current_only: bool = True) -> list[str]:
     return sorted(names)
 
 
+MAX_FACES_PROBED = 100  # 選択中のフェースのマテリアルを調べる数の上限（何千面を選んでも重くしない）
+
+
+def selection_materials() -> tuple[list[str], list[str]]:
+    """選択から (選んだフェースのマテリアル名, 選んだオブジェクトのマテリアル名)。Look の名前（今のネームスペースだけ。E-11）。"""
+    sel = cmds.ls(selection=True, long=True) or []
+    ns = naming.namespace()
+
+    def doc_names(names: set[str]) -> list[str]:
+        return sorted(naming.to_doc(n) for n in names if not ns or naming.ns_of(n) == ns)
+
+    face_names: set[str] = set()
+    faces = (cmds.filterExpand(sel, selectionMask=34) or [])[:MAX_FACES_PROBED]
+    for f in faces:
+        for sg in cmds.listSets(object=f, type=1) or []:
+            if cmds.nodeType(sg) == "shadingEngine" and (sh := _surface_shader(sg)):
+                face_names.add(source_scene_name(sh))
+    objects = [n for n in sel if "." not in n]  # 成分（pCube1.f[0]）は除く
+    shapes = cmds.ls(objects, dagObjects=True, type="mesh", long=True, noIntermediate=True) or []
+    object_names: set[str] = set()
+    sgs = (cmds.listConnections(shapes, type="shadingEngine") or []) if shapes else []
+    for sg in sgs:
+        if sh := _surface_shader(sg):
+            object_names.add(source_scene_name(sh))
+    return doc_names(face_names), doc_names(object_names)
+
+
+def faces_of_materials(materials: list[str]) -> list[str]:
+    """Look のマテリアル名の列が付いたフェース / メッシュ（`cmds.select` に渡せる名前）。プレビュー中のシェーダーの分も含む。"""
+    wanted = {naming.to_scene(m) for m in materials}
+    members: list[str] = []
+    for sg in cmds.ls(type="shadingEngine"):
+        shader = _surface_shader(sg)
+        if not shader or source_scene_name(shader) not in wanted:
+            continue
+        for m in cmds.sets(sg, query=True) or []:
+            node = m.split(".")[0]
+            if cmds.objExists(node) and cmds.nodeType(node) == "mesh":
+                node = (cmds.listRelatives(node, parent=True, fullPath=True) or [node])[0]
+            if cmds.objExists(node) and not cmds.attributeQuery(PREVIEW_ONLY_ATTR, node=node, exists=True):
+                members.append(m)
+    return members
+
+
 def base_texture_of(material: str) -> str | None:
     """元マテリアルのカラーに繋がる file テクスチャのパス（リポジトリ内ならリポジトリ相対）。"""
     material = naming.to_scene(material)  # Look の名前 → シーンのノード
