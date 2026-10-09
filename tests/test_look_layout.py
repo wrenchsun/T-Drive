@@ -123,3 +123,41 @@ def test_color_roundtrip():
     for c in ([0.0, 0.0, 0.0, 1.0], [1.0, 1.0, 1.0, 1.0], [0.502, 0.4392, 0.6275, 1.0]):
         assert L.parse_color(L.format_hex(c)) == [round(round(x * 255) / 255, 4) for x in c]
         assert L.parse_color(L.format_floats(c)) == c
+
+
+# ---------------------------------------------------------------- 影色をベース色から作る（E-6）
+def test_shade_from_white_is_close_to_preset_shade_color():
+    out = L.shade_from_base([1.0, 1.0, 1.0])
+    preset = params.PARAMS_BY_UNITY["_ToonShadeColor"].default
+    assert len(out) == 4 and out[3] == 1.0
+    assert all(abs(a - b) <= 0.15 for a, b in zip(out[:3], preset[:3])), (out, preset)
+
+
+def test_shade_pair_second_is_darker_again():
+    shade, shade2 = L.shade_pair([1.0, 0.9, 0.8], *L.SHADE_DEFAULTS)
+    assert shade2[:3] != shade[:3]
+    assert max(shade2[:3]) <= max(shade[:3])
+    assert shade2 == L.shade_from_base(shade, *L.SHADE_DEFAULTS)
+
+
+def test_shade_hue_shift_wraps_and_values_clamp():
+    red = L.shade_from_base([1.0, 0.0, 0.0], 0.5, 1.0, 1.0)  # 赤 → 色相を半周 → シアン
+    assert red[0] < 0.01 and red[1] > 0.99 and red[2] > 0.99
+    assert L.shade_from_base([0.5, 0.2, 0.2], 0.0, 9.0, 9.0)[:3] == [1.0, 0.0, 0.0]
+    assert L.shade_from_base([0.5, 0.2, 0.2], 0.0, 1.0, 0.0)[:3] == [0.0, 0.0, 0.0]
+    assert L.shade_from_base([2.0, -1.0, 0.5], 0.0, 1.0, 1.0)[:3] == L.shade_from_base([1.0, 0.0, 0.5], 0.0, 1.0, 1.0)[:3]
+
+
+def test_identity_shade_keeps_color():
+    assert L.shade_from_base([0.3, 0.6, 0.9], 0.0, 1.0, 1.0)[:3] == [0.3, 0.6, 0.9]
+
+
+def test_shade_defaults_within_ranges():
+    for v, (lo, hi) in zip(L.SHADE_DEFAULTS, L.SHADE_RANGES):
+        assert lo <= v <= hi
+
+
+def test_average_rgb():
+    assert L.average_rgb([(1, 0, 0, 1), (0, 0, 1, 1)]) == [0.5, 0.0, 0.5]
+    assert L.average_rgb([(1, 0, 0, 0), (0, 1, 0, 1)]) == [0.0, 1.0, 0.0]  # 透明は数えない
+    assert L.average_rgb([]) == [1.0, 1.0, 1.0]

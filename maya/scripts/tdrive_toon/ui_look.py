@@ -282,6 +282,11 @@ class LookTab(QtWidgets.QWidget):
             self.sections[group] = sec
             self.form.addWidget(sec)
             self.group_keys[group] = [r[0] for r in rows]
+            if group == "Shadow":
+                btn = QtWidgets.QPushButton("ベース色から作る…")
+                btn.setToolTip("ベース色（かベースマップの平均色）から、色相・彩度・明度をずらして影色と 2 影の色を作る")
+                btn.clicked.connect(lambda *_: self.open_shade_dialog())
+                sec.body_layout.addWidget(btn)
             main, subs = split_group(group, rows)
             self._add_rows(sec.body_layout, main)
             for fid, sub_rows in subs:
@@ -670,6 +675,20 @@ class LookTab(QtWidgets.QWidget):
             os.startfile(str(folder))  # noqa: S606  Windows のエクスプローラーで開く
         except OSError as exc:
             QtWidgets.QMessageBox.warning(self, "T-Drive Toon", f"フォルダを開けません: {exc}")
+
+    # -------------------------------------------------------------- 影色をベース色から作る（E-6）
+    def open_shade_dialog(self) -> None:
+        if not self.target or self.session.look is None:
+            return
+        tints = self.session.values(self.target, "common.albedoTint")
+        base = list(tints[0][:3]) if tints and isinstance(tints[0], list) else [1.0, 1.0, 1.0]
+        maps = self.session.values(self.target, "common.albedo")
+        map_rgb = None
+        if maps and maps[0]:
+            map_rgb = ui_look_dialogs.map_average_color(maps[0])
+        dlg = ui_look_dialogs.ShadeFromBaseDialog(self, base, map_rgb)
+        self._shade_dialog = dlg  # 開いている間の参照
+        dlg.open()
 
     def reset(self, key: str) -> None:
         if self.target:

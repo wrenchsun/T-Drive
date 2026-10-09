@@ -181,6 +181,44 @@ def keys_of_groups(groups, names) -> list[str]:
     return [r[0] for g in names if g in table for r in table[g]]
 
 
+# ---------------------------------------------------------------- 影色をベース色から作る（E-6。Qt 非依存）
+SHADE_KEY, SHADE2_KEY = "_ToonShadeColor", "_ToonShade2Color"
+SHADE_DEFAULTS = (0.03, 1.1, 0.75)  # 色相のずらし / 彩度の倍率 / 明度の倍率（今のロールの影色に近い値）
+SHADE_RANGES = ((-0.5, 0.5), (0.0, 2.0), (0.0, 1.5))
+
+
+def shade_from_base(rgb, hue_shift: float = SHADE_DEFAULTS[0], sat_mul: float = SHADE_DEFAULTS[1],
+                    val_mul: float = SHADE_DEFAULTS[2]) -> list[float]:
+    """ベース色（sRGB の 0〜1）から影色（RGBA）を作る。HSV で色相をずらし、彩度・明度を掛ける。アルファは 1。"""
+    import colorsys
+
+    r, g, b = (min(max(float(x), 0.0), 1.0) for x in list(rgb)[:3])
+    h, s, v = colorsys.rgb_to_hsv(r, g, b)
+    h = (h + hue_shift) % 1.0
+    s = min(max(s * sat_mul, 0.0), 1.0)
+    v = min(max(v * val_mul, 0.0), 1.0)
+    return [round(c, 4) for c in colorsys.hsv_to_rgb(h, s, v)] + [1.0]
+
+
+def shade_pair(rgb, hue_shift: float, sat_mul: float, val_mul: float) -> tuple[list[float], list[float]]:
+    """(影色, 2 影の色)。2 影の色は影色にもう一度同じ量を掛けたもの（影色からさらにずらす）。"""
+    shade = shade_from_base(rgb, hue_shift, sat_mul, val_mul)
+    return shade, shade_from_base(shade, hue_shift, sat_mul, val_mul)
+
+
+def average_rgb(pixels) -> list[float]:
+    """(r, g, b[, a]) の 0〜1 の並びの平均色。アルファが 0 の画素は数えない。空なら白。"""
+    n = 0
+    acc = [0.0, 0.0, 0.0]
+    for px in pixels:
+        if len(px) > 3 and px[3] <= 0.0:
+            continue
+        n += 1
+        for i in range(3):
+            acc[i] += px[i]
+    return [round(c / n, 4) for c in acc] if n else [1.0, 1.0, 1.0]
+
+
 # ---------------------------------------------------------------- 記憶（optionVar。Maya が無ければ記憶しない）
 def pref_get(name: str, default):
     try:
