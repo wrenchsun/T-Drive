@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import json
 import webbrowser
 
 from PySide6 import QtCore, QtGui, QtWidgets
@@ -15,7 +16,7 @@ from pathlib import Path
 from . import REPO_ROOT, features, look, params, preview, project, roles, session
 from .look_layout import (  # noqa: F401  COMMON_ROWS / GROUP_LABELS などは ui_ab・他のモジュールも参照する
     COMMON_ROWS, MODE_DETAIL, MODE_PREF, MODE_SIMPLE, SIMPLE_KEYS, GROUP_FEATURE, GROUP_LABELS, MANUAL_PAGE, PARAM_HELP, PREVIEW_BADGE, SUB_FEATURES, TEXTURE_ROWS,
-    anchor_of, build_groups, feature_of_key, format_floats, format_hex, parse_color, pref_get, pref_set, row_passes, section_pref, split_group,
+    anchor_of, build_groups, collect_values, feature_of_key, format_floats, format_hex, parse_color, pref_get, pref_set, row_passes, section_pref, split_group,
 )
 
 MIXED = "—"
@@ -132,7 +133,7 @@ class Section(QtWidgets.QWidget):
 
     def __init__(self, tab: "LookTab", group: str, title: str, feature_id: str | None) -> None:
         super().__init__()
-        self.group, self.title = group, title
+        self.group, self.title, self.tab = group, title, tab
         self.expanded = bool(pref_get(section_pref(group), 1))
         self.forced_open = False  # 検索中は該当のあるセクションを開く（開閉の記憶は上書きしない）
         outer = QtWidgets.QVBoxLayout(self)
@@ -146,6 +147,9 @@ class Section(QtWidgets.QWidget):
         self.toggle_btn.setStyleSheet("font-weight: bold; text-align: left; padding: 3px 4px;")
         self.toggle_btn.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
         self.toggle_btn.clicked.connect(self._on_toggle)
+        for w in (head, self.toggle_btn):  # 見出しの右クリック: グループ単位のコピー / 貼り付け / ↺ / base（E-4）
+            w.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+            w.customContextMenuRequested.connect(lambda pos, w=w: self.tab.group_menu(self.group, w, pos))
         h.addWidget(self.toggle_btn, 1)
         if feature_id:
             tab.add_feature_header(h, feature_id, anchor_of(group), None)
@@ -215,6 +219,8 @@ class LookTab(QtWidgets.QWidget):
         self.tree = QtWidgets.QTreeWidget()
         self.tree.setHeaderLabels(["部位 / マテリアル"])
         self.tree.itemSelectionChanged.connect(self.on_target)
+        self.tree.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        self.tree.customContextMenuRequested.connect(self._tree_menu)
         split.addWidget(self.tree)
 
         right = QtWidgets.QWidget()
@@ -483,6 +489,110 @@ class LookTab(QtWidgets.QWidget):
         except Exception as exc:
             _warn(self, exc)
 
+    # -------------------------------------------------------------- コピー / 貼り付け / 戻す（E-4）
+    def notify(self, text: str) -> None:
+        """画面の上に短く知らせる（Maya が無ければ print）。"""
+        try:
+            from maya import cmds
+
+            cmds.inViewMessage(amg=f"T-Drive: {text}", pos="topCenter", fade=True)
+        except Exception:  # noqa: BLE001
+            print(f"T-Drive: {text}")
+
+    def all_keys(self) -> list[str]:
+        return [k for keys in self.group_keys.values() for k in keys]
+
+    def copy_keys(self, keys: list[str], target: str | None = None) -> None:
+        """keys の今の値をクリップボードへ JSON で（メモ帳に貼って中身が見える）。"""
+        target = target or self.target
+        if not target or self.session.look is None:
+            return
+        flat = collect_values(lambda k: self.session.values(target, k), keys)
+        text = json.dumps(look.flat_to_payload(flat), ensure_ascii=False, indent=2)
+        QtWidgets.QApplication.clipboard().setText(text)
+        self.notify(f"{len(flat)} 件をコピーしました")
+
+    def clipboard_flat(self) -> tuple[dict, list[str]] | None:
+        """クリップボードの JSON を検証した (使える値, 捨てたキー)。JSON でなければ None。"""
+        try:
+            payload = json.loads(QtWidgets.QApplication.clipboard().text())
+        except (ValueError, TypeError):
+            return None
+        if not isinstance(payload, dict):
+            return None
+        return look.filter_pasteable(payload)
+
+    def paste_keys(self, keys: list[str] | None = None, target: str | None = None) -> None:
+        """クリップボードの値を target（既定 = 選択中）へ。keys があればその範囲だけ（行・グループ）。1 回の貼り付け = 1 Undo。"""
+        target = target or self.target
+        if not target or self.session.look is None:
+            return
+        parsed = self.clipboard_flat()
+        if parsed is None:
+            self.notify("クリップボードに貼り付けられる内容がありません（T-Drive でコピーした JSON が必要）")
+            return
+        flat, dropped = parsed
+        if keys is not None:
+            flat = look.restrict_keys(flat, keys)
+        self.apply_flat(flat, len(dropped), target, "貼り付け")
+
+    def apply_flat(self, flat: dict, dropped: int, target: str | None = None, verb: str = "適用") -> None:
+        """検証済みの値を target へ 1 回の編集で書く（貼り付け・プリセット共通）。"""
+        target = target or self.target
+        if not target or self.session.look is None:
+            return
+        if not flat:
+            self.notify(f"{verb}できる項目がありません（{dropped} 件を捨てました）" if dropped else f"{verb}できる項目がありません")
+            return
+        try:
+            self.session.set_values(target, flat)
+        except Exception as exc:  # noqa: BLE001
+            _warn(self, exc)
+            return
+        self.notify(f"{len(flat)} 件を{verb}し、{dropped} 件を捨てました")
+
+    def reset_keys(self, keys: list[str]) -> None:
+        if self.target and keys:
+            self.session.reset_values(self.target, keys)
+
+    def clear_override_keys(self, keys: list[str]) -> None:
+        if self.target and keys:
+            self.session.clear_overrides(self.target, keys)
+
+    def fill_edit_menu(self, menu: QtWidgets.QMenu, keys: list[str], what: str, target: str | None = None) -> None:
+        """コピー / 貼り付け / ↺ / base に戻す（base は編集先がバリアントのときだけ）を menu に足す。
+        target を渡すとツリー用（その部位 / マテリアルへのコピー・貼り付けだけ）。"""
+        enabled = (target or self.target) is not None and self.session.look is not None
+        copy_a = menu.addAction(f"{what}をコピー")
+        paste_a = menu.addAction(f"{what}に貼り付け")
+        copy_a.setEnabled(enabled)
+        paste_a.setEnabled(enabled)
+        copy_a.triggered.connect(lambda *_: self.copy_keys(keys, target))
+        paste_a.triggered.connect(lambda *_: self.paste_keys(keys, target))
+        if target is None:  # ツリーのときは出さない（マテリアル全体を戻す操作は用意しない）
+            menu.addSeparator()
+            reset_a = menu.addAction(f"↺ {what}をプリセットに戻す")
+            reset_a.setEnabled(enabled)
+            reset_a.triggered.connect(lambda *_: self.reset_keys(keys))
+            if self.session.edit_variant != look.BASE:
+                base_a = menu.addAction(f"{what}を base に戻す（バリアントの上書きを外す）")
+                base_a.setEnabled(enabled)
+                base_a.triggered.connect(lambda *_: self.clear_override_keys(keys))
+
+    def group_menu(self, group: str, widget: QtWidgets.QWidget, pos) -> None:
+        menu = QtWidgets.QMenu(widget)
+        self.fill_edit_menu(menu, self.group_keys[group], f"「{GROUP_LABELS.get(group, group)}」グループ")
+        menu.exec(widget.mapToGlobal(pos))
+
+    def _tree_menu(self, pos) -> None:
+        item = self.tree.itemAt(pos)
+        if item is None:
+            return
+        target = item.data(0, QtCore.Qt.UserRole)
+        menu = QtWidgets.QMenu(self.tree)
+        self.fill_edit_menu(menu, self.all_keys(), f"「{target}」の全項目", target)
+        menu.exec(self.tree.viewport().mapToGlobal(pos))
+
     def reset(self, key: str) -> None:
         if self.target:
             self.session.reset_value(self.target, key)
@@ -514,6 +624,14 @@ class ParamRow:
         self.base_btn.setText("base")
         self.base_btn.setToolTip("このバリアントでの上書きを外して base の値に戻す")
         self.base_btn.clicked.connect(lambda: tab.clear_override(key))
+        # 右クリック: コピー / 貼り付け / ↺ / base に戻す（E-4）。数値欄は Qt 標準の編集メニューのまま
+        targets = [self.label, self.editor]
+        for name in ("slider", "path"):
+            if hasattr(self, name):
+                targets.append(getattr(self, name))
+        for w in targets:
+            w.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+            w.customContextMenuRequested.connect(lambda pos, w=w: self._show_menu(w, pos))
 
     def set_visible(self, on: bool) -> None:
         self.visible = on
@@ -567,8 +685,6 @@ class ParamRow:
             self.color_btn = QtWidgets.QPushButton()
             self.color_btn.setFixedHeight(22)
             self.color_btn.clicked.connect(self._pick_color)
-            self.color_btn.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
-            self.color_btn.customContextMenuRequested.connect(self._color_menu)
             return self.color_btn
         if k == params.TEXTURE:
             w = QtWidgets.QWidget()
@@ -663,17 +779,27 @@ class ParamRow:
         dlg.rejected.connect(on_rejected)
         dlg.open()
 
-    def _color_menu(self, pos) -> None:
-        menu = QtWidgets.QMenu(self.color_btn)
+    def _show_menu(self, widget: QtWidgets.QWidget, pos) -> None:
+        menu = QtWidgets.QMenu(widget)
+        self._fill_kind_menu(menu)
+        self.tab.fill_edit_menu(menu, [self.key], "この項目")
+        menu.exec(widget.mapToGlobal(pos))
+
+    def _fill_kind_menu(self, menu: QtWidgets.QMenu) -> None:
+        """種類ごとの項目（色のコピー / 貼り付け、テクスチャの操作）。あれば最後に区切りを入れる。"""
+        if self.kind == params.COLOR:
+            self._fill_color_menu(menu)
+            menu.addSeparator()
+
+    def _fill_color_menu(self, menu: QtWidgets.QMenu) -> None:
         copy_hex = menu.addAction("16 進をコピー")
         copy_f = menu.addAction("0〜1 の数値をコピー")
-        paste = menu.addAction("貼り付け（#RRGGBB / #RRGGBBAA / r, g, b[, a]）")
+        paste = menu.addAction("色を貼り付け（#RRGGBB / #RRGGBBAA / r, g, b[, a]）")
         copy_hex.setEnabled(not self._mixed)
         copy_f.setEnabled(not self._mixed)
         copy_hex.triggered.connect(lambda *_: QtWidgets.QApplication.clipboard().setText(format_hex(self._color)))
         copy_f.triggered.connect(lambda *_: QtWidgets.QApplication.clipboard().setText(format_floats(self._color)))
         paste.triggered.connect(lambda *_: self._paste_color())
-        menu.exec(self.color_btn.mapToGlobal(pos))
 
     def _paste_color(self) -> None:
         text = QtWidgets.QApplication.clipboard().text()

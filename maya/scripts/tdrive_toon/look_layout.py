@@ -161,6 +161,26 @@ def parse_color(text: str, alpha: float = 1.0):
     return [round(v, 4) for v in vals] + ([float(alpha)] if len(vals) == 3 else [])
 
 
+# ---------------------------------------------------------------- 値の収集（E-4。Qt 非依存）
+def collect_values(values_of, keys) -> dict:
+    """keys の値を平らな辞書にする。values_of(key) は選択中の各マテリアルの値のリスト（部位は複数）。
+    混在のときは先頭のマテリアルの値。値の無い（空リスト・取れない）キーは入れない。"""
+    import copy
+
+    out: dict = {}
+    for key in keys:
+        vals = values_of(key)
+        if vals:
+            out[key] = copy.deepcopy(vals[0])
+    return out
+
+
+def keys_of_groups(groups, names) -> list[str]:
+    """グループ名の並び → それらに属する行のキー（表示順）。知らない名前は無視。"""
+    table = groups if isinstance(groups, dict) else build_groups()
+    return [r[0] for g in names if g in table for r in table[g]]
+
+
 # ---------------------------------------------------------------- 記憶（optionVar。Maya が無ければ記憶しない）
 def pref_get(name: str, default):
     try:

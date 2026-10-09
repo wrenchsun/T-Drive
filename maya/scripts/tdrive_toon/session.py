@@ -733,36 +733,61 @@ class Session:
             return preset.get("common", {}).get(field, params.COMMON_FIELDS[field])
         return preset.get("specific", {}).get(key, params.PARAMS_BY_UNITY[key].default)
 
-    def reset_value(self, target: str, key: str) -> None:
+    def set_values(self, target: str, values: dict[str, Any]) -> None:
+        """複数のキーを 1 回の編集（1 Undo・1 回の通知）で設定する。貼り付け・プリセットの適用（E-4 / E-5）。"""
+        self.require()
+        if not values:
+            return
         self.checkpoint()
-        for m in self.materials_of(target):
-            self._set_one(m, key, self.default_value(m, key))
-        self._sync_if_preview_key(key)
+        mats = self.materials_of(target)
+        for key, value in values.items():
+            for mat in mats:
+                self._set_one(mat, key, value)
+            self._sync_if_preview_key(key)
+        self._changed()
+
+    def reset_value(self, target: str, key: str) -> None:
+        self.reset_values(target, [key])
+
+    def reset_values(self, target: str, keys: list[str]) -> None:
+        """keys をロールのプリセット値（無ければ既定値）に戻す。1 回の編集（1 Undo）。"""
+        if not keys:
+            return
+        self.checkpoint()
+        for key in keys:
+            for m in self.materials_of(target):
+                self._set_one(m, key, self.default_value(m, key))
+            self._sync_if_preview_key(key)
         self._changed()
 
     def clear_override(self, target: str, key: str) -> None:
         """バリアントの上書きを外して base の値に戻す。"""
-        if self.edit_variant == look.BASE:
+        self.clear_overrides(target, [key])
+
+    def clear_overrides(self, target: str, keys: list[str]) -> None:
+        """keys のバリアント上書きを外して base の値に戻す（1 Undo）。base 編集中・キーが空なら何もしない。"""
+        if self.edit_variant == look.BASE or not keys:
             return
         self.checkpoint()
         lk = self.require()
         overrides = lk["variants"][self.edit_variant]["overrides"]
-        for m in self.materials_of(target):
-            ov = overrides.get(m, {})
-            if key == "renderQueueOffset":
-                ov.pop("renderQueueOffset", None)
-            elif key.startswith("common."):
-                ov.get("common", {}).pop(key.split(".", 1)[1], None)
-            else:
-                ov.get("specific", {}).pop(key, None)
-            for section in ("common", "specific"):
-                if section in ov and not ov[section]:
-                    del ov[section]
-            if m in overrides and not overrides[m]:
-                del overrides[m]
-            if self.shown == self.edit_variant:
-                preview.apply_value(m, key, self.value(m, key))
-        self._sync_if_preview_key(key)
+        for key in keys:
+            for m in self.materials_of(target):
+                ov = overrides.get(m, {})
+                if key == "renderQueueOffset":
+                    ov.pop("renderQueueOffset", None)
+                elif key.startswith("common."):
+                    ov.get("common", {}).pop(key.split(".", 1)[1], None)
+                else:
+                    ov.get("specific", {}).pop(key, None)
+                for section in ("common", "specific"):
+                    if section in ov and not ov[section]:
+                        del ov[section]
+                if m in overrides and not overrides[m]:
+                    del overrides[m]
+                if self.shown == self.edit_variant:
+                    preview.apply_value(m, key, self.value(m, key))
+            self._sync_if_preview_key(key)
         self._changed()
 
     def _set_one(self, material: str, key: str, value: Any) -> None:

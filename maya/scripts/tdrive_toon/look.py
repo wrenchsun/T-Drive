@@ -542,6 +542,87 @@ def set_value(look: dict[str, Any], material: str, key: str, value: Any, variant
         target.setdefault("specific", {})[key] = value
 
 
+# ---------------------------------------------------------------- コピー / 貼り付け / プリセット（E-4 / E-5。Maya・Qt 非依存）
+# 平らな辞書（キー = Specific の _Toon...、"common.<field>"、"renderQueueOffset"）と、JSON の形
+# {"specific": {...}, "common": {...}, "renderQueueOffset": n} の相互変換と検証。
+
+
+def flat_to_payload(flat: dict[str, Any]) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    for key, value in flat.items():
+        if key == "renderQueueOffset":
+            payload["renderQueueOffset"] = value
+        elif key.startswith("common."):
+            payload.setdefault("common", {})[key.split(".", 1)[1]] = copy.deepcopy(value)
+        else:
+            payload.setdefault("specific", {})[key] = copy.deepcopy(value)
+    return payload
+
+
+def _is_number(v: Any) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and v == v and abs(v) != float("inf")
+
+
+def _common_error(field: str, value: Any) -> str | None:
+    default = params.COMMON_FIELDS[field]
+    if field == "blend":
+        return None if value in params.BLEND_TYPES else "ブレンドの値が違う"
+    if field in ("albedo", "normal", "emission"):
+        return None if value is None or isinstance(value, str) else "テクスチャのパスが必要"
+    if isinstance(default, list):
+        ok = isinstance(value, list) and len(value) == 4 and all(_is_number(c) for c in value)
+        return None if ok else "[r, g, b, a] が必要"
+    if isinstance(default, bool):
+        return None if isinstance(value, bool) else "true / false が必要"
+    return None if _is_number(value) else "数値が必要"
+
+
+def filter_pasteable(payload: Any) -> tuple[dict[str, Any], list[str]]:
+    """貼り付け・プリセット用の検証。(使える値の平らな辞書, 捨てたキーの一覧) を返す。
+    契約に無いキー・型が違う値は捨てる（落ちない）。payload が辞書でなければ ({}, ["(形式)"])。"""
+    if not isinstance(payload, dict):
+        return {}, ["(形式)"]
+    ok: dict[str, Any] = {}
+    dropped: list[str] = []
+    for k in payload:
+        if k not in ("specific", "common", "renderQueueOffset"):
+            dropped.append(str(k))
+    spec = payload.get("specific", {})
+    if "specific" in payload and not isinstance(spec, dict):
+        dropped.append("specific")
+        spec = {}
+    for k, v in spec.items():
+        p = params.PARAMS_BY_UNITY.get(k)
+        if p is None:
+            dropped.append(str(k))
+        elif params.validate_value(p, v) is not None or (p.kind == params.COLOR and not all(_is_number(c) for c in v))                 or (p.kind == params.FLOAT and not _is_number(v)):
+            dropped.append(str(k))
+        else:
+            ok[k] = copy.deepcopy(v)
+    common = payload.get("common", {})
+    if "common" in payload and not isinstance(common, dict):
+        dropped.append("common")
+        common = {}
+    for k, v in common.items():
+        if k not in params.COMMON_FIELDS or _common_error(k, v):
+            dropped.append(f"common.{k}")
+        else:
+            ok[f"common.{k}"] = copy.deepcopy(v)
+    if "renderQueueOffset" in payload:
+        v = payload["renderQueueOffset"]
+        if isinstance(v, int) and not isinstance(v, bool):
+            ok["renderQueueOffset"] = v
+        else:
+            dropped.append("renderQueueOffset")
+    return ok, dropped
+
+
+def restrict_keys(flat: dict[str, Any], keys) -> dict[str, Any]:
+    """flat のうち keys に含まれるものだけ（行・グループへの貼り付けで範囲を絞る）。"""
+    allowed = set(keys)
+    return {k: v for k, v in flat.items() if k in allowed}
+
+
 def diff(look: dict[str, Any], a: str, b: str) -> list[tuple[str, str, Any, Any]]:
     """2 つのバリアントで値が異なる (material, key, a値, b値) の一覧。"""
     ra, rb = merged(look, a), merged(look, b)  # 差分は保存されている値で見る（オフの機能も含めて）
