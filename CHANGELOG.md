@@ -6,7 +6,15 @@
 ## [Unreleased]
 
 ### 互換性
-- MINOR: Python の公開モジュール名は転送モジュールで維持（`tdrive_toon.lifecycle` / `project` / `updater` / `ui_update` / `mcp_bridge` は `tdrive` に移したが、同じモジュールを返すので既存の import はそのまま動く）。Look・パラメータ契約に変更なし
+- （リリース前に記入）
+
+## [0.5.0] - 2026-10-09
+
+### 互換性
+- MINOR: パラメータ契約に追加のみ（`_ToonFacialAngle` `_ToonFacialLineWidthSide` `_ToonFacialLineWidthVertical` `_ToonFacialShadeOffsetSide`。F5-9）。削除・改名なし。Look スキーマの変更なし
+- MINOR: Python の公開モジュール名は転送モジュールで維持（`tdrive_toon.lifecycle` / `project` / `updater` / `ui_update` / `mcp_bridge` は `tdrive` に移したが、同じモジュールを返すので既存の import はそのまま動く）
+- MINOR: Maya のメニューの場所が「T-Drive」から「Tools › T-Drive」に移った（E-1）。項目は同じ
+- Unity パッケージ `com.tdrive.facial` が入る最初のリリース（D-Drive 1.4.0 以降で導入可。docs/06 §5）
 
 ### 追加
 - Toon: ルックタブのグループを折りたたみ式に、見出しにその部位での機能のオン/オフのチェック・○/△・「?」（マニュアルの該当節）。小見出しのチェックでサブ機能の行を出し入れ。「すべて開く / 閉じる」、開閉は覚える（E-2。Look・契約の変更なし）
