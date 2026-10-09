@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+import re
+
 from . import features, params
 
 # Common（D-Drive MaterialCommon）のうち編集できるもの。(キー, 表示名, 種類, 最小, 最大)
@@ -119,6 +121,44 @@ def row_passes(key: str, label: str, query: str, mode: str = MODE_DETAIL) -> boo
     if query.strip():
         return matches(query, key, label)
     return mode != MODE_SIMPLE or key in SIMPLE_KEYS
+
+
+# ---------------------------------------------------------------- 色の文字列（E-7。Qt 非依存）
+_HEX_RE = re.compile(r"^#?([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")
+
+
+def format_hex(rgba) -> str:
+    """0〜1 の RGBA → `#RRGGBB`（アルファが 1 のとき）/ `#RRGGBBAA`。"""
+    vals = [int(round(min(max(float(x), 0.0), 1.0) * 255)) for x in rgba]
+    if len(vals) < 4 or vals[3] == 255:
+        return "#%02X%02X%02X" % tuple(vals[:3])
+    return "#%02X%02X%02X%02X" % tuple(vals[:4])
+
+
+def format_floats(rgba) -> str:
+    """0〜1 の数値（`r, g, b, a`。Unity のインスペクターと同じ値）。"""
+    return ", ".join(f"{round(float(x), 4):g}" for x in rgba)
+
+
+def parse_color(text: str, alpha: float = 1.0):
+    """`#RRGGBB` / `#RRGGBBAA`（# は省略可）/ `r, g, b[, a]`（0〜1。カンマ・空白・括弧区切り）→ [r, g, b, a]。読めなければ None。
+    アルファが書かれていなければ alpha を使う。"""
+    t = (text or "").strip()
+    m = _HEX_RE.match(t)
+    if m and (t.startswith("#") or len(t) in (6, 8)):
+        h = m.group(1)
+        vals = [int(h[i:i + 2], 16) / 255 for i in range(0, len(h), 2)]
+        return [round(v, 4) for v in vals] + ([float(alpha)] if len(vals) == 3 else [])
+    parts = [x for x in re.split(r"[,\s;()\[\]]+", t) if x]
+    if len(parts) not in (3, 4):
+        return None
+    try:
+        vals = [float(x) for x in parts]
+    except ValueError:
+        return None
+    if any(v != v or v < 0.0 or v > 1.0 for v in vals):
+        return None
+    return [round(v, 4) for v in vals] + ([float(alpha)] if len(vals) == 3 else [])
 
 
 # ---------------------------------------------------------------- 記憶（optionVar。Maya が無ければ記憶しない）

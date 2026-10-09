@@ -788,6 +788,14 @@ class Session:
     def redo(self) -> bool:
         return self._restore(self._redo, self._undo)
 
+    def cancel_edit(self) -> bool:
+        """直前の checkpoint 以降の変更を捨てて元に戻す（ダイアログのキャンセル用。やり直しには残さない）。"""
+        if not self.undo():
+            return False
+        if self._redo:
+            self._redo.pop()
+        return True
+
     def _restore(self, src: list, dst: list) -> bool:
         import copy
 

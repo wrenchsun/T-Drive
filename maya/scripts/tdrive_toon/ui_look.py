@@ -15,7 +15,7 @@ from pathlib import Path
 from . import REPO_ROOT, features, look, params, preview, project, roles, session
 from .look_layout import (  # noqa: F401  COMMON_ROWS / GROUP_LABELS などは ui_ab・他のモジュールも参照する
     COMMON_ROWS, MODE_DETAIL, MODE_PREF, MODE_SIMPLE, SIMPLE_KEYS, GROUP_FEATURE, GROUP_LABELS, MANUAL_PAGE, PARAM_HELP, PREVIEW_BADGE, SUB_FEATURES, TEXTURE_ROWS,
-    anchor_of, build_groups, feature_of_key, pref_get, pref_set, row_passes, section_pref, split_group,
+    anchor_of, build_groups, feature_of_key, format_floats, format_hex, parse_color, pref_get, pref_set, row_passes, section_pref, split_group,
 )
 
 MIXED = "—"
@@ -412,6 +412,7 @@ class ParamRow:
     def __init__(self, tab: LookTab, key: str, label: str, kind: str, lo: float, hi: float) -> None:
         self.tab, self.key, self.kind, self.lo, self.hi = tab, key, kind, float(lo), float(hi)
         self._color = [1.0, 1.0, 1.0, 1.0]
+        self._mixed = False
         self.visible = True
         self.label = QtWidgets.QLabel(label)
         self.label.setFixedWidth(170)  # グループをまたいでスライダーの開始位置を揃える
@@ -478,6 +479,8 @@ class ParamRow:
             self.color_btn = QtWidgets.QPushButton()
             self.color_btn.setFixedHeight(22)
             self.color_btn.clicked.connect(self._pick_color)
+            self.color_btn.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+            self.color_btn.customContextMenuRequested.connect(self._color_menu)
             return self.color_btn
         if k == params.TEXTURE:
             w = QtWidgets.QWidget()
@@ -536,14 +539,61 @@ class ParamRow:
         self.tab.begin()
         self.tab.set(self.key, text or None)
 
-    def _pick_color(self) -> None:
-        c = QtGui.QColor.fromRgbF(*[min(max(x, 0.0), 1.0) for x in self._color])
-        picked = QtWidgets.QColorDialog.getColor(
-            c, self.color_btn, "色（Unity のインスペクターと同じ値）", QtWidgets.QColorDialog.ShowAlphaChannel
-        )
-        if picked.isValid():
-            self.tab.begin()
-            self.tab.set(self.key, [round(x, 4) for x in (picked.redF(), picked.greenF(), picked.blueF(), picked.alphaF())])
+    def _pick_color(self, *_) -> None:
+        """ダイアログを開いたまま操作でき（ウィンドウモーダル）、ドラッグ中もビューポートに反映する。
+        OK で確定、キャンセルで元の値（混在のときは元の各値）に戻す。混在のときは白から始める。"""
+        start = [1.0, 1.0, 1.0, 1.0] if self._mixed else list(self._color)
+        dlg = QtWidgets.QColorDialog(QtGui.QColor.fromRgbF(*[min(max(x, 0.0), 1.0) for x in start]), self.color_btn)
+        dlg.setOption(QtWidgets.QColorDialog.ShowAlphaChannel, True)
+        dlg.setWindowTitle("色（Unity のインスペクターと同じ値）")
+        dlg.setAttribute(QtCore.Qt.WA_DeleteOnClose)
+        dlg.setWindowModality(QtCore.Qt.WindowModal)
+        begun = [False]
+
+        def rgba(c: QtGui.QColor) -> list[float]:
+            return [round(x, 4) for x in (c.redF(), c.greenF(), c.blueF(), c.alphaF())]
+
+        def on_changed(c: QtGui.QColor) -> None:
+            if not begun[0]:
+                begun[0] = True
+                self.tab.begin()  # Undo の区切りは開いた後の最初の変更で 1 回
+            self.tab.set(self.key, rgba(c), live=True)
+
+        def on_accepted() -> None:
+            if not begun[0]:
+                self.tab.begin()
+            self.tab.set(self.key, rgba(dlg.currentColor()))  # 確定（画面全体の再描画通知つき）
+
+        def on_rejected() -> None:
+            if begun[0]:
+                self.tab.session.cancel_edit()  # 元の値へ（やり直しには残さない）
+
+        dlg.currentColorChanged.connect(on_changed)
+        dlg.accepted.connect(on_accepted)
+        dlg.rejected.connect(on_rejected)
+        dlg.open()
+
+    def _color_menu(self, pos) -> None:
+        menu = QtWidgets.QMenu(self.color_btn)
+        copy_hex = menu.addAction("16 進をコピー")
+        copy_f = menu.addAction("0〜1 の数値をコピー")
+        paste = menu.addAction("貼り付け（#RRGGBB / #RRGGBBAA / r, g, b[, a]）")
+        copy_hex.setEnabled(not self._mixed)
+        copy_f.setEnabled(not self._mixed)
+        copy_hex.triggered.connect(lambda *_: QtWidgets.QApplication.clipboard().setText(format_hex(self._color)))
+        copy_f.triggered.connect(lambda *_: QtWidgets.QApplication.clipboard().setText(format_floats(self._color)))
+        paste.triggered.connect(lambda *_: self._paste_color())
+        menu.exec(self.color_btn.mapToGlobal(pos))
+
+    def _paste_color(self) -> None:
+        text = QtWidgets.QApplication.clipboard().text()
+        alpha = 1.0 if self._mixed else self._color[3]
+        value = parse_color(text, alpha)
+        if value is None:
+            QtWidgets.QMessageBox.warning(self.color_btn, "T-Drive Toon", f"色として読めません: {text[:40]!r}\n#RRGGBB・#RRGGBBAA・r, g, b[, a]（0〜1）で貼り付けてください")
+            return
+        self.tab.begin()
+        self.tab.set(self.key, value)
 
     def _browse(self) -> None:
         path, _ = QtWidgets.QFileDialog.getOpenFileName(
@@ -594,6 +644,7 @@ class ParamRow:
             self.combo.blockSignals(False)
         elif k == params.COLOR:
             self._color = list(value) if isinstance(value, list) else [1.0, 1.0, 1.0, 1.0]
+            self._mixed = mixed
             if mixed:
                 self.color_btn.setText(MIXED)
                 self.color_btn.setStyleSheet("")

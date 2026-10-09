@@ -34,7 +34,8 @@
 <tr id="simple"><td>かんたん / 詳細</td><td>検索欄の左の切り替え。<strong>かんたん</strong>はよく使う 13 項目だけ（影色・影の境界・境界ぼかし・影の強さ・線色・線幅・固定色と強さ・リム色と強さ・髪ハイライト色・ベース色（乗算）・ベースマップ）。<strong>詳細</strong>は全部です。選んだモードは覚えていて、Maya を起動し直しても同じです。<strong>検索中は両方から探します</strong>。オフの表現の項目は、かんたんでも隠れたままです（見出しのチェックでオンに）</td></tr>
 <tr><td>「—」表示</td><td>部位の中でマテリアルごとに値が違うときの表示。操作すると全マテリアルがその値に揃います</td></tr>
 <tr><td>編集先</td><td>ふだんは <strong>base</strong>（基本の値）。A/B 比較用の案（バリアント）を選ぶと、その案への変更として書き込まれ、変えた項目は<strong>黄色の太字</strong>になります。横の <strong>base</strong> ボタンで基本の値に戻せます（<a href="ab.html">A/B 比較</a>）</td></tr>
-<tr><td>色</td><td>クリックで色を選びます。<strong>Unity のインスペクターと同じ値</strong>です</td></tr>
+<tr id="color-pick"><td>色</td><td>クリックで色を選びます。<strong>Unity のインスペクターと同じ値</strong>です。選ぶ画面を<strong>ドラッグしている最中からビューポートに反映</strong>され、<strong>OK</strong>で確定、<strong>キャンセル</strong>で元の色に戻ります（部位の中でマテリアルごとに色が違う「—」のときは、白から始まり、キャンセルでそれぞれ元の色に戻ります）</td></tr>
+<tr><td>色の右クリック</td><td>色のボタンを右クリックすると<strong>16 進（<code>#8070A0</code>）または 0〜1 の数値（<code>0.5, 0.44, 0.63, 1</code>）をコピー</strong>、<strong>貼り付け</strong>ができます。貼り付けは <code>#RRGGBB</code>・<code>#RRGGBBAA</code>・<code>r, g, b[, a]</code>（0〜1）を受け付け、アルファを書かないときは今のアルファのままです。ほかのツールで決めた色を入れるときや、別の部位に同じ色を移すときに使います</td></tr>
 </table>
 <div class="tip">
 <strong>描画順オフセット</strong>と<strong>両面表示の影響の一部</strong>は Maya では再現されません（Unity でのみ効きます）。<a href="unity-parity.html">Unity との見た目の一致</a>を参照。

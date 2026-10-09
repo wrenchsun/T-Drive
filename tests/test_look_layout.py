@@ -100,3 +100,26 @@ def test_simple_mode_filters_rows_but_search_looks_in_both():
     # 検索中はモードを無視（かんたんでも詳細の項目が見つかる）
     assert L.row_passes("_ToonRimPower", "リムの鋭さ", "鋭さ", L.MODE_SIMPLE)
     assert not L.row_passes("_ToonRimPower", "リムの鋭さ", "", L.MODE_SIMPLE)
+
+
+def test_parse_color_hex_and_floats():
+    assert L.parse_color("#8070a0") == [round(0x80 / 255, 4), round(0x70 / 255, 4), round(0xA0 / 255, 4), 1.0]
+    assert L.parse_color("8070A0") == L.parse_color("#8070a0")
+    assert L.parse_color("#80706040")[3] == round(0x40 / 255, 4)
+    assert L.parse_color("#8070a0", alpha=0.5)[3] == 0.5  # アルファ省略時は元のアルファ
+    assert L.parse_color("0.5, 0.25, 1") == [0.5, 0.25, 1.0, 1.0]
+    assert L.parse_color("(0.5 0.25 1 0.5)") == [0.5, 0.25, 1.0, 0.5]
+
+
+def test_parse_color_rejects_garbage():
+    for bad in ("", "red", "#12345", "#GGGGGG", "1, 2", "1.5, 0, 0", "-0.1, 0, 0", "0.1, 0.2, 0.3, 0.4, 0.5", "nan, 0, 0"):
+        assert L.parse_color(bad) is None, bad
+
+
+def test_color_roundtrip():
+    assert L.format_hex([1, 0.5, 0, 1]) == "#FF8000"
+    assert L.format_hex([1, 0.5, 0, 0.5]) == "#FF800080"
+    assert L.format_floats([1.0, 0.5, 0.0, 1.0]) == "1, 0.5, 0, 1"
+    for c in ([0.0, 0.0, 0.0, 1.0], [1.0, 1.0, 1.0, 1.0], [0.502, 0.4392, 0.6275, 1.0]):
+        assert L.parse_color(L.format_hex(c)) == [round(round(x * 255) / 255, 4) for x in c]
+        assert L.parse_color(L.format_floats(c)) == c
