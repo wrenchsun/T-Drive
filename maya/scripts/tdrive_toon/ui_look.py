@@ -1,41 +1,24 @@
 """ルックタブ（docs/05 §4、R-2 / R-5）: 部位 / マテリアルを選んでパラメータを調整する。
 
 値はスライダー操作中も連続でビューポートに反映する（setAttr のみ）。
+グループは折りたたみ式のセクション（E-2）。見出しのチェックは機能タブの「部位の列」と同じ意味。
 """
 
 from __future__ import annotations
+
+import webbrowser
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from pathlib import Path
 
-from . import features, look, params, preview, project, roles, session
+from . import REPO_ROOT, features, look, params, preview, project, roles, session
+from .look_layout import (  # noqa: F401  COMMON_ROWS / GROUP_LABELS などは ui_ab・他のモジュールも参照する
+    COMMON_ROWS, GROUP_FEATURE, GROUP_LABELS, MANUAL_PAGE, PARAM_HELP, PREVIEW_BADGE, SUB_FEATURES, TEXTURE_ROWS,
+    anchor_of, build_groups, feature_of_key, pref_get, pref_set, section_pref, split_group,
+)
 
 MIXED = "—"
-# Common（D-Drive MaterialCommon）のうち編集できるもの。(キー, 表示名, 種類, 最小, 最大)
-COMMON_ROWS = (
-    ("common.albedoTint", "ベース色（乗算）", "color", 0, 0),
-    ("common.blend", "ブレンド", "blend", 0, 0),
-    ("common.cutoff", "カットオフ（Cutout 時）", "float", 0.0, 1.0),
-    ("common.doubleSided", "両面表示", "bool", 0, 0),
-    ("renderQueueOffset", "描画順オフセット（Unity のみ）", "int", -100, 100),
-)
-# テクスチャの差し替え（4-9、docs/05 §4.1）。Common（D-Drive MaterialCommon）のテクスチャと関連する値
-TEXTURE_ROWS = (
-    ("common.albedo", "ベースマップ（色）", params.TEXTURE, 0, 0),
-    ("common.normal", "法線マップ", params.TEXTURE, 0, 0),
-    ("common.normalScale", "法線マップの強さ", params.FLOAT, 0.0, 2.0),
-    ("common.emission", "発光マップ", params.TEXTURE, 0, 0),
-    ("common.emissionColor", "発光色", params.COLOR, 0, 0),
-    ("common.emissionIntensity", "発光の強さ", params.FLOAT, 0.0, 10.0),
-)
-GROUP_LABELS = {
-    "Textures": "テクスチャ（差し替え）",
-    "Common": "共通", "Shadow": "影", "Mask": "マスク", "Tint": "固定色", "Outline": "線",
-    "Light": "ライト", "Depth": "手前に出す（眉・目を髪の上に）", "Rim": "リム", "Hair": "髪ハイライト",
-    "Color": "色補正", "MatCap": "MatCap（簡易反射）", "FaceShadow": "顔影マップ（SDF）", "FacialAngle": "顔の角度連動",
-}
-
 
 # テクスチャ未設定のときの意味（パラメータで違う。docs/03 §7.2 の既定値）
 TEXTURE_PLACEHOLDER = {
@@ -48,18 +31,69 @@ TEXTURE_PLACEHOLDER = {
     "_ToonFaceShadowMap": "なし（キャラクタータブの「マスクから生成」で作る）",
 }
 
-# パラメータごとの説明（ラベルのツールチップに足す）
-PARAM_HELP = {
-    "_ToonFacialAngle": "顔の向きに合わせて線の太さと陰の境目を変える。向きは FacialController のプレビュー（Maya）か "
-                        "Runner のマテリアル出力（Unity）が渡す。それが無いときは、オンにしても何も変わらない",
-    "_ToonFacialLineWidthSide": "真横を向いたときの線の太さ（倍）。正面は 1 倍で、横に向くほどこの値へ近づく。1 = 変えない",
-    "_ToonFacialLineWidthVertical": "真上・真下を向いたときの線の太さ（倍）。1 = 変えない",
-    "_ToonFacialShadeOffsetSide": "真横を向いたときの陰の境目のずらし。プラスで陰が広がり、マイナスで狭まる。0 = 変えない",
-}
-
 
 def _warn(parent: QtWidgets.QWidget, exc: Exception) -> None:
     QtWidgets.QMessageBox.warning(parent, "T-Drive Toon", str(exc))
+
+
+def open_manual(anchor: str) -> None:
+    """デザイナーマニュアルの該当節をブラウザで開く。"""
+    uri = (REPO_ROOT / "docs" / "DesignerManual" / MANUAL_PAGE).as_uri() + (f"#{anchor}" if anchor else "")
+    webbrowser.open(uri)
+
+
+class Section(QtWidgets.QWidget):
+    """折りたたみセクション: 見出し（▼/▶ + タイトル + 機能チェック + ○/△ + 「?」）と中身。"""
+
+    def __init__(self, tab: "LookTab", group: str, title: str, feature_id: str | None) -> None:
+        super().__init__()
+        self.group, self.title = group, title
+        self.expanded = bool(pref_get(section_pref(group), 1))
+        self.forced_open = False  # 検索中は該当のあるセクションを開く（開閉の記憶は上書きしない）
+        outer = QtWidgets.QVBoxLayout(self)
+        outer.setContentsMargins(0, 2, 0, 2)
+        head = QtWidgets.QFrame()
+        head.setFrameShape(QtWidgets.QFrame.StyledPanel)
+        h = QtWidgets.QHBoxLayout(head)
+        h.setContentsMargins(4, 2, 4, 2)
+        self.toggle_btn = QtWidgets.QPushButton()
+        self.toggle_btn.setFlat(True)
+        self.toggle_btn.setStyleSheet("font-weight: bold; text-align: left; padding: 3px 4px;")
+        self.toggle_btn.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
+        self.toggle_btn.clicked.connect(self._on_toggle)
+        h.addWidget(self.toggle_btn, 1)
+        if feature_id:
+            tab.add_feature_header(h, feature_id, anchor_of(group), None)
+            f = features.BY_ID[feature_id]
+            if not f.material_scope and not f.required:
+                self.toggle_btn.setToolTip(f"{f.label}はキャラクター単位の機能です（機能タブの「全体」の列で切り替え）")
+        else:
+            h.addWidget(tab.make_help_button(anchor_of(group)))
+        outer.addWidget(head)
+        self.body = QtWidgets.QWidget()
+        self.body_layout = QtWidgets.QVBoxLayout(self.body)
+        self.body_layout.setContentsMargins(8, 0, 0, 0)
+        outer.addWidget(self.body)
+        self._sync()
+
+    def _on_toggle(self, *_) -> None:
+        self.set_expanded(not self.expanded)
+
+    def set_expanded(self, on: bool, save: bool = True) -> None:
+        self.expanded = on
+        if save:
+            pref_set(section_pref(self.group), 1 if on else 0)
+        self._sync()
+
+    def set_forced_open(self, on: bool) -> None:
+        if on != self.forced_open:
+            self.forced_open = on
+            self._sync()
+
+    def _sync(self) -> None:
+        shown = self.expanded or self.forced_open
+        self.body.setVisible(shown)
+        self.toggle_btn.setText(f"{'▼' if shown else '▶'} {self.title}")
 
 
 class LookTab(QtWidgets.QWidget):
@@ -68,6 +102,10 @@ class LookTab(QtWidgets.QWidget):
         self.session = s
         self.target: str | None = None
         self.rows: dict[str, ParamRow] = {}
+        self.feature_checks: dict[str, QtWidgets.QCheckBox] = {}
+        self.sections: dict[str, Section] = {}
+        self.group_keys: dict[str, list[str]] = {}  # グループ → 行のキー
+        self.sub_blocks: dict[str, tuple[QtWidgets.QWidget, list[str]]] = {}  # サブ機能 ID → (小見出し + 行, 行のキー)
 
         v = QtWidgets.QVBoxLayout(self)
         top = QtWidgets.QHBoxLayout()
@@ -94,6 +132,18 @@ class LookTab(QtWidgets.QWidget):
         self.tree.itemSelectionChanged.connect(self.on_target)
         split.addWidget(self.tree)
 
+        right = QtWidgets.QWidget()
+        rv = QtWidgets.QVBoxLayout(right)
+        rv.setContentsMargins(0, 0, 0, 0)
+        self.toolbar = QtWidgets.QHBoxLayout()
+        self.open_all_btn = QtWidgets.QPushButton("すべて開く")
+        self.open_all_btn.clicked.connect(lambda *_: self.set_all_expanded(True))
+        self.close_all_btn = QtWidgets.QPushButton("すべて閉じる")
+        self.close_all_btn.clicked.connect(lambda *_: self.set_all_expanded(False))
+        self.toolbar.addWidget(self.open_all_btn)
+        self.toolbar.addWidget(self.close_all_btn)
+        self.toolbar.addStretch(1)
+        rv.addLayout(self.toolbar)
         scroll = QtWidgets.QScrollArea()
         scroll.setWidgetResizable(True)
         self.panel = QtWidgets.QWidget()
@@ -101,33 +151,80 @@ class LookTab(QtWidgets.QWidget):
         self.title = QtWidgets.QLabel()
         self.title.setWordWrap(True)
         self.form.addWidget(self.title)
-        self.hidden_note = QtWidgets.QLabel()
-        self.hidden_note.setWordWrap(True)
-        self.hidden_note.setStyleSheet("color: #9aa6b8;")
-        self.form.addWidget(self.hidden_note)
-        self.boxes: list[tuple[QtWidgets.QGroupBox, list[str]]] = []
         self._build_rows()
         self.form.addStretch(1)
         scroll.setWidget(self.panel)
-        split.addWidget(scroll)
+        rv.addWidget(scroll, 1)
+        split.addWidget(right)
         split.setSizes([200, 560])
         v.addWidget(split, 1)
 
+    # -------------------------------------------------------------- 構築
     def _build_rows(self) -> None:
-        groups: dict[str, list[tuple]] = {"Common": list(COMMON_ROWS), "Textures": list(TEXTURE_ROWS)}
-        for p in params.SPECIFIC_PARAMS:
-            kind = "toggle01" if p.toggle else p.kind  # 0/1 の真偽値はチェックボックス（値は 1.0 / 0.0）
-            groups.setdefault(p.group, []).append((p.unity, p.label, kind, p.min, p.max))
-        for group, rows in groups.items():
-            box = QtWidgets.QGroupBox(GROUP_LABELS.get(group, group))
-            grid = QtWidgets.QGridLayout(box)
-            grid.setColumnStretch(1, 1)
-            for i, (key, label, kind, lo, hi) in enumerate(rows):
-                row = ParamRow(self, key, label, kind, lo, hi)
-                row.add_to(grid, i)
-                self.rows[key] = row
-            self.form.addWidget(box)
-            self.boxes.append((box, [r[0] for r in rows]))
+        for group, rows in build_groups().items():
+            sec = Section(self, group, GROUP_LABELS.get(group, group), GROUP_FEATURE.get(group))
+            self.sections[group] = sec
+            self.form.addWidget(sec)
+            self.group_keys[group] = [r[0] for r in rows]
+            main, subs = split_group(group, rows)
+            self._add_rows(sec.body_layout, main)
+            for fid, sub_rows in subs:
+                block = QtWidgets.QWidget()
+                bl = QtWidgets.QVBoxLayout(block)
+                bl.setContentsMargins(0, 0, 0, 0)
+                head = QtWidgets.QHBoxLayout()
+                head.setContentsMargins(0, 2, 0, 0)
+                self.add_feature_header(head, fid, anchor_of(group, fid), features.BY_ID[fid].label)
+                bl.addLayout(head)
+                rows_widget = QtWidgets.QWidget()
+                rows_layout = QtWidgets.QVBoxLayout(rows_widget)
+                rows_layout.setContentsMargins(16, 0, 0, 0)
+                self._add_rows(rows_layout, sub_rows)
+                bl.addWidget(rows_widget)
+                sec.body_layout.addWidget(block)
+                self.sub_blocks[fid] = (block, [r[0] for r in sub_rows])
+
+    def _add_rows(self, layout: QtWidgets.QVBoxLayout, rows: list[tuple]) -> None:
+        if not rows:
+            return
+        grid_widget = QtWidgets.QWidget()
+        grid = QtWidgets.QGridLayout(grid_widget)
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setColumnStretch(1, 1)
+        for i, (key, label, kind, lo, hi) in enumerate(rows):
+            row = ParamRow(self, key, label, kind, lo, hi)
+            row.add_to(grid, i)
+            self.rows[key] = row
+        layout.addWidget(grid_widget)
+
+    def make_help_button(self, anchor: str) -> QtWidgets.QToolButton:
+        b = QtWidgets.QToolButton()
+        b.setText("?")
+        b.setAutoRaise(True)
+        b.setToolTip("デザイナーマニュアルのこの節を開く")
+        b.clicked.connect(lambda *_, a=anchor: open_manual(a))
+        return b
+
+    def add_feature_header(self, layout, fid: str, anchor: str, title: str | None) -> None:
+        """見出しの機能チェック + ○/△ バッジ + 「?」を layout に足す。title があればチェックの文言にする（サブ機能）。"""
+        from .ui_features import PREVIEW_LABELS
+
+        f = features.BY_ID[fid]
+        cb = QtWidgets.QCheckBox(title or "")
+        if f.required:
+            cb.setEnabled(False)
+            cb.setToolTip(f"{f.label}は必須の機能です（オフにできません）")
+        elif not f.material_scope:
+            cb.setVisible(False)  # キャラクター単位の機能は部位ごとには切り替えられない
+        else:
+            cb.setToolTip(f"{f.label}: この部位 / マテリアルで使う（機能タブの部位の列と同じ）")
+            cb.clicked.connect(lambda *_, fid=fid: self.toggle_feature(fid))
+        self.feature_checks[fid] = cb
+        badge = QtWidgets.QLabel(PREVIEW_BADGE[f.maya_preview])
+        badge.setToolTip(PREVIEW_LABELS[f.maya_preview])
+        layout.addWidget(cb, 1 if title else 0)
+        layout.addWidget(badge)
+        layout.addWidget(self.make_help_button(anchor))
 
     # -------------------------------------------------------------- 表示
     def refresh(self) -> None:
@@ -160,29 +257,65 @@ class LookTab(QtWidgets.QWidget):
         self.tree.blockSignals(False)
         self.refresh_values()
 
-    def _apply_features(self) -> None:
-        """オフの機能のパラメータを隠す（値は残っている。機能タブでオンにすると出る）。"""
+    def feature_on(self, fid: str | None) -> bool:
+        """選んだ部位 / マテリアルでこの機能が有効か（混在は有効扱い。値の行を出す）。"""
         lk = self.session.look
-        mats = self.session.materials_of(self.target) if lk is not None and self.target else []
-        off = set()
+        if lk is None or fid is None:
+            return True
+        mats = self.session.materials_of(self.target) if self.target else []
+        if mats:  # 部位ごとの上書きを含む（docs/11 §2.1）
+            return any(look.material_enabled(lk, m, fid) for m in mats)
+        return look.enabled(lk, fid)
+
+    def _update_checks(self) -> None:
+        lk = self.session.look
+        for fid, cb in self.feature_checks.items():
+            f = features.BY_ID[fid]
+            cb.blockSignals(True)
+            if lk is None:
+                cb.setCheckState(QtCore.Qt.Unchecked)
+            elif f.required:
+                cb.setCheckState(QtCore.Qt.Checked)
+            elif self.target and f.material_scope:
+                _ov, eff = self.session.material_feature_state(self.target, fid)
+                partial = len(set(eff)) > 1
+                cb.setTristate(partial)
+                cb.setCheckState(QtCore.Qt.PartiallyChecked if partial else (QtCore.Qt.Checked if eff[0] else QtCore.Qt.Unchecked))
+                cb.setEnabled(True)
+            else:  # 何も選んでいない: 全体の状態を表示だけ
+                cb.setTristate(False)
+                cb.setCheckState(QtCore.Qt.Checked if look.enabled(lk, fid) else QtCore.Qt.Unchecked)
+                cb.setEnabled(False)
+            cb.blockSignals(False)
+
+    def _apply_visibility(self) -> None:
+        """行・小見出し・セクションの表示を 1 か所で決める。
+        オフの機能は値の行だけ隠す。見出し（グループ・小見出し）は残す（どこでオンにするか迷わない）。"""
         for key, row in self.rows.items():
-            fid = features.FEATURE_OF_COMMON.get(key.split(".", 1)[1]) if key.startswith("common.") else features.FEATURE_OF_PARAM.get(key)
-            if lk is None or fid is None:
-                visible = True
-            elif mats:  # 選んだ部位 / マテリアルで有効か（部位ごとの上書きを含む。docs/11 §2.1）
-                visible = any(look.material_enabled(lk, m, fid) for m in mats)
+            row.set_visible(self.feature_on(feature_of_key(key)))
+
+    def toggle_feature(self, fid: str) -> None:
+        """見出しのチェック: 全部オンならオフへ、それ以外（オフ・混在）はオンへ（機能タブの部位の列と同じ）。"""
+        if not self.target or self.session.look is None:
+            return
+        try:
+            _ov, eff = self.session.material_feature_state(self.target, fid)
+            on = not all(eff)
+            if self.target in self.session.look["parts"]:
+                self.session.set_part_feature(self.target, fid, on)
             else:
-                visible = look.enabled(lk, fid)
-            row.set_visible(visible)
-            if not visible:
-                off.add(features.BY_ID[fid].label)
-        for box, keys in self.boxes:
-            box.setVisible(any(self.rows[k].visible for k in keys))
-        self.hidden_note.setText(f"オフの機能は隠しています（機能タブ）: {'、'.join(sorted(off))}" if off else "")
-        self.hidden_note.setVisible(bool(off))
+                self.session.set_material_feature(self.target, fid, on)
+        except Exception as exc:
+            _warn(self, exc)
+        self.refresh_values()  # 表示中でないタブは session の通知で更新されないことがあるので自分でも更新する
+
+    def set_all_expanded(self, on: bool) -> None:
+        for sec in self.sections.values():
+            sec.set_expanded(on)
 
     def refresh_values(self) -> None:
-        self._apply_features()
+        self._update_checks()
+        self._apply_visibility()
         enabled = self.target is not None and self.session.look is not None
         self.panel.setEnabled(enabled)
         if not enabled:
