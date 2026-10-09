@@ -98,6 +98,19 @@ def anchor_of(group: str, fid: str | None = None) -> str:
     return SUB_ANCHOR.get(fid) or GROUP_ANCHOR.get(group, "")
 
 
+def matches(query: str, key: str, label: str) -> bool:
+    """検索（E-3）: 表示名・Unity 名（key）・説明（PARAM_HELP）に部分一致（大文字小文字・前後の空白は無視）。"""
+    q = query.strip().casefold()
+    if not q:
+        return True
+    return any(q in text.casefold() for text in (label, key, PARAM_HELP.get(key, "")))
+
+
+def row_passes(key: str, label: str, query: str) -> bool:
+    """機能のオン/オフ以外の理由（検索・モード）でこの行を出すか。"""
+    return matches(query, key, label)
+
+
 # ---------------------------------------------------------------- 記憶（optionVar。Maya が無ければ記憶しない）
 def pref_get(name: str, default):
     try:

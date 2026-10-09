@@ -66,3 +66,18 @@ def test_anchors_exist_in_manual():
 def test_prefs_are_noop_without_maya():
     L.pref_set("tdriveLookSection_Test", 0)  # 例外にならない
     assert L.pref_get("tdriveLookSection_Test", 1) == 1
+
+
+def test_search_matches_label_key_and_help():
+    assert L.matches("", "_ToonOutlineWidth", "線幅")
+    assert L.matches("線", "_ToonOutlineWidth", "線幅")
+    assert L.matches("outlinewidth", "_ToonOutlineWidth", "線幅")  # 大文字小文字を無視・Unity 名
+    assert L.matches("  線  ", "_ToonOutlineWidth", "線幅")
+    assert L.matches("顔の向き", "_ToonFacialAngle", "角度連動")  # PARAM_HELP
+    assert not L.matches("リム", "_ToonOutlineWidth", "線幅")
+
+
+def test_search_senn_shows_only_outline_group_rows():
+    hits = {g: [r[0] for r in rows if L.row_passes(r[0], r[1], "線")] for g, rows in L.build_groups().items()}
+    assert len(hits["Outline"]) >= 5  # 線色・線幅など
+    assert not hits["Rim"] and not hits["Shadow"] and not hits["Color"] and not hits["Tint"]  # 部分一致なので「法線」「視線」の行は混ざる

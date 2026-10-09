@@ -10,6 +10,7 @@
 
 ### 追加
 - Toon: ルックタブのグループを折りたたみ式に、見出しにその部位での機能のオン/オフのチェック・○/△・「?」（マニュアルの該当節）。小見出しのチェックでサブ機能の行を出し入れ。「すべて開く / 閉じる」、開閉は覚える（E-2。Look・契約の変更なし）
+- Toon: ルックタブの検索欄（名前・Unity 名・説明に部分一致。該当のあるグループだけ開く。Esc でクリア）（E-3）
 - Unity パッケージ: D-Drive 1.4.0 の実行順の検査から FacialCorrectionRunner を除外すると宣言（`FacialCameraExecutionOrderExemption`。カメラを読むだけのため）
 - Toon: 機能「顔の角度連動（線と陰）」（`_ToonFacialAngle` ほか 3 つ。顔の向きに合わせて輪郭線の太さと陰の境目を変える。角度は FacialController が渡す）（F5-9）
 - **FacialController**（エディタ › FacialController タブ。マニュアル: docs/DesignerManual/facial.html）: カメラの角度に応じて顔を補正するデータを Maya で作り、Unity で再生する

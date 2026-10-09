@@ -15,7 +15,7 @@ from pathlib import Path
 from . import REPO_ROOT, features, look, params, preview, project, roles, session
 from .look_layout import (  # noqa: F401  COMMON_ROWS / GROUP_LABELS などは ui_ab・他のモジュールも参照する
     COMMON_ROWS, GROUP_FEATURE, GROUP_LABELS, MANUAL_PAGE, PARAM_HELP, PREVIEW_BADGE, SUB_FEATURES, TEXTURE_ROWS,
-    anchor_of, build_groups, feature_of_key, pref_get, pref_set, section_pref, split_group,
+    anchor_of, build_groups, feature_of_key, pref_get, pref_set, row_passes, section_pref, split_group,
 )
 
 MIXED = "—"
@@ -142,7 +142,15 @@ class LookTab(QtWidgets.QWidget):
         self.close_all_btn.clicked.connect(lambda *_: self.set_all_expanded(False))
         self.toolbar.addWidget(self.open_all_btn)
         self.toolbar.addWidget(self.close_all_btn)
-        self.toolbar.addStretch(1)
+        self.search = QtWidgets.QLineEdit()
+        self.search.setPlaceholderText("検索（名前・Unity 名・説明）")
+        self.search.setClearButtonEnabled(True)
+        self.search.setToolTip("表示名・Unity のプロパティ名・説明に部分一致する項目だけ表示します。Esc で消去")
+        self.search.textChanged.connect(self._on_search)
+        esc = QtGui.QShortcut(QtGui.QKeySequence("Escape"), self.search)
+        esc.setContext(QtCore.Qt.WidgetShortcut)
+        esc.activated.connect(self.search.clear)
+        self.toolbar.addWidget(self.search, 1)
         rv.addLayout(self.toolbar)
         scroll = QtWidgets.QScrollArea()
         scroll.setWidgetResizable(True)
@@ -290,9 +298,21 @@ class LookTab(QtWidgets.QWidget):
 
     def _apply_visibility(self) -> None:
         """行・小見出し・セクションの表示を 1 か所で決める。
-        オフの機能は値の行だけ隠す。見出し（グループ・小見出し）は残す（どこでオンにするか迷わない）。"""
+        表示の可否 = 機能がオン AND 検索に一致（AND モード。E-9）。
+        オフの機能は値の行だけ隠す。見出し（グループ・小見出し）は残す（どこでオンにするか迷わない）。
+        検索中は、一致する行を持つグループだけ出して開く（開閉の記憶は上書きしない）。"""
+        query = self.search.text()
+        passes = {key: row_passes(key, row.label.text(), query) for key, row in self.rows.items()}
         for key, row in self.rows.items():
-            row.set_visible(self.feature_on(feature_of_key(key)))
+            row.set_visible(passes[key] and self.feature_on(feature_of_key(key)))
+        for block, keys in self.sub_blocks.values():
+            block.setVisible(any(passes[k] for k in keys))
+        for group, sec in self.sections.items():
+            sec.setVisible(any(passes[k] for k in self.group_keys[group]))
+            sec.set_forced_open(bool(query.strip()))
+
+    def _on_search(self, *_) -> None:
+        self._apply_visibility()
 
     def toggle_feature(self, fid: str) -> None:
         """見出しのチェック: 全部オンならオフへ、それ以外（オフ・混在）はオンへ（機能タブの部位の列と同じ）。"""
