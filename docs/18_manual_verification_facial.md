@@ -245,6 +245,17 @@ FacialController（[14](14_facial_controller_spec.md)）と、それに伴う変
 | R10-10 | 起動時（1 日 1 回）に本体とツールの両方に新しい版がある状態で Maya を起動。オフラインでも起動 | 「更新があります（本体 vX / ツール名 vY …）」の 1 つのメッセージ。オフラインでは何も出ない | 一部 ✅（文言のテスト） | [ ] | |
 | R10-11 | 大きいリポジトリを URL 追加 | clone の間は待機カーソルになり Maya が数秒固まる。許容できるか（気になるならスレッド化のチケットにする） | ❌ 未確認 | [ ] | |
 
+## R12. 外部ツールパッケージ — MS2026 グレーボックス（R-12。2026-10-14 追加）
+
+**T-Drive v0.6.0 のタグを打ったあとで確認します**（`tool.json` の `requires.tdrive` が 0.6.0。それより前の本体では「T-Drive 0.6.0 以上が必要です」の理由付きタブになる）。
+
+| # | 手順 | 期待結果 | 自動 | 結果 | 結果メモ |
+|---|---|---|---|---|---|
+| R12-1 | T-Drive v0.6.0 以上で、更新ウィンドウ ›「URL を入力して追加」に `https://github.com/wrenchsun/MS2026-Maya.git` | v1.0.0 に固定されて一覧に出る。Tools › T-Drive に「MS2026 グレーボックス」のタブ（案内文 + 「グレーボックスのウィンドウを開く」）が並び、メニュー Tools › MS2026 もできる | 一部 ✅（`resolve_tools` で読み込み可否まで。mayapy は GUI が無いので `install_menu` で止まる） | [ ] | |
+| R12-2 | グレーボックスのウィンドウで準備 → 読み込み → 検査 → Export Block → Unity（MS2026）の Import Background | 従来どおり通る。既定の作業フォルダが `$TDRIVE_PROJECT/MayaWork/` になっている | ❌ 未確認 | [ ] | |
+| R12-3 | T-Drive v0.5.0 のまま同じ URL を追加 | 警告が出て追加されない（`requires.tdrive` 不足） | ✅ | [ ] | |
+| R12-4 | MS2026 の `Docs/Guides/MayaGreyboxPipeline.md` の「必要なツールの版と URL」の表と、`.props.json` / `.colliders.json` の version が MS2026-Maya の CHANGELOG と一致 | 一致している | ❌ 未確認（目視） | [ ] | |
+
 ## F. Unity（FU）
 
 | # | 手順 | 期待結果 | 自動 | 結果 | 結果メモ |
