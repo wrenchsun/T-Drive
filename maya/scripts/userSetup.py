@@ -8,7 +8,7 @@
 
 画面の準備ができてから行うもの（executeDeferred）:
 - MCP 用の commandPort を localhost:7001 で開く（環境変数 TDRIVE_MCP_PORT=0 で無効化）
-- メインメニュー Tools › T-Drive、更新の確認
+- 外部ツール（tools.json）の読み込み、メインメニュー Tools › T-Drive、更新の確認
 - 起動と同時にシーンが開いていたら、Look を開いてテクスチャを読み込み直す
 
 mayapy / バッチ（Unity 出力の別プロセス・スモークテスト）では何もしない。
@@ -44,6 +44,12 @@ def _tdrive_startup():
     from tdrive_toon import session
 
     mcp_bridge.open_from_env()
+    try:
+        from tdrive import external_load
+
+        external_load.load_external_tools()  # 外部ツール（docs/13 §6）。殻を開く前に登録しておく（タブは組み込みの後ろ）
+    except Exception as exc:  # noqa: BLE001  外部ツールの不具合で起動を止めない
+        print(f"[T-Drive] 外部ツールの読み込みに失敗: {exc}")
     menu.install()
     if cmds.file(query=True, sceneName=True) and session.current().look is None:
         session.on_scene_opened()  # scriptJob より先にシーンが開いていた場合

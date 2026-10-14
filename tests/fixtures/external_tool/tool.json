@@ -1,0 +1,6 @@
+{
+  "id": "tdrive_dummy",
+  "name": "Dummy",
+  "entry": "tdrive_dummy.tool",
+  "requires": { "tdrive": "0.1.0" }
+}

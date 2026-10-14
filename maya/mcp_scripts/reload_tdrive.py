@@ -73,6 +73,14 @@ for name in sorted([m for m in sys.modules if any(m == p or m.startswith(p + "."
 from tdrive import shell  # noqa: E402
 from tdrive_toon import look, preview, session  # noqa: E402
 
+# 外部ツール（docs/13 §6）。モジュールは後片付け（external_load.unload）で外してあるので、読み直して登録し直す。殻を作り直す前に
+try:
+    from tdrive import external_load  # noqa: E402
+
+    external_load.load_external_tools()
+except Exception as exc:  # noqa: BLE001  外部ツールの不具合でリロードを止めない
+    print(f"[T-Drive] 外部ツールの読み込みに失敗: {exc}")
+
 s = session.current()
 if carry and carry.get("look") is not None:
     for k, v in carry.items():

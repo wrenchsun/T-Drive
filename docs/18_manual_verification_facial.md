@@ -219,6 +219,16 @@ FacialController（[14](14_facial_controller_spec.md)）と、それに伴う変
 | E4-4 | D-Drive の無いプロジェクトで、Package Manager › Add package from git URL に `…?path=unity/com.tdrive.facial#vX.Y.Z` | 導入でき、コンパイルエラーが無い（D-Drive 用のブリッジは外れる） | ❌ 未確認 | [ ] | |
 | E4-5 | リリースの前に `check_release.py` を実行 | Unity パッケージの版が本体の版と違う / パッケージの CHANGELOG に「互換性」が無いと止まる | ✅ | [ ] | |
 
+## R. 外部ツールパッケージ（docs/13 §6。R-9 起動時の読み込み。2026-10-14 追加）
+
+| # | 手順 | 期待結果 | 自動 | 結果 | 結果メモ |
+|---|---|---|---|---|---|
+| R9-1 | `%LOCALAPPDATA%\TDriveToon	ools.json` に `{"version":1,"tools":[{"id":"tdrive_dummy","dir":"<T-Drive>\tests\fixtures\external_tool"}]}`（絶対パス）を書いて Maya を起動 → Tools › T-Drive | Toon / FacialController の後ろに「Dummy」タブが並び、中身が表示される | ✅（mayapy のスモークで登録と並び順） | [ ] | |
+| R9-2 | 同じ要領で `testsixtures\external_tool_broken`（`create_tool` が例外）も足して起動 | 「Broken」タブに理由が出て、スクリプトエディタにトレースが出る。Toon / FacialController / Dummy は普通に動く | ✅（`_UnavailableTool` 化） | [ ] | |
+| R9-3 | `enabled: false` のエントリ・`tool.json` が無いフォルダ・`requires.tdrive` が本体より新しいエントリ | 無効のものはタブが出ずログだけ。他は理由付きのタブになる | ✅ | [ ] | |
+| R9-4 | 「ツールをリロード」（MCP の reload_tdrive / 更新後のリロード）のあと。外部ツールのソースを書き換えてからもう一度 | 外部ツールのタブが残り、書き換えが反映される | 一部 ✅（`unload` でモジュールと sys.path が外れることまで） | [ ] | |
+| R9-5 | 起動直後のスクリプトエディタ | `[T-Drive] 外部ツール …` のログに想定外のエラーが無い | ❌ 未確認 | [ ] | |
+
 ## F. Unity（FU）
 
 | # | 手順 | 期待結果 | 自動 | 結果 | 結果メモ |
