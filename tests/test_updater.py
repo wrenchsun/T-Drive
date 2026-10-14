@@ -132,3 +132,51 @@ def test_dev_install_and_local_changes_are_not_updated(remote_and_install):
     _git(git.repo, "checkout", "-q", "--", "VERSION")
     _git(git.repo, "checkout", "-q", "main")  # ブランチ上 = 開発用
     assert updater.install_kind(git) == "dev"
+
+
+@needs_git
+def test_external_checkout_updates_and_rolls_back_with_same_functions(remote_and_install, tmp_path):
+    """本体とは別パスの checkout（外部ツール）も同じ関数で更新 → 元に戻せる。本体の checkout には触れない。"""
+    main_git = remote_and_install
+    ext = tmp_path / "external" / "SomeTool"
+    ext.parent.mkdir()
+    subprocess.run(["git", "clone", "-q", str(main_git.repo.parent / "remote.git"), str(ext)], check=True)
+    _git(ext, "-c", "advice.detachedHead=false", "checkout", "-q", "v0.1.0")
+    git = updater.Git(repo=ext)
+    assert updater.install_kind(git) == "release" and updater.installed_version(ext) == "0.1.0"
+    updater.write_state(git, autoCheck=False)
+    assert updater.read_state(git) == {"autoCheck": False}
+    res = updater.update_to(git, "v0.2.0")
+    assert git.current_tag() == "v0.2.0" and updater.installed_version(ext) == "0.2.0"
+    assert res["from"] == "v0.1.0" and updater.read_state(git)["previous"] == "v0.1.0"
+    assert updater.read_state(git)["autoCheck"] is False  # 状態は他のキーを消さない
+    updater.rollback(git)
+    assert git.current_tag() == "v0.1.0"
+    assert main_git.current_tag() == "v0.1.0" and updater.read_state(main_git) == {}  # 本体は別の状態
+    (ext / "VERSION").write_text("hacked\n", encoding="utf-8")
+    with pytest.raises(updater.GitError):
+        updater.update_to(git, "v0.2.0")
+
+
+@needs_git
+def test_external_without_usersetup_needs_no_restart(tmp_path):
+    work, bare = tmp_path / "w", tmp_path / "r.git"
+    work.mkdir()
+    _git(work, "init", "-q", "-b", "main")
+    _git(work, "config", "user.email", "t@example.com")
+    _git(work, "config", "user.name", "t")
+    for ver in ("1.0.0", "1.1.0"):
+        (work / "VERSION").write_text(ver + "\n", encoding="utf-8")
+        _git(work, "add", "-A")
+        _git(work, "commit", "-q", "-m", ver)
+        _git(work, "tag", "-a", f"v{ver}", "-m", ver)
+    subprocess.run(["git", "clone", "-q", "--bare", str(work), str(bare)], check=True)
+    git = updater.clone(str(bare), tmp_path / "dest")  # 最新タグに固定
+    assert git.current_tag() == "v1.1.0" and updater.install_kind(git) == "release"
+    assert updater.latest_tag(git) == "v1.1.0"
+    pinned = updater.clone(str(bare), tmp_path / "dest2", tag="v1.0.0")
+    assert pinned.current_tag() == "v1.0.0"
+    res = updater.update_to(pinned, "v1.1.0")
+    assert res["restart"] is False
+    with pytest.raises(updater.GitError):
+        updater.clone(str(tmp_path / "nonexistent.git"), tmp_path / "dest3")

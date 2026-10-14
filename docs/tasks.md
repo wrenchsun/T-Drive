@@ -148,8 +148,8 @@ T-Drive は殻 + 配布・更新の基盤を担い、ゲームと寿命の違う
 
 | # | チケット | 技術 | 日数 | 依存 | 受け入れ条件 | 状態 |
 |---|---|---|---|---|---|---|
-| R-7 | `updater.py` を複数リポジトリ対応に（`REPO_ROOT` 固定の `update_to` / `rollback` / `installed_version` / `read_state` を `Git(repo)` で受ける。本体の呼び出しは挙動不変）+ 既存テストが通る | — | 0.5 | R-2 | 本物の git（bare）で、本体と別パスの checkout を同じ関数で更新・元に戻せる。既存の updater テストが変更なしで通る | ⬜ |
-| R-8 | `tdrive/external.py`: `tools.json` の読み書き・`tool.json` の検証（必須キー・`id` の文字・`entry`）・`requires.tdrive` の判定・開発用（絶対パスの `dir`）の判定 + 単体テスト | — | 1 | — | 壊れた `tools.json` / `tool.json` は警告だけで他のツールを止めない。`requires.tdrive` を満たさないツールは「読み込まない理由」を返す | ⬜ |
+| R-7 | `updater.py` を複数リポジトリ対応に（`REPO_ROOT` 固定の `update_to` / `rollback` / `installed_version` / `read_state` を `Git(repo)` で受ける。本体の呼び出しは挙動不変）+ 既存テストが通る | — | 0.5 | R-2 | 本物の git（bare）で、本体と別パスの checkout を同じ関数で更新・元に戻せる。既存の updater テストが変更なしで通る | ✅ `latest_tag` / `clone` を追加。本物の git で別パスの checkout を更新・元に戻すテスト |
+| R-8 | `tdrive/external.py`: `tools.json` の読み書き・`tool.json` の検証（必須キー・`id` の文字・`entry`）・`requires.tdrive` の判定・開発用（絶対パスの `dir`）の判定 + 単体テスト | — | 1 | — | 壊れた `tools.json` / `tool.json` は警告だけで他のツールを止めない。`requires.tdrive` を満たさないツールは「読み込まない理由」を返す | ✅ `resolve_tools` が読み込めるツール / 読み込まないツール（理由）/ 警告を返す。12 テスト |
 | R-9 | 起動時の読み込み: `userSetup.py` → `shell` が `tools.json` の各ツールの `scripts` を `sys.path` に足し、`entry.create_tool()` を `register_tool`。失敗は `_UnavailableTool`（理由付き）。「ツールをリロード」で外部ツールも再読み込み | — | 1 | R-8 F0-1 | ダミーの外部ツール（tests/fixtures）を登録して Maya を起動すると 1 段目のタブに並ぶ。`entry` が例外を投げても Toon / FacialController は動く | ⬜ |
 | R-10 | 更新ウィンドウの「外部ツール」区画: URL を入力して追加（clone → `tool.json` → 最新タグ → `tools.json` → その場で読み込み）・一覧（名前・版・固定タグ・最新・上げ幅）・更新・元に戻す・変更点・無効化・削除。起動時の確認を各ツールにも | — | 2 | R-7 R-8 R-9 R-4 | mayapy で、bare の GitHub 役からダミーツールを URL 追加 → 新しいタグに更新 → 元に戻す → 削除 が通る。画面の確認項目を [18](18_manual_verification_facial.md) に追加 | ⬜ |
 | R-11 | `install.ps1 -Tools "<url>[#tag],..."`（`tools.json` へ追記して clone。既にあれば何もしない）。`Install-TDriveToon.bat` は変えない | — | 0.5 | R-10 | 作業用フォルダで `-Tools` 付き導入 → Maya 起動でツールが並ぶ。bat の ASCII / CRLF 検査が通る | ⬜ |

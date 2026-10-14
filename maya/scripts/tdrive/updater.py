@@ -200,13 +200,45 @@ def update_to(git: Git, tag: str) -> dict[str, Any]:
         raise GitError("開発用の導入（ブランチ上・変更あり）は更新ウィンドウでは更新しません。git で更新してください")
     changes = git.local_changes()
     if changes:
-        raise GitError("ツール本体に変更があります: " + ", ".join(changes[:5]))
+        name = "ツール本体" if Path(git.repo) == REPO_ROOT else f"{git.repo.name} "  # 本体の文言はマニュアルに載っている
+        raise GitError(f"{name}に変更があります: " + ", ".join(changes[:5]))
     before = git.current_tag() or git.run("rev-parse", "HEAD").strip()
     git.fetch_tags()
     changed = git.changed_files(before, tag)
     git.checkout(tag)
     write_state(git, previous=before)
     return {"from": before, "to": tag, "restart": any(f in changed for f in RESTART_FILES), "changed": changed}
+
+
+def latest_tag(git: Git) -> str | None:
+    """origin のタグを取り込み、ローカルのリリースタグ（vX.Y.Z）の最大を返す。無ければ None。"""
+    git.fetch_tags()
+    found = [v for t in git.run("tag", "--list", "v*").split() if (v := parse_version(t))]
+    return f"v{fmt(max(found))}" if found else None
+
+
+def clone(url: str, dest: Path, tag: str | None = None, timeout: float = 300.0) -> Git:
+    """url を dest に git clone し、tag（省略時は最新のリリースタグ）に固定して Git(dest) を返す（外部ツール用）。"""
+    dest = Path(dest)
+    env = dict(os.environ, GIT_TERMINAL_PROMPT="0", GCM_INTERACTIVE="never", GIT_LFS_SKIP_SMUDGE="1")
+    flags = 0x08000000 if sys.platform == "win32" else 0  # CREATE_NO_WINDOW
+    try:
+        r = subprocess.run(
+            ["git", "clone", "--quiet", url, str(dest)], capture_output=True, text=True, encoding="utf-8",
+            errors="replace", env=env, timeout=timeout, creationflags=flags,
+        )
+    except FileNotFoundError as exc:
+        raise GitError("git が見つかりません（Git for Windows を入れてください）") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise GitError("git clone が時間切れ（ネットワーク・GitHub の権限を確認）") from exc
+    if r.returncode != 0:
+        raise GitError(f"git clone {url}: {r.stderr.strip() or r.stdout.strip()}")
+    git = Git(dest)
+    target = tag or latest_tag(git)
+    if not target:
+        raise GitError(f"{url} にリリースタグ（vX.Y.Z）がありません")
+    git.checkout(target)
+    return git
 
 
 def rollback(git: Git) -> dict[str, Any]:
