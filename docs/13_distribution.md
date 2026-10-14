@@ -107,3 +107,75 @@ D-Drive の更新ウィンドウと同じ構成。
 | プロジェクトフォルダの解決・設定の読み書き | `tdrive_toon/project.py` | なし（Maya の optionVar だけは呼び出し側） |
 | 更新ウィンドウ・起動時の確認 | `tdrive_toon/ui_update.py`、`userSetup.py` | あり |
 | インストーラー | `tools/install.ps1`（Windows PowerShell 5.1 で動く） | — |
+
+## 6. 外部ツールパッケージ（URL で追加。2026-10-14 決定）
+
+D-Drive の更新ウィンドウ「URL を入力して追加」と同じ体験を Maya で提供する。T-Drive は **殻 + 配布・更新の基盤**を担い、
+ゲームと寿命の違うツール（最初の例: MS2026 のグレーボックス → Maya → Unity 背景パイプライン、`MS2026/Tools/Maya/`）は
+**別リポジトリ**にして、デザイナーは同じインストーラーと同じ更新ウィンドウから導入・更新する。
+
+決定事項（2026-10-14 ユーザー確認）:
+
+- **ツール本体（Toon / FacialController）と外部ツールは別リポジトリ・別タグ。** 外部ツールの相手は MS2026 の Unity 側（`MapExchange` の C#・JSON の版）で、T-Drive のリリースとは独立に変わるため
+- **MS2026 リポジトリには Maya ツールを置かない。** Unity 側の取り込みコードと「必要なツールの版 + URL」だけを残す（デザイナーに Unity リポジトリを clone させない）
+- 「まず T-Drive 本体に `tdrive_greybox` として入れて後で切り出す」案は採らない。最初から外部ツールとして扱う
+
+### 6.1 全体像
+
+```
+%LOCALAPPDATA%\TDriveToon\T-Drive\            ← ツール本体（§1 と同じ。タグ vX.Y.Z に固定）
+%LOCALAPPDATA%\TDriveToon\tools\<ToolId>\      ← 外部ツール（1 つにつき 1 つの git checkout。タグ vX.Y.Z に固定）
+%LOCALAPPDATA%\TDriveToon\tools.json           ← 外部ツールの一覧（下記）
+```
+
+`tools.json`（本体の checkout には入れない。デザイナーごとの設定）:
+
+```json
+{ "version": 1,
+  "tools": [ { "id": "ms2026_greybox", "url": "https://github.com/wrenchsun/MS2026-Maya.git",
+               "dir": "ms2026_greybox", "tag": "v1.2.0", "previous": "v1.1.0", "enabled": true } ] }
+```
+
+- `id` は外部ツールの `tool.json`（§6.2）の `id`。`dir` は `tools\` 配下のフォルダ名（既定は `id`）。`previous` は 1 段の「元に戻す」用
+- 本体の `.mod` は変えない。外部ツールの `maya/scripts` は **起動時に `userSetup.py` が `sys.path` に足す**（`.mod` を増やさない。導入・削除で Maya の再起動を要らなくする）
+
+### 6.2 外部ツールが満たす約束（D-Drive の `ddriveUpdate` 相当）
+
+| もの | 内容 |
+|---|---|
+| タグ | `vX.Y.Z`（SemVer）。更新ウィンドウはタグだけを見る（main の途中は配布されない） |
+| `VERSION` | リポジトリ直下。タグと一致（本体と同じ） |
+| `CHANGELOG.md` | リポジトリ直下。版ごとに `## vX.Y.Z` 節、壊す変更は `### 互換性` に「破壊あり」（本体・D-Drive と同じ語） |
+| `tool.json` | リポジトリ直下。`{ "id": "ms2026_greybox", "name": "MS2026 グレーボックス", "entry": "ms2026_greybox.tool", "scripts": "maya/scripts", "mayaVersion": "2026", "requires": { "tdrive": "0.6.0" }, "compatibleWith": { "ms2026": "1.3.0" } }`。`requires.tdrive` は必要な本体の最低版（満たさなければ読み込まず警告）、`compatibleWith` は相手側の最低版の宣言（表示だけ） |
+| エントリーポイント | `entry` のモジュールに `def create_tool() -> tdrive.tool.Tool` を置く。殻が `register_tool` する（2 段タブの 1 段目に並ぶ。タブを持たないメニューだけのツールは `Tool.build_widget` が案内文を返す） |
+| 置き場所 | エントリーポイントのパッケージは `<scripts>/<id>/`。他のモジュールは `ms2026_*` のように衝突しない接頭辞を付ければ `<scripts>/` 直下でもよい。`userSetup.py` は持たない（起動処理は殻が呼ぶ `create_tool` の中で行う） |
+| 作業フォルダ | ツールの入出力（例: グレーボックスの `MayaWork/`）は **T-Drive のプロジェクトフォルダ（`$TDRIVE_PROJECT`）配下**を既定にする。ツール独自の optionVar は残してよい |
+| Git LFS | ツールには使わない（インストーラーが LFS を取らないため） |
+
+### 6.3 導入・更新ウィンドウ
+
+| 操作 | 内容 |
+|---|---|
+| URL を入力して追加 | 更新ウィンドウの「外部ツール」区画。URL（と任意でタグ）を入れる → `git clone`（`GIT_LFS_SKIP_SMUDGE=1`・`GIT_TERMINAL_PROMPT=0`）→ `tool.json` を読んで `id` を決める → 最新のタグ（指定があればそのタグ）に checkout → `tools.json` に追記 → その場で読み込み（`sys.path` + `register_tool`）。clone できない・`tool.json` が無い・`requires.tdrive` を満たさないときは追加しない |
+| 一覧 | 外部ツールごとに 名前・今の版・固定タグ・最新の版・PATCH / MINOR / MAJOR（本体と同じ色分け） |
+| 更新 / 元に戻す / 変更点 | 本体と同じ処理を、`Git(repo=<ツールの checkout>)` で行う。`updater.py` の `update_to` / `rollback` / `changelog_between` をツールのパスで呼ぶ（本体固定の `REPO_ROOT` 前提を外す） |
+| 無効化 / 削除 | `enabled: false` で読み込まない（checkout は残す）。削除は `tools.json` から外し、checkout フォルダを消す |
+| 起動時の確認 | 本体と同じ 1 日 1 回の `git ls-remote` を各ツールにも行い、まとめて「更新があります」を出す |
+| インストーラー | `Install-TDriveToon.bat` は変えない。配る側が最初から入れておきたいツールは `install.ps1 -Tools "<url>[#tag],..."` で指定できるようにする（`tools.json` に書き足して clone） |
+| 開発用 | `tools.json` の `dir` に絶対パス（自分の clone）を書くと、ブランチ上の checkout をそのまま読み込む。更新ボタンは無効（本体の「開発用」と同じ） |
+
+### 6.4 最初の外部ツール: MS2026 グレーボックス
+
+- リポジトリ: `wrenchsun/MS2026-Maya`（2026-10-14 作成。ローカルは `C:/Users/yamag/wrench/maya/MS2026-Maya`）。移すもの: `MS2026/Tools/Maya/*.py`（`ms2026_maya_*`）と `README.md`。仕様の正は MS2026 の `Docs/Guides/MayaGreyboxPipeline.md` のまま（Unity 側と対で読むため）。ツール側の CHANGELOG に JSON（`.props.json` / `.colliders.json`）の版を書く
+- Unity 側（MS2026 `MapExchange`）は残す。取り込み時に JSON の `version` が対応より新しければ警告（版ずれの検出）
+- MS2026 の文書に「必要なツールの版と URL」の表を置き、ツールの MAJOR を上げたら同じ PR で更新する
+
+### 6.5 実装の置き場所
+
+| もの | 場所 | Maya 依存 |
+|---|---|---|
+| `tools.json` の読み書き・`tool.json` の検証・`requires` の判定 | `tdrive/external.py` | なし（単体テスト） |
+| 複数リポジトリ対応（`Git(repo)` を受ける `update_to` / `rollback` / `installed_version`） | `tdrive/updater.py` | なし |
+| 起動時の読み込み（`sys.path` + `register_tool`）・失敗時の `_UnavailableTool` | `tdrive/shell.py`、`userSetup.py` | あり |
+| 更新ウィンドウの「外部ツール」区画・URL 入力 | `tdrive/ui_update.py` | あり |
+| `install.ps1 -Tools` | `tools/install.ps1` | — |

@@ -141,6 +141,21 @@ FacialController（カメラ角度に応じた顔の補正。UE 版からの移�
 | R-5 | マニュアル（導入・更新）と、デザイナー向けの導入手順書 | — | 0.5 | R-3 R-4 | 手順書どおりに導入・更新できる | ✅ マニュアル「はじめに」を書き換え、「更新のしかた」を追加。docs/13 §2.1〜2.2 |
 | R-6 | v0.1.0 のリリース（CHANGELOG の互換性・check_release・タグ） | — | 0.5 | R-1〜R-5 | タグ v0.1.0 があり、更新ウィンドウで確認できる（GitHub への push は指示を受けてから） | ✅ v0.1.0・v0.2.0 を GitHub に push（2026-09-29） |
 
+### Phase R 追加（2026-10-14）: 外部ツールパッケージ（URL で追加）
+
+仕様: [13](13_distribution.md) §6。MS2026 のグレーボックス → Maya → Unity 背景パイプライン（`MS2026/Tools/Maya/`）を最初の外部ツールにする。
+T-Drive は殻 + 配布・更新の基盤を担い、ゲームと寿命の違うツールは別リポジトリ・別タグで、同じインストーラーと更新ウィンドウから導入・更新する（2026-10-14 決定。MS2026 本体に Maya ツールは置かない）。
+
+| # | チケット | 技術 | 日数 | 依存 | 受け入れ条件 | 状態 |
+|---|---|---|---|---|---|---|
+| R-7 | `updater.py` を複数リポジトリ対応に（`REPO_ROOT` 固定の `update_to` / `rollback` / `installed_version` / `read_state` を `Git(repo)` で受ける。本体の呼び出しは挙動不変）+ 既存テストが通る | — | 0.5 | R-2 | 本物の git（bare）で、本体と別パスの checkout を同じ関数で更新・元に戻せる。既存の updater テストが変更なしで通る | ⬜ |
+| R-8 | `tdrive/external.py`: `tools.json` の読み書き・`tool.json` の検証（必須キー・`id` の文字・`entry`）・`requires.tdrive` の判定・開発用（絶対パスの `dir`）の判定 + 単体テスト | — | 1 | — | 壊れた `tools.json` / `tool.json` は警告だけで他のツールを止めない。`requires.tdrive` を満たさないツールは「読み込まない理由」を返す | ⬜ |
+| R-9 | 起動時の読み込み: `userSetup.py` → `shell` が `tools.json` の各ツールの `scripts` を `sys.path` に足し、`entry.create_tool()` を `register_tool`。失敗は `_UnavailableTool`（理由付き）。「ツールをリロード」で外部ツールも再読み込み | — | 1 | R-8 F0-1 | ダミーの外部ツール（tests/fixtures）を登録して Maya を起動すると 1 段目のタブに並ぶ。`entry` が例外を投げても Toon / FacialController は動く | ⬜ |
+| R-10 | 更新ウィンドウの「外部ツール」区画: URL を入力して追加（clone → `tool.json` → 最新タグ → `tools.json` → その場で読み込み）・一覧（名前・版・固定タグ・最新・上げ幅）・更新・元に戻す・変更点・無効化・削除。起動時の確認を各ツールにも | — | 2 | R-7 R-8 R-9 R-4 | mayapy で、bare の GitHub 役からダミーツールを URL 追加 → 新しいタグに更新 → 元に戻す → 削除 が通る。画面の確認項目を [18](18_manual_verification_facial.md) に追加 | ⬜ |
+| R-11 | `install.ps1 -Tools "<url>[#tag],..."`（`tools.json` へ追記して clone。既にあれば何もしない）。`Install-TDriveToon.bat` は変えない | — | 0.5 | R-10 | 作業用フォルダで `-Tools` 付き導入 → Maya 起動でツールが並ぶ。bat の ASCII / CRLF 検査が通る | ⬜ |
+| R-12 | **MS2026 グレーボックスを外部ツールとして切り出す**: 新リポジトリ `wrenchsun/MS2026-Maya`（`ms2026_maya_*` を `maya/scripts/` へ、エントリーポイント `maya/scripts/ms2026_greybox/tool.py`、`tool.json` / `VERSION` / `CHANGELOG.md` / `create_tool`）。作業フォルダの既定を `$TDRIVE_PROJECT/MayaWork/` に。MS2026 側は `Tools/Maya/` を削除し、`Docs/Guides/MayaGreyboxPipeline.md` に必要な版と URL の表、Unity の取り込みに JSON `version` の警告を追加（MS2026 側はブランチ + PR。別リポジトリの作業なので push は指示を受けてから） | — | 1.5 | R-10 | デザイナーの PC で URL 追加だけで `Tools › T-Drive` にグレーボックスのタブ（または案内）が出て、Export Block → Unity の Import Background が従来どおり通る。MS2026 のハイジーン検査と docs 検査が通る | ⬜ |
+| R-13 | マニュアル（「外部ツールを追加する」「更新のしかた」の外部ツール分）と、配る側の手順（docs/13 §6 の運用）。本体の MINOR リリース（`tool.json` の `requires.tdrive` の基準になる版） | — | 0.5 | R-10 R-12 | 手順書どおりにグレーボックスを導入・更新できる。CHANGELOG の `### 互換性` に外部ツールの約束（§6.2）が MINOR で足されたと書いてある | ⬜ |
+
 ## Phase U: T-Drive for Unity パッケージ（Unity で再現・一任）
 
 仕様: [08_unity_port_plan.md](08_unity_port_plan.md)。キャラクターのルックは T-Drive パッケージに一任し、D-Drive からは切り離す（互換ブリッジで変換可能）。シェーダー単体で無理なものはコンポーネント・Renderer Feature で実装する。
@@ -301,7 +316,7 @@ A 系の詳細仕様は Phase 3 完了時に起こす。
 | 3 | ルック P2（Maya で仕上げる） | 13.5 |
 | 4 | 機能のオン/オフ・Unity でのみの機能の Maya プレビュー | 9.5 |
 | E | エディタの操作感（lilToon / Poiyomi を参考に） | 11.5 |
-| R | Maya ツールの配布・導入・更新 | 6 |
+| R | Maya ツールの配布・導入・更新（R-7〜R-13 外部ツールパッケージ 7 日を含む） | 13 |
 | U | T-Drive for Unity パッケージ | 39 |
 | A | アニメーション | 22 |
 | S | サンプルモデルの移行（shizuku） | 5 |

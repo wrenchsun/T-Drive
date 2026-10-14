@@ -13,7 +13,7 @@
 | 08 | [08_unity_port_plan.md](08_unity_port_plan.md) | MS2026 への移植計画・D-Drive 適合チェック・要合意事項 |
 | 09 | [09_render_parity.md](09_render_parity.md) | Maya プレビューと Unity 描画の一致（パリティ）方針 |
 | 11 | [11_features_and_shader_generation.md](11_features_and_shader_generation.md) | 機能のオン/オフと、プロジェクト専用シェーダーの生成 |
-| 13 | [13_distribution.md](13_distribution.md) | 配布・導入・更新（Maya ツール。D-Drive と同じ git タグ固定 + 更新ウィンドウ） |
+| 13 | [13_distribution.md](13_distribution.md) | 配布・導入・更新（Maya ツール。D-Drive と同じ git タグ固定 + 更新ウィンドウ。§6 外部ツールパッケージ = 別リポジトリのツールを URL で追加・更新） |
 | 14 | [14_facial_controller_spec.md](14_facial_controller_spec.md) | **FacialController 仕様**（カメラ角度に応じた顔の補正。UE 版からの移植。役割分担・データ・Maya / Unity / TimeLine・未実装項目・サンプルモデル shizuku） |
 | 15 | [15_facial_controller_design.md](15_facial_controller_design.md) | FacialController 設計（2 段タブの殻・Maya 非依存のコア・ベイク・プレビュー・Unity パッケージ・テスト） |
 | 16 | [16_ddrive_changes_for_facial.md](16_ddrive_changes_for_facial.md) | FacialController のための D-Drive 側の変更（調査: 変更なしで動く範囲・実装したほうがいい機能・チケット 7-8 との関係） |
