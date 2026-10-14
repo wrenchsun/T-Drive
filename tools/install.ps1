@@ -5,6 +5,7 @@
 #   2. -Release のとき: 最新のリリースタグ vX.Y.Z（-Version で指定可）に固定。Git LFS の大きなファイルは取らない
 #   3. プロジェクトフォルダを決める（-Project > -ProjectHint が Maya のプロジェクトなら > Maya で最後に開いたプロジェクト > 選択画面）
 #   4. Maya のモジュール（TDriveToon.mod）を登録。既存のものは .bak に残す
+#   5. -Tools "<url>[#tag],..." があれば、外部ツールを %LOCALAPPDATA%\TDriveToon	ools に導入して tools.json に追記（既にあるものは何もしない。失敗しても本体は止めない）
 #
 # 開発用（このリポジトリを直接使う）は -Release を付けない: 版の固定はせず、今のチェックアウトを登録する。
 param(
@@ -15,6 +16,8 @@ param(
     [string]$ModulesDir = "",
     [string]$MayaVersion = "2026",
     [switch]$EnableMcp,
+    [string]$Tools = "",
+    [string]$ToolsBase = "",
     [switch]$NoPause
 )
 
@@ -140,6 +143,13 @@ if ($Project) {
 }
 if (-not $EnableMcp) { $lines += "TDRIVE_MCP_PORT=0" }  # AI 連携用のポートはデザイナーの PC では開かない
 [System.IO.File]::WriteAllText($modPath, (($lines -join "`n") + "`n"), (New-Object System.Text.UTF8Encoding($false)))
+
+# ---- 5. 外部ツール（-Tools）
+if ($Tools) {
+    . (Join-Path $PSScriptRoot "install_tools.ps1")
+    try { Add-ExternalTools $Tools $ToolsBase }
+    catch { Say "注意: 外部ツールの導入で問題がありました: $_" "Yellow" }
+}
 
 Say ""
 Say "導入しました: T-Drive Toon $toolVersion" "Green"
