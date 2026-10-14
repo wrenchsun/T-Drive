@@ -6,6 +6,11 @@
 ## [Unreleased]
 
 ### 互換性
+- （リリース前に記入）
+
+## [0.6.0] - 2026-10-14
+
+### 互換性
 - MINOR: 外部ツールパッケージの約束（docs/13 §6.2: `tool.json` / `VERSION` / `CHANGELOG.md` / `create_tool()`）を追加。`tool.json` の `requires.tdrive` の基準になる最初の版。パラメータ契約・Look スキーマの変更なし
 
 ### 追加
