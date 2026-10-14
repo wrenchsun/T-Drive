@@ -5,7 +5,7 @@
 #   2. -Release のとき: 最新のリリースタグ vX.Y.Z（-Version で指定可）に固定。Git LFS の大きなファイルは取らない
 #   3. プロジェクトフォルダを決める（-Project > -ProjectHint が Maya のプロジェクトなら > Maya で最後に開いたプロジェクト > 選択画面）
 #   4. Maya のモジュール（TDriveToon.mod）を登録。既存のものは .bak に残す
-#   5. -Tools "<url>[#tag],..." があれば、外部ツールを %LOCALAPPDATA%\TDriveToon	ools に導入して tools.json に追記（既にあるものは何もしない。失敗しても本体は止めない）
+#   5. -Tools "<url>[#tag],..." があれば、外部ツールを %LOCALAPPDATA%\TDriveToon\tools に導入して tools.json に追記（既にあるものは何もしない。失敗しても本体は止めない）
 #
 # 開発用（このリポジトリを直接使う）は -Release を付けない: 版の固定はせず、今のチェックアウトを登録する。
 param(

@@ -47,7 +47,7 @@ PowerShell で:
 | 前提の確認 | git がある / Maya 2026 がある / リポジトリである |
 | 版の固定 | `git fetch --tags` → 最新のリリースタグ `vX.Y.Z`（`-Version` で指定可）を detached で checkout。**Git LFS のファイルは取らない**（`GIT_LFS_SKIP_SMUDGE=1`。マニュアルの画像だけ `git lfs` があれば取る） |
 | モジュール登録 | `TDriveToon.mod` を生成（VERSION・`TDRIVE_ROOT`。MCP の commandPort は既定で無効 `TDRIVE_MCP_PORT=0`、`-EnableMcp` で有効） |
-| 外部ツール | `-Tools "<url>[#tag],..."` があれば `%LOCALAPPDATA%\TDriveToon	ools\<id>` に clone（tool.json の `id`、タグ省略は最新の `vX.Y.Z`）して `tools.json` に追記。既にあれば何もしない・失敗しても本体は止めない（処理は `tools/install_tools.ps1`） |
+| 外部ツール | `-Tools "<url>[#tag],..."` があれば `%LOCALAPPDATA%\TDriveToon\tools\<id>` に clone（tool.json の `id`、タグ省略は最新の `vX.Y.Z`）して `tools.json` に追記。既にあれば何もしない・失敗しても本体は止めない（処理は `tools/install_tools.ps1`） |
 | 結果 | 導入した版・場所を表示。既存の `TDriveToon.mod` は上書き前に `.bak` を残す |
 
 - 開発用の登録（`tools/install_maya_module.ps1`、リポジトリを直接指す・MCP 有効）は従来どおり残す
