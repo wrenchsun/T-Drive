@@ -145,7 +145,7 @@ D-Drive の更新ウィンドウ「URL を入力して追加」と同じ体験�
 |---|---|
 | タグ | `vX.Y.Z`（SemVer）。更新ウィンドウはタグだけを見る（main の途中は配布されない） |
 | `VERSION` | リポジトリ直下。タグと一致（本体と同じ） |
-| `CHANGELOG.md` | リポジトリ直下。版ごとに `## vX.Y.Z` 節、壊す変更は `### 互換性` に「破壊あり」（本体・D-Drive と同じ語） |
+| `CHANGELOG.md` | リポジトリ直下。版ごとに `## [X.Y.Z] - 日付` 節（本体と同じ書式。更新ウィンドウの「変更点」はこの見出しだけを読む）、壊す変更は `### 互換性` に「破壊あり」（本体・D-Drive と同じ語） |
 | `tool.json` | リポジトリ直下。`{ "id": "ms2026_greybox", "name": "MS2026 グレーボックス", "entry": "ms2026_greybox.tool", "scripts": "maya/scripts", "mayaVersion": "2026", "requires": { "tdrive": "0.6.0" }, "compatibleWith": { "ms2026": "1.3.0" } }`。`requires.tdrive` は必要な本体の最低版（満たさなければ読み込まず警告）、`compatibleWith` は相手側の最低版の宣言（表示だけ） |
 | エントリーポイント | `entry` のモジュールに `def create_tool() -> tdrive.tool.Tool` を置く。殻が `register_tool` する（2 段タブの 1 段目に並ぶ。タブを持たないメニューだけのツールは `Tool.build_widget` が案内文を返す） |
 | 置き場所 | エントリーポイントのパッケージは `<scripts>/<id>/`。他のモジュールは `ms2026_*` のように衝突しない接頭辞を付ければ `<scripts>/` 直下でもよい。`userSetup.py` は持たない（起動処理は殻が呼ぶ `create_tool` の中で行う） |

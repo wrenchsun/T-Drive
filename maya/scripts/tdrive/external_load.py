@@ -16,7 +16,7 @@ import importlib
 import sys
 import traceback
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Iterable
 
 from . import external, lifecycle
 
@@ -100,10 +100,12 @@ def load_external_tools(
     tdrive_version: str | None = None,
     register: Callable[[Any], None] | None = None,
     unavailable: Callable[[str, str, str], Any] | None = None,
+    only: Iterable[str] | None = None,
 ) -> list[str]:
     """tools.json の外部ツールを読み込んで登録する → 登録した id のリスト。例外は投げない。
 
     path は tools.json の場所（既定 %LOCALAPPDATA%/TDriveToon/tools.json）。register / unavailable はテスト用の差し替え。
+    only を渡すと、その id のツールだけ読み込む（更新ウィンドウの「URL を入力して追加」。ほかのツールを作り直さない）。
     """
     register = register or _default_register
     unavailable = unavailable or _default_unavailable
@@ -115,6 +117,9 @@ def load_external_tools(
         return []
     for w in warnings:
         _log(w)
+    wanted = None if only is None else set(only)
+    skipped = [sk for sk in skipped if wanted is None or sk.id in wanted]
+    loadable = [lt for lt in loadable if wanted is None or lt.manifest.id in wanted]
     ids: list[str] = []
     for sk in skipped:
         if sk.reason == "無効":

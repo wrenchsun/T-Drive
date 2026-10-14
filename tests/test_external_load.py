@@ -103,3 +103,11 @@ def test_unload_removes_modules_and_sys_path(tmp_path):
     assert str(DUMMY / "maya" / "scripts") not in sys.path
     _, registered = _run(p)  # 再読み込みできる
     assert registered[0].id == "tdrive_dummy"
+
+
+def test_only_loads_just_the_named_tool(tmp_path):
+    """更新ウィンドウの「URL を入力して追加」: 追加したツールだけ読み込み、ほかのツールは作り直さない。"""
+    p = _tools_json(tmp_path, [{"id": "tdrive_broken", "dir": str(BROKEN)}, {"id": "tdrive_dummy", "dir": str(DUMMY)}])
+    registered = []
+    ids = external_load.load_external_tools(p, register=registered.append, unavailable=Unavailable, only=["tdrive_dummy"])
+    assert ids == ["tdrive_dummy"] and [t.id for t in registered] == ["tdrive_dummy"]
