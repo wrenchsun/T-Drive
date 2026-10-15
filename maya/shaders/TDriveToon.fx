@@ -327,6 +327,7 @@ PSOutWithId PS_Opaque(VSOut i, bool frontFace : SV_IsFrontFace)
 {
     PSOutWithId o;
     o.color = ShadeMain(i, frontFace);
+    o.color.a = 1.0;  // 不透明パス: ベースマップのアルファを描画先に残さない（残すと環境によって表示時に半透明として合成され、白っぽく抜ける。2026-10-15）
     float3 N = normalize(i.normalWS) * (frontFace ? 1.0 : -1.0);
     float3 normalVS = normalize(mul(float4(N, 0.0), gView).xyz);
     float depthM = -mul(float4(i.positionWS, 1.0), gView).z / PreviewUnitScale;

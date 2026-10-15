@@ -143,6 +143,7 @@ float4 PS_Composite(VSOut i) : SV_Target
         c.rgb = Toon_Tonemap(gInnerColor, gTonemap);
     if (gSeeThroughEnabled && EdgeSeeThrough(p, idP, (int)gSeeThroughRadius) > 0.5)
         c.rgb = Toon_Tonemap(gSeeThroughColor, gTonemap);  // 髪の上に出すので最後
+    c.a = 1.0;  // 表示先は不透明（アルファが残ると環境によって半透明として合成される。2026-10-15）
     return c;
 }
 
