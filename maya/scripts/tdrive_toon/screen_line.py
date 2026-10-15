@@ -4,7 +4,7 @@ VP2 の Render Override で、Unity の ToonRendererFeature と同じ手順を�
 
 1. 描画先を 2 枚（色 / ToonId）にして場面を描く。Toon の本体パスが ToonId（法線・部位キー・奥行き）を 2 枚目に書く
 2. 全画面の合成（TDriveScreenLine.fx）で ToonId からエッジを判定し、線を上書きする
-3. UI（グリッド・ワイヤー・選択表示）と HUD を上に描いて表示する
+3. UI（グリッド・ワイヤー・選択表示）、マニピュレータ（ViewCube を含む。深度を渡さない）、HUD を上に描いて表示する
 
 線を使うときだけ、プレビューのモデルパネルにこの Override を割り当てる（使わないときは通常の VP2 のまま）。
 実装上の注意（2026-09-28 の検証で判明）:
@@ -105,6 +105,38 @@ class _SceneOp(omr.MSceneRender):
     @lifecycle.guarded(fallback=lambda self: omr.MSceneRender.kRenderShadedItems)
     def renderFilterOverride(self):  # noqa: N802
         return omr.MSceneRender.kRenderShadedItems if self.shaded else omr.MSceneRender.kRenderNonShadedItems
+
+    @lifecycle.guarded(0)
+    def objectTypeExclusions(self):  # noqa: N802
+        # UI パスではマニピュレータ（ViewCube を含む）を描かない。シーンの奥行きが入った自前の depth と一緒に描くと、
+        # ViewCube がビュー全体に巨大な半透明の板として描かれる（2026-10-15 の不具合）。マニピュレータは _ManipOp が depth なしで描く
+        return 0 if self.shaded else omr.MFrameContext.kExcludeManipulators
+
+    @lifecycle.guarded(fallback=lambda self: self.mClearOperation)
+    def clearOperation(self):  # noqa: N802
+        c = self.mClearOperation
+        c.setMask(omr.MClearOperation.kClearNone)
+        return c
+
+
+class _ManipOp(omr.MSceneRender):
+    """マニピュレータ（移動 / 回転のギズモ・ViewCube）だけを、深度を渡さずに out へ描く（_SceneOp のコメント参照）。"""
+
+    def __init__(self, name: str, ov: "_Override") -> None:
+        super().__init__(name)
+        self.ov = ov
+
+    @lifecycle.guarded(None)
+    def targetOverrideList(self):  # noqa: N802
+        return [self.ov.targets["out"]]  # depth を渡さない（渡すと ViewCube が巨大な板になる）
+
+    @lifecycle.guarded(fallback=lambda self: omr.MSceneRender.kRenderNonShadedItems)
+    def renderFilterOverride(self):  # noqa: N802
+        return omr.MSceneRender.kRenderNonShadedItems
+
+    @lifecycle.guarded(_EXCLUDE_ALL)
+    def objectTypeExclusions(self):  # noqa: N802
+        return _EXCLUDE_ALL & ~omr.MFrameContext.kExcludeManipulators  # マニピュレータ以外は描かない
 
     @lifecycle.guarded(fallback=lambda self: self.mClearOperation)
     def clearOperation(self):  # noqa: N802
@@ -244,6 +276,7 @@ class _Override(omr.MRenderOverride):
             _SceneOp(f"{NAME}_scene", self, shaded=True),
             _QuadOp(f"{NAME}_lines", self),
             _SceneOp(f"{NAME}_ui", self, shaded=False),
+            _ManipOp(f"{NAME}_manip", self),
             _HudOp(self),
             _PresentOp(f"{NAME}_present", self),
         ]
