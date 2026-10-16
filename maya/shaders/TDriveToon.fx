@@ -217,11 +217,24 @@ float ShadowAtten(float3 positionWS)
     return lit;
 }
 
+// sRGB テクスチャ（ベースマップ・発光マップ）のリニア化。Unity は sRGB フラグでハードウェアが行うが、Maya の dx11Shader は
+// file ノードの colorSpace を見ずにそのままサンプルする（2026-10-16 に実測: sRGB 128 の灰色が 188 で表示 = 二重に符号化）。
+// そのためシェーダー側で同じ変換（IEC 61966-2-1 の区分関数）を掛ける。マスク・法線など Raw の欄には掛けない
+float3 SrgbToLinear(float3 c)
+{
+    float3 lo = c / 12.92;
+    float3 hi = pow(max((c + 0.055) / 1.055, 0.0), 2.4);
+    return (c <= 0.04045) ? lo : hi;
+}
+
 float4 SampleBase(float2 uv)
 {
     float4 c = BaseColor;
     if (BaseMapEnabled)
-        c *= BaseMap.Sample(SamLinearWrap, FlipUV(uv, BaseMapFlipV));
+    {
+        float4 t = BaseMap.Sample(SamLinearWrap, FlipUV(uv, BaseMapFlipV));
+        c *= float4(SrgbToLinear(t.rgb), t.a);
+    }
     return c;
 }
 
@@ -290,7 +303,7 @@ float4 ShadeMain(VSOut i, bool frontFace)
         else if (PreviewDebug == 2) d = N * 0.5 + 0.5;
         else if (PreviewDebug == 3) d = lit.xxx;
         else if (PreviewDebug >= 4 && PreviewDebug <= 7) d = mask[PreviewDebug - 4].xxx;
-        else if (PreviewDebug == 8) d = BaseMap.Sample(SamLinearWrap, FlipUV(i.uv, BaseMapFlipV)).rgb;
+        else if (PreviewDebug == 8) d = SrgbToLinear(BaseMap.Sample(SamLinearWrap, FlipUV(i.uv, BaseMapFlipV)).rgb);
         else if (PreviewDebug == 9) d = float3(i.uv2 * 0.5 + 0.5, 0.0);
         return float4(d, 1.0);
     }
@@ -312,7 +325,7 @@ float4 ShadeMain(VSOut i, bool frontFace)
     col = Toon_ApplyTint(col, mask, ToonTintColor.rgb, ToonTintStrength);
     col = Toon_ColorCorrect(col, ToonSaturation, ToonBrightness);
     if (EmissionIntensity > 0.0)
-        col = Toon_Emission(col, EmissionMapEnabled ? EmissionMap.Sample(SamLinearWrap, FlipUV(i.uv, EmissionMapFlipV)).rgb : float3(1.0, 1.0, 1.0), EmissionColor, EmissionIntensity);
+        col = Toon_Emission(col, EmissionMapEnabled ? SrgbToLinear(EmissionMap.Sample(SamLinearWrap, FlipUV(i.uv, EmissionMapFlipV)).rgb) : float3(1.0, 1.0, 1.0), EmissionColor, EmissionIntensity);
     col = Toon_Tonemap(col, PreviewTonemap);
     return float4(col, base.a);
 }

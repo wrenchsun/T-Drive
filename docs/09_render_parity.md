@@ -50,7 +50,7 @@ MS2026 自体が開発中で、色空間以外（トーンマップ・ライト�
 | 項目 | Unity（MS2026、2026-09-28 調査） | Maya プレビューでの合わせ方 |
 |---|---|---|
 | 色空間 | **Linear**（`m_ActiveColorSpace: 1`） | OCIO 有効・レンダリング空間 scene-linear Rec.709-sRGB。シェーダー内の計算はすべてリニア |
-| ベースカラーテクスチャ | sRGB テクスチャ（ハードウェアでリニア化） | file ノード colorSpace = sRGB（VP2 がリニア化） |
+| ベースカラーテクスチャ | sRGB テクスチャ（ハードウェアでリニア化） | file ノード colorSpace = sRGB は付けるが、**dx11Shader はそれを見ずに生の値でサンプルする**（2026-10-16 に実測）ため、Maya ラッパー `TDriveToon.fx` の `SrgbToLinear` でリニア化する（ベースマップ・発光マップ） |
 | マスク・法線系 | リニア（sRGB OFF） | colorSpace = Raw |
 | マテリアルの色・ライト色 | インスペクター値（sRGB）をリニアへ変換してシェーダーへ | Look の色は sRGB 値で保存し、Maya ラッパーで同じ変換をしてから setAttr（2026-09-28 のパリティ確認で判明） |
 | 頂点カラー | そのまま（変換なし） | そのまま（Color Set の値を変換しない） |
@@ -114,6 +114,7 @@ MS2026 自体が開発中で、色空間以外（トーンマップ・ライト�
 | Toon 表示にならず既定のスムースシェーディングになる | ビューポートのテクスチャ表示 OFF | プレビュー有効化時にモデルパネルのテクスチャ表示を ON にする |
 | 部位ごとにテクスチャの 1 色でくすんで見える | `overridesDrawState = true` では DirectX 既定（時計回り = 表面）になり、カリングが逆転してアウトラインが表面を覆っていた | ラスタライザステートに `FrontCounterClockwise = true` |
 | 線色・影色が想定より明るい | Unity は Color を sRGB → リニア変換してから渡すが、Maya ではリニアのまま渡していた | Look の色は sRGB 値。Maya ラッパーで `srgb_color_to_linear` してから setAttr |
+| テクスチャの発色が薄い（UnityChan が公式より淡い。2026-10-16 デザイナー報告） | dx11Shader は file ノードの colorSpace（sRGB）を無視して生の値でサンプルし、ビュー変換でもう一度 sRGB に符号化していた（sRGB 128 の灰色 → 188、(200,60,60) → (229,133,133) と実測）。Look の色は Python 側でリニア化しているので、テクスチャの部分だけ淡くなる | `TDriveToon.fx` の `SrgbToLinear` でベースマップ・発光マップをリニア化（修正後は 128 → 128、(200,60,60) → (200,60,60)）。Raw の欄（マスク・法線・MatCap・髪ハイライト・顔影）には掛けない。なお環境プロファイル `ms2026_ingame` の Neutral トーンマップは Unity InGame と同じ意図の変更で、白 255 が 208 になる（公式 UnityChan はトーンマップ無し） |
 | Maya がフリーズ | 描画中の dx11Shader に `dx11Shader -reload` | 使わない。`.fx` 更新時はプレビューノードを作り直す（`preview.reload_shader_file`） |
 | float4 の色に setAttr できない | dx11Shader は `color1x4` を `<名前>RGB` + `<名前>A` に分ける | 子アトリビュートに個別に設定 |
 | 頂点カラー・UV2 が届かない | 既定の取得元が `color:colorSet` / `uv:map3` | `Color0_Source = color:tdToonMask`、`TexCoord2_Source = uv:tdSmoothNormal` を設定 |
