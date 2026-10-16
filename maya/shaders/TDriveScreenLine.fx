@@ -133,8 +133,10 @@ float4 PS_Composite(VSOut i) : SV_Target
         int part = EdgeSilhouette(p, idP, owner);
         if (part > 0)
         {
+            // ownerColor は本体パスでトーンマップ済み。線色だけトーンマップしてから混ぜる（トーンマップを二重に掛けない。
+            // Unity の tm(lerp(line, line*base, mix)) に対する近似。docs/03 §10.4。2026-10-16 のレビュー #3）
             float3 ownerColor = gColorTex.Load(int3(clamp(owner, int2(0, 0), int2(gScreenSize) - 1), 0)).rgb;
-            c.rgb = Toon_Tonemap(Toon_OutlineColor(ownerColor, float3(gSilR[part], gSilG[part], gSilB[part]), gSilMix[part]), gTonemap);
+            c.rgb = Toon_OutlineColor(ownerColor, Toon_Tonemap(float3(gSilR[part], gSilG[part], gSilB[part]), gTonemap), gSilMix[part]);
         }
     }
     if (gOuterEnabled && EdgeOuter(p, idP, (int)gOuterRadius) > 0.5)

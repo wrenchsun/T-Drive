@@ -115,6 +115,9 @@ MS2026 自体が開発中で、色空間以外（トーンマップ・ライト�
 | 部位ごとにテクスチャの 1 色でくすんで見える | `overridesDrawState = true` では DirectX 既定（時計回り = 表面）になり、カリングが逆転してアウトラインが表面を覆っていた | ラスタライザステートに `FrontCounterClockwise = true` |
 | 線色・影色が想定より明るい | Unity は Color を sRGB → リニア変換してから渡すが、Maya ではリニアのまま渡していた | Look の色は sRGB 値。Maya ラッパーで `srgb_color_to_linear` してから setAttr |
 | テクスチャの発色が薄い（UnityChan が公式より淡い。2026-10-16 デザイナー報告） | dx11Shader は file ノードの colorSpace（sRGB）を無視して生の値でサンプルし、ビュー変換でもう一度 sRGB に符号化していた（sRGB 128 の灰色 → 188、(200,60,60) → (229,133,133) と実測）。Look の色は Python 側でリニア化しているので、テクスチャの部分だけ淡くなる | `TDriveToon.fx` の `SrgbToLinear` でベースマップ・発光マップをリニア化（修正後は 128 → 128、(200,60,60) → (200,60,60)）。Raw の欄（マスク・法線・MatCap・髪ハイライト・顔影）には掛けない。なお環境プロファイル `ms2026_ingame` の Neutral トーンマップは Unity InGame と同じ意図の変更で、白 255 が 208 になる（公式 UnityChan はトーンマップ無し） |
+| 画面上の線の太さが Unity と 1 px ずれる（線幅 5 / 9 / 13 px@1080p） | Python の `round()` は偶数丸め（2.5 → 2）、HLSL の `round` は 0.5 を 0 から遠い方へ（2.5 → 3） | `screen_line.line_radius` を `math.floor(x + 0.5)` に。docs/03 §10.2 に丸め規則を明記（C# の `Mathf.Round` も偶数丸めなので使わない）。2026-10-16 のシェーダーレビュー |
+| MatCap のハイライトが上下逆（PNG 等の上から並ぶ画像） | 他のテクスチャにはある `<名前>FlipV` が MatCap だけ無く、`_set` が黙って何もしていなかった | `ToonMatCapMapFlipV` を追加し `FlipUV` を通す。同レビュー |
+| スクリーンスペース輪郭線で「ベース色を混ぜる」を上げると線が Unity より暗い・くすむ | 持ち主の画素の色はトーンマップ済みなのに、混ぜた結果にもう一度 `Toon_Tonemap` を掛けていた | 線色だけトーンマップしてから混ぜる（docs/03 §10.4 の近似）。本筋はトーンマップを合成パスに移すこと（docs/tasks.md SR-3）。同レビュー |
 | Maya がフリーズ | 描画中の dx11Shader に `dx11Shader -reload` | 使わない。`.fx` 更新時はプレビューノードを作り直す（`preview.reload_shader_file`） |
 | float4 の色に setAttr できない | dx11Shader は `color1x4` を `<名前>RGB` + `<名前>A` に分ける | 子アトリビュートに個別に設定 |
 | 頂点カラー・UV2 が届かない | 既定の取得元が `color:colorSet` / `uv:map3` | `Color0_Source = color:tdToonMask`、`TexCoord2_Source = uv:tdSmoothNormal` を設定 |

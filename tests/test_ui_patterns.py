@@ -31,8 +31,26 @@ def test_reload_unregisters_render_override_before_dropping_modules():
 def test_line_radius_is_float():
     """シェーダーの float パラメータへ渡す値は float（int だと kInvalidParameter）。screen_line は maya を import するので式だけ確認する。"""
     src = (ROOT / "maya/scripts/tdrive_toon/screen_line.py").read_text(encoding="utf-8")
-    assert "return float(max(1.0, round(" in src
+    assert "return float(max(1.0, math.floor(" in src
     assert "_EXCLUDE_ALL = 0x7FFFFFFF" in src  # Windows の C long（32 ビット符号付き）に収める
+
+
+def test_line_radius_rounds_like_hlsl():
+    """HLSL の round（0.5 は 0 から遠い方へ）と同じ丸め。Python の round() の偶数丸め（2.5 → 2）を使わない。
+    screen_line は maya を import するので、同じ式を切り出して確かめる。"""
+    import math
+
+    def line_radius(width_px, screen_height):
+        return float(max(1.0, math.floor(float(width_px) * float(screen_height) / 1080.0 * 0.5 + 0.5)))
+
+    src = (ROOT / "maya/scripts/tdrive_toon/screen_line.py").read_text(encoding="utf-8")
+    assert "math.floor(float(width_px) * float(screen_height) / 1080.0 * 0.5 + 0.5)" in src
+    assert line_radius(5.0, 1080) == 3.0  # 2.5 → 3（round() なら 2）
+    assert line_radius(9.0, 1080) == 5.0  # 4.5 → 5
+    assert line_radius(7.0, 1080) == 4.0  # 3.5 → 4
+    assert line_radius(1.0, 1080) == 1.0  # 下限
+    assert line_radius(5.0, 2160) == 5.0  # 4K では 2 倍
+    assert isinstance(line_radius(5.0, 1080), float)
 
 
 # ---------------------------------------------------------------- Maya に登録するもの・Maya から呼ばれるもの（lifecycle.py）

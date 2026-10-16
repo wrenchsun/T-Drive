@@ -319,6 +319,7 @@ Maya（Render Override、4-7 / 4-8）と Unity（`ToonRendererFeature`、U-10 / 
 ### 10.2 エッジの判定（`Toon_LineInner`）
 
 画素 p と、上下左右に r 画素離れた 4 点 q を比べる。r = max(1, round(線幅[px@1080p] × 画面の高さ / 1080 / 2))（線は境界の両側に r ずつ出るので、見た目の太さ ≒ 線幅）。
+round は **0.5 を 0 から遠い方へ**（HLSL の `round`。2.5 → 3）。C# の `Mathf.Round` と Python の `round()` は偶数丸め（2.5 → 2）なので使わない（`Mathf.Floor(x + 0.5f)` / `math.floor(x + 0.5)` にする。2026-10-16）。
 次のどれかを満たす q が 1 つでもあれば、p に線を描く:
 
 1. **部位の境界**: p・q とも Toon で、部位番号が違い、どちらかの線フラグが 1
@@ -378,6 +379,8 @@ Toon_LineSilhouettePart(p, q, gap):   // p・q の手前側が Toon で、奥側
 画素 p が持ち主（手前側）: 4 方向の距離 r_(p の部位) の q で Toon_LineSilhouettePart = p の部位 → 線
 画素 p が奥側: 4 方向に k = 1 .. r_max と進み、最初に Toon_LineSilhouettePart(q, p) > 0 になる q で k ≤ r_(q の部位) → 線
 線の色 = Toon_OutlineColor(持ち主の画素の色, color_i, mix_i)   // ベース色の代わりに描画済みの色を混ぜる（近似）
+// 描画済みの色は既にトーンマップ済みなので、color_i だけトーンマップしてから混ぜる（持ち主の色にもう一度掛けない。2026-10-16）。
+// 正確には tm(lerp(color_i, color_i × ベース色, mix_i)) だが、Neutral は非線形なので Maya ではこの近似で描く。Unity はポストの前に線を描けば正確になる
 ```
 
 - 背面押し出しとの違い: 頂点カラーの線の太さ（Toon マスク G）・影側 / 下向きの太さ・遠いほど細く は効かない（画面上の一定幅）

@@ -104,6 +104,7 @@ float ToonOutlineShadowSide < string UIGroup = "Outline"; float UIMin = 0.0; flo
 float ToonOutlineBottom < string UIGroup = "Outline"; float UIMin = 0.0; float UIMax = 3.0; int UIOrder = 47; > = 1.0;
 Texture2D ToonMatCapMap < string UIGroup = "MatCap"; string ResourceName = ""; string UIWidget = "FilePicker"; string ResourceType = "2D"; int UIOrder = 62; >;
 bool ToonMatCapMapEnabled < string UIGroup = "MatCap"; int UIOrder = 63; > = false;
+bool ToonMatCapMapFlipV < string UIGroup = "MatCap"; string UIName = "ToonMatCapMap Flip V"; int UIOrder = 200; > = false;  // Maya ビューポート専用: 上から並ぶ画像（PNG/JPG 等）の V を反転（他のテクスチャと同じ。2026-10-16 のレビュー #2）
 float ToonMatCapStrength < string UIGroup = "MatCap"; float UIMin = 0.0; float UIMax = 1.0; int UIOrder = 64; > = 0.0;
 
 // ------------------------------------------------------------------ プレビュー環境（Unity では キャラクターライト / ポスト）
@@ -314,7 +315,7 @@ float4 ShadeMain(VSOut i, bool frontFace)
     if (ToonMatCapMapEnabled)
     {
         float3 normalVS = normalize(mul(float4(N, 0.0), gView).xyz);
-        col += ToonMatCapMap.Sample(SamLinearWrap, Toon_MatCapUV(normalVS)).rgb * ToonMatCapStrength * lightC;
+        col += ToonMatCapMap.Sample(SamLinearWrap, FlipUV(Toon_MatCapUV(normalVS), ToonMatCapMapFlipV)).rgb * ToonMatCapStrength * lightC;
     }
     col += ToonRimColor.rgb * Toon_Rim(N, V, ToonRimPower, ToonRimStrength, lit) * lightC;
     if (ToonHairHighlightMapEnabled)

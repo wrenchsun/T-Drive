@@ -156,6 +156,18 @@ T-Drive は殻 + 配布・更新の基盤を担い、ゲームと寿命の違う
 | R-12 | **MS2026 グレーボックスを外部ツールとして切り出す**: 新リポジトリ `wrenchsun/MS2026-Maya`（`ms2026_maya_*` を `maya/scripts/` へ、エントリーポイント `maya/scripts/ms2026_greybox/tool.py`、`tool.json` / `VERSION` / `CHANGELOG.md` / `create_tool`）。作業フォルダの既定を `$TDRIVE_PROJECT/MayaWork/` に。MS2026 側は `Tools/Maya/` を削除し、`Docs/Guides/MayaGreyboxPipeline.md` に必要な版と URL の表、Unity の取り込みに JSON `version` の警告を追加（MS2026 側はブランチ + PR。別リポジトリの作業なので push は指示を受けてから） | — | 1.5 | R-10 | デザイナーの PC で URL 追加だけで `Tools › T-Drive` にグレーボックスのタブ（または案内）が出て、Export Block → Unity の Import Background が従来どおり通る。MS2026 のハイジーン検査と docs 検査が通る | ✅ 切り出し済み（MS2026-Maya v1.0.0 = 2026-10-14、`tool.json` の `requires.tdrive` は 0.6.0。MS2026 側はブランチ feature/maya-simple-collision に Tools/Maya 削除・版の表・JSON version の警告。push は未）。T-Drive 側で `resolve_tools` が 0.6.0 なら読み込める／0.5.0 なら理由付きで読み込まないことを確認。画面ありの Maya で URL 追加 → タブ・メニュー・ウィンドウまで確認（2026-10-14。docs/18 R12-1） |
 | R-13 | マニュアル（「外部ツールを追加する」「更新のしかた」の外部ツール分）と、配る側の手順（docs/13 §6 の運用）。本体の MINOR リリース（`tool.json` の `requires.tdrive` の基準になる版） | — | 0.5 | R-10 R-12 | 手順書どおりにグレーボックスを導入・更新できる。CHANGELOG の `### 互換性` に外部ツールの約束（§6.2）が MINOR で足されたと書いてある | ✅ マニュアル update.html「外部ツール」節・setup.html「配布担当向け」・Readme.html の表（画像 2 枚を 2026-10-14 に実機で撮影）。v0.6.0（ローカルタグ。push は指示を受けてから）。手順どおりの導入は未確認（docs/18 R13） |
 
+### シェーダーのコードレビュー（2026-10-16）の残件
+
+発色が薄い不具合（dx11Shader が sRGB テクスチャをリニア化しない。docs/09 §6）の調査に続けて、ToonCore / Maya ラッパーをレビューした。
+その場で直したもの: 画面上の線の半径の丸め（Python の偶数丸め → HLSL と同じ）、MatCap の V 反転、スクリーンスペース輪郭線のベース色混ぜのトーンマップ二重掛け。残りは次のチケット。
+
+| # | チケット | 技術 | 日数 | 依存 | 受け入れ条件 | 状態 |
+|---|---|---|---|---|---|---|
+| SR-1 | セルフシャドウの参照位置: 本体パスは `_ToonDepthOffset` / 奥行き圧縮で手前に寄せた `positionWS` でシャドウマップを引くが、影を落とすパス（`VS_Shadow`）は寄せない。寄せた分がライト方向に射影され、目・眉・顔で影の境界がずれる。`VSOut` に未変位の位置を持ち `ShadowAtten` にはそれを渡す。Unity も同じ約束（URP の ShadowCaster は未変位）を docs/03 §2.3 に書く | T-10 | 0.5 | — | 目に `_ToonDepthOffset` 0.05 を入れても前髪の影の境界が目の上で動かない | ⬜ |
+| SR-2 | Raw 扱いテクスチャの Unity 側の色空間を決めて書く: `_ToonMatCapMap` / `_ToonHairHighlightMap` / `_ToonFaceShadowMap` / `_ToonMaskMap` / `_NormalMap` は sRGB OFF（値を角度・強さとして使う）。MatCap を「絵」として sRGB にする運用なら Maya 側を `srgb=True` + `SrgbToLinear` に揃える。docs/03 §7・docs/08 Q-2 と AssetPostprocessor の対象に明記 | — | 0.25 | — | docs に表があり、Unity の取り込み設定と Maya の `_set_texture(srgb=…)` が 1 対 1 で対応している | ⬜ |
+| SR-3 | 透明パスのトーンマップの順序: Maya は tm(src)·a + tm(dst)·(1−a)、Unity は tm(src·a + dst·(1−a))。本筋は Render Override 有効時に本体の `PreviewTonemap` を None にし、合成パス（`TDriveScreenLine.fx`）の最後に 1 回だけ掛ける（スクリーンスペース輪郭線の近似も不要になる）。まず docs/09 §4 に差として載せる | 4-7 | 1 | — | Override あり / なしで同じ見た目。半透明の目のハイライトが Unity のキャプチャと平均 2/255 以内 | ⬜ |
+| SR-4 | ToonCore の規則の整理: `uint occluderMask` の型（D-5「float 系のみ」との食い違い）、画面上の線の走査（`EdgeSilhouette` の持ち主探索・4 方向 max）が Maya ラッパーにしか無い件。docs/03 §10.4 の疑似コードを「正」と明記するか、走査 1 段分の純関数を ToonCore に切り出す。ToonId の法線は法線マップ適用前の幾何法線であることを docs/03 §10.1 に書く | — | 0.5 | — | Unity の `ToonRendererFeature` を書く人が Maya ラッパーを読まずに済む | ⬜ |
+
 ## Phase U: T-Drive for Unity パッケージ（Unity で再現・一任）
 
 仕様: [08_unity_port_plan.md](08_unity_port_plan.md)。キャラクターのルックは T-Drive パッケージに一任し、D-Drive からは切り離す（互換ブリッジで変換可能）。シェーダー単体で無理なものはコンポーネント・Renderer Feature で実装する。

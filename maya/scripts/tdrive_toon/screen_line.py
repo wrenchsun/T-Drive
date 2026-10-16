@@ -16,6 +16,7 @@ VP2 の Render Override で、Unity の ToonRendererFeature と同じ手順を�
 
 from __future__ import annotations
 
+import math
 import uuid
 from typing import Any
 
@@ -406,8 +407,10 @@ def line_radius(width_px: float, screen_height: float) -> float:
     """docs/03 §10.2（Toon_LineRadius と同じ）: 境界の両側に r 画素ずつ。
 
     必ず float で返す（round() は int を返し、float のシェーダーパラメータへ渡すと kInvalidParameter になっていた）。
+    丸めは HLSL の round（0.5 は 0 から遠い方へ）に合わせて floor(x + 0.5)。Python の round() は偶数丸めで、
+    線幅 5 px@1080p（2.5）が Maya は 2、Unity は 3 と 1 px ずれていた（2026-10-16 のシェーダーレビュー #1）。
     """
-    return float(max(1.0, round(float(width_px) * float(screen_height) / 1080.0 * 0.5)))
+    return float(max(1.0, math.floor(float(width_px) * float(screen_height) / 1080.0 * 0.5 + 0.5)))
 
 
 def register() -> None:
