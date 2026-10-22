@@ -13,14 +13,14 @@ Unity は UV・頂点カラーを「名前でなく順番」で読むため、�
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 from maya import cmds, mel
 from maya.api import OpenMaya as om
+
+from tdrive import export_job
 
 from . import REPO_ROOT, mask, naming, preview, smooth_normals
 
@@ -110,8 +110,11 @@ def _flatten_references() -> None:
             pass
 
 
-def export_in_place(meshes: list[str], path: str | Path) -> dict[str, object]:
+def export_in_place(meshes: list[str], path: str | Path, roots: list[str] | None = None, animation: bool = True) -> dict[str, object]:
     """開いているシーンを直接整形して書き出す（破壊的）。mayapy（tools/export_fbx_batch.py）専用。
+
+    `roots` = 一緒に書き出すスケルトンのルート（無ければスキンの影響ジョイントの最上位 = 従来どおり）。`animation=False` はアニメーションを含めない
+    （アニメーション作業台の `SK_<ModelId>.fbx`。docs/20 §6.1）。
 
     参照したキャラクター（ネームスペース付き）は、先に元のマテリアルへ戻してから取り込み、ネームスペースを外す
     （FBX の名前は `mdl_face02`・マテリアル名は `mat_body01` のようにネームスペースなし。ネームスペースなしのシーンと同じ出力）。
@@ -130,51 +133,26 @@ def export_in_place(meshes: list[str], path: str | Path) -> dict[str, object]:
     for shape in shapes:
         _prepare(shape, warnings)
     transforms = sorted({cmds.listRelatives(s, parent=True, fullPath=True)[0] for s in shapes})
-    cmds.select(transforms + _skeleton_roots(shapes), replace=True)
+    cmds.select(transforms + (roots if roots else _skeleton_roots(shapes)), replace=True)
     for cmd in FBX_OPTIONS:
         mel.eval(cmd)
+    if not animation:
+        mel.eval('FBXProperty "Export|IncludeGrp|Animation" -v false')
     mel.eval(f'FBXExport -f "{path.as_posix()}" -s')
     return {"path": str(path), "meshes": len(shapes), "warnings": warnings}
 
 
 def _mayapy() -> Path:
-    exe = Path(sys.executable).with_name("mayapy.exe")
-    if exe.exists():
-        return exe
-    return Path(os.environ.get("MAYA_LOCATION", r"C:\Program Files\Autodesk\Maya2026")) / "bin" / "mayapy.exe"
+    return export_job.mayapy()
 
 
-class ExportJob:
-    """別プロセスでの FBX 書き出し。start() → poll() が True になったら result()。"""
+class ExportJob(export_job.BatchJob):
+    """別プロセスでの FBX 書き出し（Toon のモデル）。生成すると開始 → poll() が True になったら result()。
+    共通部分は `tdrive.export_job.BatchJob`（アニメーション作業台と共有。docs/20 §7）。"""
 
     def __init__(self, meshes: list[str], path: str | Path) -> None:
-        self.work = Path(tempfile.mkdtemp(prefix="tdrive_export_"))
         self.out = Path(path)
-        self.result_path = self.work / "result.json"
-        scene = self.work / "scene.mb"
-        # シーン名・未保存フラグを変えずに内容だけ書き出す（メインスレッドで行う）
-        cmds.file(str(scene), exportAll=True, type="mayaBinary", force=True, preserveReferences=True)
-        args = self.work / "args.json"
-        payload = {"scene": str(scene), "meshes": meshes, "out": str(path), "result": str(self.result_path)}
-        args.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
-        env = dict(os.environ, TDRIVE_ROOT=REPO_ROOT.as_posix(), PYTHONIOENCODING="utf-8", MAYA_DISABLE_CER="1")  # 裏の mayapy のクラッシュ画面を出さない
-        self.log = open(self.work / "log.txt", "wb")
-        self.proc = subprocess.Popen(
-            [str(_mayapy()), str(REPO_ROOT / "tools" / "export_fbx_batch.py"), str(args)],
-            stdout=self.log, stderr=subprocess.STDOUT, env=env,
-            # mayapy はコンソールアプリなので、指定しないと黒いウィンドウが書き出し中ずっと出る（閉じると失敗する）
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        )
-
-    def poll(self) -> bool:
-        return self.proc.poll() is not None
-
-    def result(self) -> dict[str, object]:
-        self.log.close()
-        if not self.result_path.exists():
-            tail = (self.work / "log.txt").read_bytes().decode("utf-8", "replace")[-3000:]
-            raise RuntimeError("FBX 書き出しに失敗しました:\n" + tail)
-        return json.loads(self.result_path.read_text(encoding="utf-8"))
+        super().__init__({"meshes": meshes, "out": str(path)})
 
 
 def export_fbx(meshes: list[str], path: str | Path, timeout: float = 600.0) -> dict[str, object]:

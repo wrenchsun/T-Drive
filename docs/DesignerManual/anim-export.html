@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>アニメーション作業台: 出力 - T-Drive デザイナーマニュアル</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<nav class="breadcrumb"><a href="Readme.html">トップ</a> › <a href="anim.html">アニメーション作業台</a> › 出力</nav>
+<h1>出力タブ</h1>
+<p class="lastupdate">最終更新日: 2026-10-22</p>
+
+<p>Unity（MS2026 / D-Drive）に渡すファイルを書き出します。<strong>モデルと、動き 1 つごとのファイルに分けて</strong>出します（D-Drive の決まり: モデルとアニメーションは別のファイル）。</p>
+<table>
+<tr><th>ファイル</th><th>中身</th></tr>
+<tr><td><code>SK_&lt;ModelId&gt;.fbx</code></td><td>メッシュ + スキン + スケルトン（骨）。アニメーションは入りません。バインドポーズ（基本の姿勢）で書きます</td></tr>
+<tr><td><code>A_&lt;ModelId&gt;_&lt;動作&gt;.fbx</code>（クリップごとに 1 つ）</td><td>骨だけ（メッシュなし）。クリップの範囲を 1 フレームごとに焼き込み（ベイク）、先頭が 0 フレーム。コントローラやコンストレイントは入りません。1 ファイルに 1 つの動き</td></tr>
+<tr><td><code>humanoid.json</code> / <code>animset.json</code></td><td>モデルと同じフォルダに書きます。Unity 側で人型の設定（Avatar）やアニメーションの設定を作るときの元データ</td></tr>
+</table>
+<div class="tip"><code>Model@Anim.fbx</code> のような「<code>@</code> で分ける」書き方は使いません（D-Drive の規則）。D-Drive は、アニメーションのファイルの最初の動きを、ファイル名で取り込みます。</div>
+
+<h2>出せないとき</h2>
+<p>出力ボタンが灰色で、赤い文字で理由が出ているときは、<strong>命名の❌</strong>があります（フレームレートが 30 fps でない、クリップ名に <code>@</code> がある、スケルトンのルートが見つからない、など）。<a href="anim-naming.html">命名タブ</a>で直してから、「命名を確認」を押してください。出力ボタンを押したときにも確認します。</p>
+
+<h2>出し方</h2>
+<ol>
+<li><strong>出力先</strong>を選ぶ — 既定は、プロジェクトの <span class="path">build/unity/&lt;ModelId&gt;/</span>（アニメは中の <span class="path">anim/</span>）。MS2026 / D-Drive の SourceAssets は、「MS2026 のパス…」「D-Drive のパス…」ボタンで Unity プロジェクトのフォルダ（<span class="path">Assets</span> の 1 つ上）を選ぶと使えます（選んでいないと灰色で、理由が出ます）。「フォルダを開く」で確認できます</li>
+<li><strong>モデルを出力</strong> — 出力するメッシュは animset に入っています。空のときは、スケルトンにスキンされたメッシュを自動で選びます。「スキンされたメッシュを animset に設定」で入れることもできます（そのあと上の「保存」）</li>
+<li><strong>アニメーション</strong> — 出したいクリップにチェックを入れて「チェックしたクリップを出力」</li>
+</ol>
+<ul>
+<li>書き出しは<strong>別のプロセスで行う</strong>ので、Maya はそのまま操作できます。開いているシーンは変更されません。進み具合は画面の中の進捗バーと、下のログに出ます（出力したファイルの名前・サイズ・警告）</li>
+<li>ウィンドウを閉じると、実行中の書き出しは止まります</li>
+<li>同じ名前のファイルは上書きされます</li>
+</ul>
+
+<h2>変更のあるクリップだけ</h2>
+<p>「変更のあるクリップだけ」にチェックが入っていると（既定）、前回の出力から<strong>クリップの範囲内のアニメーションや属性が変わっていないクリップは飛ばします</strong>（ログに「変更なしのため飛ばしました」と出ます）。出力先のファイルを消したときや、出力先を変えたときは、全部が対象になります。全部を出し直したいときはチェックを外してください。記録は <span class="path">anim/&lt;ModelId&gt;/.export-state.json</span> に残ります（Git には入れません）。</p>
+<div class="warn">変更を調べるのは、キー（アニメーションのカーブ）と、クリップの属性です。アニメーションレイヤーの重みや、コンストレイントの設定を変えただけのときは「変更なし」に見えます。迷ったら、チェックを外して全部出してください。</div>
+
+<h2>ルートモーション</h2>
+<p>クリップの「ルートモーション」が <code>none</code>（既定）のとき、腰（Hips）の前後・左右の移動（X と Z）は、クリップの最初の位置に固定されます。その場で動く待機や走りのアニメーションに使います。<code>bake</code> のときは、動きをそのまま出します。上下（Y）は固定しません。</p>
+
+<h2>ショット</h2>
+<p>ショットの出力は <span class="soon">準備中</span> です。</p>
+
+<h2>仮の決め</h2>
+<ul>
+<li>出力先の既定は <span class="path">build/</span> です。MS2026 の <span class="path">Assets/_Project/DDrive/SourceAssets/</span> に直接出すかどうかは確認中です</li>
+<li>Unity 側での Avatar や AnimatorController、AnimData の自動作成は、このツールではまだ行いません（<span class="path">humanoid.json</span> / <span class="path">animset.json</span> を元に、あとで作る予定です）</li>
+<li>FBX のテイク名は Maya の既定（Take 001）です。D-Drive は最初の動きをファイル名で取り込むので、影響しません</li>
+</ul>
+
+<div class="tip">この画面の写真は実機で撮ったものを足します（<span class="soon">準備中</span>）。</div>
+
+<footer><a href="anim.html">アニメーション作業台へ戻る</a> / <a href="Readme.html">トップへ戻る</a></footer>
+</body>
+</html>

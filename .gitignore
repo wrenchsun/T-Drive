@@ -57,3 +57,6 @@ facial/*/export/
 
 # MisotenChara 本体（手元の確認用。リポジトリに入れない。docs/20 §7）
 assets/misoten/
+
+# アニメーション作業台: 出力の記録（Git 管理外。docs/20 §6.2）
+anim/**/.export-state.json

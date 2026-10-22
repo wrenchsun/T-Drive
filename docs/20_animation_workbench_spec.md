@@ -279,7 +279,7 @@ D-Drive の **CutsceneData 1 つ**に相当する Maya 側の単位。`anim/<Mod
 ### 6.2 アニメーション `A_<ModelId>_<動作>.fbx`（クリップごと 1 ファイル）
 
 - 対象: `skeletonRoot` 以下のジョイントだけ。クリップ範囲で **ベイク**（`bakeResults`、Step 1、コントローラやコンストレイントは出さない）。`rootMotion=none` のときは Hips の平行移動の XZ（と任意で Y）を開始フレームの値に固定
-- FBX: Animation ON、Bake Animation ON、Deformed Models / Skins / Blend Shapes OFF、Embed Media OFF、Input Connections OFF、テイク名 = クリップ名、1 ファイル 1 テイク
+- FBX: Animation ON、Bake Animation ON、Deformed Models / Skins / Blend Shapes OFF、Embed Media OFF、Input Connections OFF、1 ファイル 1 テイク（**実装での変更 2026-10-22**: テイク名は Maya の既定 `Take 001`。名前付きのテイクに分けると 2 テイクになり、D-Drive が先頭を取り込む仕組み（ファイル名で取り込む）と合わないため。範囲の先頭は 0 フレームに寄せる）
 - **`@` は使わない**（D-Drive の規則）。ファイル名は `A_<ModelId>_<動作>.fbx`、D-Drive は最初の埋め込みクリップを `ANIM_<Category>_A_<ModelId>_<動作>` として取り込む
 - 出力先: `build/unity/<ModelId>/anim/`。プリセット: `SourceAssets/Anim/<Category>/`
 - 「変更のあるクリップだけ」: クリップの範囲内のカーブのハッシュを `animset.json` 横の `.export-state.json`（Git 管理外）に記録し、変わっていないものは飛ばす（任意、既定 ON）
