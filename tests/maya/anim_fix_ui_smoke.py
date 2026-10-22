@@ -71,6 +71,33 @@ def _run(tmp: Path) -> None:
     blend.refresh()
     check("AN-F-1: 別のメッセージは消さない", blend.message.text() == "⚠ 別の警告")
 
+    # ---- AN-F-3: Idle / Run だけで開いたあと Jump を足すと 3 行になる
+    s.add_clip_from_range("Idle", 0, 30)
+    s.add_clip_from_range("Run", 100, 118, direction="F")
+    blend.refresh()
+    check("AN-F-3: Idle / Run だけだと 2 行", [r["clip"] for r in blend.rows] == ["A_MisotenChara_Idle", "A_MisotenChara_Run_F"], str(blend.rows))
+    s.add_clip_from_range("Jump", 200, 230)
+    blend.refresh()
+    check("AN-F-3: Jump を足すと既定の列が 3 行に作り直される", [r["clip"] for r in blend.rows] == ["A_MisotenChara_Idle", "A_MisotenChara_Run_F", "A_MisotenChara_Jump"], str(blend.rows))
+    check("AN-F-3: 表も 3 行", blend.rows_table.rowCount() == 3)
+    # 編集したら触らない
+    blend.rows[0]["holdSec"] = 2.5
+    s.add_clip_from_range("Wave", 300, 330)
+    blend.refresh()
+    check("AN-F-3: 手で編集した列はクリップを足しても作り直さない", len(blend.rows) == 3 and blend.rows[0]["holdSec"] == 2.5, str(blend.rows))
+    blend.add_row()
+    blend.refresh()
+    check("AN-F-3: 行を足した列も作り直さない", len(blend.rows) == 4)
+    # 既定の列に戻す
+    blend.reset_rows()
+    check("AN-F-3: 「既定の列に戻す」で 3 行・既定の値に戻る", [r["clip"] for r in blend.rows] == ["A_MisotenChara_Idle", "A_MisotenChara_Run_F", "A_MisotenChara_Jump"] and blend.rows[0]["holdSec"] == 1.0 and blend.rows_table.rowCount() == 3, str(blend.rows))
+    s.remove_clip("A_MisotenChara_Wave")
+    s.remove_clip("A_MisotenChara_Jump")
+    blend.refresh()
+    check("AN-F-3: 既定のままならクリップを減らしても追従する", [r["clip"] for r in blend.rows] == ["A_MisotenChara_Idle", "A_MisotenChara_Run_F"], str(blend.rows))
+    for t in (clips_tab, blend):
+        s.listeners.remove(t.refresh)
+
 
 if __name__ == "__main__":
     maya.standalone.initialize(name="python")

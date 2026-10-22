@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import traceback
 
@@ -34,6 +35,7 @@ class BlendTab(QtWidgets.QWidget):
         super().__init__()
         self.session = s
         self.rows: list[dict] = []
+        self._default_rows: list[dict] = []  # 既定の列として作った時点の控え。rows がこれと同じ（未編集）なら、クリップの増減で作り直す（AN-F-3）
         self.shot_tab = None  # AnimPanel が渡す（「この列をショットへ」）
         self.mode = "rows"  # "rows" | "graph"
         self.graph: dict | None = None
@@ -77,7 +79,8 @@ class BlendTab(QtWidgets.QWidget):
         bv.addWidget(self.rows_table)
         rb = QtWidgets.QHBoxLayout()
         for text, fn, tip in (("＋ 行を足す", self.add_row, "末尾に行を足します"), ("－ 行を消す", self.remove_row, "選んだ行を消します"),
-                              ("↑", lambda: self.move_row(-1), "選んだ行を上へ"), ("↓", lambda: self.move_row(1), "選んだ行を下へ")):
+                              ("↑", lambda: self.move_row(-1), "選んだ行を上へ"), ("↓", lambda: self.move_row(1), "選んだ行を下へ"),
+                              ("既定の列に戻す", self.reset_rows, "Idle → Run → Jump の既定の列に作り直します（今の列は消えます）")):
             b = QtWidgets.QPushButton(text)
             b.setToolTip(tip)
             b.clicked.connect(lambda *_, f=fn: f())
@@ -252,8 +255,9 @@ class BlendTab(QtWidgets.QWidget):
         if [self.layer_clip.itemText(i) for i in range(self.layer_clip.count())] != names:
             self.layer_clip.clear()
             self.layer_clip.addItems(names)
-        if not self.rows and self.mode == "rows":
+        if self.mode == "rows" and (not self.rows or self.rows == self._default_rows):  # 未編集の既定の列は、クリップの増減に追従する
             self.rows = Seq.default_rows(d["clips"], d["modelId"])
+            self._default_rows = copy.deepcopy(self.rows)
         self.rows = [r for r in self.rows if r["clip"] in self._clips()]  # 消えたクリップの行は落とす
         self._fill_rows()
         self.graph = d.get("stateGraph") if isinstance(d.get("stateGraph"), dict) else self.graph
@@ -306,6 +310,18 @@ class BlendTab(QtWidgets.QWidget):
             self._fill_rows()
             return
         self.rows[item.row()][key] = val
+
+    def reset_rows(self) -> None:
+        """遷移列を既定（Idle → Run → Jump）に作り直す（AN-F-3）。"""
+        if self.session.data is None:
+            self._say(NEED_ANIMSET)
+            return
+        d = self.session.data
+        self.mode = "rows"
+        self.rows = Seq.default_rows(d["clips"], d["modelId"])
+        self._default_rows = copy.deepcopy(self.rows)
+        self._fill_rows()
+        self._say("遷移列を既定の列に戻しました")
 
     def add_row(self) -> None:
         names = list(self._clips())
