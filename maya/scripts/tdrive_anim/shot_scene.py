@@ -4,7 +4,8 @@
 - カメラの区間は Maya 標準の Camera Sequencer（`shot` ノード `tdShot_<Shot>_<n>`）に同期する。ビューポートでの切り替えはシーケンサー再生で確認する
 - キャラクターのクリップ列は `composition.compose`（`shot_<Shot>_<ModelId>` の名前）。ショットの範囲の先頭から並べる。手で打つキー（口パク・視線など）は
   合成の上の animLayer `tdShotHand_<Shot>_<ModelId>` に打つ（出力時はベイクされる）
-- イベント `EVT_<キー>` は `tdShot_<Shot>` の下のロケータ。**可視性が 0 → 1 に切り替わるフレームがイベントの時刻**（ステップキー。ベイクしても残る。docs/20 に追記）
+- イベント `EVT_<キー>` は `tdShot_<Shot>` の下のロケータ。**カスタムアトリビュート `ddEvent`（整数）が 0 → 1 に切り替わるフレームがイベントの時刻**
+  （D-Drive の「EVT_ ロケーターにアトリビュートを足してキーを打つ」方式。ステップキー。docs/26 §5.5）
 - dx11Shader・Render Override は使わない
 """
 
@@ -100,9 +101,9 @@ def sequencer_shots(shot_name: str) -> list[dict[str, Any]]:
 
 # ------------------------------------------------------------------ イベント
 def sync_events(shot: dict[str, Any]) -> list[str]:
-    """イベントのロケータ `EVT_<キー>` を作り直す（可視性のステップキーが時刻）。作ったロケータ名を返す。"""
+    """イベントのロケータ `EVT_<キー>` を作り直す（`ddEvent` が 0 → 1 に切り替わるフレームが時刻）。作ったロケータ名を返す。"""
     g = ensure_group(shot)
-    old = [c for c in (cmds.listRelatives(g, children=True, fullPath=True) or []) if cmds.attributeQuery("tdEventFrame", node=c, exists=True)]
+    old = [c for c in (cmds.listRelatives(g, children=True, fullPath=True) or []) if cmds.attributeQuery("tdEventKey", node=c, exists=True)]
     if old:  # 空のリストを cmds.delete に渡さない
         cmds.delete(old)
     lo = shot["range"][0]
@@ -110,27 +111,33 @@ def sync_events(shot: dict[str, Any]) -> list[str]:
     for ev in shot["events"]:
         loc = cmds.spaceLocator(name=f"EVT_{ev['key']}")[0]
         loc = cmds.parent(loc, g)[0]
-        cmds.addAttr(loc, longName="tdEventFrame", attributeType="long", defaultValue=int(ev["frame"]))
         cmds.addAttr(loc, longName="tdEventKey", dataType="string")
         cmds.setAttr(f"{loc}.tdEventKey", ev["key"], type="string")
-        cmds.setKeyframe(loc, attribute="visibility", time=min(lo, ev["frame"]) - 1, value=0)
-        cmds.setKeyframe(loc, attribute="visibility", time=ev["frame"], value=1)
-        cmds.keyTangent(loc, attribute="visibility", inTangentType="step", outTangentType="step")
+        cmds.addAttr(loc, longName="ddEvent", attributeType="long", defaultValue=0, keyable=True)
+        if ev["frame"] > lo:  # ショットの範囲の外にキーを置かない（同じショットの全ファイルで開始〜終了を揃える）
+            cmds.setKeyframe(loc, attribute="ddEvent", time=lo, value=0)
+        cmds.setKeyframe(loc, attribute="ddEvent", time=ev["frame"], value=1)
+        cmds.keyTangent(loc, attribute="ddEvent", inTangentType="step", outTangentType="step")
         made.append(loc)
     return made
 
 
-def event_frames(shot_name: str) -> dict[str, int]:
-    """シーンのロケータから読んだイベント（キー → 可視性が 1 になる最初のフレーム）。出力と同じ読み方。"""
+def event_locators(shot_name: str) -> list[str]:
     g = group_name(shot_name)
+    if not cmds.objExists(g):
+        return []
+    return [c for c in (cmds.listRelatives(g, children=True, fullPath=True) or []) if cmds.attributeQuery("tdEventKey", node=c, exists=True)]
+
+
+def event_frames(shot_name: str) -> dict[str, int]:
+    """シーンのロケータから読んだイベント（キー → `ddEvent` が 1 になる最初のフレーム）。Unity 側と同じ読み方。"""
     out = {}
-    for c in (cmds.listRelatives(g, children=True, fullPath=True) or []) if cmds.objExists(g) else []:
-        if not cmds.attributeQuery("tdEventFrame", node=c, exists=True):
-            continue
-        times = cmds.keyframe(c, attribute="visibility", query=True, timeChange=True) or []
-        vals = cmds.keyframe(c, attribute="visibility", query=True, valueChange=True) or []
+    for c in event_locators(shot_name):
+        times = cmds.keyframe(c, attribute="ddEvent", query=True, timeChange=True) or []
+        vals = cmds.keyframe(c, attribute="ddEvent", query=True, valueChange=True) or []
         on = [t for t, v in zip(times, vals) if v >= 0.5]
-        out[cmds.getAttr(f"{c}.tdEventKey")] = int(min(on)) if on else int(cmds.getAttr(f"{c}.tdEventFrame"))
+        if on:
+            out[cmds.getAttr(f"{c}.tdEventKey")] = int(min(on))
     return out
 
 
@@ -155,16 +162,18 @@ def character_joints(ch: dict[str, Any], animset: dict[str, Any]) -> list[str]:
     return [root] + (cmds.listRelatives(root, allDescendents=True, type="joint") or [])
 
 
-def compose_characters(shot: dict[str, Any], current: dict[str, Any] | None = None) -> list[K.Result]:
-    """各キャラクターのクリップ列をショットの範囲の先頭から並べて合成する。列が空・ジョイントが無いキャラクターは飛ばして警告に。"""
+def compose_characters(shot: dict[str, Any], current: dict[str, Any] | None = None, animsets: dict[str, dict[str, Any]] | None = None,
+                       only: int | None = None) -> list[K.Result]:
+    """各キャラクターのクリップ列をショットの範囲の先頭から並べて合成する。列が空のキャラクターは飛ばす。
+    `animsets`（ModelId → animset）を渡すとそれを使う（別プロセスの書き出し用）。`only` はそのインデックスのキャラクターだけ。"""
     fps = shot["frameRate"]
     lo = shot["range"][0]
     ensure_group(shot)
     results = []
-    for ch, fname in SH.character_files(shot):
-        if not ch["sequence"]:
+    for i, (ch, fname) in enumerate(SH.character_files(shot)):
+        if not ch["sequence"] or (only is not None and i != only):
             continue
-        aset = animset_for(ch["modelId"], current)
+        aset = animsets[ch["modelId"]] if animsets else animset_for(ch["modelId"], current)
         clips = {c["name"]: c for c in aset["clips"]}
         pls = Seq.from_rows(ch["sequence"], clips, fps)
         for p in pls:
@@ -208,7 +217,7 @@ def remove(shot_name: str, delete_group: bool = False) -> int:
         cmds.delete(sn)
     g = group_name(shot_name)
     if cmds.objExists(g):
-        locs = [c for c in (cmds.listRelatives(g, children=True, fullPath=True) or []) if cmds.attributeQuery("tdEventFrame", node=c, exists=True)]
+        locs = event_locators(shot_name)
         if locs:
             cmds.delete(locs)
         if cmds.attributeQuery("tdPlayback", node=g, exists=True):

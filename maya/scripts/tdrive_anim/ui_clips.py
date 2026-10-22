@@ -174,7 +174,7 @@ class ClipsTab(QtWidgets.QWidget):
         d = self.session.data
         self._fill_vocab(d)
         lo, hi = MC.playback_range()
-        keyed = MC.keyed_range(d["skeletonRoot"])
+        keyed = MC.keyed_range(A.root_name(d))
         self.range_label.setText(f"範囲 {lo}〜{hi}" + (f"（キー {keyed[0]}〜{keyed[1]}）" if keyed else "（ルート以下にキーなし）"))
         selected = self.selected_names()
         self._building = True

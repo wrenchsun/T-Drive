@@ -61,7 +61,21 @@ class HeaderBar(QtWidgets.QWidget):
         for b in (self.new_btn, self.open_btn, self.save_btn):
             row.addWidget(b)
         v.addLayout(row)
+        row2 = QtWidgets.QHBoxLayout()
+        row2.addWidget(QtWidgets.QLabel("リグのネームスペース"))
+        self.namespace = QtWidgets.QLineEdit()
+        self.namespace.setPlaceholderText("無ければ空（参照して読み込んだリグは MisotenChara など）")
+        self.namespace.setToolTip("シーンのリグのネームスペース。スケルトンのルート・クリップの再生・出力はこのネームスペースの中を見ます。出力する FBX には付きません。既定: 空")
+        self.namespace.editingFinished.connect(lambda *_: self._set_namespace())
+        row2.addWidget(self.namespace, 1)
+        v.addLayout(row2)
         self.refresh()
+
+    def _set_namespace(self) -> None:
+        s = self.session
+        text = self.namespace.text().strip().rstrip(":")
+        if s.data is not None and text != (s.data.get("namespace") or ""):
+            s.set_value("namespace", text)
 
     def refresh(self) -> None:
         s = self.session
@@ -72,8 +86,11 @@ class HeaderBar(QtWidgets.QWidget):
             mark = " *" if s.dirty else ""
             self.label.setText(f"ModelId: {s.model_id}　{s.data['frameRate']} fps　クリップ {len(s.data['clips'])} 件\nanimset: {where}{mark}")
         self.save_btn.setEnabled(s.data is not None)
+        self.namespace.setEnabled(s.data is not None)
         if s.data is not None and not self.model_id.hasFocus():
             self.model_id.setText(s.model_id)
+        if s.data is not None and not self.namespace.hasFocus():
+            self.namespace.setText(s.data.get("namespace", "") or "")
 
     def _new(self) -> None:
         try:

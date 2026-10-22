@@ -67,3 +67,23 @@ def test_state_roundtrip_and_broken(tmp_path):
     p.write_text("{broken", encoding="utf-8")
     assert E.load_state(p) == {"clips": {}}
     assert E.load_state(tmp_path / "none.json") == {"clips": {}}
+
+
+def test_shot_dirs(tmp_path):
+    from tdrive_anim.core import shot as SH
+
+    sh = SH.new_shot("Opening01")
+    sh["export"]["category"] = "Opening"
+    assert E.resolve_shot_dir(sh, "default", {}, tmp_path) == tmp_path / "build" / "cutscene" / "Opening"
+    cfg = {"animMs2026Root": "C:/ms", "animDdriveRoot": "C:/dd"}
+    assert E.resolve_shot_dir(sh, "ms2026", cfg, tmp_path) == Path("C:/ms/Assets/_Project/DDrive/SourceAssets/Cutscene/Opening")
+    assert E.resolve_shot_dir(sh, "ddrive", cfg, tmp_path) == Path("C:/dd/Assets/SourceAssets/Cutscene/Opening")
+    with pytest.raises(E.ExportPlanError):
+        E.resolve_shot_dir(sh, "ms2026", {}, tmp_path)
+    with pytest.raises(E.ExportPlanError):
+        E.resolve_shot_dir(sh, "custom", {}, tmp_path)
+    sh["export"]["dir"] = "X:/c"
+    assert E.resolve_shot_dir(sh, "custom", {}, tmp_path) == Path("X:/c")
+    assert E.shot_file("Opening01") == "Opening01.fbx"
+    with pytest.raises(E.ExportPlanError):
+        E.shot_file("Open@ing")

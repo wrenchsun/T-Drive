@@ -61,6 +61,31 @@ def resolve_dirs(animset: dict[str, Any], preset: str, config: dict[str, Any], p
     raise ExportPlanError(f"出力先のプリセットが不明です: {preset}")
 
 
+def resolve_shot_dir(shot: dict[str, Any], preset: str, config: dict[str, Any], project_root: str | Path) -> Path:
+    """ショットの出力先（docs/20 §5.3）。既定 `build/cutscene/<Category>/`、MS2026 / D-Drive は `…/SourceAssets/Cutscene/<Category>/`、custom は shot の export.dir。"""
+    cat = (shot.get("export") or {}).get("category") or "Cutscene"
+    if preset == "default":
+        return Path(project_root) / "build" / "cutscene" / cat
+    if preset in CONFIG_KEYS:
+        root = config.get(CONFIG_KEYS[preset])
+        if not root:
+            raise ExportPlanError(f"{PRESET_LABEL[preset]} のパスが設定されていません（プロジェクト設定 {CONFIG_KEYS[preset]}）")
+        return Path(root) / (MS2026_SUB if preset == "ms2026" else DDRIVE_SUB) / "Cutscene" / cat
+    if preset == "custom":
+        d = (shot.get("export") or {}).get("dir")
+        if not d:
+            raise ExportPlanError("shot.json の export.dir が空です")
+        return Path(d)
+    raise ExportPlanError(f"出力先のプリセットが不明です: {preset}")
+
+
+def shot_file(shot_name: str) -> str:
+    """カメラ・小道具・イベントの FBX 名（`<Shot>.fbx`）。キャラクターは `shot.character_files` の `<Shot>__<ModelId>`。"""
+    if "@" in shot_name:
+        raise ExportPlanError(f"ショット名に「@」は使えません: {shot_name}")
+    return f"{shot_name}.fbx"
+
+
 def available_presets(animset: dict[str, Any], config: dict[str, Any]) -> dict[str, str]:
     """プリセット → 使えないときの理由（使えるなら ""）。"""
     out = {}

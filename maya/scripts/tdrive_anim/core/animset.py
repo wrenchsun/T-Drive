@@ -60,6 +60,13 @@ def action_of(clip_name: str, model_id: str = "") -> str:
     return m.group(1) if m else ""
 
 
+def root_name(data: dict[str, Any]) -> str:
+    """シーンでのスケルトンのルートのノード名: リグを参照して読み込んだとき（`namespace` が空でない）は `<ns>:<skeletonRoot>`。"""
+    ns = data.get("namespace") or ""
+    root = data["skeletonRoot"]
+    return f"{ns}:{root}" if ns and not root.startswith(f"{ns}:") else root
+
+
 def default_clip(name: str, start: int, end: int, model_id: str = "") -> dict[str, Any]:
     """クリップの既定値（docs/20 §3.1）。loop / stateGroup は動作の語彙から決める。"""
     action = action_of(name, model_id)
@@ -73,7 +80,7 @@ def default_clip(name: str, start: int, end: int, model_id: str = "") -> dict[st
 def new_animset(model_id: str, skeleton_root: str = "spine_C0_0_jnt", meshes: list[str] | None = None) -> dict[str, Any]:
     return {
         "format": FORMAT, "version": VERSION, "modelId": model_id, "frameRate": 30, "units": "cm", "upAxis": "Y",
-        "skeletonRoot": skeleton_root, "meshes": list(meshes or []), "clips": [],
+        "skeletonRoot": skeleton_root, "namespace": "", "meshes": list(meshes or []), "clips": [],
         "layers": copy.deepcopy(DEFAULT_LAYERS), "stateGraph": None, "export": dict(DEFAULT_EXPORT),
     }
 
@@ -164,6 +171,8 @@ def validate(data: dict[str, Any]) -> list[Issue]:
         err("upAxis", "上方向は Y")
     if not isinstance(data.get("skeletonRoot"), str) or not data.get("skeletonRoot"):
         err("skeletonRoot", "スケルトンのルートジョイントが空です")
+    if not isinstance(data.get("namespace", ""), str):
+        err("namespace", "ネームスペースは文字列（無ければ空）")
     meshes = data.get("meshes")
     if not isinstance(meshes, list) or not all(isinstance(m, str) for m in meshes):
         err("meshes", "メッシュ名の配列にしてください")

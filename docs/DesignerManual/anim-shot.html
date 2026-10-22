@@ -12,7 +12,7 @@
 <p class="lastupdate">最終更新日: 2026-10-22</p>
 
 <p><strong>ショット</strong>は、カットシーン（ムービーのような演出）1 つ分です。「このカメラで、このキャラクターがこの動きをして、ここで合図を出す」を並べて作り、Maya で再生して確かめます。D-Drive のカットシーン（CutsceneData）1 つにあたります。</p>
-<div class="tip">DirectX 11 は要りません。ショットの書き出し（Unity へ渡すファイル）は、次の<a href="anim-export.html">出力タブ</a>で行います。</div>
+<div class="tip">DirectX 11 は要りません。ショットの書き出し（Unity へ渡すファイル）は、<a href="anim-export.html#shot">出力タブ</a>で行います。</div>
 
 <div class="warn"><strong>「ショットを反映」すると、キャラクターのジョイントが合成につながります。</strong>元のアニメーションのカーブは壊していませんが、合成したままシーンを保存すると、保存されたシーンも合成につながったままになります。確認が終わったら<strong>「合成を外す」</strong>を押してください（オレンジ色の注意が出ている間は合成中です。ウィンドウを閉じても外れます）。</div>
 
@@ -32,7 +32,7 @@
 <tr><th>名前</th><th>中身</th></tr>
 <tr><td><code>tdShot_&lt;Shot&gt;</code></td><td>ショットのグループ。イベントのロケータがこの下に入ります</td></tr>
 <tr><td><code>tdShot_&lt;Shot&gt;_0</code>…</td><td>Maya のカメラ シーケンサーの区間（カメラごと）</td></tr>
-<tr><td><code>EVT_&lt;キー&gt;</code></td><td>イベントのロケータ。<strong>表示が 0 から 1 に変わるフレームが、イベントの時刻</strong>です（同じキーを 2 回使うと、名前の最後に数字が付きます）</td></tr>
+<tr><td><code>EVT_&lt;キー&gt;</code></td><td>イベントのロケータ。<strong><code>ddEvent</code> という属性が 0 から 1 に変わるフレームが、イベントの時刻</strong>です（D-Drive の決まり）（同じキーを 2 回使うと、名前の最後に数字が付きます）</td></tr>
 <tr><td><code>tdAnimComp_shot_&lt;Shot&gt;_&lt;ModelId&gt;</code></td><td>キャラクターのクリップ列の合成</td></tr>
 <tr><td><code>tdShotHand_&lt;Shot&gt;_&lt;ModelId&gt;</code></td><td>手付けキー用のアニメーションレイヤー（下記）</td></tr>
 </table>
@@ -49,7 +49,7 @@
 
 <h2>仮の決め・できないこと</h2>
 <ul>
-<li>顔の演出（FacialController の <code>.fctrack</code>）は、キャラクターごとに「あり／なし」を決めるところまでです。書き出しは出力タブの対応を待ちます</li>
+<li>顔の演出（FacialController の <code>.fctrack</code>）は、キャラクターごとに「あり／なし」を決めます。書き出しは<a href="anim-export.html#shot">出力タブ</a>で行います（Facial タブにデータが開いている必要があります）</li>
 <li>小道具（<code>PRP_</code>）は、書き出しのときにシーンから集めます。ショットタブで選ぶ画面は準備中です <span class="soon">準備中</span></li>
 <li>同じ ModelId のキャラクターを 2 体置いたときの 2 体目は、書き出しのファイル名が <code>_2</code> になります</li>
 </ul>

@@ -326,11 +326,14 @@ class NamingTab(QtWidgets.QWidget):
     def _root(self) -> str:
         return self.session.data["skeletonRoot"] if self.session.data else ""
 
+    def _ns(self) -> str:
+        return (self.session.data or {}).get("namespace", "") or ""
+
     def _fill_humanoid(self, reset: bool = False) -> None:
         if self.session.data is None:
             return
         if reset or self.humanoid is None:
-            self.humanoid = SN.humanoid_for(self.session.model_id, self._root())
+            self.humanoid = SN.humanoid_for(self.session.model_id, self._root(), self._ns())
         self._building = True
         try:
             bones = self.humanoid.get("bones", {})
@@ -355,7 +358,7 @@ class NamingTab(QtWidgets.QWidget):
     def _humanoid_check(self) -> None:
         if self.humanoid is None:
             return
-        probs = SN.humanoid_problems(self.humanoid, self._root())
+        probs = SN.humanoid_problems(self.humanoid, self._root(), self._ns())
         self.h_msg.setText("\n".join("⚠ " + p for p in probs[:6]) + (f"\n…ほか {len(probs) - 6} 件" if len(probs) > 6 else "")
                            if probs else f"✔ 必須 15 ボーンが埋まっています（extra {len(self.humanoid.get('extra', []))} 本）")
 
@@ -375,7 +378,8 @@ class NamingTab(QtWidgets.QWidget):
     def humanoid_infer(self) -> None:
         if self.session.data is None:
             return
-        self.humanoid = H.new_map(self.session.model_id, SN.scene_joints(self._root()), self._root())
+        ns = self._ns()
+        self.humanoid = H.new_map(self.session.model_id, SN.scene_joints(f"{ns}:{self._root()}" if ns else self._root()), self._root())
         self._fill_humanoid()
 
     def humanoid_set_selected(self) -> None:

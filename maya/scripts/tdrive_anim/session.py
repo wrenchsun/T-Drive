@@ -121,11 +121,12 @@ class AnimSession:
         return project.anim_dir() / model_id / "animset.json"
 
     @undoable
-    def new(self, model_id: str, skeleton_root: str = "spine_C0_0_jnt", meshes: list[str] | None = None) -> dict[str, Any]:
+    def new(self, model_id: str, skeleton_root: str = "spine_C0_0_jnt", meshes: list[str] | None = None, namespace: str = "") -> dict[str, Any]:
         """新しい animset を作る（保存先は既定の場所。まだ書かない）。ModelId の形が違えば AnimSetError。"""
         if not A.MODEL_ID_PATTERN.match(model_id or ""):
             raise A.AnimSetError("ModelId は英数字の PascalCase（例: MisotenChara）")
         self.data = A.new_animset(model_id, skeleton_root, meshes)
+        self.data["namespace"] = namespace
         self.path = self.default_path(model_id)
         self._changed()
         return self.data

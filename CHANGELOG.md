@@ -10,6 +10,7 @@
 
 ### 追加
 - Animation タブ（アニメーション作業台。仕様 docs/20）: 殻の 1 段目に追加。DirectX 11 を使わない（OpenGL・ヘッドレスでも動く）
+  - AN-8: ショットの出力（`<Shot>.fbx` = Ubercam 1 台に焼いたカメラ + `PRP_` + `EVT_`、`<Shot>__<ModelId>.fbx` = ルートジョイントの階層だけ・ショットの範囲でベイク・ネームスペースなし、`.fctrack`（既存の export_fctrack）、`<Shot>.shot.json`、D-Drive のオプション、同名上書き、出力先プリセット、`tools/export_fbx_batch.py` の `mode: "shot"`）。animset に `namespace`（リグのネームスペース。MINOR）
   - AN-7: ショットの作成（`shots/<Shot>.shot.json`・`tdShot_<Shot>` グループ・カメラの区間を Camera Sequencer に同期・キャラクターごとのクリップ列の合成（複数体同時）・`EVT_` イベントのロケータ（可視性のステップが時刻）・手付けキー用 animLayer・シーケンサー再生・playblast）。ブレンドタブの「この列をショットへ」
   - AN-6: Unity 用の分割出力（モデル `SK_<ModelId>.fbx` は Toon の出力に相乗り、クリップごとの `A_<ModelId>_<動作>.fbx` はジョイントだけ・ベイク・1 テイク・Hips の XZ 固定、`humanoid.json` / `animset.json` の写し、変更のあるクリップだけ、出力先プリセット、出力タブ）。`ExportJob` の共通部分を `tdrive.export_job.BatchJob` に切り出し（`tdrive_toon.export.ExportJob` は従来どおり使える）
   - AN-4: ブレンドのプレビュー（遷移列 → 固定秒・線形のクロスフェード合成。ジョイントの 1 フレームごとのサンプルを複製カーブにして `pairBlend`（四元数）/ `blendTwoAttr` の連鎖でつなぐ。元のカーブは壊さず、外すと再生範囲・時刻・ループも戻る）

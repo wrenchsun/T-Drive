@@ -129,6 +129,8 @@ def export_in_place(meshes: list[str], path: str | Path, roots: list[str] | None
     shapes = preview.mesh_shapes([m for m in meshes if cmds.objExists(m)])
     if not shapes:
         raise RuntimeError("書き出すメッシュがありません")
+    if roots:  # ネームスペースを外したあとは名前が変わるので引き直す
+        roots = [r if cmds.objExists(r) else "|".join(naming.strip_all(p) for p in r.split("|")) for r in roots]
     warnings: list[str] = []
     for shape in shapes:
         _prepare(shape, warnings)

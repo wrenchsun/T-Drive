@@ -167,7 +167,7 @@ Unity の Humanoid ボーン名 → Maya のジョイント名。mGear の名前
 ```jsonc
 { "format": "TDriveAnimSet", "version": 1, "modelId": "MisotenChara",
   "frameRate": 30, "units": "cm", "upAxis": "Y",
-  "skeletonRoot": "spine_C0_0_jnt", "meshes": ["SK_MisotenChara_Body", "SK_MisotenChara_Skirt", "SK_MisotenChara_RibbonBack"],
+  "skeletonRoot": "spine_C0_0_jnt", "namespace": "", "meshes": ["SK_MisotenChara_Body", "SK_MisotenChara_Skirt", "SK_MisotenChara_RibbonBack"],
   "clips": [
     { "name": "A_MisotenChara_Idle", "start": 0, "end": 60, "loop": true, "rootMotion": "none", "layer": "Base", "crossFade": 0.1,
       "events": [], "stateGroup": "locomotion" },
@@ -253,7 +253,7 @@ D-Drive の **CutsceneData 1 つ**に相当する Maya 側の単位。`anim/<Mod
 - キャラクター: ネームスペース（= ModelId）ごとに **クリップ列**（§4.2 の遷移列と同じ型）。配置は Time Editor の合成（`tdAnimComp_<Shot>_<ModelId>`）で、ブレンドタブの「この列をショットへ」から持ち込める。手で打ったキー（口パク・視線など）は合成の上の animLayer に打てる（出力時はベイクされる）
 - 顔: FacialController のプレビューノードにキーがあれば `.fctrack` も一緒に出す（[14](14_facial_controller_spec.md) §7.3。既存の `tdrive_facial.export.export_fctrack` を呼ぶ）
 - イベント: 現在フレームに `EVT_<キー>` を追加（ロケータ `EVT_<キー>` を `tdShot_<Shot>` の下に。D-Drive の Signal マーカー `cutscene/<キー>` になる）。
-  **時刻の持ち方（実装での決め 2026-10-22）**: ロケータの `visibility` を「イベントの 1 フレーム前は 0、イベントのフレームから 1」のステップキーにする（ベイクしても残る。出力時は 0 → 1 に変わる最初のフレームがイベントの時刻）。属性 `tdEventFrame` / `tdEventKey` も持つ。同じキーを 2 回使うと Maya が名前に数字を付ける
+  **時刻の持ち方（実装での決め 2026-10-22）**: D-Drive の docs/26 §5.5「EVT_ ロケーターにカスタムアトリビュート（`ddEvent`、整数）を足してキーを打つ」方式に合わせ、ロケータの `ddEvent` を「イベントの 1 フレーム前は 0、イベントのフレームから 1」のステップキーにする（FBX にアニメ付きユーザープロパティとして出る。Unity 側で確実に取れるかは D-Drive 側が要検証としている）。属性 `tdEventKey` も持つ。同じキーを 2 回使うと Maya が名前に数字を付ける
 - プレビュー: ショットの範囲でシーケンサー再生（カメラ切替 + 合成 + 顔）。`playblast` で動画（`captures/shots/<Shot>.mov`。Git 管理外）
 
 ### 5.3 出力（D-Drive のカットシーン規則そのまま）
@@ -267,6 +267,8 @@ D-Drive の **CutsceneData 1 つ**に相当する Maya 側の単位。`anim/<Mod
 
 - 出力先の既定: `build/cutscene/<Category>/`。「D-Drive の SourceAssets へ」プリセット: `<D-Drive または MS2026 のパス>/Assets/_Project/DDrive/SourceAssets/Cutscene/<Category>/`（MS2026）/ `Assets/SourceAssets/Cutscene/<Category>/`（D-Drive）。パスはプロジェクト設定（`project.py`）に持つ
 - 同名で上書き（D-Drive の再取り込みの流儀）。出力前に命名検査（§2.5）の ❌ があれば止める
+- **実装での変更（2026-10-22, AN-8）**: Ubercam は Maya の `doCreateUbercam` ではなく、出力のとき各フレームの「その時刻のカメラ」のワールド行列・焦点距離・フィルム・クリップ面を 1 台のカメラ `Ubercam` に写してキーを打つ（検証できる・ヘッドレスで動く。区間の切り替わりはステップ）。
+  キャラクターの FBX は、別プロセスで一時シーンを開き、ショットのクリップ列を合成し直してベイクする（開いているシーンの合成の有無に依存しない）。ジョイント名はネームスペースを外す。範囲は 0 に寄せず、ショットの範囲のまま（D-Drive: 同じショットの全ファイルで開始〜終了を揃える）
 - 出力は Toon / Facial と同じ **別プロセスの mayapy** 方式（開いているシーンを壊さない。`tools/export_fbx_batch.py` に `--mode shot` を足す）
 
 ## 6. Unity 用の分割出力（出力タブ、AN-6）

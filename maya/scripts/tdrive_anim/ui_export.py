@@ -1,4 +1,4 @@
-"""出力タブ（docs/20 §6.4、チケット AN-6）: Unity 用の分割出力（モデル / アニメーション。ショットは AN-8）。
+"""出力タブ（docs/20 §6.4、チケット AN-6 / AN-8）: Unity 用の分割出力（モデル / アニメーション）と、ショット（D-Drive のカットシーン用）の出力。
 
 - 別プロセスの mayapy が FBX を書く（`export.SplitJob`）ので Maya は止まらない。進捗はウィンドウ内、ログに出力ファイルとサイズ・警告
 - 命名の❌（禁止文字・`@`・24 fps・クリップ名の形 など）があるうちは出力ボタンを無効にして理由を表示する（docs/20 §2.5）
@@ -18,15 +18,17 @@ from tdrive import lifecycle, project
 from . import export as X
 from . import scene_naming as SN
 from . import session
+from . import shot_scene as SS
 from .core import animset as A
 from .core import export_plan as E
+from .core import shot as SH
 
 
 class ExportTab(QtWidgets.QWidget):
     def __init__(self, s: session.AnimSession) -> None:
         super().__init__()
         self.session = s
-        self.job: X.SplitJob | None = None
+        self.job: "X.SplitJob | X.ShotJob | None" = None
         self.report: SN.Report | None = None
         self.blocked = ""  # 出力を止めている理由（空 = 出せる）
         self._tasks_done = False
@@ -119,9 +121,15 @@ class ExportTab(QtWidgets.QWidget):
         # ---- ショット
         sbox = QtWidgets.QGroupBox("ショット（<Shot>.fbx / <Shot>__<ModelId>.fbx）")
         sv = QtWidgets.QVBoxLayout(sbox)
-        self.shot_label = QtWidgets.QLabel("ショットの出力は準備中です（AN-8）")
-        self.shot_label.setEnabled(False)
+        self.shot_label = QtWidgets.QLabel()
+        self.shot_label.setWordWrap(True)
+        self.shot_label.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
         sv.addWidget(self.shot_label)
+        self.shot_btn = QtWidgets.QPushButton("ショットを出力")
+        self.shot_btn.setToolTip("ショットタブで開いているショットを書き出します: <Shot>.fbx（Ubercam + 小道具 + EVT_）と、キャラクターごとの <Shot>__<ModelId>.fbx（ルートジョイントの階層だけ・ショットの範囲でベイク）。\n"
+                                 "同じ名前のファイルは上書きされます。顔の .fctrack と <Shot>.shot.json も同じフォルダに書きます")
+        self.shot_btn.clicked.connect(lambda *_: self.start_shot())
+        sv.addWidget(self.shot_btn)
         v.addWidget(sbox)
 
         # ---- 進捗とログ
@@ -190,6 +198,7 @@ class ExportTab(QtWidgets.QWidget):
             it.setToolTip(f"{c['start']}〜{c['end']}（{c['end'] - c['start'] + 1} フレーム）")
             self.clip_list.addItem(it)
         self.open_btn.setEnabled(bool(dirs))
+        self.shot_label.setText(self._shot_text())
         self.recheck_btn.setEnabled(not busy)
         self.set_meshes_btn.setEnabled(not busy)
         for w in (self.all_btn, self.none_btn):
@@ -202,7 +211,41 @@ class ExportTab(QtWidgets.QWidget):
         ok = bool(self.session.data) and not busy and not reason
         self.model_btn.setEnabled(ok)
         self.anim_btn.setEnabled(ok and self.clip_list.count() > 0)
+        self.shot_btn.setEnabled(ok and self.session.shot is not None)
         self.block_label.setText(("⛔ 出力できません: " + reason) if reason and self.session.data else "")
+
+    def _shot_text(self) -> str:
+        sh = self.session.shot
+        if sh is None:
+            return "ショットが開かれていません（ショットタブで作る／開く）"
+        try:
+            d = E.resolve_shot_dir(sh, self.preset.currentData(), self._config(), project.root())
+        except E.ExportPlanError as exc:
+            return f"ショット {sh['shot']}: {exc}"
+        names = [E.shot_file(sh["shot"])] + [E.shot_file(f) for _, f in SH.character_files(sh)]
+        return f"ショット {sh['shot']}（{sh['range'][0]}〜{sh['range'][1]}、{sh['frameRate']} fps）\n出力先: {d.as_posix()}\nファイル: {', '.join(names)}"
+
+    def shot_problem(self) -> str:
+        """ショットを出せない理由（無ければ ""）。"""
+        sh = self.session.shot
+        if sh is None:
+            return "ショットが開かれていません"
+        errs = SH.errors(sh)
+        if errs:
+            return str(errs[0])
+        want = {30: "ntsc", 60: "ntscf"}[sh["frameRate"]]
+        have = cmds.currentUnit(query=True, time=True)
+        if have != want:
+            return f"シーンの時間単位（{have}）がショットのフレームレート（{sh['frameRate']} fps）と違います（命名タブで直す）"
+        if not any(cmds.objExists(c["node"]) for c in sh["cameras"]):
+            return "シーンにあるカメラの区間がありません（ショットタブでカメラを足してください）"
+        for ch in sh["characters"]:
+            try:
+                aset = SS.animset_for(ch["modelId"], self.session.data)
+                SS.character_joints(ch, aset)
+            except (A.AnimSetError, ValueError) as exc:
+                return str(exc)
+        return ""
 
     def check_names(self) -> bool:
         """命名の検査をして、❌ があれば出力を止める。出せるなら True。"""
@@ -238,9 +281,9 @@ class ExportTab(QtWidgets.QWidget):
         d = self.session.data
         if d is None:
             return
-        found = X.skinned_meshes(d["skeletonRoot"])
+        found = X.skinned_meshes(A.root_name(d))
         if not found:
-            self._append(f"⚠ {d['skeletonRoot']} 以下にスキンされたメッシュが見つかりません")
+            self._append(f"⚠ {A.root_name(d)} 以下にスキンされたメッシュが見つかりません")
             return
         self.session.set_value("meshes", found)
         self._append(f"出力するメッシュを設定しました: {', '.join(found)}（上の「保存」で animset に保存）")
@@ -305,6 +348,37 @@ class ExportTab(QtWidgets.QWidget):
         self._update_buttons()
         return True
 
+    def start_shot(self) -> bool:
+        """ショットの出力を始める。命名の❌・ショットの問題・出力先のときは始めずに理由をログに出す。始めたら True。"""
+        sh = self.session.shot
+        if self.session.data is None or sh is None or self.job is not None:
+            if sh is None:
+                self._append("⛔ ショットが開かれていません")
+            return False
+        if not self.check_names():
+            self._append("⛔ " + self.blocked.splitlines()[0])
+            return False
+        why = self.shot_problem()
+        if why:
+            self._append("⛔ " + why)
+            return False
+        try:
+            out_dir = E.resolve_shot_dir(sh, self.preset.currentData(), self._config(), project.root())
+            animsets = {ch["modelId"]: SS.animset_for(ch["modelId"], self.session.data) for ch in sh["characters"]}
+            self.job = X.ShotJob(sh, out_dir, animsets)
+        except Exception as exc:  # noqa: BLE001
+            lifecycle.report_error("ショットの出力を始められません", traceback.format_exc())
+            self._append(f"⛔ 出力を始められませんでした: {exc}")
+            self.job = None
+            return False
+        self.progress.setRange(0, self.job.total)
+        self.progress.setValue(0)
+        self.progress.setVisible(True)
+        self._append(f"ショットの出力を始めました（{self.job.total} ファイル）。別プロセスで書き出すので Maya は操作できます")
+        self.timer.start()
+        self._update_buttons()
+        return True
+
     def poll(self) -> None:
         job = self.job
         if job is None:
@@ -328,6 +402,8 @@ class ExportTab(QtWidgets.QWidget):
         except Exception as exc:  # noqa: BLE001
             lifecycle.report_error("出力の結果を読めません", traceback.format_exc())
             self._append(f"✖ 出力に失敗しました: {exc}")
+        for line in getattr(job, "extra", []):
+            self._append(line)
         self._tasks_done = True
         self._update_buttons()
 

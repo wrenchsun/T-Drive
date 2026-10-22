@@ -75,7 +75,7 @@ def _run(tmp: Path) -> None:
     cam1 = cmds.rename(cmds.camera(name="CAM_Main")[0], "CAM_Main")
     cam2 = cmds.rename(cmds.camera(name="CAM_Close")[0], "CAM_Close")
     s = S.current()
-    s.new("MisotenChara", meshes=[rig["mesh"]])
+    s.new("MisotenChara", meshes=[rig["mesh"]], namespace="MisotenChara")
     for name, a, b in (("Idle", 0, 30), ("Run", 100, 118), ("Wave", 200, 230)):
         s.add_clip_from_range(name, a, b, direction="F" if name == "Run" else "")
     clips = {c["name"]: c for c in s.data["clips"]}
@@ -127,7 +127,7 @@ def _run(tmp: Path) -> None:
                 bad.append((t, p, round(cmds.getAttr(p), 2), round(expected[t][p], 2)))
     check("クリップ列がショットの先頭（10）から並ぶ（元のカーブのブレンドと一致）", not bad, str(bad[:4]))
     check("イベントのロケータ EVT_Hit / EVT_Finish が td グループの下にある", SS.event_frames("Opening01") == {"Hit": 70, "Finish": 200}, str(SS.event_frames("Opening01")))
-    check("ロケータの可視性は 0 → 1 のステップ", [cmds.getAttr("EVT_Hit.visibility", time=t) for t in (60, 69, 70, 100)] == [0, 0, 1, 1])
+    check("ロケータの ddEvent は 0 → 1 のステップ", [cmds.getAttr("EVT_Hit.ddEvent", time=t) for t in (60, 69, 70, 100)] == [0, 0, 1, 1])
     check("td ノードは出力の対象外の印（td 接頭辞）", all(n.startswith("td") for n in cmds.ls("tdShot_*") + cmds.ls("tdAnimComp_*", type="network")))
 
     # ---- 外す

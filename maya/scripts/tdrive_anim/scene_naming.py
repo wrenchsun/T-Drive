@@ -19,6 +19,7 @@ from maya import cmds
 
 from tdrive import project
 
+from .core import animset as A
 from .core import humanoid_map as H
 from .core import look_follow
 from .core import naming_rules as N
@@ -219,7 +220,7 @@ def inspect_scene(model_id: str, animset: dict[str, Any] | None = None) -> Repor
             rep.findings.append(f)
     taken = {N.strip_namespace(n) for n in cmds.ls(long=False) or []} | {c["name"] for c in (animset or {}).get("clips", [])}
     N.unique_suggestions(rep.findings, taken)
-    rep.settings = scene_settings((animset or {}).get("frameRate", prof.frame_rate), (animset or {}).get("skeletonRoot", ""))
+    rep.settings = scene_settings((animset or {}).get("frameRate", prof.frame_rate), A.root_name(animset) if animset else "")
     rep.cleanup = cleanup_candidates()
     return rep
 
@@ -377,18 +378,21 @@ def scene_joints(root: str) -> list[str]:
     return [N.strip_namespace(root)] + [N.strip_namespace(j) for j in reversed(found)]
 
 
-def scene_parents(joints: list[str]) -> dict[str, str | None]:
+def scene_parents(joints: list[str], ns: str = "") -> dict[str, str | None]:
+    """ジョイント名（ネームスペースなし）→ 親のジョイント名。`ns` はシーンでのネームスペース。"""
     out: dict[str, str | None] = {}
     have = set(joints)
+    pre = f"{ns}:" if ns else ""
     for j in joints:
-        if not cmds.objExists(j):
+        if not cmds.objExists(pre + j):
             continue
-        p = (cmds.listRelatives(j, parent=True, type="joint") or [None])[0]
+        p = (cmds.listRelatives(pre + j, parent=True, type="joint") or [None])[0]
+        p = N.strip_namespace(p) if p else None
         out[j] = p if p in have else None
     return out
 
 
-def humanoid_for(model_id: str, root: str) -> dict[str, Any]:
+def humanoid_for(model_id: str, root: str, ns: str = "") -> dict[str, Any]:
     """保存済みの対応表があればそれ、無ければシーンのジョイントから推定する（保存はしない）。壊れたファイルは推定にする。"""
     path = humanoid_path(model_id)
     if path.exists():
@@ -396,9 +400,9 @@ def humanoid_for(model_id: str, root: str) -> dict[str, Any]:
             return H.load(path)
         except H.HumanoidMapError:
             pass
-    return H.new_map(model_id, scene_joints(root), root)
+    return H.new_map(model_id, scene_joints(f"{ns}:{root}" if ns else root), root)
 
 
-def humanoid_problems(data: dict[str, Any], root: str) -> list[str]:
-    joints = scene_joints(root)
-    return H.validate(data, joints=joints, parents=scene_parents(joints))
+def humanoid_problems(data: dict[str, Any], root: str, ns: str = "") -> list[str]:
+    joints = scene_joints(f"{ns}:{root}" if ns else root)
+    return H.validate(data, joints=joints, parents=scene_parents(joints, ns))

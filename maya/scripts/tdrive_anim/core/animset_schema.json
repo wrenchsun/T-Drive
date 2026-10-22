@@ -12,6 +12,7 @@
     "units": { "const": "cm" },
     "upAxis": { "const": "Y" },
     "skeletonRoot": { "type": "string", "minLength": 1 },
+    "namespace": { "type": "string" },
     "meshes": { "type": "array", "items": { "type": "string" } },
     "clips": {
       "type": "array",

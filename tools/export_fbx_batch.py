@@ -2,6 +2,7 @@
 
   mayapy tools/export_fbx_batch.py <args.json>
   args.json:
+    mode "shot"（ショットの出力。`tdrive_anim.export.ShotJob`）: {"scene", "shot": {...}, "animsets": {ModelId: {...}}, "tasks": [{"type": "camera"|"character", ...}], "result"}
     mode 省略 / "model"（Toon のモデル。`tdrive_toon.export.ExportJob`）: {"scene": 一時シーン, "meshes": [...], "out": FBX パス, "result": 結果 JSON パス}
     mode "anim"（アニメーション作業台の分割出力。`tdrive_anim.export.SplitJob`）: {"scene", "animset": {...}, "tasks": [{"type": "model"|"clip", ...}], "result"}
 """
@@ -23,7 +24,11 @@ try:
 
     a = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
     mode = a.get("mode", "model")
-    if mode == "anim":
+    if mode == "shot":
+        from tdrive_anim import export as anim_export
+
+        res = anim_export.run_shot_tasks(a)
+    elif mode == "anim":
         try:
             cmds.loadPlugin("dx11Shader", quiet=True)  # 一時シーンの T-Drive プレビュー用ノードのため（裏のプロセスだけ）。読めなくても続ける
         except RuntimeError:

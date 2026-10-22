@@ -347,6 +347,8 @@ class BlendTab(QtWidgets.QWidget):
             return []
         d = self.session.data
         mask = next((l.get("maskRoot") for l in d.get("layers", []) if l["name"] == "UpperBody"), None) or "spine_C0_3_jnt"
+        if d.get("namespace") and ":" not in mask:
+            mask = f"{d['namespace']}:{mask}"
         if not cmds.objExists(mask):
             raise ValueError(f"UpperBody の maskRoot {mask} がシーンにありません")
         joints = [mask] + (cmds.listRelatives(mask, allDescendents=True, type="joint") or [])
@@ -355,7 +357,7 @@ class BlendTab(QtWidgets.QWidget):
         return [K.Layer(pls, joints, self.layer_weight.value() / 100.0, "UpperBody")]
 
     def _skeleton(self) -> list[str]:
-        root = self.session.data["skeletonRoot"]
+        root = A.root_name(self.session.data)
         if not cmds.objExists(root):
             raise ValueError(f"スケルトンのルート {root} がシーンにありません")
         return [root] + (cmds.listRelatives(root, allDescendents=True, type="joint") or [])
