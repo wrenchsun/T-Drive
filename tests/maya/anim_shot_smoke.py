@@ -27,6 +27,7 @@ sys.path.insert(0, str(REPO / "tests" / "maya"))
 from PySide6 import QtWidgets  # noqa: E402
 
 APP = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+QtWidgets.QMessageBox.question = staticmethod(lambda *a, **k: QtWidgets.QMessageBox.Yes)  # 確認ダイアログは常に「はい」（ヘッドレスで止まらないように）
 
 import maya.standalone  # noqa: E402
 
@@ -237,8 +238,9 @@ def _run(tmp: Path) -> None:
     shot_ui.start.setValue(0)
     shot_ui.end.setValue(60)
     shot_ui.fps.setCurrentIndex(1)
+    unit_before = cmds.currentUnit(query=True, time=True)
     shot_ui.create()
-    check("UI: 新規ショット（60 fps）でシーンの時間単位も合わせる", s.shot["shot"] == "Closing02" and s.shot["frameRate"] == 60 and cmds.currentUnit(query=True, time=True) == "ntscf")
+    check("UI: 新規ショット（60 fps）はシーンの時間単位を変えず、警告する（SF-2）", s.shot["shot"] == "Closing02" and s.shot["frameRate"] == 60 and cmds.currentUnit(query=True, time=True) == unit_before and "命名タブ" in shot_ui.message.text(), shot_ui.message.text())
     for t in (shot_ui, blend_ui):
         t.detach()
     s.listeners = [f for f in s.listeners if f not in (shot_ui.refresh, blend_ui.refresh)]

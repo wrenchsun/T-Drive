@@ -3,7 +3,7 @@
 - ショットは `shots/<Shot>.shot.json`（D-Drive の CutsceneData 1 つにあたる）。作った内容を Maya のシーンに反映するのが「ショットを反映」
   （再生範囲・Camera Sequencer・`EVT_` ロケータ・キャラクターの合成）
 - 出力は出力タブ（AN-8）。dx11Shader・Render Override は使わない
-- 操作感は Phase E に合わせる: 右クリック・1 操作 = 1 Undo・ツールチップに範囲と既定値・壊れた入力は警告だけ
+- 操作感は Phase E に合わせる: 1 操作 = 1 Undo・ツールチップに範囲と既定値・壊れた入力は警告だけ・捨てる前の確認（右クリックメニュー・検索欄はこのタブには無い）
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ from PySide6 import QtCore, QtWidgets
 from tdrive import lifecycle, project
 
 from . import composition as K
+from . import scene_naming as SN
 from . import session
 from . import shot_scene as SS
 from .core import animset as A
@@ -52,7 +53,7 @@ class ShotTab(QtWidgets.QWidget):
         self.fps = QtWidgets.QComboBox()
         self.fps.addItem("30 fps", 30)
         self.fps.addItem("60 fps", 60)
-        self.fps.setToolTip("D-Drive は 30 か 60。1 ショットの中は同じにします。作成すると、シーンの時間単位もこれに合わせます。既定: 30")
+        self.fps.setToolTip("D-Drive は 30 か 60。1 ショットの中は同じにします。シーンの時間単位は変えません（違うときは警告するので、命名タブの「直す」で合わせます）。既定: 30")
         f.addRow("フレームレート", self.fps)
         self.start = QtWidgets.QSpinBox()
         self.start.setRange(-100000, 1000000)
@@ -68,8 +69,10 @@ class ShotTab(QtWidgets.QWidget):
         f.addRow("範囲", rr)
         row = QtWidgets.QHBoxLayout()
         self.create_btn = QtWidgets.QPushButton("新規ショット")
+        self.create_btn.setToolTip("この名前・フレームレート・範囲で新しいショットを作ります（保存するまでファイルは書きません。シーンの時間単位は変えません）")
         self.create_btn.clicked.connect(lambda *_: self.create())
         self.open_btn = QtWidgets.QPushButton("開く…")
+        self.open_btn.setToolTip("既存の shot.json を開きます（未保存の変更は捨てます）")
         self.open_btn.clicked.connect(lambda *_: self.open_dialog())
         self.save_btn = QtWidgets.QPushButton("保存")
         self.save_btn.setToolTip("shots/<Shot>.shot.json に保存します（シーンの保存でも自動で保存されます）")
@@ -99,12 +102,15 @@ class ShotTab(QtWidgets.QWidget):
         self.cam_combo.setToolTip("シーンのカメラ（標準の persp などは除く）")
         self.cam_start = QtWidgets.QSpinBox()
         self.cam_start.setRange(-100000, 1000000)
+        self.cam_start.setToolTip("カメラを使い始めるフレーム。既定: ショットの開始")
         self.cam_end = QtWidgets.QSpinBox()
         self.cam_end.setRange(-100000, 1000000)
+        self.cam_end.setToolTip("カメラを使い終わるフレーム（含む）。既定: ショットの終了")
         self.cam_add = QtWidgets.QPushButton("区間を追加")
         self.cam_add.setToolTip("選んだカメラを、開始〜終了の区間で使います。ショットの範囲に収めてください")
         self.cam_add.clicked.connect(lambda *_: self.add_camera())
         self.cam_del = QtWidgets.QPushButton("削除")
+        self.cam_del.setToolTip("表で選んだカメラの区間を外します（Ctrl+Z で戻せます）")
         self.cam_del.clicked.connect(lambda *_: self.remove_camera())
         for w in (self.cam_combo, self.cam_start, self.cam_end, self.cam_add, self.cam_del):
             cr.addWidget(w)
@@ -135,6 +141,7 @@ class ShotTab(QtWidgets.QWidget):
         self.char_face.setToolTip("FacialController のプレビューにキーがあるとき、出力時に .fctrack も書きます（AN-8）")
         self.char_face.clicked.connect(lambda *_: self.toggle_face())
         self.char_del = QtWidgets.QPushButton("削除")
+        self.char_del.setToolTip("表で選んだキャラクターを外します（Ctrl+Z で戻せます）")
         self.char_del.clicked.connect(lambda *_: self.remove_character())
         for w in (self.ns_edit, self.char_add, self.char_seq, self.char_face, self.char_del):
             hr.addWidget(w)
@@ -142,7 +149,7 @@ class ShotTab(QtWidgets.QWidget):
         v.addWidget(hbox)
 
         # ---- イベント
-        ebox = QtWidgets.QGroupBox("イベント（EVT_<キー> のロケータ。D-Drive の Signal マーカーになります）")
+        ebox = QtWidgets.QGroupBox("イベント（EVT_<キー> のロケータ。D-Drive は未対応のため Signal マーカーにはなりません）")
         ev = QtWidgets.QVBoxLayout(ebox)
         self.ev_table = QtWidgets.QTableWidget(0, 2)
         self.ev_table.setHorizontalHeaderLabels(["フレーム", "キー"])
@@ -156,8 +163,10 @@ class ShotTab(QtWidgets.QWidget):
         self.ev_key = QtWidgets.QLineEdit()
         self.ev_key.setPlaceholderText("キー（例: Hit）")
         self.ev_add = QtWidgets.QPushButton("現在フレームに追加")
+        self.ev_add.setToolTip("タイムスライダーの現在フレームにイベントを足します。同じキーを複数回置くと EVT_Hit1 のように番号が付き、D-Drive では別のキーになるので警告します")
         self.ev_add.clicked.connect(lambda *_: self.add_event())
         self.ev_del = QtWidgets.QPushButton("削除")
+        self.ev_del.setToolTip("表で選んだイベントを外します（Ctrl+Z で戻せます）")
         self.ev_del.clicked.connect(lambda *_: self.remove_event())
         for w in (self.ev_key, self.ev_add, self.ev_del):
             er.addWidget(w)
@@ -174,14 +183,16 @@ class ShotTab(QtWidgets.QWidget):
         self.remove_btn.setToolTip("ショットがシーンに作ったもの（合成・shot ノード・イベントのロケータ）を外し、再生範囲を戻します")
         self.remove_btn.clicked.connect(lambda *_: self.remove())
         self.play_btn = QtWidgets.QPushButton("▶ シーケンサー再生")
+        self.play_btn.setToolTip("ショットの範囲を 1 回再生します（カメラの区間が切り替わります）")
         self.play_btn.clicked.connect(lambda *_: self.play())
         self.stop_btn = QtWidgets.QPushButton("■")
+        self.stop_btn.setToolTip("再生を止めます")
         self.stop_btn.clicked.connect(lambda *_: cmds.play(state=False))
         self.movie_btn = QtWidgets.QPushButton("動画を撮る")
         self.movie_btn.setToolTip("captures/shots/<Shot>.mov に playblast します（ビューポートが必要）")
         self.movie_btn.clicked.connect(lambda *_: self.capture())
-        self.hand_btn = QtWidgets.QPushButton("手付けキーのレイヤー")
-        self.hand_btn.setToolTip("選んだキャラクターの手付けキー用の animLayer（口パク・視線など）を作ります。出力のときはベイクされます")
+        self.hand_btn = QtWidgets.QPushButton("手付けキーのレイヤー（準備中）")
+        self.hand_btn.setToolTip("準備中: 合成中はコントローラに打ったキーがジョイントに届かず、出力にも入らないため使えません（docs/21 SP-2）。\n手付けのキーは、合成を外した状態のクリップ側に打ってください")
         self.hand_btn.clicked.connect(lambda *_: self.make_hand_layer())
         for w in (self.build_btn, self.remove_btn, self.play_btn, self.stop_btn, self.movie_btn, self.hand_btn):
             pv.addWidget(w)
@@ -218,8 +229,9 @@ class ShotTab(QtWidgets.QWidget):
         s = self._shot()
         has = s is not None
         for w in (self.save_btn, self.cam_add, self.cam_del, self.char_add, self.char_seq, self.char_face, self.char_del, self.ev_add, self.ev_del,
-                  self.build_btn, self.remove_btn, self.play_btn, self.stop_btn, self.movie_btn, self.hand_btn):
+                  self.build_btn, self.remove_btn, self.play_btn, self.stop_btn, self.movie_btn):
             w.setEnabled(has)
+        self.hand_btn.setEnabled(False)  # 準備中（SP-2）
         self.char_add.setEnabled(has and self.session.data is not None)
         self.create_btn.setEnabled(True)
         comps = SS.compositions(s["shot"]) if has else []
@@ -254,18 +266,58 @@ class ShotTab(QtWidgets.QWidget):
         table.resizeColumnsToContents()
 
     # ------------------------------------------------------------ ショット
+    def _confirm_discard(self, what: str) -> bool:
+        """未保存のショットを捨ててよいか（既定「いいえ」。UX-4）。"""
+        if not (self.session.shot is not None and self.session.shot_dirty):
+            return True
+        r = QtWidgets.QMessageBox.question(self, "T-Drive Animation", f"未保存のショットの変更があります。{what}と、その変更は失われます。続けますか？",
+                                           QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No)
+        return r == QtWidgets.QMessageBox.Yes
+
+    def _release_current(self) -> None:
+        """今のショットがシーンに作った合成・shot ノード・ロケータを外す（別のショットに切り替える前に。残すと前のショットのジョイントの合成が残る）。"""
+        s = self._shot()
+        if s is not None and SS.is_reflected(s["shot"]):
+            cmds.play(state=False)
+            SS.remove(s["shot"])
+
     def create(self) -> None:
         def go():
+            name = self.name.text().strip()
             fps = self.fps.currentData()
-            self.session.new_shot(self.name.text().strip(), fps, self.start.value(), self.end.value())
-            cmds.currentUnit(time={30: "ntsc", 60: "ntscf"}[fps])  # シーンの時間単位を合わせる（Maya の既定の変換）
-            self._say(f"ショット {self.name.text().strip()} を作りました。カメラ・キャラクター・イベントを足して「ショットを反映」")
+            if not self._confirm_discard("新規にする"):
+                return
+            existing = self.session.existing_shot(name) if name else None
+            overwrite = False
+            if existing is not None:  # 既存の shot.json を確認なしに上書きしない（UX-3 と同じ）
+                r = QtWidgets.QMessageBox.question(self, "T-Drive Animation", f"{project.to_project_path(existing)} が既にあります。\n既存のものを開きますか？（「いいえ」で新規にして、保存時に上書きします）",
+                                                   QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No | QtWidgets.QMessageBox.Cancel, QtWidgets.QMessageBox.Yes)
+                if r == QtWidgets.QMessageBox.Cancel:
+                    return
+                if r == QtWidgets.QMessageBox.Yes:
+                    self._release_current()
+                    self.session.open_shot(existing)
+                    return
+                overwrite = True
+            self._release_current()
+            self.session.new_shot(name, fps, self.start.value(), self.end.value())
+            if overwrite:
+                self.session.confirm_shot_overwrite()
+            note = ""
+            have = SN.scene_fps()
+            if have != fps:  # SF-2: 時間単位は勝手に変えない（キーのフレーム番号が変わり、animset のクリップ範囲とずれる）
+                note = (f"\n⚠ シーンの時間単位は {have or '30 / 60 以外の'} fps です。ショットは {fps} fps なので、命名タブの「直す」で時間単位を合わせてください"
+                        "（Maya の既定ではキーの実時間が保たれ、フレーム番号が変わります）")
+            self._say(f"ショット {name} を作りました。カメラ・キャラクター・イベントを足して「ショットを反映」{note}")
 
         self._guard(go)
 
     def open_dialog(self) -> None:
+        if not self._confirm_discard("開く"):
+            return
         picked = cmds.fileDialog2(fileMode=1, caption="shot.json を開く", fileFilter="shot (*.shot.json)", startingDirectory=project.shots_dir().as_posix())
         if picked:
+            self._release_current()
             self._guard(self.session.open_shot, picked[0])
 
     def save(self) -> None:
@@ -374,7 +426,7 @@ class ShotTab(QtWidgets.QWidget):
             path, why = SS.capture_movie(s)
             self._say(f"動画を撮りました: {project.to_project_path(path)}" if path else f"⚠ {why}")
 
-    def make_hand_layer(self) -> None:
+    def make_hand_layer(self) -> None:  # 準備中（SP-2）。ボタンは使えない状態にしてある
         s = self._shot()
         r = self._selected(self.char_table)
         if s is None or not s["characters"]:
@@ -385,6 +437,6 @@ class ShotTab(QtWidgets.QWidget):
 
     def detach(self) -> None:
         s = self._shot()
-        if s is not None and SS.compositions(s["shot"]):
+        if s is not None and SS.is_reflected(s["shot"]):
             cmds.play(state=False)
-            SS.remove(s["shot"])  # 閉じるときは合成を外して、保存したシーンに合成が残らないようにする
+            SS.remove(s["shot"])  # 閉じるときは反映したもの（合成・shot ノード・ロケータ・再生範囲）を外す（SF-18）

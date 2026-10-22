@@ -36,9 +36,9 @@
 <h2>はじめかた</h2>
 <ol>
 <li>Maya にキャラクターのシーンを開きます</li>
-<li>Animation タブの上の欄に <strong>ModelId</strong> を入れて「新規」を押します。ModelId は英数字の「大文字で始まる」名前です（例: <code>MisotenChara</code>）</li>
+<li>Animation タブの上の欄に <strong>ModelId</strong> を入れて「新規」を押します。ModelId は英数字の「大文字で始まる」名前です（例: <code>MisotenChara</code>）。<strong>その ModelId の animset が既にあるときは「既存を開く」か「新規にして上書きする」かを聞かれます</strong>（既定は「既存を開く」。上書きすると中のクリップの記録が失われます）。未保存の変更があるときの「新規」「開く…」も確認が出ます</li>
 <li>リグを参照して読み込んだシーン（ネームスペースがある）では、その下の「リグのネームスペース」欄にネームスペースを入れます（例: <code>MisotenChara</code>）。ネームスペースの無いシーンは空のままです</li>
-<li>「保存」を押すと、プロジェクトの <span class="path">anim/&lt;ModelId&gt;/animset.json</span> ができます。シーンを保存したときも自動で保存され、シーンを開き直すと自動で読み込まれます</li>
+<li>「保存」を押すと、プロジェクトの <span class="path">anim/&lt;ModelId&gt;/animset.json</span> ができます。シーンを保存したときも自動で保存され（シーンにはその場所が一緒に記録されます）、シーンを開き直すと自動で読み込まれます。新しいシーンにしたときは、前のシーンの animset は閉じます（未保存の変更は破棄され、その旨が出ます）</li>
 </ol>
 <div class="warn">ModelId の <code>MisotenChara</code> は<strong>仮の決め</strong>です（ファイル名から付けました）。MS2026 側で別の名前に決まったら、ここを変えれば他は追従します。</div>
 

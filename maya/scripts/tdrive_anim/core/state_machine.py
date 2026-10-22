@@ -86,17 +86,27 @@ def validate(graph: dict[str, Any], clips: Iterable[dict[str, Any]] = ()) -> lis
     out: list[str] = []
     if not isinstance(graph, dict) or graph.get("format") != FORMAT:
         return [f"状態図ではありません（format が {FORMAT} ではない）"]
-    names = {c["name"] for c in clips}
-    params = {p.get("name") for p in graph.get("parameters", [])}
-    states = {s.get("name"): s for s in graph.get("states", [])}
-    if not states:
+
+    def dicts(key: str) -> list[dict[str, Any]]:
+        v = graph.get(key)
+        if v is None:
+            return []
+        if not isinstance(v, list) or not all(isinstance(x, dict) for x in v):
+            out.append(f"{key} はオブジェクトの配列にしてください")
+            return []
+        return v
+
+    names = {c.get("name") for c in clips if isinstance(c, dict)}
+    params = {p.get("name") for p in dicts("parameters")}
+    states = {s.get("name"): s for s in dicts("states")}
+    if not states and not out:
         out.append("状態がありません")
     for n, s in states.items():
         if not s.get("clip"):
             out.append(f"状態 {n} にクリップが割り当てられていません")
         elif names and s["clip"] not in names:
             out.append(f"状態 {n} のクリップ {s['clip']} が animset にありません")
-    for i, t in enumerate(graph.get("transitions", [])):
+    for i, t in enumerate(dicts("transitions")):
         where = f"遷移 {i + 1}（{t.get('from')} → {t.get('to')}）"
         if t.get("from") != ANY and t.get("from") not in states:
             out.append(f"{where}: 元の状態がありません")
@@ -106,6 +116,9 @@ def validate(graph: dict[str, Any], clips: Iterable[dict[str, Any]] = ()) -> lis
         if isinstance(d, bool) or not isinstance(d, (int, float)) or d < 0:
             out.append(f"{where}: 長さは 0 以上の秒")
         conds = t.get("conditions") or []
+        if not isinstance(conds, list) or not all(isinstance(c, dict) for c in conds):
+            out.append(f"{where}: conditions はオブジェクトの配列にしてください")
+            continue
         if not conds:
             out.append(f"{where}: 条件がありません（すぐに遷移し続けます）")
         for c in conds:

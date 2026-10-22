@@ -3,7 +3,7 @@
 - `td` 接頭辞のノード（`tdShot_*` `tdAnimComp_*` `tdShotHand_*`）は**出力の対象外**（プレビュー用。docs/20 §2.2）
 - カメラの区間は Maya 標準の Camera Sequencer（`shot` ノード `tdShot_<Shot>_<n>`）に同期する。ビューポートでの切り替えはシーケンサー再生で確認する
 - キャラクターのクリップ列は `composition.compose`（`shot_<Shot>_<ModelId>` の名前）。ショットの範囲の先頭から並べる。手で打つキー（口パク・視線など）は
-  合成の上の animLayer `tdShotHand_<Shot>_<ModelId>` に打つ（出力時はベイクされる）
+  合成の上の animLayer `tdShotHand_<Shot>_<ModelId>` に打つ予定だったが、**準備中**（合成中はコントローラのキーがジョイントに届かない。docs/21 SP-2）
 - イベント `EVT_<キー>` は `tdShot_<Shot>` の下のロケータ。**カスタムアトリビュート `ddEvent`（整数）が 0 → 1 に切り替わるフレームがイベントの時刻**
   （D-Drive の「EVT_ ロケーターにアトリビュートを足してキーを打つ」方式。ステップキー。docs/26 §5.5）
 - dx11Shader・Render Override は使わない
@@ -189,15 +189,31 @@ def compositions(shot_name: str) -> list[str]:
 
 
 def hand_layer(shot_name: str, model_id: str) -> str:
-    """手付けキー用の animLayer を作る（あれば何もしない）。キーを打ちたいコントローラを選んで、レイヤーに追加して使う。"""
+    """手付けキー用の animLayer を作る（あれば何もしない）。**準備中**（docs/21 SP-2）: 合成はジョイントのつながりを切り離して
+    サンプルしたカーブでつなぎ直すので、コントローラに打ったレイヤーのキーはジョイントに届かず、出力にも入らない。UI からは呼ばない。"""
     name = f"{HAND_PREFIX}{shot_name}_{model_id}"
     if not cmds.objExists(name):
         name = cmds.animLayer(name)
     return name
 
 
+def is_reflected(shot_name: str) -> bool:
+    """このショットがシーンに作ったもの（合成・shot ノード・イベントのロケータ・再生範囲の控え）が残っているか。"""
+    g = group_name(shot_name)
+    return bool(compositions(shot_name) or cmds.ls(f"{GROUP_PREFIX}{shot_name}_*", type="shot")
+                or (cmds.objExists(g) and (event_locators(shot_name) or cmds.attributeQuery("tdPlayback", node=g, exists=True))))
+
+
 def build(shot: dict[str, Any], current: dict[str, Any] | None = None) -> dict[str, Any]:
-    """ショットをシーンに反映する: グループ・再生範囲・カメラ区間・イベント・キャラクターの合成。戻り値: 結果と警告。"""
+    """ショットをシーンに反映する: グループ・再生範囲・カメラ区間・イベント・キャラクターの合成。戻り値: 結果と警告。
+    全体で Maya の Undo 1 回にまとめる（SF-6）。"""
+    from .scene_naming import undo_chunk
+
+    with undo_chunk("tdShotBuild"):
+        return _build(shot, current)
+
+
+def _build(shot: dict[str, Any], current: dict[str, Any] | None) -> dict[str, Any]:
     ensure_group(shot)
     try:
         apply_range(shot)

@@ -15,6 +15,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .fileio import write_text_atomic
+
 FORMAT = "TDriveAnimSet"
 VERSION = 1
 FRAME_RATES = (30, 60)
@@ -35,6 +37,10 @@ DEFAULT_EXPORT = {"modelDir": "", "animDir": "", "category": "Player"}
 
 class AnimSetError(ValueError):
     """読めない（JSON が壊れている・別の形式）・操作できない（名前の重複）。"""
+
+
+class AnimSetExists(AnimSetError):
+    """新規の animset の保存先に、確かめていない既存のファイルがある（上書きしない）。"""
 
 
 @dataclass
@@ -112,7 +118,55 @@ def loads(text: str) -> dict[str, Any]:
         raise AnimSetError(f"animset.json を読めません（JSON が壊れています）: {exc}") from exc
     if not isinstance(raw, dict) or raw.get("format") != FORMAT:
         raise AnimSetError(f"animset.json ではありません（format が {FORMAT} ではない）")
+    bad = type_problems(raw)
+    if bad:
+        more = f"（ほか {len(bad) - 3} 件）" if len(bad) > 3 else ""
+        raise AnimSetError("animset.json の中身の型が壊れています: " + " / ".join(bad[:3]) + more)
     return normalize(raw)
+
+
+def type_problems(raw: dict[str, Any]) -> list[str]:
+    """画面・出力が読む所の値の型が壊れていないか（JSON としては正しくても、clips が文字列など）。壊れた所の一覧（空なら OK）。
+    値の中身（範囲の逆転・名前の形）は `validate` が見る。ここは「読んだだけで画面が例外になる」ものだけ。"""
+    out: list[str] = []
+
+    def is_list_of_dicts(v: Any) -> bool:
+        return isinstance(v, list) and all(isinstance(x, dict) for x in v)
+
+    for key in ("clips", "layers"):
+        if key in raw and not is_list_of_dicts(raw[key]):
+            out.append(f"{key} はオブジェクトの配列にしてください")
+    if "meshes" in raw and not (isinstance(raw["meshes"], list) and all(isinstance(m, str) for m in raw["meshes"])):
+        out.append("meshes は文字列の配列にしてください")
+    if "export" in raw and not isinstance(raw["export"], dict):
+        out.append("export はオブジェクトにしてください")
+    if isinstance(raw.get("clips"), list):
+        for i, c in enumerate(raw["clips"]):
+            if not isinstance(c, dict):
+                continue
+            for k in ("start", "end"):
+                if k in c and not _is_int(c[k]):
+                    out.append(f"clips[{i}].{k} は整数にしてください")
+            if "name" in c and not isinstance(c["name"], str):
+                out.append(f"clips[{i}].name は文字列にしてください")
+            if "events" in c and not is_list_of_dicts(c["events"]):
+                out.append(f"clips[{i}].events はオブジェクトの配列にしてください")
+    if isinstance(raw.get("layers"), list):
+        for i, l in enumerate(raw["layers"]):
+            if isinstance(l, dict) and "name" in l and not isinstance(l["name"], str):
+                out.append(f"layers[{i}].name は文字列にしてください")
+    sg = raw.get("stateGraph")
+    if sg is not None:
+        if not isinstance(sg, dict):
+            out.append("stateGraph はオブジェクトにしてください")
+        else:
+            for key in ("parameters", "states", "transitions"):
+                if key in sg and not is_list_of_dicts(sg[key]):
+                    out.append(f"stateGraph.{key} はオブジェクトの配列にしてください")
+            for i, t in enumerate(sg.get("transitions") or []):
+                if isinstance(t, dict) and "conditions" in t and not is_list_of_dicts(t["conditions"]):
+                    out.append(f"stateGraph.transitions[{i}].conditions はオブジェクトの配列にしてください")
+    return out
 
 
 def dumps(data: dict[str, Any]) -> str:
@@ -129,10 +183,7 @@ def load(path: str | Path) -> dict[str, Any]:
 
 
 def save(path: str | Path, data: dict[str, Any]) -> Path:
-    p = Path(path)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(dumps(data), encoding="utf-8", newline="\n")
-    return p
+    return write_text_atomic(path, dumps(data))
 
 
 def newer_version(data: dict[str, Any]) -> bool:

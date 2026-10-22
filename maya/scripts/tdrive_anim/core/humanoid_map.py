@@ -17,6 +17,8 @@ import re
 from pathlib import Path
 from typing import Any, Iterable
 
+from .fileio import write_text_atomic
+
 FORMAT = "TDriveHumanoidMap"
 VERSION = 1
 
@@ -180,7 +182,4 @@ def load(path: str | Path) -> dict[str, Any]:
 
 
 def save(path: str | Path, data: dict[str, Any]) -> Path:
-    p = Path(path)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(dumps(data), encoding="utf-8", newline="\n")
-    return p
+    return write_text_atomic(path, dumps(data))

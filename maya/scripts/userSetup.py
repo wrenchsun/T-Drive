@@ -41,8 +41,11 @@ def _tdrive_facial_early():
 
 def _tdrive_anim_early():
     """アニメーション作業台のシーンの出来事（文字列の scriptJob。dx11 には触れない）。"""
-    for event, call in (("SceneOpened", "on_scene_opened"), ("SceneSaved", "on_scene_saved")):
+    for event, call in (("NewSceneOpened", "on_new_scene"), ("SceneOpened", "on_scene_opened"), ("SceneSaved", "on_scene_saved")):
         cmds.scriptJob(event=[event, f"from tdrive_anim import session; session.{call}()"], protected=True)
+    from tdrive_anim import session  # 保存の直前に animset / ショットの場所をシーンへ記録する MSceneMessage（import で登録される）
+
+    session.install_scene_callbacks()
 
 
 def _tdrive_startup():

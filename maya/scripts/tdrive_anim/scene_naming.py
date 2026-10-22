@@ -169,6 +169,11 @@ def scene_settings(frame_rate: int, skeleton_root: str = "") -> list[SettingIssu
     return out
 
 
+def scene_fps() -> int | None:
+    """シーンの時間単位が 30 / 60 fps のときそのフレームレート、それ以外（film の 24 fps など）は None。"""
+    return {"ntsc": 30, "ntscf": 60}.get(cmds.currentUnit(query=True, time=True))
+
+
 def _fps_label(unit: str) -> str:
     return {"film": "24 fps", "ntsc": "30 fps", "ntscf": "60 fps", "pal": "25 fps", "game": "15 fps", "show": "48 fps"}.get(unit, unit)
 

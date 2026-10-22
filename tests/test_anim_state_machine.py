@@ -150,3 +150,13 @@ def test_unassigned_clip_blocks_placements():
     r = M.evaluate(g, [(1.0, {"ActionState": 2})], 3.0, FPS)
     with pytest.raises(S.SequenceError):
         M.to_placements(r, {c["name"]: c for c in d["clips"]}, FPS)
+
+
+def test_validate_survives_wrongly_typed_graph():
+    """UX-2: 型の壊れた状態図で例外にならず、問題として返す。"""
+    for bad in ({"format": M.FORMAT, "states": ["Idle"]},
+                {"format": M.FORMAT, "states": [{"name": "Idle", "clip": "A"}], "transitions": ["x"]},
+                {"format": M.FORMAT, "states": [{"name": "Idle", "clip": "A"}], "transitions": [{"from": "Idle", "to": "Idle", "conditions": ["c"]}]},
+                {"format": M.FORMAT, "parameters": "Speed", "states": []},
+                {"format": M.FORMAT, "states": {"a": 1}}):
+        assert M.validate(bad, [{"name": "A"}]) != []

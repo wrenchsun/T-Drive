@@ -17,6 +17,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .fileio import write_text_atomic
+
 PRESETS = ("default", "ms2026", "ddrive", "custom")
 PRESET_LABEL = {"default": "既定（build/unity/<ModelId>）", "ms2026": "MS2026 の SourceAssets", "ddrive": "D-Drive の SourceAssets", "custom": "animset の指定先"}
 STATE_NAME = ".export-state.json"
@@ -113,9 +115,7 @@ def load_state(path: str | Path) -> dict[str, Any]:
 
 
 def save_state(path: str | Path, state: dict[str, Any]) -> None:
-    p = Path(path)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(state, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
+    write_text_atomic(path, json.dumps(state, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
 
 
 def changed_clips(clips: list[str], fingerprints: dict[str, str], state: dict[str, Any], anim_dir: str | Path) -> list[str]:

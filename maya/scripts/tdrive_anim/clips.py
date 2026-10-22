@@ -66,6 +66,12 @@ def play(clip: dict[str, Any]) -> None:
         cmds.play(forward=True)
 
 
+def forget() -> None:
+    """再生前の状態の控えを捨てる（別のシーンを開いた・新しいシーンにしたとき。前のシーンの範囲・時刻を書き戻さない）。"""
+    global _saved
+    _saved = None
+
+
 def stop() -> None:
     """再生を止めて、元の再生範囲・時刻・ループ設定に戻す。再生中でなければ何もしない。"""
     global _saved

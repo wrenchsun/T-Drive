@@ -347,8 +347,9 @@ def export_shot_character_in_place(shot: dict[str, Any], index: int, animset: di
     cmds.bakeResults(joints, time=(lo, hi), simulation=True, sampleBy=1, disableImplicitControl=True, preserveOutsideKeys=False,
                      sparseAnimCurveBake=False, minimizeRotation=True, controlPoints=False, shape=False, attribute=list(TRS))
     junk = (cmds.ls(joints, dagObjects=True, type="constraint", long=True) or []) + (cmds.ls("tdAnimComp_*") or [])
-    if junk:  # 空のリストを cmds.delete に渡さない
-        cmds.delete([n for n in junk if cmds.objExists(n)])
+    existing = [n for n in junk if cmds.objExists(n)]  # 先に絞り込む（コンストレイントの削除に巻き込まれて先に消えたものがある。CR-2）
+    if existing:  # 空のリストを cmds.delete に渡さない
+        cmds.delete(existing)
     root = SS.character_root(ch, animset)
     ns = ch.get("namespace") or ""
     if ns:  # FBX のジョイント名にネームスペースを付けない（SK_<ModelId>.fbx と同じ名前にする）

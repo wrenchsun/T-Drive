@@ -5,9 +5,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "maya/scripts"
-# 検査の対象: Toon・殻（tdrive）・FacialController（tdrive_facial。Maya 非依存の core は別のテストが見る）
+# 検査の対象: Toon・殻（tdrive）・FacialController（tdrive_facial）・Animation（tdrive_anim）。Maya 非依存の core は別のテストが見る
 UI_FILES = sorted(
-    [*(SCRIPTS / "tdrive_toon").glob("ui*.py"), *(SCRIPTS / "tdrive").glob("*.py"), *(SCRIPTS / "tdrive_facial").glob("*.py")]
+    [*(SCRIPTS / "tdrive_toon").glob("ui*.py"), *(SCRIPTS / "tdrive").glob("*.py"), *(SCRIPTS / "tdrive_facial").glob("*.py"),
+     *(SCRIPTS / "tdrive_anim").glob("*.py")]
 )
 
 
@@ -58,7 +59,7 @@ import ast  # noqa: E402
 
 TOOL_FILES = sorted(
     f
-    for pkg in ("tdrive_toon", "tdrive", "tdrive_facial")
+    for pkg in ("tdrive_toon", "tdrive", "tdrive_facial", "tdrive_anim")
     for f in (SCRIPTS / pkg).glob("*.py")
     if not (f.parent.name == "tdrive_toon" and f.read_text(encoding="utf-8").lstrip().startswith('"""転送モジュール'))
 )  # 転送モジュールは本体（tdrive/）を検査する
@@ -90,7 +91,8 @@ def test_forwarding_modules_share_the_moved_module():
 def test_reload_handles_all_packages():
     """リロードは tdrive_toon だけでなく tdrive（殻）・tdrive_facial のモジュールも捨てて読み直す。"""
     src = (ROOT / "maya/mcp_scripts/reload_tdrive.py").read_text(encoding="utf-8")
-    assert '"tdrive_toon", "tdrive", "tdrive_facial"' in src
+    assert '"tdrive_toon", "tdrive", "tdrive_facial", "tdrive_anim"' in src
+    assert "tdrive_anim.session" in src and "anim_carry" in src  # CR-3: Animation の未保存データも引き継ぐ
 
 
 def test_reload_runs_cleanups_before_dropping_modules():

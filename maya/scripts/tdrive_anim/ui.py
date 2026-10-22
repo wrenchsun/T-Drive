@@ -7,12 +7,13 @@ UI はセッション層（session.current()）の薄いラッパー。操作は
 
 from __future__ import annotations
 
+import traceback
 from pathlib import Path
 
 from maya import cmds
 from PySide6 import QtWidgets
 
-from tdrive import project, shell
+from tdrive import lifecycle, project, shell
 
 from . import session
 from .core import animset as A
@@ -51,9 +52,10 @@ class HeaderBar(QtWidgets.QWidget):
         self.model_id.setToolTip("英数字の PascalCase。D-Drive の Model 識別子・カットシーンの __<ModelId>・ネームスペースに使います。\n既定: MisotenChara（仮。docs/20 §9）")
         row.addWidget(self.model_id, 1)
         self.new_btn = QtWidgets.QPushButton("新規")
-        self.new_btn.setToolTip("この ModelId で animset を新しく作ります（保存するまでファイルは書きません）")
+        self.new_btn.setToolTip("この ModelId で animset を新しく作ります（保存するまでファイルは書きません。既にあるときは開くか上書きかを聞きます）")
         self.new_btn.clicked.connect(lambda *_: self._new())
         self.open_btn = QtWidgets.QPushButton("開く…")
+        self.open_btn.setToolTip("既存の animset.json を開きます（未保存の変更とエディタ内の Undo は捨てます）")
         self.open_btn.clicked.connect(lambda *_: self._open())
         self.save_btn = QtWidgets.QPushButton("保存")
         self.save_btn.setToolTip("animset.json を保存します（シーンを保存したときも自動で保存されます）")
@@ -92,13 +94,46 @@ class HeaderBar(QtWidgets.QWidget):
         if s.data is not None and not self.namespace.hasFocus():
             self.namespace.setText(s.data.get("namespace", "") or "")
 
+    def _confirm_discard(self, what: str) -> bool:
+        """未保存の変更を捨ててよいか（既定「いいえ」。Toon の `_confirm_discard` と同じ作法。UX-4）。"""
+        if not self.session.has_unsaved_work:
+            return True
+        r = QtWidgets.QMessageBox.question(self, "T-Drive Animation", f"未保存の変更があります。{what}と、その変更は失われます。続けますか？",
+                                           QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No)
+        return r == QtWidgets.QMessageBox.Yes
+
     def _new(self) -> None:
+        mid = self.model_id.text().strip() or "MisotenChara"
+        if not self._confirm_discard("新規にする"):
+            return
         try:
-            self.session.new(self.model_id.text().strip() or "MisotenChara")
+            existing = self.session.existing_default(mid)
+            if existing is not None:  # UX-3: 既存の animset を確認なしに上書きしない
+                box = QtWidgets.QMessageBox(self)
+                box.setWindowTitle("T-Drive Animation")
+                box.setText(f"{project.to_project_path(existing)} が既にあります。")
+                box.setInformativeText("既存のものを開きますか？ 新規にして保存すると、既存のクリップの記録は上書きで失われます。")
+                open_btn = box.addButton("既存を開く", QtWidgets.QMessageBox.AcceptRole)
+                over_btn = box.addButton("新規にして上書きする", QtWidgets.QMessageBox.DestructiveRole)
+                box.addButton("キャンセル", QtWidgets.QMessageBox.RejectRole)
+                box.setDefaultButton(open_btn)
+                box.exec()
+                clicked = box.clickedButton()
+                if clicked is open_btn:
+                    self.session.open(existing)
+                    return
+                if clicked is not over_btn:
+                    return
+                self.session.new(mid)
+                self.session.confirm_overwrite()
+                return
+            self.session.new(mid)
         except Exception as exc:  # noqa: BLE001
             _warn(self, exc)
 
     def _open(self) -> None:
+        if not self._confirm_discard("開く"):
+            return
         start = project.anim_dir()
         picked = cmds.fileDialog2(fileMode=1, caption="animset.json を開く", fileFilter="animset (*.json)", startingDirectory=start.as_posix())
         if picked:
@@ -141,8 +176,18 @@ class AnimPanel(QtWidgets.QWidget):
         self.shot_tab.blend_tab = self.blend_tab  # 遷移列の受け渡し（ブレンドタブ ⇄ ショットタブ）
         self.blend_tab.shot_tab = self.shot_tab
 
+        self.tabs.currentChanged.connect(lambda *_: self._refresh_current())  # UX-1: 前に出したタブを描き直す（前に出ていない間の変更を反映）
         self.session.listeners.append(self.refresh)
         self.refresh()
+
+    def _refresh_current(self) -> None:
+        current = self.tabs.currentWidget()
+        if current is None:
+            return
+        try:
+            current.refresh()
+        except Exception:  # noqa: BLE001  壊れたデータでタブ全体を止めない（UX-2）
+            lifecycle.report_error(f"{self.tabs.tabText(self.tabs.currentIndex())}タブの更新で例外", traceback.format_exc())
 
     def _all_tabs(self):
         return (self.naming_tab, self.clips_tab, self.blend_tab, self.shot_tab, self.export_tab)
@@ -159,9 +204,7 @@ class AnimPanel(QtWidgets.QWidget):
         issues = self.session.issues()
         self.warning.setText("\n".join(str(i) for i in issues[:5]) + (f"\n…ほか {len(issues) - 5} 件" if len(issues) > 5 else ""))
         self.warning.setVisible(bool(issues))
-        current = self.tabs.currentWidget()
-        if current is not None:
-            current.refresh()
+        self._refresh_current()
 
 
 class AnimTool:

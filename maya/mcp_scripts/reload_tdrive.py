@@ -1,10 +1,11 @@
-"""tdrive（殻）・tdrive_toon・tdrive_facial パッケージをリロードし、開いている Look があればプレビューを作り直す（MCP script.execute / メニュー用）。
+"""tdrive（殻）・tdrive_toon・tdrive_facial・tdrive_anim パッケージをリロードし、開いている Look があればプレビューを作り直す（MCP script.execute / メニュー用）。
 
 .fx / ToonCore.hlsl の変更も反映される（dx11Shader -reload は使わない。docs/09 §6）。
 **編集中の Look（未保存の変更・エディタ内 Undo を含む）とプレビュー環境（プロファイル・ライト）は引き継ぐ**。
 以前はファイルから開き直していたため、未保存の変更が消えていた（2026-09-28 修正）。
 **FacialController の開いているデータ（未保存の変更・保存先・Undo・選択・編集中の値）も引き継ぐ**（docs/19 M-3）。
 基準姿勢の編集状態はリロードの前に抜けてシーンを元へ戻し、編集中だったならリロード後に入り直して同じポーズを当て直す。
+**Animation の開いている animset・ショット（未保存の変更・保存先・エディタ内 Undo）も引き継ぐ**（docs/21 CR-3）。合成・クリップ再生は on_reload の後片付けで外れる。
 """
 
 import sys
@@ -38,6 +39,13 @@ if old_facial is not None:
             facial_carry["edit"] = edit_info
     except Exception as exc:  # noqa: BLE001  引き継げなければ目立つように知らせる（黙って消さない）
         cmds.warning(f"[T-Drive] FacialController のデータを引き継げませんでした。未保存の変更は失われます: {exc}")
+anim_carry = None  # Animation の開いている animset・ショット（未保存の変更・Undo を含む。CR-3）
+old_anim = sys.modules.get("tdrive_anim.session")
+if old_anim is not None:
+    try:
+        anim_carry = old_anim.current().export_state()
+    except Exception as exc:  # noqa: BLE001  引き継げなければ目立つように知らせる（黙って消さない）
+        cmds.warning(f"[T-Drive] Animation のデータを引き継げませんでした。未保存の変更は失われます: {exc}")
 env = dict(getattr(old_preview, "_env", {})) if old_preview is not None else {}
 editor_open = False
 editor_control = None
@@ -109,6 +117,15 @@ if facial_carry is not None:
         print("tdrive_facial reloaded; データを引き継ぎました（未保存の変更・Undo・選択を含む）")
     except Exception as exc:  # noqa: BLE001
         cmds.warning(f"[T-Drive] FacialController のデータを引き継げませんでした。未保存の変更は失われます: {exc}")
+
+try:
+    from tdrive_anim import session as anim_session  # import で保存直前のコールバックも登録し直す
+
+    if anim_carry is not None:
+        anim_session.current().import_state(anim_carry)
+        print("tdrive_anim reloaded; データを引き継ぎました（未保存の変更・Undo を含む）")
+except Exception as exc:  # noqa: BLE001
+    cmds.warning(f"[T-Drive] Animation のデータを引き継げませんでした。未保存の変更は失われます: {exc}")
 
 if editor_open:
     shell.restore(editor_control)  # 同じドッキング位置に新しいコードのエディタを作り直す
