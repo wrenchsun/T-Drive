@@ -87,3 +87,34 @@ def test_shot_dirs(tmp_path):
     assert E.shot_file("Opening01") == "Opening01.fbx"
     with pytest.raises(E.ExportPlanError):
         E.shot_file("Open@ing")
+
+
+# ---------------------------------------------------------------- docs/21 CR-6: 出力先の安全
+import subprocess  # noqa: E402
+
+
+def _git_repo(path, branch):
+    subprocess.run(["git", "init", "-q", "-b", branch, str(path)], check=True)
+    subprocess.run(["git", "-C", str(path), "-c", "user.name=t", "-c", "user.email=t@t", "commit", "--allow-empty", "-q", "-m", "x"], check=True)
+
+
+def test_ddrive_main_branch_is_blocked_and_feature_branch_is_allowed(tmp_path):
+    from tdrive_anim.core import export_plan as EP
+
+    repo = tmp_path / "ddrive"
+    repo.mkdir()
+    _git_repo(repo, "main")
+    cfg = {"animDdriveRoot": str(repo)}
+    assert EP.git_branch(repo) == "main"
+    assert "main" in EP.write_problem("ddrive", cfg)
+    subprocess.run(["git", "-C", str(repo), "checkout", "-q", "-b", "tdrive-facial"], check=True)
+    assert EP.write_problem("ddrive", cfg) == ""
+    assert EP.write_problem("default", cfg) == "" and EP.write_problem("ddrive", {}) == ""  # パス未設定は resolve_dirs が止める
+    assert EP.git_branch(tmp_path / "nothing") is None
+
+
+def test_ms2026_asks_before_writing():
+    from tdrive_anim.core import export_plan as EP
+
+    assert "MS2026" in EP.write_warning("ms2026") and "読み取りのみ" in EP.write_warning("ms2026")
+    assert EP.write_warning("default") == "" and EP.write_warning("ddrive") == ""

@@ -81,6 +81,39 @@ def resolve_shot_dir(shot: dict[str, Any], preset: str, config: dict[str, Any], 
     raise ExportPlanError(f"出力先のプリセットが不明です: {preset}")
 
 
+PROTECTED_BRANCHES = ("main", "master")
+
+
+def git_branch(repo: str | Path) -> str | None:
+    """`repo` の今のブランチ名（git が無い・リポジトリでない・detached HEAD は None）。"""
+    import subprocess
+
+    try:
+        r = subprocess.run(["git", "-C", str(repo), "rev-parse", "--abbrev-ref", "HEAD"], capture_output=True, text=True, timeout=10,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except (OSError, subprocess.SubprocessError):
+        return None
+    name = r.stdout.strip()
+    return name if r.returncode == 0 and name and name != "HEAD" else None
+
+
+def write_problem(preset: str, config: dict[str, Any]) -> str:
+    """プリセットの出力先に書くのを止める理由（無ければ ""）。D-Drive は main / master に直接書かない（ブランチを切ってローカルで作業。CLAUDE.md）。"""
+    if preset == "ddrive":
+        root = config.get(CONFIG_KEYS["ddrive"])
+        branch = git_branch(root) if root else None
+        if branch in PROTECTED_BRANCHES:
+            return f"D-Drive が {branch} ブランチです。{branch} に直接書き出さず、ブランチを切ってから出力してください"
+    return ""
+
+
+def write_warning(preset: str) -> str:
+    """プリセットの出力先に書く前の確認文（無ければ ""）。MS2026 は読み取りのみの参照リポジトリ（CLAUDE.md）なので、毎回確かめる。"""
+    if preset == "ms2026":
+        return "MS2026 のフォルダへ直接書き出します。MS2026 は本来読み取りのみの参照リポジトリです（変更するとリポジトリが汚れます）。続けますか？"
+    return ""
+
+
 def shot_file(shot_name: str) -> str:
     """カメラ・小道具・イベントの FBX 名（`<Shot>.fbx`）。キャラクターは `shot.character_files` の `<Shot>__<ModelId>`。"""
     if "@" in shot_name:

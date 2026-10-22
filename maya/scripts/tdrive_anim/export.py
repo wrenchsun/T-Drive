@@ -2,10 +2,15 @@
 
 - **開いているシーンは壊さない**: 一時ファイルに書き出して、別プロセスの mayapy（`tools/export_fbx_batch.py` の `mode: "anim"`）が
   タスクごとにそのファイルを開き直し、整形して FBX を書く（ベイクはシーンを壊すので、タスクごとに新しく開く）
+- **合成中は出力しない**（`COMPOSITION_BLOCK`）: 一時シーンにジョイントが合成につながったまま書かれ、合成の動きが焼かれる。裏のプロセスでも、
+  シーンを開いた直後に合成を外す（`_prepare_scene`。SF-1）
 - モデル: Toon の `export_in_place` に相乗り（頂点カラー `tdToonMask`・UV `tdSmoothNormal`・参照のフラット化・`_tdToon` を元に戻す）。
   メッシュ + スケルトンのルート以下だけ。アニメーションは含めない・バインドポーズで書く
 - アニメーション: ルート以下のジョイントだけ。クリップ範囲で `bakeResults`（コントローラやコンストレイントは出さない）、
-  `rootMotion=none` は Hips の XZ をクリップ開始フレームの値に固定、範囲の先頭を 0 フレームへ寄せ、1 テイク（Maya の既定の名前 `Take 001`。D-Drive は最初の埋め込みクリップをファイル名で取り込むので、テイク名は使われない。名前付きのテイクを足すと 2 テイクになる）
+  `rootMotion=none` は **humanoid.json の Hips**（無ければスケルトンのルート）の XZ をクリップ開始フレームの値に固定、範囲の先頭を 0 フレームへ寄せ、
+  1 テイク（Maya の既定の名前 `Take 001`。D-Drive は最初の埋め込みクリップをファイル名で取り込むので、テイク名は使われない。名前付きのテイクを足すと 2 テイクになる）
+- **FBX は一時名で書いてから置き換える**（`_write_atomically`）: 書き出し中の失敗・閉じたときの kill で、Unity プロジェクトの以前の正しい FBX を壊さない（SF-13）
+- FBX のオプションは単位 cm・バイナリ・FBX 2020 を明示する（Maya の既定が変わっても同じ。DD-11）
 - dx11Shader・Render Override は使わない（モデルの出力は Toon のコードを通るので、プレビュー用ノードを扱えるよう、裏のプロセスを起動する
   `tools/export_fbx_batch.py` だけがプラグインを読む。読めなくても出力は続く。開いている Maya の側では何も読まない）
 """
@@ -13,8 +18,10 @@
 from __future__ import annotations
 
 import contextlib
+import copy
 import hashlib
 import json
+import os
 import time
 import traceback
 from pathlib import Path
@@ -24,10 +31,15 @@ from maya import cmds, mel
 
 from tdrive import export_job, project
 
+from . import composition as K
 from .core import animset as A
 from .core import export_plan as E
 
 TRS = ("tx", "ty", "tz", "rx", "ry", "rz", "sx", "sy", "sz")
+EXPORT_VERSION = 2  # 出力のコード・FBX のオプションを変えたら上げる（指紋に入れ、古い FBX が「変更なし」で飛ばされないように。SF-12）
+COMPOSITION_BLOCK = "ブレンド / ショットの合成中は出力できません（合成の動きが FBX に焼かれます）。ブレンドタブ・ショットタブで「合成を外す」を押してから出力してください"
+# 単位 cm・バイナリ・FBX 2020（Unity が読める上限）を明示する（FBXResetExport の既定に任せない。DD-11）
+FBX_COMMON = ("FBXExportConvertUnitString cm", "FBXExportInAscii -v false", "FBXExportFileVersion -v FBX202000")
 
 
 # ------------------------------------------------------------------ 集める
@@ -55,22 +67,71 @@ def skinned_meshes(root: str) -> list[str]:
 
 
 def fingerprint(clip: dict[str, Any], animset: dict[str, Any]) -> str:
-    """クリップの指紋: 属性 + フレームレート + ルート + 範囲内の全アニメーションカーブのキー。変わったかどうかの判定にだけ使う。"""
+    """クリップの指紋: 属性 + フレームレート + ルート + 出力コードの版 + **範囲内の各フレームの全ジョイントのローカル行列**（評価した結果）。
+    変わったかどうかの判定にだけ使う。評価した値なので、接線・範囲外のキー（範囲内の補間が変わる）・コンストレイントやリグ・アニメーションレイヤーの
+    重みとミュートの変更も拾う（以前は範囲内のキーの時刻と値だけ見ていた。SF-12）。現在の時刻は元に戻す。"""
     h = hashlib.sha1()
-    h.update(json.dumps({k: clip[k] for k in ("name", "start", "end", "rootMotion")} | {"fps": animset["frameRate"], "root": A.root_name(animset)},
-                        sort_keys=True).encode())
-    s, e = clip["start"], clip["end"]
-    for curve in sorted(cmds.ls(type="animCurve") or []):
-        t = cmds.keyframe(curve, query=True, time=(s, e), timeChange=True) or []
-        if not t:
-            continue
-        v = cmds.keyframe(curve, query=True, time=(s, e), valueChange=True) or []
-        h.update(curve.encode())
-        h.update(json.dumps([[round(a, 5), round(b, 5)] for a, b in zip(t, v)]).encode())
+    h.update(json.dumps({k: clip[k] for k in ("name", "start", "end", "rootMotion")} | {"fps": animset["frameRate"], "root": A.root_name(animset),
+                                                                                       "v": EXPORT_VERSION}, sort_keys=True).encode())
+    joints = skeleton_joints(A.root_name(animset))
+    s, e = int(clip["start"]), int(clip["end"])
+    t0 = cmds.currentTime(query=True)
+    undo_was = cmds.undoInfo(query=True, state=True)
+    cmds.undoInfo(stateWithoutFlush=False)
+    try:
+        for f in range(s, e + 1):
+            cmds.currentTime(f, edit=True)
+            for j in joints:
+                h.update(",".join(f"{x:.4f}" for x in cmds.getAttr(f"{j}.matrix")).encode())
+    finally:
+        cmds.currentTime(t0, edit=True)
+        if undo_was:
+            cmds.undoInfo(stateWithoutFlush=True)
     return h.hexdigest()
 
 
+def fingerprints(animset: dict[str, Any], names: list[str]) -> dict[str, str]:
+    return {n: fingerprint(A.find_clip(animset, n), animset) for n in names}
+
+
 # ------------------------------------------------------------------ 書き出し（別プロセスの mayapy で呼ぶ。開いているシーンを直接壊す）
+def _import_references() -> None:
+    """参照（リファレンス）を取り込む（ネームスペースは残す。外すのは各出力の最後）。参照のままだと、`removeNamespace` が外せず、
+    ノードの削除・名前の変更が効かない（DD-4）。書き出し用の一時シーンだけで呼ぶ。"""
+    for _ in range(10):  # 入れ子の参照は、取り込むと外側に出てくる
+        refs = cmds.file(query=True, reference=True) or []
+        if not refs:
+            break
+        for r in refs:
+            try:
+                cmds.file(r, importReference=True)
+            except RuntimeError:
+                with contextlib.suppress(RuntimeError):
+                    cmds.file(r, removeReference=True)  # 読み込まれていない参照は取り込めない
+
+
+def _prepare_scene() -> None:
+    """一時シーンを開いた直後に行う: 合成を外す（合成の動きを焼かない。SF-1）・参照を取り込む（DD-4）。"""
+    K.remove()
+    _import_references()
+
+
+def _write_atomically(path: Path, write) -> None:
+    """`write(一時ファイルのパス)` で書いてから `path` に置き換える。一時ファイルが書かれなければ例外にして、以前のファイルは触らない（SF-13）。"""
+    tmp = path.with_name(f"{path.stem}.writing{path.suffix}")
+    if tmp.exists():
+        tmp.unlink()  # 前回の中断の残り
+    try:
+        write(tmp)
+        if not tmp.is_file() or tmp.stat().st_size <= 0:
+            raise RuntimeError(f"FBX が書かれませんでした（{path.name}）。以前のファイルはそのままです")
+        os.replace(tmp, path)
+    finally:
+        if tmp.exists():
+            with contextlib.suppress(OSError):
+                tmp.unlink()
+
+
 def _to_bind_pose(joints: list[str]) -> None:
     """ジョイントの入力のつながり（キー・コンストレイント）を切り、バインドポーズへ戻す。"""
     for j in joints:
@@ -90,6 +151,7 @@ def export_model_in_place(animset: dict[str, Any], path: str | Path) -> dict[str
     """`SK_<ModelId>.fbx`（メッシュ + スキン + スケルトン、アニメ無し）を書く。破壊的（mayapy 専用）。"""
     from tdrive_toon import export as toon_export
 
+    path = Path(path)
     root = A.root_name(animset)
     joints = skeleton_joints(root)
     if not joints:
@@ -99,11 +161,16 @@ def export_model_in_place(animset: dict[str, Any], path: str | Path) -> dict[str
         raise RuntimeError("書き出すメッシュがありません（animset の meshes が空で、スキンされたメッシュも見つかりません）")
     cmds.currentUnit(time={30: "ntsc", 60: "ntscf"}[animset["frameRate"]], updateAnimation=False)
     _to_bind_pose(joints)
-    return toon_export.export_in_place(meshes, path, roots=[cmds.ls(root, long=True)[0]], animation=False)
+    result: dict[str, Any] = {}
+    root_node = cmds.ls(root, long=True)[0]
+    _write_atomically(path, lambda tmp: result.update(toon_export.export_in_place(meshes, tmp, roots=[root_node], animation=False)))
+    result["path"] = str(path)
+    return result
 
 
-def export_clip_in_place(animset: dict[str, Any], clip: dict[str, Any], path: str | Path) -> dict[str, Any]:
-    """`A_<ModelId>_<動作>.fbx`（ジョイントのみ・ベイク済み・1 テイク）を書く。破壊的（mayapy 専用）。"""
+def export_clip_in_place(animset: dict[str, Any], clip: dict[str, Any], path: str | Path, hips: str = "") -> dict[str, Any]:
+    """`A_<ModelId>_<動作>.fbx`（ジョイントのみ・ベイク済み・1 テイク）を書く。破壊的（mayapy 専用）。
+    `hips` = humanoid.json の Hips のジョイント名（ネームスペースなし）。rootMotion=none はこのジョイントの XZ を固定する（無ければスケルトンのルート。SP-9）。"""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     cmds.loadPlugin("fbxmaya", quiet=True)
@@ -112,15 +179,18 @@ def export_clip_in_place(animset: dict[str, Any], clip: dict[str, Any], path: st
     if not joints:
         raise RuntimeError(f"スケルトンのルート {root} がシーンにありません")
     s, e = int(clip["start"]), int(clip["end"])
-    hips = joints[0]
-    fixed = {ax: cmds.getAttr(f"{hips}.translate{ax}", time=s) for ax in "XZ"} if clip["rootMotion"] == "none" else {}
+    ns = animset.get("namespace") or ""
+    top = joints[0]
+    motion = f"{ns}:{hips}" if ns and hips and ":" not in hips else hips
+    motion_node = cmds.ls(motion, long=True)[0] if motion and cmds.objExists(motion) else top
+    fixed = {ax: cmds.getAttr(f"{motion_node}.translate{ax}", time=s) for ax in "XZ"} if clip["rootMotion"] == "none" else {}
     cmds.bakeResults(joints, time=(s, e), simulation=True, sampleBy=1, disableImplicitControl=True, preserveOutsideKeys=False,
                      sparseAnimCurveBake=False, minimizeRotation=True, controlPoints=False, shape=False, attribute=list(TRS))
     cons = cmds.ls(joints, dagObjects=True, type="constraint", long=True) or []
     if cons:  # 空のリストを cmds.delete に渡さない。コンストレイントは書き出さない
         cmds.delete(cons)
     for ax, v in fixed.items():  # rootMotion = none: Hips の XZ をクリップ開始の値に固定（Unity の Original 相当）
-        plug = f"{hips}.translate{ax}"
+        plug = f"{motion_node}.translate{ax}"
         with contextlib.suppress(RuntimeError):
             cmds.cutKey(plug, clear=True)
             cmds.setAttr(plug, v)
@@ -128,21 +198,20 @@ def export_clip_in_place(animset: dict[str, Any], clip: dict[str, Any], path: st
     length = e - s
     cmds.playbackOptions(minTime=0, maxTime=length, animationStartTime=0, animationEndTime=length)
     cmds.currentTime(0, edit=True)
-    ns = animset.get("namespace") or ""
     if ns:  # FBX のジョイント名にネームスペースを付けない（SK_<ModelId>.fbx と同じ名前にする）
         with contextlib.suppress(RuntimeError):
             cmds.namespace(removeNamespace=ns, mergeNamespaceWithRoot=True)
-        hips = hips.replace(f"{ns}:", "")
-    cmds.select(hips, replace=True)
+        top = animset["skeletonRoot"].rsplit(":", 1)[-1]
+    cmds.select(top, replace=True)
     for cmd in (
-        "FBXResetExport", "FBXExportSkins -v false", "FBXExportShapes -v false", "FBXExportConstraints -v false",
+        "FBXResetExport", *FBX_COMMON, "FBXExportSkins -v false", "FBXExportShapes -v false", "FBXExportConstraints -v false",
         "FBXExportCameras -v false", "FBXExportLights -v false", "FBXExportInputConnections -v false",
         "FBXExportEmbeddedTextures -v false", "FBXExportUpAxis y", "FBXExportAnimationOnly -v false",
-        "FBXExportBakeComplexAnimation -v true", f"FBXExportBakeComplexStart -v 0", f"FBXExportBakeComplexEnd -v {length}",
+        "FBXExportBakeComplexAnimation -v true", "FBXExportBakeComplexStart -v 0", f"FBXExportBakeComplexEnd -v {length}",
         "FBXExportBakeComplexStep -v 1", "FBXExportSplitAnimationIntoTakes -clear",
     ):
         mel.eval(cmd)
-    mel.eval(f'FBXExport -f "{path.as_posix()}" -s')
+    _write_atomically(path, lambda tmp: mel.eval(f'FBXExport -f "{tmp.as_posix()}" -s'))
     return {"path": str(path), "frames": length + 1, "joints": len(joints)}
 
 
@@ -157,13 +226,14 @@ def run_tasks(args: dict[str, Any]) -> dict[str, Any]:
         rec: dict[str, Any] = {"type": task["type"], "name": task.get("clip", "model"), "out": task["out"], "ok": False}
         try:
             cmds.file(args["scene"], open=True, force=True)
+            _prepare_scene()
             if task["type"] == "model":
                 rec.update(export_model_in_place(animset, task["out"]))
             else:
                 clip = A.find_clip(animset, task["clip"])
                 if clip is None:
                     raise RuntimeError(f"クリップがありません: {task['clip']}")
-                rec.update(export_clip_in_place(animset, clip, task["out"]))
+                rec.update(export_clip_in_place(animset, clip, task["out"], args.get("hips", "")))
             out = Path(task["out"])
             rec["ok"] = out.is_file() and out.stat().st_size > 0
             rec["size"] = out.stat().st_size if out.is_file() else 0
@@ -184,23 +254,25 @@ class SplitJob(export_job.BatchJob):
     """分割出力のジョブ。生成すると開始 → poll() が True になったら finish()。"""
 
     def __init__(self, animset: dict[str, Any], model_dir: Path, anim_dir: Path, clips: list[str], model: bool = True,
-                 animset_path: Path | None = None) -> None:
+                 animset_path: Path | None = None, fingerprints_: dict[str, str] | None = None) -> None:
+        if K.active():
+            raise RuntimeError(COMPOSITION_BLOCK)
         self.animset = json.loads(json.dumps(animset))  # 出力中に編集しても食い違わないよう、開始時の内容を持つ
         self.model_dir, self.anim_dir = Path(model_dir), Path(anim_dir)
         self.animset_path = animset_path
-        self.fingerprints = {n: fingerprint(A.find_clip(animset, n), animset) for n in clips}
+        self.fingerprints = {n: (fingerprints_ or {}).get(n) or fingerprint(A.find_clip(animset, n), animset) for n in clips}
         self.tasks: list[dict[str, Any]] = []
         if model:
             self.tasks.append({"type": "model", "out": str(self.model_dir / E.model_file(animset["modelId"]))})
         for n in clips:
             self.tasks.append({"type": "clip", "clip": n, "out": str(self.anim_dir / E.clip_file(n))})
-        self.humanoid: dict[str, Any] | None = None
-        if model:
-            from . import scene_naming as SN
+        from . import scene_naming as SN
 
-            self.humanoid = SN.humanoid_for(animset["modelId"], animset["skeletonRoot"], animset.get("namespace", ""))
+        humanoid = SN.humanoid_for(animset["modelId"], animset["skeletonRoot"], animset.get("namespace", ""))
+        self.humanoid: dict[str, Any] | None = humanoid if model else None
+        hips = (humanoid.get("bones") or {}).get("Hips", "")
         self.total = len(self.tasks)
-        super().__init__({"mode": "anim", "animset": self.animset, "tasks": self.tasks}, prefix="tdrive_anim_export_")
+        super().__init__({"mode": "anim", "animset": self.animset, "tasks": self.tasks, "hips": hips}, prefix="tdrive_anim_export_")
 
     def progress(self) -> tuple[int, int]:
         """(終わったタスク数, 全タスク数)。"""
@@ -227,6 +299,8 @@ class SplitJob(export_job.BatchJob):
                 if r["type"] == "clip" and r["ok"]:
                     E.record(state, r["name"], self.fingerprints[r["name"]], self.anim_dir)
             E.save_state(sp, state)
+        if all(r["ok"] for r in res):
+            self.dispose()  # 成功したら作業フォルダ（シーンのコピー）を消す。失敗したときはログのために残す（SF-15）
         return res
 
 
@@ -236,7 +310,7 @@ def project_config() -> dict[str, Any]:
 
 # ------------------------------------------------------------------ ショットの出力（docs/20 §5.3、AN-8）
 SHOT_BAKE = (
-    "FBXResetExport", "FBXExportSkins -v false", "FBXExportShapes -v false", "FBXExportConstraints -v false", "FBXExportLights -v false",
+    "FBXResetExport", *FBX_COMMON, "FBXExportSkins -v false", "FBXExportShapes -v false", "FBXExportConstraints -v false", "FBXExportLights -v false",
     "FBXExportInputConnections -v false", "FBXExportEmbeddedTextures -v false", "FBXExportUpAxis y", "FBXExportAnimationOnly -v false",
     "FBXExportBakeComplexAnimation -v true", "FBXExportBakeComplexStep -v 1", "FBXExportSplitAnimationIntoTakes -clear",
 )
@@ -244,7 +318,9 @@ SHOT_BAKE = (
 
 def _shot_fbx_options(lo: int, hi: int, cameras: bool) -> None:
     """D-Drive のカットシーン FBX のオプション（docs/26 §5.1 手順 3）: Animation ON / Bake（開始〜終了 = ショットの全フレーム、Step 1）/
-    Cameras は引数 / Lights OFF / Embed Media OFF / Input Connections OFF / 単位 cm・Y-up。"""
+    Cameras は引数 / Lights OFF / Embed Media OFF / Input Connections OFF / 単位 cm・Y-up。
+    再生範囲もショットの範囲にする（テイクの長さが再生範囲から取られても lo〜hi になる。DD-10）。"""
+    cmds.playbackOptions(minTime=lo, maxTime=hi, animationStartTime=lo, animationEndTime=hi)
     for cmd in SHOT_BAKE:
         mel.eval(cmd)
     mel.eval(f"FBXExportCameras -v {'true' if cameras else 'false'}")
@@ -267,7 +343,8 @@ def _collect_props(shot: dict[str, Any]) -> list[str]:
 
 def build_ubercam(shot: dict[str, Any], name: str = "Ubercam") -> str:
     """ショットのカメラの区間を、1 台のカメラに焼く（Maya の「Ubercam 作成」にあたる。範囲の全フレームで、その時刻のカメラの
-    ワールド位置・向き・画角・フィルム・クリップ面を写してキーを打つ。区間の切り替わりはステップ）。カメラが無ければ ValueError。"""
+    ワールド位置・向き・画角・フィルム・クリップ面を写してキーを打つ。区間の切り替わりはステップ）。カメラが無ければ ValueError。
+    D-Drive のトラック名はカメラの GameObject 名なので、名前が `Ubercam1` などにならないよう、シーンに同名のノードがあれば先に改名する（DD-13）。"""
     from .core import shot as SH
 
     lo, hi = shot["range"]
@@ -276,7 +353,13 @@ def build_ubercam(shot: dict[str, Any], name: str = "Ubercam") -> str:
         raise ValueError("カメラの区間がありません（ショットタブでカメラを足してください）")
     first = cams[0]["node"]
     first_shape = (cmds.listRelatives(first, shapes=True, type="camera") or [first])[0]
+    for existing in cmds.ls(name, f"{name}Shape", long=True) or []:  # 一時シーンなので改名してよい
+        cmds.rename(existing, "tdOld_" + existing.split("|")[-1])
     uber = cmds.camera(name=name)[0]
+    if uber != name:  # Maya が番号を付けることがある（Ubercam1）。D-Drive のトラック名になるので、名前を戻す
+        uber = cmds.rename(uber, name)
+    if uber != name:
+        raise RuntimeError(f"Ubercam の名前が {uber} になりました（D-Drive のトラック名が変わります）")
     ushape = cmds.listRelatives(uber, shapes=True, type="camera")[0]
     attrs = ("focalLength", "horizontalFilmAperture", "verticalFilmAperture", "nearClipPlane", "farClipPlane", "filmFit", "lensSqueezeRatio")
     for a in attrs:
@@ -306,8 +389,14 @@ def build_ubercam(shot: dict[str, Any], name: str = "Ubercam") -> str:
     return uber
 
 
+def include_events(shot: dict[str, Any]) -> bool:
+    """`<Shot>.fbx` に `EVT_` ロケータを入れるか。既定は**入れない**: D-Drive には `EVT_` / `ddEvent` を読むコードが無く、
+    `EVT_Hit` という小物のトラックとして取り込まれて警告が出る（docs/21 DD-2）。D-Drive が対応したら、ショットの export.includeEvents を true に。"""
+    return bool((shot.get("export") or {}).get("includeEvents", False))
+
+
 def export_shot_camera_in_place(shot: dict[str, Any], path: str | Path) -> dict[str, Any]:
-    """`<Shot>.fbx`（Ubercam + 小道具 + `EVT_` ロケータ）を書く。破壊的（mayapy 専用）。"""
+    """`<Shot>.fbx`（Ubercam + 小道具 + 設定すれば `EVT_` ロケータ）を書く。破壊的（mayapy 専用）。"""
     from . import shot_scene as SS
 
     path = Path(path)
@@ -317,11 +406,13 @@ def export_shot_camera_in_place(shot: dict[str, Any], path: str | Path) -> dict[
     lo, hi = shot["range"]
     props = _collect_props(shot)
     uber = build_ubercam(shot)
-    events = SS.sync_events(shot)
-    events = [cmds.parent(e, world=True)[0] for e in events]  # 親（tdShot_ グループ）は書き出さない
+    events: list[str] = []
+    if include_events(shot):
+        events = SS.sync_events(shot)
+        events = [cmds.parent(e, world=True)[0] for e in events]  # 親（tdShot_ グループ）は書き出さない
     cmds.select([uber] + props + events, replace=True)
     _shot_fbx_options(lo, hi, cameras=True)
-    mel.eval(f'FBXExport -f "{path.as_posix()}" -s')
+    _write_atomically(path, lambda tmp: mel.eval(f'FBXExport -f "{tmp.as_posix()}" -s'))
     return {"path": str(path), "camera": uber, "props": len(props), "events": len(events), "frames": hi - lo + 1}
 
 
@@ -355,10 +446,10 @@ def export_shot_character_in_place(shot: dict[str, Any], index: int, animset: di
     if ns:  # FBX のジョイント名にネームスペースを付けない（SK_<ModelId>.fbx と同じ名前にする）
         with contextlib.suppress(RuntimeError):
             cmds.namespace(removeNamespace=ns, mergeNamespaceWithRoot=True)
-        root = root.split(":", 1)[1]
+        root = root.rsplit(":", 1)[-1]  # 入れ子のネームスペース（A:B:）でも最後の名前（DD-12）
     cmds.select(root, replace=True)
     _shot_fbx_options(lo, hi, cameras=False)
-    mel.eval(f'FBXExport -f "{path.as_posix()}" -s')
+    _write_atomically(path, lambda tmp: mel.eval(f'FBXExport -f "{tmp.as_posix()}" -s'))
     return {"path": str(path), "joints": len(joints), "frames": hi - lo + 1}
 
 
@@ -374,6 +465,7 @@ def run_shot_tasks(args: dict[str, Any]) -> dict[str, Any]:
         rec: dict[str, Any] = {"type": task["type"], "name": task["name"], "out": task["out"], "ok": False}
         try:
             cmds.file(args["scene"], open=True, force=True)
+            _prepare_scene()
             if task["type"] == "camera":
                 rec.update(export_shot_camera_in_place(shot, task["out"]))
             else:
@@ -402,6 +494,8 @@ class ShotJob(export_job.BatchJob):
         from .core import shot as SH
         from .core import export_plan as EP
 
+        if K.active():
+            raise RuntimeError(COMPOSITION_BLOCK)
         self.shot = json.loads(json.dumps(shot))
         self.out_dir = Path(out_dir)
         self.animsets = animsets
@@ -410,7 +504,19 @@ class ShotJob(export_job.BatchJob):
             self.tasks.append({"type": "character", "name": fname, "index": i, "out": str(self.out_dir / EP.shot_file(fname))})
         self.total = len(self.tasks)
         self.extra: list[str] = []  # .fctrack / shot.json のログ
+        self._facial_doc = self._snapshot_facial_doc()  # 出力中に顔のキーを触っても、開始時の内容で .fctrack を書く（SF-21）
         super().__init__({"mode": "shot", "shot": self.shot, "animsets": animsets, "tasks": self.tasks}, prefix="tdrive_shot_export_")
+
+    def _snapshot_facial_doc(self) -> Any:
+        if not any(ch.get("facialTrack") for ch in self.shot["characters"]):
+            return None
+        try:
+            from tdrive_facial import session as fsession
+
+            doc = fsession.current().doc
+            return copy.deepcopy(doc) if doc is not None else None
+        except Exception:  # noqa: BLE001  複製できなければ、書くときに今のデータを使う
+            return None
 
     def progress(self) -> tuple[int, int]:
         try:
@@ -432,7 +538,7 @@ class ShotJob(export_job.BatchJob):
             from tdrive_facial import session as fsession
         except Exception as exc:  # noqa: BLE001
             return [f"⚠ .fctrack: FacialController を読み込めません: {exc}"]
-        doc = fsession.current().doc
+        doc = self._facial_doc if self._facial_doc is not None else fsession.current().doc
         if doc is None:
             return ["⚠ .fctrack: FacialController のデータが開かれていません（Facial タブでデータを開いてください）"]
         lo, hi = self.shot["range"]
@@ -453,4 +559,6 @@ class ShotJob(export_job.BatchJob):
         if any(r["ok"] for r in res):
             SH.save(self.out_dir / f"{self.shot['shot']}{SH.SUFFIX}", self.shot)
             self.extra = self.write_facial_tracks()
+        if all(r["ok"] for r in res):
+            self.dispose()  # 成功したら作業フォルダを消す（SF-15）
         return res

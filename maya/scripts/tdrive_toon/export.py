@@ -27,6 +27,9 @@ from . import REPO_ROOT, mask, naming, preview, smooth_normals
 SPARE_UV = "tdUVSpare"
 FBX_OPTIONS = (
     "FBXResetExport",
+    "FBXExportConvertUnitString cm",  # 単位・バイナリ・FBX の版を明示する（Maya の既定に任せない。docs/21 DD-11）
+    "FBXExportInAscii -v false",
+    "FBXExportFileVersion -v FBX202000",
     "FBXExportSkins -v true",
     "FBXExportShapes -v true",
     "FBXExportTangents -v true",

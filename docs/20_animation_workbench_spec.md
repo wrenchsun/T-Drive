@@ -254,9 +254,9 @@ D-Drive の **CutsceneData 1 つ**に相当する Maya 側の単位。`anim/<Mod
 
 - 「新規ショット」: 名前（`^[A-Z][A-Za-z0-9]*$`）・fps（30 / 60）・範囲。シーンにグループ `tdShot_<Shot>`（出力対象外）を作り、ロケータでカメラ区間と `EVT_` を持つ
 - カメラ: シーンのカメラを区間付きで並べる。**Camera Sequencer**（`sequencer` / `shot` ノード）に同期して、Maya のシーケンサー再生でカメラ切替を確認する。出力時は Ubercam（`doCreateUbercam`）を作って 1 本にし、終わったら消す
-- キャラクター: ネームスペース（= ModelId）ごとに **クリップ列**（§4.2 の遷移列と同じ型）。配置は Time Editor の合成（`tdAnimComp_<Shot>_<ModelId>`）で、ブレンドタブの「この列をショットへ」から持ち込める。手で打ったキー（口パク・視線など）は合成の上の animLayer に打てる（出力時はベイクされる）
+- キャラクター: ネームスペース（= ModelId）ごとに **クリップ列**（§4.2 の遷移列と同じ型）。配置は Time Editor の合成（`tdAnimComp_<Shot>_<ModelId>`）で、ブレンドタブの「この列をショットへ」から持ち込める。手で打ったキー（口パク・視線など）を合成の上の animLayer に打つ案は**準備中**（合成はジョイントのつながりを切り離すので、コントローラに打ったキーがジョイントに届かない。docs/21 SP-2。当面は合成を外した状態のクリップ側に打つ）
 - 顔: FacialController のプレビューノードにキーがあれば `.fctrack` も一緒に出す（[14](14_facial_controller_spec.md) §7.3。既存の `tdrive_facial.export.export_fctrack` を呼ぶ）
-- イベント: 現在フレームに `EVT_<キー>` を追加（ロケータ `EVT_<キー>` を `tdShot_<Shot>` の下に。D-Drive の Signal マーカー `cutscene/<キー>` になる）。
+- イベント: 現在フレームに `EVT_<キー>` を追加（ロケータ `EVT_<キー>` を `tdShot_<Shot>` の下に）。**D-Drive には `EVT_` / `ddEvent` を読むコードが無く**（docs/26 §5.5 の方式は 6-10c で不採用。`EVT_Hit` は小物のトラック + SpawnModel のバインドとして取り込まれ、「ModelData('EVT_Hit') が見つかりません」の警告が出る）、Signal マーカーにはならない。**既定では `<Shot>.fbx` に `EVT_` を入れない**（ショットの `export.includeEvents` を true にしたときだけ入れる。出力タブのチェック）。イベントは shot.json に残り、D-Drive 側のマーカーは手で置く。D-Drive の対応は §8.1。
   **時刻の持ち方（実装での決め 2026-10-22）**: D-Drive の docs/26 §5.5「EVT_ ロケーターにカスタムアトリビュート（`ddEvent`、整数）を足してキーを打つ」方式に合わせ、ロケータの `ddEvent` を「イベントの 1 フレーム前は 0、イベントのフレームから 1」のステップキーにする（FBX にアニメ付きユーザープロパティとして出る。Unity 側で確実に取れるかは D-Drive 側が要検証としている）。属性 `tdEventKey` も持つ。同じキーを 2 回使うと Maya が名前に数字を付ける
 - プレビュー: ショットの範囲でシーケンサー再生（カメラ切替 + 合成 + 顔）。`playblast` で動画（`captures/shots/<Shot>.mov`。Git 管理外）
 
@@ -264,7 +264,7 @@ D-Drive の **CutsceneData 1 つ**に相当する Maya 側の単位。`anim/<Mod
 
 | ファイル | 中身 | オプション |
 |---|---|---|
-| `<Shot>.fbx` | Ubercam（+ `PRP_*` 小道具）。`EVT_*` ロケータ | Bake Animation ON（Step 1）、Cameras ON、Lights OFF、Embed Media OFF、Input Connections OFF |
+| `<Shot>.fbx` | Ubercam（+ `PRP_*` 小道具）。`EVT_*` ロケータは `export.includeEvents` が true のときだけ（既定は入れない。§5.2）| Bake Animation ON（Step 1）、Cameras ON、Lights OFF、Embed Media OFF、Input Connections OFF |
 | `<Shot>__<ModelId>.fbx` | そのキャラクターの**ルートジョイント階層だけ**（メッシュ・スキン・ブレンドシェイプ無し）、ショット範囲でベイク | 同上 + Deformed Models / Skins / Blend Shapes OFF |
 | `<Shot>__<ModelId>.fctrack` | 顔の演出（任意） | 既存 |
 | `<Shot>.shot.json` | 上の内容（Unity 側は読まない。T-Drive の再現用） | |
@@ -285,7 +285,7 @@ D-Drive の **CutsceneData 1 つ**に相当する Maya 側の単位。`anim/<Mod
 
 ### 6.2 アニメーション `A_<ModelId>_<動作>.fbx`（クリップごと 1 ファイル）
 
-- 対象: `skeletonRoot` 以下のジョイントだけ。クリップ範囲で **ベイク**（`bakeResults`、Step 1、コントローラやコンストレイントは出さない）。`rootMotion=none` のときは Hips の平行移動の XZ（と任意で Y）を開始フレームの値に固定
+- 対象: `skeletonRoot` 以下のジョイントだけ。クリップ範囲で **ベイク**（`bakeResults`、Step 1、コントローラやコンストレイントは出さない）。`rootMotion=none` のときは humanoid.json の Hips（無ければスケルトンのルート）の平行移動の XZ を開始フレームの値に固定（Y は固定しない。「任意で Y」は実装しない）
 - FBX: Animation ON、Bake Animation ON、Deformed Models / Skins / Blend Shapes OFF、Embed Media OFF、Input Connections OFF、1 ファイル 1 テイク（**実装での変更 2026-10-22**: テイク名は Maya の既定 `Take 001`。名前付きのテイクに分けると 2 テイクになり、D-Drive が先頭を取り込む仕組み（ファイル名で取り込む）と合わないため。範囲の先頭は 0 フレームに寄せる）
 - **`@` は使わない**（D-Drive の規則）。ファイル名は `A_<ModelId>_<動作>.fbx`、D-Drive は最初の埋め込みクリップを `ANIM_<Category>_A_<ModelId>_<動作>` として取り込む
 - 出力先: `build/unity/<ModelId>/anim/`。プリセット: `SourceAssets/Anim/<Category>/`
@@ -340,6 +340,20 @@ tests/fixtures/anim/          # 小さなリグ（ジョイント 6 本 + 立方
 | U-A1 | `animset.json` + `humanoid.json` から Avatar（Humanoid マッピング）・`AC_<ModelId>.controller`（状態図・固定秒クロスフェード）・D-Drive `AnimData`（単発クリップ・イベント・ループ）を生成する ScriptedImporter / メニュー。MS2026-Maya と同じく外部パッケージか `com.tdrive.toon` に同梱かは [08](08_unity_port_plan.md) で決める |
 | U-A2 | `OnFootPlant` などのイベントを D-Drive の `AssetEvent` に写す。MS2026 の `FootPlantEvents.md` の流儀（単独 `.anim` 必須）に合わせるため、FBX のクリップを `.anim` に複製するかは要確認 |
 
+### 8.1 D-Drive 側（要相談）
+
+D-Drive（`C:/Users/yamag/wrench/unity/D-Drive`）は読み取りのみ（変更しない）。T-Drive 側でできる対応は済ませたうえで、D-Drive 側にあるとよい変更を書く（docs/21 のレビューで D-Drive のコードと突き合わせた結果。ID は docs/21）。
+
+| ID | D-Drive 側に欲しい変更 | T-Drive 側の対応（済み） |
+|---|---|---|
+| DD-1 | `SK_<ModelId>.fbx` から作る ModelData の識別子が `SK<ModelId>` になる（`Import/ImportRuleService.cs:495-496`、`AssetBrowser/AssetNamingService.cs:150-173` の `ToIdentifier` は `_` を落として次を大文字にする）ため、`FindModelDataByIdentifier`（`Cutscene/CutsceneImportService.cs:654-671`）がカットシーンの `<Shot>__<ModelId>` の `ModelId` と一致しない。識別子を作る前に MS2026 の接頭辞 `SK_` / `SM_` を外す案 | 出力タブのログとマニュアルに「取り込み後に ModelData の識別子を ModelId に直す」手順を書いた |
+| DD-2 | `EVT_<キー>` + `ddEvent`（docs/26 §5.5）を読むコードが無い（6-10c で不採用）。`CutsceneImportService.cs:351-360` はカメラ以外のルート直下の子を全部小物にするので `EVT_` が小物のトラックになる。`EVT_` を小物から除いて Signal マーカーにする実装（アニメ付きユーザープロパティの取り込み `importAnimatedCustomProperties` も要る、推定） | 既定で `EVT_` を `<Shot>.fbx` に入れない（`export.includeEvents`）。仕様・マニュアルを「D-Drive は未対応」に直した |
+| DD-3 | トップレベルが 1 つの FBX（`A_*.fbx` は Hips、`<Shot>__<ModelId>.fbx` はルート）は Unity の既定でそのノードがプレハブのルートになり、名前がファイル名に替わって階層の道筋がずれる。D-Drive は `preserveHierarchy` を設定していない。`OnPreprocessModel` で Cutscene / Anim の FBX に `preserveHierarchy = true` を提案 | 確認項目（docs/18 AN-R）に足した。Unity で確かめてから |
+| DD-7 | Ubercam のカットはステップのタンジェントだが、ベイクで毎フレームのキーになる。D-Drive（`CutsceneCameraCurveExtractor.cs:30-70`、StepFps 既定 0）は写すだけなので、30 fps のデータを 60 fps で補間して、カットの前後に 2 台の間の絵が 1 コマ出る可能性。D-Drive 側でカット（隣のキーで位置が大きく飛ぶ）を検出してステップにする案 | 確認項目に足した |
+| DD-9 | ショットの先頭フレームのイベントは `ddEvent` が 1 のキーだけで 0 → 1 の変化が無い。「最初に 1 になったフレーム（先頭を含む）」と読む案（docs/26 §5.5 の実装時に） | shot.json の検証で警告 |
+| DD-14 | `humanoid.json` / `animset.json` の写しを `SourceAssets/Model/<cat>/` に置くと「対象外の拡張子」の案内ログ（`ImportRuleHandlers.cs:88`）が出る。.json を無視する、または別の置き場所の取り決め | ログに出ても害がないことをマニュアルとログに書いた |
+| DD-15 | 小物のトラックに FBX 全体のクリップを渡している（`CutsceneImportService.cs:359,380-383`）ので、カーブの道筋 `PRP_Mic/...` が小物に当たらない可能性 | `<Shot>.fbx` の小物が動くかを確認項目に足した |
+
 ## 9. 決めること（要確認）
 
 | # | 事項 | 仮の決め |
@@ -378,5 +392,11 @@ tests/fixtures/anim/          # 小さなリグ（ジョイント 6 本 + 立方
 | §4.1 合成中のオートキー | 合成中はオートキーを切り、外すと戻す | ジョイントへ打ったキーが合成の入力に紛れて「外す」で消えるのを防ぐ（SF-7） |
 | §4.1 再生範囲の控え | クリップ再生・合成・ショットで 1 つの控え（`playstate`）を共有し、最初に取った状態へ最後に手を放した人が戻す | 戻す順で合成した範囲が残るのを防ぐ（SF-8） |
 | §4.4 タイムスライダーへの遷移の表示 | 実装しない（Time Editor を使わない方式にしたため、遷移の区間をタイムスライダーに出す手段が無い）。遷移の確認は、ブレンドタブの表と ▶ 再生 | 仕様のうち未実装を明記（SP-7） |
+| §5.2 手付けキーのレイヤー | 準備中（UI のボタンは灰色）。合成の上へのキーの乗せ方は未実装 | 合成はジョイントのつながりを切り離すので、コントローラに打ったキーがジョイントに届かない（SP-2） |
+| §5.2 EVT_ の取り込み | `<Shot>.fbx` に `EVT_` を入れるのは `export.includeEvents` が true のときだけ（既定は入れない） | D-Drive に `EVT_` / `ddEvent` を読むコードが無く、小物のトラック + 警告になる（DD-2）。D-Drive 側の対応は §8.1 |
+| §5.3 イベントの検証 | 同じキーの重複・先頭フレームのイベントを警告。同じネームスペースのキャラクター 2 体は error、animset とショットの fps 違いは出力を止める | DD-5 / DD-6 / DD-8 / DD-9 |
+| §5.3 出力 | FBX は一時名で書いてから置き換える。単位 cm・バイナリ・FBX 2020 を明示。ショットの出力前に再生範囲をショットの範囲に。Ubercam の名前を保つ。合成中は出力しない。参照のリグは取り込んでから出す。出力の中止ボタン。MS2026 は毎回確認、D-Drive が main のときは止める | SF-1 / SF-13 / DD-4 / DD-10 / DD-11 / DD-13 / UX-7 / CR-6 |
+| §6.2 rootMotion=none | humanoid.json の Hips（無ければルート）の XZ を固定。「任意で Y」は実装しない | SP-9 |
+| §6.2 変更のあるクリップだけ | 指紋は範囲内の各フレームの全ジョイントのローカル行列（評価した結果）+ 出力コードの版 | 接線・範囲外のキー・リグ・アニメーションレイヤーの変更を拾う（SF-12） |
 
 未実装・保留: AN-10（OpenGL 用の簡易セル表示）、Unity 側の取り込み（U-A1 / U-A2。§8）、小道具の選択 UI（`PRP_` はシーンから集める）、遷移列の保存（状態図は保存する）、スクリーンショット。

@@ -29,7 +29,7 @@ FORMAT = "TDriveShot"
 VERSION = 1
 SHOT_PATTERN = re.compile(r"^[A-Z][A-Za-z0-9]*$")
 SUFFIX = ".shot.json"
-DEFAULT_EXPORT = {"dir": "", "category": "Cutscene"}
+DEFAULT_EXPORT = {"dir": "", "category": "Cutscene", "includeEvents": False}  # includeEvents: <Shot>.fbx に EVT_ を入れるか（D-Drive 未対応のため既定は入れない。docs/21 DD-2）
 
 
 class ShotError(ValueError):
@@ -145,6 +145,7 @@ def validate(data: dict[str, Any]) -> list[Issue]:
         if b["start"] <= a["end"]:
             warn("cameras", f"カメラの区間が重なっています（{a['node']} {a['start']}〜{a['end']} と {b['node']} {b['start']}〜{b['end']}）。後のカメラが優先されます")
     ids: set[str] = set()
+    namespaces: dict[str, str] = {}
     for i, ch in enumerate(data.get("characters") or []):
         p = f"characters[{i}]"
         if not isinstance(ch, dict) or not isinstance(ch.get("modelId"), str) or not MODEL_ID_PATTERN.match(ch.get("modelId", "")):
@@ -153,14 +154,37 @@ def validate(data: dict[str, Any]) -> list[Issue]:
         if ch["modelId"] in ids:
             warn(p, f"キャラクター {ch['modelId']} が複数います（2 体目は _2 を付けて出力します）")
         ids.add(ch["modelId"])
+        ns = ch.get("namespace") if isinstance(ch.get("namespace"), str) else ""
+        if ns in namespaces:  # 同じネームスペース = 同じスケルトン。D-Drive の _2 は別のリグが前提（DD-5）
+            err(f"{p}.namespace", f"ネームスペース {ns!r} が {namespaces[ns]} と同じです（同じジョイントを指します）。2 体目は別のネームスペースにしてください")
+        else:
+            namespaces[ns] = f"characters[{i}]"
         if not isinstance(ch.get("sequence"), list):
             err(f"{p}.sequence", "遷移列は配列にしてください")
+    keys: dict[str, int] = {}
     for i, e in enumerate(data.get("events") or []):
         p = f"events[{i}]"
         if not isinstance(e, dict) or not _is_int(e.get("frame")) or not isinstance(e.get("key"), str) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", e.get("key", "")):
             err(p, "frame（整数）と key（英数字とアンダースコア）が要ります")
-        elif lo is not None and not lo <= e["frame"] <= hi:
-            warn(p, f"イベントのフレーム {e['frame']} がショットの範囲（{lo}〜{hi}）の外です")
+        else:
+            if lo is not None and not lo <= e["frame"] <= hi:
+                warn(p, f"イベントのフレーム {e['frame']} がショットの範囲（{lo}〜{hi}）の外です")
+            elif lo is not None and e["frame"] == lo:
+                warn(p, f"イベント {e['key']} がショットの先頭フレーム（{lo}）にあります。0 → 1 の変化が無いので、D-Drive が拾えないことがあります（1 フレーム後ろにずらすのが安全です）")
+            keys[e["key"]] = keys.get(e["key"], 0) + 1
+            if keys[e["key"]] == 2:
+                warn(p, f"イベントのキー {e['key']} が複数あります。ロケータが EVT_{e['key']}1 のように番号付きになり、D-Drive では別のキーになります（DD-8）")
+    return out
+
+
+def fps_problems(data: dict[str, Any], animsets: dict[str, dict[str, Any]]) -> list[str]:
+    """キャラクターの animset のフレームレートがショットと違うもの（クリップの範囲はフレーム番号のまま並ぶので、中身がずれる。DD-6）。"""
+    out = []
+    for ch in data.get("characters") or []:
+        a = animsets.get(ch.get("modelId"))
+        if a is not None and a.get("frameRate") != data.get("frameRate"):
+            out.append(f"キャラクター {ch['modelId']} の animset は {a.get('frameRate')} fps、ショットは {data.get('frameRate')} fps です"
+                       "（クリップの範囲はフレーム番号のまま並ぶので、同じにしてください）")
     return out
 
 

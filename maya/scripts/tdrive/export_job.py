@@ -8,8 +8,10 @@ Maya の画面は止まらない。`start()` は要らず、生成すると開�
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -57,9 +59,19 @@ class BatchJob:
         return self.proc.poll() is not None
 
     def kill(self) -> None:
-        """裏の mayapy を止める（キャンセル・タイムアウト）。"""
+        """裏の mayapy を止める（キャンセル・タイムアウト・ウィンドウを閉じる）。ログを閉じ、作業フォルダを消す（SF-15）。"""
         if self.proc.poll() is None:
             self.proc.kill()
+            with contextlib.suppress(Exception):
+                self.proc.wait(timeout=10)
+        self.dispose()
+
+    def dispose(self) -> None:
+        """ログを閉じ、作業フォルダ（シーンの丸ごとのコピー）を消す。何度呼んでもよい。成功のあとと kill のあとに呼ぶ。
+        失敗したときは呼ばない（ログを読めるように残す）。"""
+        with contextlib.suppress(Exception):
+            self.log.close()
+        shutil.rmtree(self.work, ignore_errors=True)
 
     def log_tail(self, n: int = 3000) -> str:
         try:

@@ -106,3 +106,49 @@ def test_schema_file_matches():
     schema = json.loads((Path(S.__file__).parent / "shot_schema.json").read_text(encoding="utf-8"))
     d = S.new_shot("A")
     assert set(schema["required"]) <= set(d) and set(schema["properties"]) >= set(d)
+
+
+# ---------------------------------------------------------------- docs/21 DD-5 / DD-6 / DD-8 / DD-9 / DD-2
+def test_same_namespace_twice_is_an_error():
+    """DD-5: 同じ ModelId の 2 体目が既定で同じネームスペースだと、同じスケルトンを指す。"""
+    d = S.new_shot("Opening01", 30, 0, 240)
+    S.add_character(d, "MisotenChara")
+    S.add_character(d, "MisotenChara")  # 既定: ネームスペース = ModelId で同じ
+    errs = S.errors(d)
+    assert errs and "ネームスペース" in str(errs[0])
+    d["characters"][1]["namespace"] = "MisotenChara2"
+    assert S.errors(d) == []  # 別のネームスペースなら 2 体目（_2）として出せる
+    d["characters"][1]["namespace"] = ""
+    d["characters"][0]["namespace"] = ""
+    assert S.errors(d)  # 空のネームスペースが 2 体も同じ
+
+
+def test_event_warnings_duplicate_key_and_first_frame():
+    d = S.new_shot("Opening01", 30, 0, 240)
+    S.add_event(d, 0, "Hit")
+    S.add_event(d, 60, "Step")
+    S.add_event(d, 90, "Step")
+    msgs = [str(i) for i in S.validate(d)]
+    assert any("先頭フレーム" in m for m in msgs)  # DD-9
+    assert any("複数あります" in m and "Step" in m for m in msgs)  # DD-8
+    assert not any("Hit" in m and "複数" in m for m in msgs)
+    assert S.errors(d) == []  # 警告だけで止めない
+
+
+def test_fps_problems_between_shot_and_animset():
+    """DD-6: animset の frameRate とショットの frameRate が違う。"""
+    d = S.new_shot("Opening01", 60, 0, 240)
+    S.add_character(d, "MisotenChara")
+    assert S.fps_problems(d, {"MisotenChara": {"frameRate": 30}}) and "30 fps" in S.fps_problems(d, {"MisotenChara": {"frameRate": 30}})[0]
+    assert S.fps_problems(d, {"MisotenChara": {"frameRate": 60}}) == []
+    assert S.fps_problems(d, {}) == []
+
+
+def test_events_are_not_exported_into_shot_fbx_by_default():
+    """DD-2: D-Drive には EVT_ を読むコードが無いので、既定では <Shot>.fbx に入れない。"""
+    d = S.new_shot("Opening01")
+    assert d["export"]["includeEvents"] is False
+    assert S.loads(S.dumps(d))["export"]["includeEvents"] is False
+    old = json.loads(S.dumps(d))
+    del old["export"]["includeEvents"]
+    assert S.loads(json.dumps(old))["export"]["includeEvents"] is False  # 古い shot.json でも既定が補われる

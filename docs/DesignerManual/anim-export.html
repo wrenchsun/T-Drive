@@ -21,32 +21,40 @@
 <div class="tip"><code>Model@Anim.fbx</code> のような「<code>@</code> で分ける」書き方は使いません（D-Drive の規則）。D-Drive は、アニメーションのファイルの最初の動きを、ファイル名で取り込みます。</div>
 
 <h2>出せないとき</h2>
-<p>出力ボタンが灰色で、赤い文字で理由が出ているときは、<strong>命名の❌</strong>があります（フレームレートが 30 fps でない、クリップ名に <code>@</code> がある、スケルトンのルートが見つからない、など）。<a href="anim-naming.html">命名タブ</a>で直してから、「命名を確認」を押してください。出力ボタンを押したときにも確認します。</p>
+<p>出力ボタンが灰色で、赤い文字で理由が出ているときは、次のどれかです。</p>
+<ul>
+<li><strong>合成中</strong>です — ブレンドタブ・ショットタブで「合成を外す」を押してください（合成の動きが FBX に焼かれてしまうので、合成中は出力できません）</li>
+<li>出力先の問題 — D-Drive のパスが <code>main</code> ブランチのとき（ブランチを切ってから）、MS2026 / D-Drive のパスが未設定のとき</li>
+<li><strong>命名の❌</strong>があります（フレームレートが 30 fps でない、クリップ名に <code>@</code> がある、スケルトンのルートが見つからない、など）。<a href="anim-naming.html">命名タブ</a>で直してから、「命名を確認」を押してください。<strong>命名の❌は、タブを開いただけでは調べません</strong>（「命名を確認」か出力ボタンを押したときに調べ、❌ があればそこで止まって理由が出ます）</li>
+</ul>
 
 <h2>出し方</h2>
 <ol>
-<li><strong>出力先</strong>を選ぶ — 既定は、プロジェクトの <span class="path">build/unity/&lt;ModelId&gt;/</span>（アニメは中の <span class="path">anim/</span>）。MS2026 / D-Drive の SourceAssets は、「MS2026 のパス…」「D-Drive のパス…」ボタンで Unity プロジェクトのフォルダ（<span class="path">Assets</span> の 1 つ上）を選ぶと使えます（選んでいないと灰色で、理由が出ます）。「フォルダを開く」で確認できます</li>
+<li><strong>出力先</strong>を選ぶ — 既定は、プロジェクトの <span class="path">build/unity/&lt;ModelId&gt;/</span>（アニメは中の <span class="path">anim/</span>）。MS2026 / D-Drive の SourceAssets は、「MS2026 のパス…」「D-Drive のパス…」ボタンで Unity プロジェクトのフォルダ（<span class="path">Assets</span> の 1 つ上）を選ぶと使えます（選んでいないと灰色で、理由が出ます）。「フォルダを開く」で確認できます。4 つ目の「animset の指定先」は、animset の <code>export.modelDir</code> / <code>export.animDir</code> に書いたフォルダです。<strong>MS2026 へ書くときは毎回確認が出ます</strong>（MS2026 は本来読み取りのみのリポジトリです。既定は「いいえ」）。<strong>D-Drive のパスが <code>main</code> / <code>master</code> ブランチのときは出力を止めます</strong>（ブランチを切ってから出力してください）</li>
 <li><strong>モデルを出力</strong> — 出力するメッシュは animset に入っています。空のときは、スケルトンにスキンされたメッシュを自動で選びます。「スキンされたメッシュを animset に設定」で入れることもできます（そのあと上の「保存」）</li>
 <li><strong>アニメーション</strong> — 出したいクリップにチェックを入れて「チェックしたクリップを出力」</li>
 </ol>
 <ul>
 <li>書き出しは<strong>別のプロセスで行う</strong>ので、Maya はそのまま操作できます。開いているシーンは変更されません。進み具合は画面の中の進捗バーと、下のログに出ます（出力したファイルの名前・サイズ・警告）</li>
-<li>ウィンドウを閉じると、実行中の書き出しは止まります</li>
-<li>同じ名前のファイルは上書きされます</li>
+<li>出力中は進捗バーの横に<strong>「中止」</strong>が出ます。押すと書き出しを止めます（書き終えたファイルは残ります）。ウィンドウを閉じても止まります</li>
+<li>同じ名前のファイルは上書きされます。ただし FBX は<strong>いったん別の名前で書いてから置き換える</strong>ので、書き出しの途中で失敗・中止しても、Unity プロジェクトの以前の正しい FBX は壊れません</li>
+<li>FBX は単位 cm・バイナリ・FBX 2020 形式で書きます</li>
+<li>モデルを出力すると、ログに「D-Drive に取り込むと ModelData の識別子は SK&lt;ModelId&gt; になる」という注意が出ます。D-Drive は <code>SK_MisotenChara.fbx</code> から <code>SKMisotenChara</code> という識別子を作り、カットシーンの <code>MisotenChara</code> と結び付かないので、<strong>取り込んだあとに ModelData の識別子を <code>MisotenChara</code> に直してください</strong>（D-Drive 側の直しを相談中。<code>humanoid.json</code> / <code>animset.json</code> の写しは、D-Drive が「対象外の拡張子」のログを出しますが、害はありません）</li>
+<li>参照（リファレンス）で読み込んだリグでも出力できます（書き出し用の一時シーンで参照を取り込んでから、ネームスペースを外します）</li>
 </ul>
 
 <h2>変更のあるクリップだけ</h2>
 <p>「変更のあるクリップだけ」にチェックが入っていると（既定）、前回の出力から<strong>クリップの範囲内のアニメーションや属性が変わっていないクリップは飛ばします</strong>（ログに「変更なしのため飛ばしました」と出ます）。出力先のファイルを消したときや、出力先を変えたときは、全部が対象になります。全部を出し直したいときはチェックを外してください。記録は <span class="path">anim/&lt;ModelId&gt;/.export-state.json</span> に残ります（Git には入れません）。</p>
-<div class="warn">変更を調べるのは、キー（アニメーションのカーブ）と、クリップの属性です。アニメーションレイヤーの重みや、コンストレイントの設定を変えただけのときは「変更なし」に見えます。迷ったら、チェックを外して全部出してください。</div>
+<div class="tip">変更を調べるのは、クリップの範囲内の<strong>各フレームの全ジョイントの姿勢（評価した結果）</strong>と、クリップの属性です。キーの接線・範囲外のキー・コンストレイントやリグの変更・アニメーションレイヤーの重みやミュートの変更も拾います（調べるのに少し時間がかかります）。ツールの出力のしかたを変えたときは、全部が対象になります。迷ったら、チェックを外して全部出してください。</div>
 
 <h2>ルートモーション</h2>
-<p>クリップの「ルートモーション」が <code>none</code>（既定）のとき、腰（Hips）の前後・左右の移動（X と Z）は、クリップの最初の位置に固定されます。その場で動く待機や走りのアニメーションに使います。<code>bake</code> のときは、動きをそのまま出します。上下（Y）は固定しません。</p>
+<p>クリップの「ルートモーション」が <code>none</code>（既定）のとき、腰（Hips。<span class="path">humanoid.json</span> の Hips のジョイント。無ければスケルトンのルート）の前後・左右の移動（X と Z）は、クリップの最初の位置に固定されます。その場で動く待機や走りのアニメーションに使います。<code>bake</code> のときは、動きをそのまま出します。上下（Y）は固定しません。</p>
 
 <h2 id="shot">ショットの出力（D-Drive のカットシーン用）</h2>
 <p><a href="anim-shot.html">ショットタブ</a>で開いているショットを書き出します。D-Drive のカットシーンの決まり（ファイル名・書き出しオプション）にそのまま合わせています。</p>
 <table>
 <tr><th>ファイル</th><th>中身</th></tr>
-<tr><td><code>&lt;Shot&gt;.fbx</code></td><td>カメラ（複数のカメラの区間を<strong>1 台のカメラ「Ubercam」に焼いたもの</strong>）・小道具（<code>PRP_</code>）・イベント（<code>EVT_</code>）。キャラクターは入りません</td></tr>
+<tr><td><code>&lt;Shot&gt;.fbx</code></td><td>カメラ（複数のカメラの区間を<strong>1 台のカメラ「Ubercam」に焼いたもの</strong>）・小道具（<code>PRP_</code>）。キャラクターは入りません。イベント（<code>EVT_</code>）は、「イベント（EVT_）も &lt;Shot&gt;.fbx に入れる」にチェックを入れたときだけ入ります（既定はオフ。D-Drive は <code>EVT_</code> を読めず、小物のトラックとして取り込んで警告が出るため。D-Drive に Signal マーカーを置く対応が入るまで、マーカーは手で置きます）</td></tr>
 <tr><td><code>&lt;Shot&gt;__&lt;ModelId&gt;.fbx</code></td><td>キャラクター 1 体ぶんの骨だけ（メッシュなし）。ショットの範囲を 1 フレームごとに焼き込み。クリップ列のクロスフェードを含んだ動きになります。同じキャラクターが 2 体目なら <code>_2</code></td></tr>
 <tr><td><code>&lt;Shot&gt;__&lt;ModelId&gt;.fctrack</code></td><td>顔の演出（任意）。キャラクターで「顔の .fctrack」を「あり」にしていて、Facial タブにデータが開いているときだけ</td></tr>
 <tr><td><code>&lt;Shot&gt;.shot.json</code></td><td>ショットの内容の写し（Unity は読みません。この道具で作り直すとき用）</td></tr>
@@ -57,13 +65,14 @@
 <li>同じ名前のファイルは<strong>上書き</strong>されます（D-Drive は、同じ名前で上書きすると、自動で作ったトラックだけを差し替えます）</li>
 <li>FBX のジョイント名にはネームスペースが付きません（<code>SK_&lt;ModelId&gt;.fbx</code> と同じ名前）</li>
 <li>カメラの切り替わりの瞬間は、補間せず前のカメラの値を次のフレームまで保ちます</li>
-<li>出力ボタンが灰色のときは、赤い文字の理由を直してください（ショット名、フレームレートがシーンの時間単位と違う、カメラの区間がシーンにない、キャラクターの animset がない、命名の❌ など）</li>
+<li>ショットの出力ボタンが灰色のときは、赤い文字の理由を直してください（ショット名、フレームレートがシーンの時間単位と違う、キャラクターの animset のフレームレートがショットと違う、カメラの区間がシーンにない、キャラクターの animset がない、合成中、など）。ボタンを押す前に、理由が見えます</li>
+<li>同じ ModelId のキャラクターを 2 体置くときは、別のネームスペースにしてください（同じネームスペースは同じスケルトンを指すので、出力できません）。2 体目のファイルは <code>_2</code> が付きます</li>
 </ul>
 <div class="warn">Unity（D-Drive）に置いて CutsceneData が自動で作られることは、まだ人が確認していません（確認中）。置き先は D-Drive の確認用ブランチ <code>tdrive-facial</code> で試してください。</div>
 
 <h2>仮の決め</h2>
 <ul>
-<li>出力先の既定は <span class="path">build/</span> です。MS2026 の <span class="path">Assets/_Project/DDrive/SourceAssets/</span> に直接出すかどうかは確認中です</li>
+<li>出力先の既定は <span class="path">build/</span> です。MS2026 の <span class="path">Assets/_Project/DDrive/SourceAssets/</span> に直接出す機能はありますが、MS2026 は読み取りのみの決めなので毎回確認します（確認中）</li>
 <li>Unity 側での Avatar や AnimatorController、AnimData の自動作成は、このツールではまだ行いません（<span class="path">humanoid.json</span> / <span class="path">animset.json</span> を元に、あとで作る予定です）</li>
 <li>FBX のテイク名は Maya の既定（Take 001）です。D-Drive は最初の動きをファイル名で取り込むので、影響しません</li>
 <li>Ubercam は、Maya の「Ubercam 作成」ではなく、この道具が各フレームのカメラの位置・向き・画角を 1 台のカメラに写して作ります（結果は同じ考え方です）。カメラの名前は <code>Ubercam</code> です</li>

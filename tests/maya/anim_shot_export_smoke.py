@@ -98,6 +98,7 @@ def _run(tmp: Path) -> None:
     rows = [{"clip": "A_MisotenChara_Idle", "holdSec": 2.0}, {"clip": "A_MisotenChara_Run_F", "holdSec": 1.0, "crossFadeSec": 0.08}]
     s.shot_add_character("MisotenChara", "MisotenChara", rows)
     s.shot_add_event(60, "Hit")
+    s.shot_set("export", {**s.shot["export"], "includeEvents": True})  # EVT_ を入れる設定（既定は入れない。docs/21 DD-2）
     s.save_shot()
     shot = s.shot
     plugs = ["MisotenChara:spine_C0_0_jnt.translateX", "MisotenChara:arm_L0_0_jnt.rotateZ"]

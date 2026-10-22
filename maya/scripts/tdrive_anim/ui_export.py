@@ -1,7 +1,9 @@
 """出力タブ（docs/20 §6.4、チケット AN-6 / AN-8）: Unity 用の分割出力（モデル / アニメーション）と、ショット（D-Drive のカットシーン用）の出力。
 
 - 別プロセスの mayapy が FBX を書く（`export.SplitJob`）ので Maya は止まらない。進捗はウィンドウ内、ログに出力ファイルとサイズ・警告
-- 命名の❌（禁止文字・`@`・24 fps・クリップ名の形 など）があるうちは出力ボタンを無効にして理由を表示する（docs/20 §2.5）
+- 命名の❌（禁止文字・`@`・24 fps・クリップ名の形 など）があるうち、またはブレンド / ショットの合成中は出力ボタンを無効にして理由を表示する（docs/20 §2.5。SF-1）。
+  命名の検査は「命名を確認」か出力ボタンを押したときに行う（タブを開いただけでは行わない。UX-9）
+- 出力中は「中止」で裏のプロセスを止められる（UX-7）。MS2026 への出力は毎回確認、D-Drive が main / master のときは止める（CR-6）
 - dx11Shader・Render Override は使わない
 """
 
@@ -15,6 +17,7 @@ from PySide6 import QtCore, QtWidgets
 
 from tdrive import lifecycle, project
 
+from . import composition as K
 from . import export as X
 from . import scene_naming as SN
 from . import session
@@ -48,10 +51,12 @@ class ExportTab(QtWidgets.QWidget):
         self.preset = QtWidgets.QComboBox()
         for p in E.PRESETS:
             self.preset.addItem(E.PRESET_LABEL[p], p)
-        self.preset.setToolTip("既定: プロジェクトの build/unity/<ModelId>。MS2026 / D-Drive の SourceAssets はプロジェクト設定にパスを書くと選べます（docs/20 §9 Q-4）")
+        self.preset.setToolTip("既定: プロジェクトの build/unity/<ModelId>。MS2026 / D-Drive の SourceAssets は「パス…」で Unity プロジェクトを指定すると選べます（docs/20 §9 Q-4）。\n"
+                               "「animset の指定先」は animset の export.modelDir / animDir に書いたフォルダです。MS2026 へ書くときは毎回確認し、D-Drive が main / master のときは出力を止めます")
         self.preset.activated.connect(lambda *_: self.refresh())
         row.addWidget(self.preset, 1)
         self.open_btn = QtWidgets.QPushButton("フォルダを開く")
+        self.open_btn.setToolTip("モデルの出力先のフォルダをエクスプローラーで開きます（無ければ作ります）")
         self.open_btn.clicked.connect(lambda *_: self.open_folder())
         row.addWidget(self.open_btn)
         for label, key, tip in (("MS2026 のパス…", "animMs2026Root", "MS2026 の Unity プロジェクトのフォルダ（Assets の 1 つ上）を選びます。プロジェクト設定に保存されます"),
@@ -107,8 +112,10 @@ class ExportTab(QtWidgets.QWidget):
         av.addWidget(self.clip_list)
         ar = QtWidgets.QHBoxLayout()
         self.all_btn = QtWidgets.QPushButton("すべてチェック")
+        self.all_btn.setToolTip("一覧のクリップを全部チェックします")
         self.all_btn.clicked.connect(lambda *_, on=True: self._check_all(on))
         self.none_btn = QtWidgets.QPushButton("チェックを外す")
+        self.none_btn.setToolTip("一覧のチェックを全部外します")
         self.none_btn.clicked.connect(lambda *_, on=False: self._check_all(on))
         self.anim_btn = QtWidgets.QPushButton("チェックしたクリップを出力")
         self.anim_btn.setToolTip("ジョイントだけをクリップの範囲でベイクして書き出します（コントローラ・コンストレイントは出ません）。rootMotion が none のクリップは Hips の XZ を固定します")
@@ -125,6 +132,15 @@ class ExportTab(QtWidgets.QWidget):
         self.shot_label.setWordWrap(True)
         self.shot_label.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
         sv.addWidget(self.shot_label)
+        self.shot_block_label = QtWidgets.QLabel()
+        self.shot_block_label.setWordWrap(True)
+        self.shot_block_label.setStyleSheet("color: #ff6060;")
+        sv.addWidget(self.shot_block_label)
+        self.events_cb = QtWidgets.QCheckBox("イベント（EVT_）も <Shot>.fbx に入れる")
+        self.events_cb.setToolTip("D-Drive には EVT_ / ddEvent を読むコードが無く、EVT_ は小物のトラックとして取り込まれて警告が出ます。D-Drive が対応するまでオフのままにします。\n"
+                                  "オフのときのイベントは shot.json にだけ残ります（D-Drive では手でマーカーを置きます）。既定: オフ")
+        self.events_cb.toggled.connect(lambda checked, *_: self._set_include_events(bool(checked)))
+        sv.addWidget(self.events_cb)
         self.shot_btn = QtWidgets.QPushButton("ショットを出力")
         self.shot_btn.setToolTip("ショットタブで開いているショットを書き出します: <Shot>.fbx（Ubercam + 小道具 + EVT_）と、キャラクターごとの <Shot>__<ModelId>.fbx（ルートジョイントの階層だけ・ショットの範囲でベイク）。\n"
                                  "同じ名前のファイルは上書きされます。顔の .fctrack と <Shot>.shot.json も同じフォルダに書きます")
@@ -133,9 +149,16 @@ class ExportTab(QtWidgets.QWidget):
         v.addWidget(sbox)
 
         # ---- 進捗とログ
+        prow = QtWidgets.QHBoxLayout()
         self.progress = QtWidgets.QProgressBar()
         self.progress.setVisible(False)
-        v.addWidget(self.progress)
+        prow.addWidget(self.progress, 1)
+        self.cancel_btn = QtWidgets.QPushButton("中止")
+        self.cancel_btn.setToolTip("出力を止めます（裏のプロセスを止めます。書き終えたファイルは残り、書きかけのファイルは以前のものに影響しません）")
+        self.cancel_btn.setVisible(False)
+        self.cancel_btn.clicked.connect(lambda *_: self.cancel())
+        prow.addWidget(self.cancel_btn)
+        v.addLayout(prow)
         self.log = QtWidgets.QPlainTextEdit()
         self.log.setReadOnly(True)
         self.log.setMinimumHeight(130)
@@ -205,14 +228,38 @@ class ExportTab(QtWidgets.QWidget):
             w.setEnabled(True)
         self._update_buttons()
 
+    def block_reason(self) -> str:
+        """出力を止めている理由（無ければ ""）: 命名の❌・合成中（SF-1）・出力先の問題（CR-6）。"""
+        if not self.session.data:
+            return ""
+        if self.blocked:
+            return self.blocked
+        if K.active():
+            return X.COMPOSITION_BLOCK
+        return self.preset_problem() or E.write_problem(self.preset.currentData(), self._config())
+
     def _update_buttons(self) -> None:
         busy = self.job is not None
-        reason = self.blocked or (self.preset_problem() if self.session.data else "")
+        reason = self.block_reason()
         ok = bool(self.session.data) and not busy and not reason
         self.model_btn.setEnabled(ok)
         self.anim_btn.setEnabled(ok and self.clip_list.count() > 0)
-        self.shot_btn.setEnabled(ok and self.session.shot is not None)
+        why_shot = self.shot_problem() if (ok and self.session.shot is not None) else ""
+        self.shot_btn.setEnabled(ok and self.session.shot is not None and not why_shot)
         self.block_label.setText(("⛔ 出力できません: " + reason) if reason and self.session.data else "")
+        self.shot_block_label.setText(("⛔ ショットを出力できません: " + why_shot) if why_shot else "")  # UX-8: 押す前に理由が見える
+        self.cancel_btn.setVisible(busy)
+        events_on = bool((self.session.shot or {}).get("export", {}).get("includeEvents", False)) if self.session.shot else False
+        self.events_cb.setEnabled(self.session.shot is not None and not busy)
+        if self.events_cb.isChecked() != events_on:
+            self.events_cb.blockSignals(True)
+            self.events_cb.setChecked(events_on)
+            self.events_cb.blockSignals(False)
+
+    def _set_include_events(self, on: bool) -> None:
+        sh = self.session.shot
+        if sh is not None and bool(sh.get("export", {}).get("includeEvents", False)) != on:
+            self.session.shot_set("export", {**sh.get("export", {}), "includeEvents": on})
 
     def _shot_text(self) -> str:
         sh = self.session.shot
@@ -239,13 +286,16 @@ class ExportTab(QtWidgets.QWidget):
             return f"シーンの時間単位（{have}）がショットのフレームレート（{sh['frameRate']} fps）と違います（命名タブで直す）"
         if not any(cmds.objExists(c["node"]) for c in sh["cameras"]):
             return "シーンにあるカメラの区間がありません（ショットタブでカメラを足してください）"
+        animsets: dict[str, dict] = {}
         for ch in sh["characters"]:
             try:
                 aset = SS.animset_for(ch["modelId"], self.session.data)
                 SS.character_joints(ch, aset)
+                animsets[ch["modelId"]] = aset
             except (A.AnimSetError, ValueError) as exc:
                 return str(exc)
-        return ""
+        fps = SH.fps_problems(sh, animsets)  # DD-6
+        return fps[0] if fps else ""
 
     def check_names(self) -> bool:
         """命名の検査をして、❌ があれば出力を止める。出せるなら True。"""
@@ -309,10 +359,40 @@ class ExportTab(QtWidgets.QWidget):
     def _append(self, text: str) -> None:
         self.log.appendPlainText(text)
 
+    def _confirm_write(self) -> bool:
+        """MS2026 へ直接書くときの確認（既定「いいえ」。CR-6）。D-Drive の main への書き込みは block_reason が止める。"""
+        problem = E.write_problem(self.preset.currentData(), self._config())
+        if problem:
+            self._append("⛔ " + problem)
+            return False
+        warn = E.write_warning(self.preset.currentData())
+        if not warn:
+            return True
+        r = QtWidgets.QMessageBox.question(self, "T-Drive Animation", warn, QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No)
+        if r != QtWidgets.QMessageBox.Yes:
+            self._append("出力を取りやめました（MS2026 へは書き出していません）")
+            return False
+        return True
+
+    def cancel(self) -> None:
+        """出力を中止する（裏のプロセスを止める）。書き終えたファイルは残り、書きかけの一時ファイルは次回の出力で消える。"""
+        job = self.job
+        if job is None:
+            return
+        self.timer.stop()
+        job.kill()
+        self.job = None
+        self.progress.setVisible(False)
+        self._append("出力を中止しました（書き終えたファイルは残っています）")
+        self._update_buttons()
+
     def start(self, model: bool, clips: list[str]) -> bool:
         """出力を始める。命名の❌・出力先・対象なしのときは始めずに理由をログに出す。始めたら True。"""
         d = self.session.data
         if d is None or self.job is not None:
+            return False
+        if K.active():  # SF-1: 合成の動きを FBX に焼かない
+            self._append("⛔ " + X.COMPOSITION_BLOCK)
             return False
         if not self.check_names():
             self._append("⛔ " + self.blocked.splitlines()[0])
@@ -321,11 +401,15 @@ class ExportTab(QtWidgets.QWidget):
         if dirs is None:
             self._append("⛔ " + self.preset_problem())
             return False
+        if not self._confirm_write():
+            return False
         model_dir, anim_dir = dirs
+        fps: dict[str, str] | None = None
+        if clips:
+            fps = X.fingerprints(d, clips)  # 1 回だけ計算して、ジョブにも渡す（評価に時間がかかる）
         if clips and self.only_changed.isChecked():
             sp = self.session.path
             state = E.load_state(E.state_path(sp)) if sp else {"clips": {}}
-            fps = {n: X.fingerprint(A.find_clip(d, n), d) for n in clips}
             skipped = [n for n in clips if n not in E.changed_clips(clips, fps, state, anim_dir)]
             clips = [n for n in clips if n not in skipped]
             if skipped:
@@ -334,7 +418,7 @@ class ExportTab(QtWidgets.QWidget):
             self._append("出力するものがありません（クリップにチェックが無い、または変更のあるクリップがありません）")
             return False
         try:
-            self.job = X.SplitJob(d, model_dir, anim_dir, clips, model, self.session.path)
+            self.job = X.SplitJob(d, model_dir, anim_dir, clips, model, self.session.path, fps)
         except Exception as exc:  # noqa: BLE001
             lifecycle.report_error("出力を始められません", traceback.format_exc())
             self._append(f"⛔ 出力を始められませんでした: {exc}")
@@ -355,12 +439,20 @@ class ExportTab(QtWidgets.QWidget):
             if sh is None:
                 self._append("⛔ ショットが開かれていません")
             return False
+        if K.active():  # SF-1
+            self._append("⛔ " + X.COMPOSITION_BLOCK)
+            return False
         if not self.check_names():
             self._append("⛔ " + self.blocked.splitlines()[0])
             return False
         why = self.shot_problem()
         if why:
             self._append("⛔ " + why)
+            return False
+        if E.write_problem(self.preset.currentData(), self._config()):
+            self._append("⛔ " + E.write_problem(self.preset.currentData(), self._config()))
+            return False
+        if not self._confirm_write():
             return False
         try:
             out_dir = E.resolve_shot_dir(sh, self.preset.currentData(), self._config(), project.root())
@@ -397,6 +489,9 @@ class ExportTab(QtWidgets.QWidget):
                     self._append(f"✔ {r['out']}（{r.get('size', 0) / 1024:.0f} KB, {r['seconds']} 秒）")
                     for w in r.get("warnings", []):
                         self._append(f"   ⚠ {w}")
+                    if r.get("type") == "model":
+                        self._append(f"   ℹ D-Drive に取り込むと ModelData の識別子は SK{self.session.model_id} になり、カットシーンの {self.session.model_id} と結び付きません。"
+                                     f"取り込み後に識別子を {self.session.model_id} に直してください（docs/20 §8）。humanoid.json / animset.json の写しは D-Drive が「対象外の拡張子」のログを出しますが害はありません")
                 else:
                     self._append(f"✖ {r['name']}: {r.get('error', '失敗')}")
         except Exception as exc:  # noqa: BLE001
