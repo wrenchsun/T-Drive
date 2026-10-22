@@ -339,6 +339,8 @@ Unity 側（U-A1 / U-A2。[20](20_animation_workbench_spec.md) §8）は Phase U
 | AN-F-2 | クリップ一覧・遷移列の表に「ダブルクリックで編集」の一言（表の下のグレーの注記）。「現在の範囲から追加」の動作コンボに「入力もできます」のプレースホルダー | 低 | 0.2 | — | ⬜ |
 | AN-F-7 | 「ツールをリロード」で古い `AnimSession`（`export_state` の無い版）から引き継ぐとき `AttributeError` で警告が出る。`getattr(..., None)` で守り、無ければ「引き継ぎなし」と出す | 低 | 0.2 | 古い形のセッションを渡しても例外にならない（pytest） | ⬜ |
 | AN-F-8 | クリップタブの「▶ 再生」のあとの一時停止・コマ送りは Maya 標準（`Alt+V`、`Alt+.`／`Alt+,`）で行う旨をマニュアル anim-clips.html に書く | 低 | 0.1 | — | ⬜ |
+| AN-F-9 | 命名タブのテクスチャ検査が、どの面にも割り当てられていないマテリアルにつながる file ノードまで拾う（マテリアルは割り当て済みだけなのと食い違う）。割り当て済みマテリアルに届く file だけにし、部位名はマテリアル名から推定（`HairM` → `Hair`。`T_<ModelId>_Part_BaseColor2…` の連番を減らす） | 中 | 0.5 | 未割り当てマテリアルの file が一覧に出ない。割り当て済みの file は部位名がマテリアル由来になる（mayapy） | ⬜ |
+| AN-F-10 | 命名タブのシーン設定（fps / 単位 / 軸）の表示が、Maya 側の Undo や設定変更に追従しない（検査を押すまで古いまま）。`timeUnitChanged` / `linearUnitChanged` / `Undo` の scriptJob（`lifecycle.keep_alive` + `on_reload`）で表示だけ更新 | 低 | 0.3 | 単位を変えると表示が変わる（mayapy で scriptJob の登録と更新） | ⬜ |
 
 
 
