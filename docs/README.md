@@ -18,6 +18,7 @@
 | 15 | [15_facial_controller_design.md](15_facial_controller_design.md) | FacialController 設計（2 段タブの殻・Maya 非依存のコア・ベイク・プレビュー・Unity パッケージ・テスト） |
 | 16 | [16_ddrive_changes_for_facial.md](16_ddrive_changes_for_facial.md) | FacialController のための D-Drive 側の変更（調査: 変更なしで動く範囲・実装したほうがいい機能・チケット 7-8 との関係） |
 | 17 | [17_ddrive_toon_materials.md](17_ddrive_toon_materials.md) | D-Drive では扱いにくい Toon マテリアル（何が扱いにくいか・T-Drive 側の解決法・罠と避け方・D-Drive 側に実装したほうがいい機能 M-1〜M-9） |
+| 20 | [20_animation_workbench_spec.md](20_animation_workbench_spec.md) | **アニメーション作業台 仕様**（MS2026 の命名規則・クリップ・ブレンド / 遷移のプレビュー（DX11 不要）・Unity 用のモデル / アニメ分割出力・ショット（Timeline）作成と出力・設計・Unity 側の積み残し） |
 | 12 | [12_substance_painter.md](12_substance_painter.md) | Substance Painter の扱い（検討メモ・確認待ち） |
 | 10 | [10_manual_verification_2026-09-28.md](10_manual_verification_2026-09-28.md) | 人による確認項目（Phase 1〜4） |
 | 19 | [19_code_review_2026-10-03.md](19_code_review_2026-10-03.md) | コードレビュー結果（FacialController。opus による 5 領域のレビュー。指摘と対応状況） |
