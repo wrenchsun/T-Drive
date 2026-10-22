@@ -16,7 +16,7 @@ from pathlib import Path
 from maya import cmds
 from PySide6 import QtCore, QtWidgets
 
-from tdrive import services, shell
+from tdrive import services, shell, widgets as WG
 
 from . import environment, look, preview, project, roles, session
 from .ui_ab import ABTab
@@ -228,7 +228,7 @@ class HeaderBar(QtWidgets.QWidget):
         box.setContentsMargins(0, 0, 0, 0)
         row = QtWidgets.QHBoxLayout()
         row.addWidget(QtWidgets.QLabel("ネームスペース"))
-        self.ns_combo = QtWidgets.QComboBox()
+        self.ns_combo = WG.ComboBox()
         self.ns_combo.setSizeAdjustPolicy(QtWidgets.QComboBox.AdjustToMinimumContentsLengthWithIcon)
         self.ns_combo.setMinimumContentsLength(8)
         self.ns_combo.setToolTip(
@@ -520,7 +520,7 @@ class PartsTab(QtWidgets.QWidget):
                     part_item.setFlags(part_item.flags() & ~QtCore.Qt.ItemIsEditable)
                 self.table.setItem(row, 1, part_item)
 
-                combo = QtWidgets.QComboBox()
+                combo = WG.ComboBox()
                 for r in roles.ROLES:
                     combo.addItem(ROLE_LABELS[r], r)
                 combo.setEnabled(part is not None)
@@ -627,12 +627,12 @@ class RegisterDialog(QtWidgets.QDialog):
         form = QtWidgets.QFormLayout(self)
         form.addRow("マテリアル", QtWidgets.QLabel(", ".join(materials)))
         guess = roles.guess_role(materials[0])
-        self.part = QtWidgets.QComboBox()
+        self.part = WG.ComboBox()
         self.part.setEditable(True)
         self.part.addItems(parts)
         self.part.setCurrentText(guess if guess != "other" else materials[0])
         form.addRow("部位名", self.part)
-        self.role = QtWidgets.QComboBox()
+        self.role = WG.ComboBox()
         for r in roles.ROLES:
             self.role.addItem(ROLE_LABELS[r], r)
         self.role.setCurrentIndex(roles.ROLES.index(guess))
@@ -681,7 +681,7 @@ class MaskBox(QtWidgets.QGroupBox):
         row.addWidget(self.cancel_btn)
         row.addStretch(1)
         row.addWidget(QtWidgets.QLabel("表示:"))
-        self.view = QtWidgets.QComboBox()
+        self.view = WG.ComboBox()
         self.view.addItem("通常", None)
         for ch in mask.CHANNELS:
             self.view.addItem(f"{ch} だけ（白黒）", ch)
@@ -732,7 +732,7 @@ class FaceNormalBox(QtWidgets.QGroupBox):
         proxy.clicked.connect(lambda: self._run(self.session.create_face_proxy, self._target()))
         row.addWidget(proxy)
         row.addWidget(QtWidgets.QLabel("強さ"))
-        self.weight = QtWidgets.QDoubleSpinBox()
+        self.weight = WG.DoubleSpinBox()
         self.weight.setRange(0.0, 1.0)
         self.weight.setSingleStep(0.1)
         self.weight.setValue(0.7)

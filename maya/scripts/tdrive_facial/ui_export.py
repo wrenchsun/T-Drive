@@ -20,7 +20,7 @@ from typing import Optional
 from maya import cmds
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from tdrive import lifecycle
+from tdrive import lifecycle, widgets as WG
 
 from . import export
 from .core import validate as V
@@ -180,7 +180,7 @@ class ExportTab(QtWidgets.QWidget):
 
     @staticmethod
     def _spin() -> QtWidgets.QDoubleSpinBox:
-        w = QtWidgets.QDoubleSpinBox()
+        w = WG.DoubleSpinBox()
         w.setRange(-100000.0, 100000.0)
         w.setDecimals(1)
         w.setKeyboardTracking(False)

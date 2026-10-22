@@ -29,7 +29,7 @@ from typing import Callable, Optional
 from maya import cmds
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from tdrive import lifecycle, project
+from tdrive import lifecycle, project, widgets as WG
 
 from . import anim_import
 from . import scene as scene_mod
@@ -118,10 +118,10 @@ class _CurveRowWidgets:
         self.lo, self.hi = float(row.lo), float(row.hi)
         self.label = QtWidgets.QLabel(row.name)
         self.label.setFixedWidth(LABEL_WIDTH)
-        self.slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        self.slider = WG.Slider(QtCore.Qt.Horizontal)
         self.slider.setRange(0, SLIDER_STEPS)
         self.slider.setMinimumWidth(70)
-        self.spin = QtWidgets.QDoubleSpinBox()
+        self.spin = WG.DoubleSpinBox()
         self.spin.setRange(self.lo, self.hi)
         self.spin.setDecimals(3)
         self.spin.setSingleStep(max((self.hi - self.lo) / 100.0, 0.001))
@@ -256,7 +256,7 @@ class _BoneRowWidgets:
 
     @staticmethod
     def _spin(lo: float, hi: float, decimals: int, step: float, tip: str, axis: str) -> QtWidgets.QDoubleSpinBox:
-        s = QtWidgets.QDoubleSpinBox()
+        s = WG.DoubleSpinBox()
         s.setPrefix(f"{axis}  ")
         s.setRange(lo, hi)
         s.setDecimals(decimals)
@@ -344,7 +344,7 @@ class AnimImportDialog(QtWidgets.QDialog):
         self.source_group.addButton(self.rb_frame)
         self.source_group.addButton(self.rb_file)
         self.path_row = _PathRow(self, start_dir)
-        self.time = QtWidgets.QDoubleSpinBox()
+        self.time = WG.DoubleSpinBox()
         self.time.setRange(0.0, 100000.0)
         self.time.setDecimals(3)
         self.time.setSingleStep(0.1)
@@ -431,7 +431,7 @@ class BaseExpressionDialog(QtWidgets.QDialog):
         lbl.setWordWrap(True)
         v.addWidget(lbl)
         self.path_row = _PathRow(self, start_dir)
-        self.time = QtWidgets.QDoubleSpinBox()
+        self.time = WG.DoubleSpinBox()
         self.time.setRange(0.0, 100000.0)
         self.time.setDecimals(3)
         self.time.setSingleStep(0.1)

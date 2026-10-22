@@ -11,7 +11,7 @@ import traceback
 from maya import cmds
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from tdrive import lifecycle
+from tdrive import lifecycle, widgets as WG
 
 from . import clips as MC
 from . import session
@@ -35,13 +35,13 @@ class ClipsTab(QtWidgets.QWidget):
         # ---- 追加
         add = QtWidgets.QGroupBox("現在の範囲から追加")
         ah = QtWidgets.QHBoxLayout(add)
-        self.action = QtWidgets.QComboBox()
+        self.action = WG.ComboBox()
         self.action.setEditable(True)
         self.action.setToolTip("動作の名前（PascalCase）。語彙から選ぶか、自分で入力します。語彙は anim/_vocabulary.json で増やせます。既定: Idle")
-        self.direction = QtWidgets.QComboBox()
+        self.direction = WG.ComboBox()
         self.direction.addItems(["", "F", "B", "L", "R"])
         self.direction.setToolTip("方向（前 F / 後 B / 左 L / 右 R）。無ければ空")
-        self.number = QtWidgets.QSpinBox()
+        self.number = WG.SpinBox()
         self.number.setRange(0, 99)
         self.number.setSpecialValueText("連番なし")
         self.number.setToolTip("連番（01 など）。0 のときは付けません。範囲: 0〜99。既定: 連番なし")
@@ -87,14 +87,14 @@ class ClipsTab(QtWidgets.QWidget):
         # ---- 詳細（選んだクリップ）
         d = QtWidgets.QGroupBox("選んだクリップ")
         dv = QtWidgets.QFormLayout(d)
-        self.root_motion = QtWidgets.QComboBox()
+        self.root_motion = WG.ComboBox()
         self.root_motion.addItems(list(A.ROOT_MOTIONS))
         self.root_motion.setToolTip("none: Hips の移動を出力時にその場に固定（Unity の Original 相当）／ bake: そのまま出す。既定: none")
         self.root_motion.activated.connect(lambda *_: self._apply_detail("rootMotion", self.root_motion.currentText()))
-        self.layer = QtWidgets.QComboBox()
+        self.layer = WG.ComboBox()
         self.layer.setToolTip("Base: 全身／ UpperBody: 上半身だけ（レイヤーの確認はブレンドタブ）。既定: Base")
         self.layer.activated.connect(lambda *_: self._apply_detail("layer", self.layer.currentText()))
-        self.cross = QtWidgets.QDoubleSpinBox()
+        self.cross = WG.DoubleSpinBox()
         self.cross.setRange(0.0, 5.0)
         self.cross.setSingleStep(0.02)
         self.cross.setDecimals(2)
@@ -104,7 +104,7 @@ class ClipsTab(QtWidgets.QWidget):
         self.loop_cb = QtWidgets.QCheckBox("ループする")
         self.loop_cb.setToolTip("ループ再生・状態図でのループ（Unity の Loop Time）。一覧の「ループ」列でも変えられます。既定: 動作の語彙から決まります（Idle・Run はオン）")
         self.loop_cb.clicked.connect(lambda *_: self._apply_detail("loop", self.loop_cb.isChecked()))
-        self.state_group = QtWidgets.QComboBox()
+        self.state_group = WG.ComboBox()
         self.state_group.addItems(list(A.STATE_GROUPS))
         self.state_group.setToolTip("locomotion: 状態図（待機・走り…）に載せる／ oneshot: 単発の動作。既定: 動作の語彙から決まります")
         self.state_group.activated.connect(lambda *_: self._apply_detail("stateGroup", self.state_group.currentText()))

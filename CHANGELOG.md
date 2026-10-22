@@ -22,6 +22,7 @@
   - AN-1: 骨格（5 つのサブタブの枠・`tdrive_anim` パッケージ）、`animset.json` の読み書き・検証、メニュー Tools › T-Drive › Animation…
 
 ### 修正
+  - AN-F-4: Animation タブのスピンボックス・コンボ・スライダーが、マウスが重なっただけのホイールで値が変わる不具合。`tdrive_toon.ui_look` の「ホイールはフォーカス時だけ」を共通ウィジェット `tdrive.widgets`（SpinBox / DoubleSpinBox / ComboBox / Slider）に切り出し、Toon（公開名 `ToonSlider` 等は維持）/ Facial / Animation / 殻のすべてで使う。`test_ui_patterns.py` が直接 `QtWidgets.QSpinBox()` などを作っていないか検査する（MINOR: `tdrive.widgets` の追加）
   - AN-F-3: ブレンドタブの既定の遷移列がクリップの増減に追従する（手で編集した列は触らない）。「既定の列に戻す」ボタンを追加
 - Animation 修正チケット AN-F（実機確認 2026-10-23）
   - AN-F-1: クリップ / ブレンドタブの案内「先に animset を作ってください」が、animset を作ったあとも消えない不具合

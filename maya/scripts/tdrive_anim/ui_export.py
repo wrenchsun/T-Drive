@@ -15,7 +15,7 @@ import traceback
 from maya import cmds
 from PySide6 import QtCore, QtWidgets
 
-from tdrive import lifecycle, project
+from tdrive import lifecycle, project, widgets as WG
 
 from . import composition as K
 from . import export as X
@@ -48,7 +48,7 @@ class ExportTab(QtWidgets.QWidget):
         top = QtWidgets.QGroupBox("出力先")
         tv = QtWidgets.QVBoxLayout(top)
         row = QtWidgets.QHBoxLayout()
-        self.preset = QtWidgets.QComboBox()
+        self.preset = WG.ComboBox()
         for p in E.PRESETS:
             self.preset.addItem(E.PRESET_LABEL[p], p)
         self.preset.setToolTip("既定: プロジェクトの build/unity/<ModelId>。MS2026 / D-Drive の SourceAssets は「パス…」で Unity プロジェクトを指定すると選べます（docs/20 §9 Q-4）。\n"

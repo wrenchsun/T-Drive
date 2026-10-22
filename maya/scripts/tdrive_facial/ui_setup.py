@@ -12,7 +12,7 @@ from typing import Optional
 from maya import cmds
 from PySide6 import QtCore, QtWidgets
 
-from tdrive import lifecycle, project
+from tdrive import lifecycle, project, widgets as WG
 
 from . import scene as scene_mod
 from .session import NoLookError
@@ -51,7 +51,7 @@ def _selected_joints() -> list[str]:
 
 
 def _spin(lo: float, hi: float, step: float, decimals: int = 2, suffix: str = "") -> QtWidgets.QDoubleSpinBox:
-    w = QtWidgets.QDoubleSpinBox()
+    w = WG.DoubleSpinBox()
     w.setRange(lo, hi)
     w.setSingleStep(step)
     w.setDecimals(decimals)
@@ -62,7 +62,7 @@ def _spin(lo: float, hi: float, step: float, decimals: int = 2, suffix: str = ""
 
 
 def _int_spin(lo: int, hi: int) -> QtWidgets.QSpinBox:
-    w = QtWidgets.QSpinBox()
+    w = WG.SpinBox()
     w.setRange(lo, hi)
     w.setKeyboardTracking(False)
     return w
@@ -116,7 +116,7 @@ class SetupTab(QtWidgets.QWidget):
     def _build_target(self) -> None:
         f = self._group("対象のメッシュ")
         ns_row = QtWidgets.QHBoxLayout()
-        self.ns_combo = QtWidgets.QComboBox()
+        self.ns_combo = WG.ComboBox()
         self.ns_combo.setSizeAdjustPolicy(QtWidgets.QComboBox.AdjustToMinimumContentsLengthWithIcon)
         self.ns_combo.setMinimumContentsLength(8)
         self.ns_combo.setToolTip(
@@ -136,7 +136,7 @@ class SetupTab(QtWidgets.QWidget):
         self.ns_note.setVisible(False)
         f.addRow(self.ns_note)
         row = QtWidgets.QHBoxLayout()
-        self.mesh = QtWidgets.QComboBox()
+        self.mesh = WG.ComboBox()
         self.mesh.setSizeAdjustPolicy(QtWidgets.QComboBox.AdjustToMinimumContentsLengthWithIcon)
         self.mesh.setMinimumContentsLength(12)
         self.mesh.setToolTip("顔のメッシュ（blendShape があるもの）。ここを基準にシェイプとボーンを探します")
@@ -211,7 +211,7 @@ class SetupTab(QtWidgets.QWidget):
         row.addWidget(self.bone_from_sel)
         f.addRow("基準ボーン", row)
 
-        self.forward = QtWidgets.QComboBox()
+        self.forward = WG.ComboBox()
         for a in FORWARD_CHOICES:
             self.forward.addItem(a, a)
         self.forward.setToolTip("顔が向いている方向（基準ボーンのローカル軸）。Maya は Y が上なので X か Z を選びます")
@@ -287,7 +287,7 @@ class SetupTab(QtWidgets.QWidget):
         self.mirror_exclude.setToolTip("名前にこの文字を含むシェイプ・ボーンは反転しない（カンマで区切る）")
         self.mirror_exclude.editingFinished.connect(self.on_mirror_changed)
         f.addRow("反転しないもの", self.mirror_exclude)
-        self.mirror_axis = QtWidgets.QComboBox()
+        self.mirror_axis = WG.ComboBox()
         for a in MIRROR_AXES:
             self.mirror_axis.addItem(a, a)
         self.mirror_axis.setToolTip("ボーンを左右反転する軸。Maya で顔の左右が X のときは X")
@@ -296,7 +296,7 @@ class SetupTab(QtWidgets.QWidget):
 
     def _build_autogen(self) -> None:
         f = self._group("自動生成とベイク")
-        self.fill_mode = QtWidgets.QComboBox()
+        self.fill_mode = WG.ComboBox()
         for m in FILL_MODES:
             self.fill_mode.addItem(FILL_LABELS.get(m, m), m)
         self.fill_mode.setToolTip("キーを打っていない点のポーズを、キーからどう作るか")
@@ -319,7 +319,7 @@ class SetupTab(QtWidgets.QWidget):
         )
         self.quality_sharpness.valueChanged.connect(lambda *_: self.on_quality_changed())
         f.addRow("シャープさ", self.quality_sharpness)
-        self.quality_interp = QtWidgets.QComboBox()
+        self.quality_interp = WG.ComboBox()
         self.quality_interp.addItem("双線形（標準）", "bilinear")
         self.quality_interp.addItem("なめらか（Catmull-Rom）", "catmullRom")
         self.quality_interp.setToolTip(
@@ -455,7 +455,7 @@ class SetupTab(QtWidgets.QWidget):
     def _build_profile(self) -> None:
         f = self._group("命名規則プロファイル")
         row = QtWidgets.QHBoxLayout()
-        self.profile_combo = QtWidgets.QComboBox()
+        self.profile_combo = WG.ComboBox()
         self.profile_combo.setToolTip("シェイプ名の決まり（左右の名前・可動域・標準のシェイプ）")
         row.addWidget(self.profile_combo, 1)
         self.profile_overwrite = QtWidgets.QCheckBox("上書き")
@@ -514,7 +514,7 @@ class SetupTab(QtWidgets.QWidget):
         flt.setClearButtonEnabled(True)
         col.addWidget(flt)
         if kind == "curve":  # シェイプは名前の最初の _ の前で分けて見られる（プロファイルに categories があればそれ）
-            self.curve_cat = QtWidgets.QComboBox()
+            self.curve_cat = WG.ComboBox()
             self.curve_cat.setToolTip(
                 "シェイプを名前の「_」より前の言葉（eye・mouth など）で分けて、そのグループだけを一覧に出します。"
                 "かっこの中は「作業セットに入れた数 / グループの数」。下の「表示中を全部オン / オフ」は、いま一覧に出ているものだけに効きます"

@@ -22,6 +22,24 @@ def test_clicked_lambda_without_required_arg_with_defaults():
     assert not bad, bad
 
 
+def test_wheel_only_on_focus():
+    """スピンボックス・コンボ・スライダーは、マウスが重なっただけのホイールで値が変わらない（フォーカス時だけ。Phase E-8 → AN-F-4）。
+    共通ウィジェット（tdrive/widgets.py）を使い、`QtWidgets.QSpinBox()` などを直接作らない。Toon / Facial / Animation / 殻のすべてが対象。"""
+    widgets = (SCRIPTS / "tdrive/widgets.py").read_text(encoding="utf-8")
+    assert "def wheelEvent" in widgets and "self.hasFocus()" in widgets and "event.ignore()" in widgets and "StrongFocus" in widgets
+    for cls, base in (("SpinBox", "QSpinBox"), ("DoubleSpinBox", "QDoubleSpinBox"), ("ComboBox", "QComboBox"), ("Slider", "QSlider")):
+        assert f"class {cls}(WheelOnFocusMixin, QtWidgets.{base})" in widgets, cls  # ミックスインが先（wheelEvent が先に効く）
+    raw = re.compile(r"QtWidgets\.(QSpinBox|QDoubleSpinBox|QComboBox|QSlider)\(")
+    bad = [f"{f.parent.name}/{f.name}:{i}" for f in UI_FILES if f.name != "widgets.py"
+           for i, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1) if raw.search(line)]
+    assert not bad, f"直接作らずに tdrive.widgets を使う: {bad}"
+    tools = {d: [f for f in UI_FILES if f.parent.name == d and "WG." in f.read_text(encoding="utf-8")] for d in ("tdrive_toon", "tdrive_facial", "tdrive_anim")}
+    assert all(tools.values()), tools  # 3 つのツールすべてが共通ウィジェットを使っている
+    look = (SCRIPTS / "tdrive_toon/ui_look.py").read_text(encoding="utf-8")
+    assert "_WheelOnFocusMixin = WG.WheelOnFocusMixin" in look  # Toon の公開名（ToonSlider / ToonSpin / ToonIntSpin のミックスイン）を維持
+    assert "def wheelEvent" not in look  # 実装は 1 か所
+
+
 def test_reload_unregisters_render_override_before_dropping_modules():
     """Maya に登録した Python オブジェクトは、モジュールを捨てる前に登録を外す（外さないと解放済みメモリで Maya が落ちる）。"""
     src = (ROOT / "maya/mcp_scripts/reload_tdrive.py").read_text(encoding="utf-8")

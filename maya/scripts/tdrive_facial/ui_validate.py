@@ -10,7 +10,7 @@ import traceback
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from tdrive import lifecycle
+from tdrive import lifecycle, widgets as WG
 
 from .core.presenters import CONFIRM_CANCEL, SELECT_NEEDS_CONFIRM, SELECT_SELECTED
 from .core.validate import SEVERITY_ERROR, SEVERITY_INFO, SEVERITY_WARNING
@@ -160,7 +160,7 @@ class ValidateTab(QtWidgets.QWidget):
                 top.addChild(it)
                 self._issue_of_item[id(it)] = r
                 if r.fix == "rename" and (r.kind, r.name) in self.choices:
-                    combo = QtWidgets.QComboBox()
+                    combo = WG.ComboBox()
                     cands = list(r.candidates)
                     cur = self.choices[(r.kind, r.name)]
                     for c in cands:

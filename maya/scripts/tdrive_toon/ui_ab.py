@@ -6,6 +6,8 @@ import re
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from tdrive import widgets as WG
+
 from . import environment, look, params, session
 from .ui_look import COMMON_ROWS
 
@@ -28,8 +30,8 @@ class ABTab(QtWidgets.QWidget):
 
         # ---- A / B の選択
         row = QtWidgets.QHBoxLayout()
-        self.combo_a = QtWidgets.QComboBox()
-        self.combo_b = QtWidgets.QComboBox()
+        self.combo_a = WG.ComboBox()
+        self.combo_b = WG.ComboBox()
         for label, combo, slot in (("A:", self.combo_a, 0), ("B:", self.combo_b, 1)):
             row.addWidget(QtWidgets.QLabel(label))
             combo.activated.connect(lambda _i, c=combo, sl=slot: self._run(self.session.set_ab, sl, c.currentData()))
@@ -65,24 +67,24 @@ class ABTab(QtWidgets.QWidget):
         row.addWidget(cap)
         self.all_angles = QtWidgets.QCheckBox("正面 / 3/4 / 横 / 後ろ を一括")
         row.addWidget(self.all_angles)
-        self.target = QtWidgets.QComboBox()
+        self.target = WG.ComboBox()
         self.target.addItem("全身", "all")
         self.target.addItem("顔", "head")
         row.addWidget(self.target)
         row.addStretch(1)
-        self.mode = QtWidgets.QComboBox()
+        self.mode = WG.ComboBox()
         self.mode.addItems(["左右", "ワイプ"])
         self.mode.currentIndexChanged.connect(self._update_compare)
         row.addWidget(QtWidgets.QLabel("比較:"))
         row.addWidget(self.mode)
         v.addLayout(row)
 
-        self.shot_select = QtWidgets.QComboBox()
+        self.shot_select = WG.ComboBox()
         self.shot_select.currentIndexChanged.connect(self._update_compare)
         v.addWidget(self.shot_select)
         self.compare = CompareView()
         v.addWidget(self.compare, 3)
-        self.wipe = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        self.wipe = WG.Slider(QtCore.Qt.Horizontal)
         self.wipe.setRange(0, 1000)
         self.wipe.setValue(500)
         self.wipe.valueChanged.connect(self._update_compare)
@@ -276,7 +278,7 @@ class AddVariantDialog(QtWidgets.QDialog):
         self.label = QtWidgets.QLineEdit()
         self.label.setPlaceholderText("例: 顔の影を弱く")
         form.addRow("説明", self.label)
-        self.copy_from = QtWidgets.QComboBox()
+        self.copy_from = WG.ComboBox()
         self.copy_from.addItems(existing)
         form.addRow("複製元", self.copy_from)
         buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)

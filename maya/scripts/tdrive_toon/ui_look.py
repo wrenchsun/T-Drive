@@ -13,6 +13,8 @@ import webbrowser
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from tdrive import widgets as WG
+
 from pathlib import Path
 
 from . import REPO_ROOT, features, lifecycle, look, look_layout, params, presets, preview, project, roles, session, ui_look_dialogs
@@ -97,14 +99,7 @@ def open_manual(anchor: str) -> None:
     webbrowser.open(uri)
 
 
-class _WheelOnFocusMixin:
-    """ホイールはフォーカスがあるときだけ値を変える（パネルをスクロール中の誤操作を防ぐ。E-8）。"""
-
-    def wheelEvent(self, event) -> None:  # noqa: N802
-        if self.hasFocus():
-            super().wheelEvent(event)
-        else:
-            event.ignore()  # 親（スクロール領域）へ渡す
+_WheelOnFocusMixin = WG.WheelOnFocusMixin  # 共通ウィジェットへ切り出した（tdrive/widgets.py。AN-F-4）。この名前は維持
 
 
 class ToonSlider(_WheelOnFocusMixin, QtWidgets.QSlider):
@@ -260,7 +255,7 @@ class LookTab(QtWidgets.QWidget):
         self.follow.toggled.connect(self._on_follow_toggled)
         top.addWidget(self.follow)
         top.addWidget(QtWidgets.QLabel("編集先:"))
-        self.variant = QtWidgets.QComboBox()
+        self.variant = WG.ComboBox()
         self.variant.setToolTip("base = 基本の値。バリアントを選ぶとその案への上書きとして書き込む（A/B タブで比較）")
         self.variant.currentIndexChanged.connect(self.on_variant)
         top.addWidget(self.variant)
@@ -304,7 +299,7 @@ class LookTab(QtWidgets.QWidget):
         self.close_all_btn.clicked.connect(lambda *_: self.set_all_expanded(False))
         self.toolbar.addWidget(self.open_all_btn)
         self.toolbar.addWidget(self.close_all_btn)
-        self.mode = QtWidgets.QComboBox()
+        self.mode = WG.ComboBox()
         self.mode.addItem("かんたん", MODE_SIMPLE)
         self.mode.addItem("詳細", MODE_DETAIL)
         self.mode.setToolTip("かんたん = よく使う項目だけ（影・線・固定色・リム・髪ハイライト・ベース色）。詳細 = 全部。検索中は両方から探します")
@@ -951,7 +946,7 @@ class ParamRow:
             self.check.clicked.connect(self._on_bool)
             return self.check
         if k == "blend":
-            self.combo = QtWidgets.QComboBox()
+            self.combo = WG.ComboBox()
             self.combo.addItems(params.BLEND_TYPES)
             self.combo.activated.connect(self._on_blend)
             return self.combo

@@ -13,7 +13,7 @@ import traceback
 from maya import cmds
 from PySide6 import QtCore, QtWidgets
 
-from tdrive import lifecycle, project
+from tdrive import lifecycle, project, widgets as WG
 
 from . import composition as K
 from . import scene_naming as SN
@@ -50,14 +50,14 @@ class ShotTab(QtWidgets.QWidget):
         self.name.setPlaceholderText("例: Opening01")
         self.name.setToolTip("英数字の PascalCase（先頭は大文字。「__」は使えません）。ファイル名 <Shot>.fbx と <Shot>__<ModelId>.fbx になります")
         f.addRow("名前", self.name)
-        self.fps = QtWidgets.QComboBox()
+        self.fps = WG.ComboBox()
         self.fps.addItem("30 fps", 30)
         self.fps.addItem("60 fps", 60)
         self.fps.setToolTip("D-Drive は 30 か 60。1 ショットの中は同じにします。シーンの時間単位は変えません（違うときは警告するので、命名タブの「直す」で合わせます）。既定: 30")
         f.addRow("フレームレート", self.fps)
-        self.start = QtWidgets.QSpinBox()
+        self.start = WG.SpinBox()
         self.start.setRange(-100000, 1000000)
-        self.end = QtWidgets.QSpinBox()
+        self.end = WG.SpinBox()
         self.end.setRange(-100000, 1000000)
         self.end.setValue(240)
         self.start.setToolTip("ショットの開始フレーム。既定: 0")
@@ -98,12 +98,12 @@ class ShotTab(QtWidgets.QWidget):
             r.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
         cv.addWidget(self.cam_table)
         cr = QtWidgets.QHBoxLayout()
-        self.cam_combo = QtWidgets.QComboBox()
+        self.cam_combo = WG.ComboBox()
         self.cam_combo.setToolTip("シーンのカメラ（標準の persp などは除く）")
-        self.cam_start = QtWidgets.QSpinBox()
+        self.cam_start = WG.SpinBox()
         self.cam_start.setRange(-100000, 1000000)
         self.cam_start.setToolTip("カメラを使い始めるフレーム。既定: ショットの開始")
-        self.cam_end = QtWidgets.QSpinBox()
+        self.cam_end = WG.SpinBox()
         self.cam_end.setRange(-100000, 1000000)
         self.cam_end.setToolTip("カメラを使い終わるフレーム（含む）。既定: ショットの終了")
         self.cam_add = QtWidgets.QPushButton("区間を追加")

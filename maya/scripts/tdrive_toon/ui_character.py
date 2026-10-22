@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from tdrive import widgets as WG
+
 from . import features, look, params, session
 
 UNITY_ONLY = "<span style='color:#9aa6b8'>（Unity でのみ）</span>"
@@ -93,7 +95,7 @@ class CharacterTab(QtWidgets.QWidget):
         gen = QtWidgets.QPushButton("マスクから生成…")
         gen.setToolTip("角度ごとの白黒マスク（face_shadow_000.png, _030 … _180）が入ったフォルダを選ぶ → 顔マテリアルに設定")
         gen.clicked.connect(self._generate_face_shadow)
-        self.fs_size = QtWidgets.QComboBox()
+        self.fs_size = WG.ComboBox()
         self.fs_size.addItems(["256", "512", "1024"])
         self.fs_size.setCurrentText("512")
         row = QtWidgets.QHBoxLayout()
@@ -139,7 +141,7 @@ class CharacterTab(QtWidgets.QWidget):
         # ---- 表情パラメータ T-25（3-9 プレビュー）
         box, v = self._group("表情パラメータ（0〜1 の入力で値を動かす対応表）", form=False, feature="expressions")
         row = QtWidgets.QHBoxLayout()
-        self.expr = QtWidgets.QComboBox()
+        self.expr = WG.ComboBox()
         self.expr.currentIndexChanged.connect(self._show_expression)
         row.addWidget(self.expr, 1)
         for text, fn in (("追加…", self._add_expression), ("削除", self._remove_expression), ("行を追加", self._add_row), ("行を削除", self._remove_row)):
@@ -156,7 +158,7 @@ class CharacterTab(QtWidgets.QWidget):
         v.addWidget(self.table)
         prow = QtWidgets.QHBoxLayout()
         prow.addWidget(QtWidgets.QLabel("プレビュー（保存されません）"))
-        self.expr_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        self.expr_slider = WG.Slider(QtCore.Qt.Horizontal)
         self.expr_slider.setRange(0, 100)
         self.expr_slider.valueChanged.connect(self._preview_expression)
         prow.addWidget(self.expr_slider, 1)
@@ -181,7 +183,7 @@ class CharacterTab(QtWidgets.QWidget):
         return box, inner
 
     def _spin(self, f, label, path, lo, hi, step):
-        w = QtWidgets.QDoubleSpinBox()
+        w = WG.DoubleSpinBox()
         w.setRange(lo, hi)
         w.setSingleStep(step)
         w.setDecimals(3)
@@ -294,7 +296,7 @@ class CharacterTab(QtWidgets.QWidget):
             floats = [p.unity for p in params.SPECIFIC_PARAMS if p.kind == params.FLOAT]
             for i, e in enumerate(rows):
                 for col, (items, value) in enumerate(((mats, e["material"]), (floats, e["property"]))):
-                    combo = QtWidgets.QComboBox()
+                    combo = WG.ComboBox()
                     combo.addItems(items)
                     combo.setCurrentText(value)
                     combo.currentTextChanged.connect(self._write_table)

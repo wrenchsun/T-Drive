@@ -7,6 +7,8 @@ import time
 
 from PySide6 import QtCore, QtWidgets
 
+from tdrive import widgets as WG
+
 from . import envmath, environment, look, preview, session
 
 ROTATE_STEP_DEG = 3.0
@@ -27,7 +29,7 @@ class PreviewTab(QtWidgets.QWidget):
         # ---- 環境
         box = QtWidgets.QGroupBox("環境（Unity の描画条件）")
         form = QtWidgets.QFormLayout(box)
-        self.profile = QtWidgets.QComboBox()
+        self.profile = WG.ComboBox()
         self.profile.activated.connect(self.on_profile)
         form.addRow("環境プロファイル", self.profile)
         self.profile_info = QtWidgets.QLabel()
@@ -39,7 +41,7 @@ class PreviewTab(QtWidgets.QWidget):
         box = QtWidgets.QGroupBox("カメラ（環境プロファイルの縦 FOV / Near / Far）")
         h = QtWidgets.QVBoxLayout(box)
         row = QtWidgets.QHBoxLayout()
-        self.target = QtWidgets.QComboBox()
+        self.target = WG.ComboBox()
         self.target.addItem("顔", "head")
         self.target.addItem("全身", "all")
         row.addWidget(QtWidgets.QLabel("範囲:"))
@@ -124,7 +126,7 @@ class PreviewTab(QtWidgets.QWidget):
         v.addStretch(1)
 
     def _slider(self, lo: int, hi: int) -> QtWidgets.QSlider:
-        s = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        s = WG.Slider(QtCore.Qt.Horizontal)
         s.setRange(lo, hi)
         s.valueChanged.connect(self._on_slider)
         return s

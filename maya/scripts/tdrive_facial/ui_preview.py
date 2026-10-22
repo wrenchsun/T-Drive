@@ -29,7 +29,7 @@ from typing import Optional
 from maya import cmds
 from PySide6 import QtCore, QtWidgets
 
-from tdrive import lifecycle
+from tdrive import lifecycle, widgets as WG
 
 from .session import FacialSessionError
 from .ui import DIM_STYLE, WARN_STYLE, YAW_PLUS_HELP, ask_yes_no
@@ -73,7 +73,7 @@ class TimeRangeDialog(QtWidgets.QDialog):
 
     @staticmethod
     def _spin(value: float, lo_step: float = 1.0) -> QtWidgets.QDoubleSpinBox:
-        w = QtWidgets.QDoubleSpinBox()
+        w = WG.DoubleSpinBox()
         w.setRange(-100000.0, 100000.0)
         w.setDecimals(2)
         w.setSingleStep(lo_step)
@@ -131,7 +131,7 @@ class PreviewGroup(QtWidgets.QGroupBox):
 
         row = QtWidgets.QHBoxLayout()
         row.addWidget(QtWidgets.QLabel("カメラ"))
-        self.camera_combo = QtWidgets.QComboBox()
+        self.camera_combo = WG.ComboBox()
         self.camera_combo.setSizeAdjustPolicy(QtWidgets.QComboBox.AdjustToMinimumContentsLengthWithIcon)
         self.camera_combo.setMinimumContentsLength(10)
         self.camera_combo.setToolTip("補正を計算するカメラ。プレビューがあるときは、選ぶとすぐつなぎ替えます")
@@ -161,14 +161,14 @@ class PreviewGroup(QtWidgets.QGroupBox):
         self.sliders.setColumnStretch(1, 1)
         v.addLayout(self.sliders)
         self.alpha_label = QtWidgets.QLabel("強さ")
-        self.alpha_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        self.alpha_slider = WG.Slider(QtCore.Qt.Horizontal)
         self.alpha_slider.setRange(0, SLIDER_STEPS)
         self.alpha_slider.setToolTip("補正全体の強さ（0 = 補正なし、1 = そのまま）")
         self.alpha_value = QtWidgets.QLabel()
         self.alpha_slider.valueChanged.connect(partial(self.on_slider, "alpha"))
         self._watch_drag(self.alpha_slider)
         self.ex_label = QtWidgets.QLabel("誇張")
-        self.ex_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        self.ex_slider = WG.Slider(QtCore.Qt.Horizontal)
         self.ex_slider.setRange(0, SLIDER_STEPS)
         self.ex_slider.setToolTip(
             "誇張の強さ（0 = 誇張なし、1 = ポーズに入れた誇張の通り）。重みが 1 を超えるポーズをベイクすると、"
@@ -178,7 +178,7 @@ class PreviewGroup(QtWidgets.QGroupBox):
         self.ex_slider.valueChanged.connect(partial(self.on_slider, "exaggeration"))
         self._watch_drag(self.ex_slider)
         self.persp_label = QtWidgets.QLabel("パース補正")
-        self.persp_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        self.persp_slider = WG.Slider(QtCore.Qt.Horizontal)
         self.persp_slider.setRange(0, SLIDER_STEPS)
         self.persp_slider.setToolTip(
             "パース補正の強さ（0 = 補正なし、1 = 作った通り）。広角で寄ったときの奥行きを押さえる補正で、カメラの距離 / 画角に応じて動きます。"
@@ -255,7 +255,7 @@ class PreviewGroup(QtWidgets.QGroupBox):
 
     @staticmethod
     def _angle_spin(prefix: str, lo: float, hi: float) -> QtWidgets.QDoubleSpinBox:
-        w = QtWidgets.QDoubleSpinBox()
+        w = WG.DoubleSpinBox()
         w.setRange(lo, hi)
         w.setDecimals(1)
         w.setSingleStep(5.0)
@@ -398,7 +398,7 @@ class PreviewGroup(QtWidgets.QGroupBox):
         for i, (name, attr, _v, _k) in enumerate(st.emotions, start=3):
             by_distance = name in st.distance_layers
             label = QtWidgets.QLabel(f"感情 {name}")
-            slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+            slider = WG.Slider(QtCore.Qt.Horizontal)
             slider.setRange(0, SLIDER_STEPS)
             slider.setToolTip(
                 f"レイヤー「{name}」は重みをカメラの距離で決めます（レイヤータブの「重みの出どころ」）。このスライダーは使われません"

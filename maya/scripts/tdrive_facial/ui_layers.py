@@ -11,7 +11,7 @@ from typing import Optional
 
 from PySide6 import QtCore, QtWidgets
 
-from tdrive import lifecycle
+from tdrive import lifecycle, widgets as WG
 
 from .core.presenters import (
     EMOTION_PRESETS,
@@ -116,7 +116,7 @@ class LayersTab(QtWidgets.QWidget):
         ov.addLayout(row)
         row = QtWidgets.QHBoxLayout()
         row.addWidget(QtWidgets.QLabel("ポーズをコピー: 元"))
-        self.copy_source = QtWidgets.QComboBox()
+        self.copy_source = WG.ComboBox()
         self.copy_source.setToolTip("ほかのレイヤーのポーズを、選んだレイヤーへコピーする（叩き台作り）。同じ位置の点は上書きされます")
         row.addWidget(self.copy_source, 1)
         self.copy_btn = QtWidgets.QPushButton("コピー")
@@ -129,7 +129,7 @@ class LayersTab(QtWidgets.QWidget):
         src_box = QtWidgets.QGroupBox("重みの出どころ（選んだレイヤー）")
         sf = QtWidgets.QFormLayout(src_box)
         sf.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
-        self.src_combo = QtWidgets.QComboBox()
+        self.src_combo = WG.ComboBox()
         self.src_combo.addItem("直接（Timeline / 部品の値）", "direct")
         self.src_combo.addItem("カメラの距離", "distance")
         self.src_combo.setToolTip(
@@ -165,7 +165,7 @@ class LayersTab(QtWidgets.QWidget):
         # ---- 表情での弱め
         dampen_box = QtWidgets.QGroupBox("表情が強いときに補正を弱める")
         f = QtWidgets.QFormLayout(dampen_box)
-        self.dampen = QtWidgets.QDoubleSpinBox()
+        self.dampen = WG.DoubleSpinBox()
         self.dampen.setRange(0.0, 1.0)
         self.dampen.setSingleStep(0.05)
         self.dampen.setDecimals(2)
@@ -187,7 +187,7 @@ class LayersTab(QtWidgets.QWidget):
         self.refresh()
 
     def _dist_spin(self, lo: float, hi: float, step: float, suffix: str, tip: str) -> QtWidgets.QDoubleSpinBox:
-        w = QtWidgets.QDoubleSpinBox()
+        w = WG.DoubleSpinBox()
         w.setRange(lo, hi)
         w.setSingleStep(step)
         w.setDecimals(2)

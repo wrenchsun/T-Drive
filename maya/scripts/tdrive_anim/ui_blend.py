@@ -14,7 +14,7 @@ import traceback
 from maya import cmds
 from PySide6 import QtCore, QtWidgets
 
-from tdrive import lifecycle
+from tdrive import lifecycle, widgets as WG
 
 from . import composition as K
 from . import scene_naming as SN
@@ -101,7 +101,7 @@ class BlendTab(QtWidgets.QWidget):
         self.graph_btn.clicked.connect(lambda *_: self.use_graph())
         gv.addWidget(self.graph_btn)
         form = QtWidgets.QFormLayout()
-        self.speed = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        self.speed = WG.Slider(QtCore.Qt.Horizontal)
         self.speed.setRange(0, 100)
         self.speed.setToolTip("Speed（0〜1）。0.1 より大きいと Idle → Run、小さいと Run → Idle。再生中に動かすと、その時刻から遷移します")
         self.speed_label = QtWidgets.QLabel("0.00")
@@ -110,13 +110,13 @@ class BlendTab(QtWidgets.QWidget):
         sp.addWidget(self.speed, 1)
         sp.addWidget(self.speed_label)
         form.addRow("Speed", sp)
-        self.action_state = QtWidgets.QComboBox()
+        self.action_state = WG.ComboBox()
         for name, val in M.ACTION_STATES.items():
             self.action_state.addItem(f"{name} ({val})", val)
         self.action_state.setToolTip("ActionState。Jump (2) / Fall (3) にすると、Idle・Run から Jump へ遷移します。Jump 以外に戻すと、Speed に応じて Idle か Run に戻ります（AC_PlayerPreview と同じ）")
         self.action_state.activated.connect(lambda *_: self.on_param_changed())
         form.addRow("ActionState", self.action_state)
-        self.total_sec = QtWidgets.QDoubleSpinBox()
+        self.total_sec = WG.DoubleSpinBox()
         self.total_sec.setRange(1.0, 120.0)
         self.total_sec.setValue(8.0)
         self.total_sec.setSuffix(" 秒")
@@ -142,10 +142,10 @@ class BlendTab(QtWidgets.QWidget):
         self.layer_on = QtWidgets.QCheckBox("UpperBody を使う")
         self.layer_on.setToolTip("animset のレイヤー UpperBody の maskRoot（既定 spine_C0_3_jnt）以下のジョイントにだけ、下のクリップを重ねます")
         lf.addRow(self.layer_on)
-        self.layer_clip = QtWidgets.QComboBox()
+        self.layer_clip = WG.ComboBox()
         self.layer_clip.setToolTip("上半身に重ねるクリップ（ループします）")
         lf.addRow("クリップ", self.layer_clip)
-        self.layer_weight = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        self.layer_weight = WG.Slider(QtCore.Qt.Horizontal)
         self.layer_weight.setRange(0, 100)
         self.layer_weight.setValue(100)
         self.layer_weight.setToolTip("重み（0〜1）。合成中でも動かせます。既定: 1")
@@ -165,7 +165,7 @@ class BlendTab(QtWidgets.QWidget):
         self.loop_cb = QtWidgets.QCheckBox("ループ")
         self.loop_cb.setChecked(True)
         self.loop_cb.setToolTip("ON: ループ再生／ OFF: 1 回だけ。既定: ON")
-        self.play_speed = QtWidgets.QComboBox()
+        self.play_speed = WG.ComboBox()
         for label, val in (("1×", 1.0), ("0.5×", 0.5), ("0.25×", 0.25)):
             self.play_speed.addItem(label, val)
         self.play_speed.setToolTip("再生の速さ。既定: 1×（実時間）")
@@ -269,7 +269,7 @@ class BlendTab(QtWidgets.QWidget):
             self.rows_table.setRowCount(len(self.rows))
             names = list(self._clips())
             for r, row in enumerate(self.rows):
-                combo = QtWidgets.QComboBox()
+                combo = WG.ComboBox()
                 combo.addItems(names)
                 combo.setCurrentText(row["clip"])
                 combo.activated.connect(lambda *_, rr=r, c=combo: self._set(rr, "clip", c.currentText()))

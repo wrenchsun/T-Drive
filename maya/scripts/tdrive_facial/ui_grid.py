@@ -25,7 +25,7 @@ from typing import Callable, Optional
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from tdrive import lifecycle, project
+from tdrive import lifecycle, project, widgets as WG
 
 from . import anim_import
 from . import scene_grid
@@ -691,7 +691,7 @@ class GridTab(QtWidgets.QWidget):
         self.show_scene_grid.toggled.connect(lambda *_: self.on_scene_grid_toggled())
         row.addWidget(self.show_scene_grid)
         row.addWidget(QtWidgets.QLabel("大きさ"))
-        self.scene_grid_scale = QtWidgets.QDoubleSpinBox()
+        self.scene_grid_scale = WG.DoubleSpinBox()
         self.scene_grid_scale.setRange(scene_grid.SCALE_MIN, scene_grid.SCALE_MAX)
         self.scene_grid_scale.setSingleStep(0.25)
         self.scene_grid_scale.setDecimals(2)

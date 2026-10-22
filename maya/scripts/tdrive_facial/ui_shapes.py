@@ -12,7 +12,7 @@ from typing import Optional
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from tdrive import lifecycle
+from tdrive import lifecycle, widgets as WG
 
 from . import scene, shapes
 from .core import space
@@ -38,7 +38,7 @@ def _btn(text: str, tip: str, slot) -> QtWidgets.QPushButton:
 
 
 def _spin(lo: float, hi: float, val: float, step: float, dec: int, suffix: str = "") -> QtWidgets.QDoubleSpinBox:
-    s = QtWidgets.QDoubleSpinBox()
+    s = WG.DoubleSpinBox()
     s.setRange(lo, hi)
     s.setDecimals(dec)
     s.setSingleStep(step)
@@ -81,7 +81,7 @@ class ShapesTab(QtWidgets.QWidget):
         self.filter_edit = QtWidgets.QLineEdit()
         self.filter_edit.setPlaceholderText("名前で絞り込み")
         self.filter_edit.textChanged.connect(lambda *_: self._fill_list())
-        self.tag_combo = QtWidgets.QComboBox()
+        self.tag_combo = WG.ComboBox()
         for label, _tag in TAG_FILTERS:
             self.tag_combo.addItem(label)
         self.tag_combo.currentIndexChanged.connect(lambda *_: self._fill_list())
@@ -190,7 +190,7 @@ class ShapesTab(QtWidgets.QWidget):
         gv = QtWidgets.QVBoxLayout(g)
         gv.addWidget(_hint("選んだシェイプを、まつ毛・眉・別の頭など別メッシュへ写します。頂点が同じなら複写、違えば近接（proximityWrap）で転写します。写し先の元からあるシェイプは確認なしでは上書きしません"))
         row = QtWidgets.QHBoxLayout()
-        self.dest_combo = QtWidgets.QComboBox()
+        self.dest_combo = WG.ComboBox()
         self.dest_combo.setMinimumWidth(160)
         row.addWidget(self.dest_combo, 1)
         self.transfer_btn = _btn("写す", "選んだシェイプを写し先へ写します", self.on_transfer)

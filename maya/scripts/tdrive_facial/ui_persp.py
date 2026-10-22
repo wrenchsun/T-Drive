@@ -17,7 +17,7 @@ from typing import Callable, Optional
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from tdrive import lifecycle
+from tdrive import lifecycle, widgets as WG
 
 from .core.presenters import (
     BAKE_BAKED,
@@ -88,7 +88,7 @@ class PerspectiveGroup(QtWidgets.QWidget):
         self.cb_enabled.toggled.connect(lambda *_: self.on_enabled())
         row.addWidget(self.cb_enabled)
         row.addWidget(QtWidgets.QLabel("軸"))
-        self.axis_combo = QtWidgets.QComboBox()
+        self.axis_combo = WG.ComboBox()
         for data, text in AXIS_ITEMS:
             self.axis_combo.addItem(text, data)
         self.axis_combo.setToolTip(
@@ -101,7 +101,7 @@ class PerspectiveGroup(QtWidgets.QWidget):
         v.addLayout(row)
         row = QtWidgets.QHBoxLayout()
         row.addWidget(QtWidgets.QLabel("強さ"))
-        self.strength = QtWidgets.QDoubleSpinBox()
+        self.strength = WG.DoubleSpinBox()
         self.strength.setRange(0.0, 1.0)
         self.strength.setSingleStep(0.05)
         self.strength.setDecimals(2)

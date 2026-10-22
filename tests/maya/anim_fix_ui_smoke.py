@@ -95,6 +95,52 @@ def _run(tmp: Path) -> None:
     s.remove_clip("A_MisotenChara_Jump")
     blend.refresh()
     check("AN-F-3: 既定のままならクリップを減らしても追従する", [r["clip"] for r in blend.rows] == ["A_MisotenChara_Idle", "A_MisotenChara_Run_F"], str(blend.rows))
+    # ---- AN-F-4: ホイールはフォーカス時だけ
+    from PySide6 import QtCore, QtGui
+
+    from tdrive import widgets as WG
+    from tdrive_anim import ui_export, ui_shot
+    from tdrive_toon import ui_look
+
+    panels = [clips_tab, blend, ui_export.ExportTab(s), ui_shot.ShotTab(s)]
+    kinds = (QtWidgets.QSpinBox, QtWidgets.QDoubleSpinBox, QtWidgets.QComboBox, QtWidgets.QSlider)
+    found = [w for p in panels for w in p.findChildren(QtWidgets.QWidget) if isinstance(w, kinds)]
+    check("AN-F-4: Animation タブにスピンボックス・コンボ・スライダーがある", len(found) >= 10, str(len(found)))
+    not_wg = [type(w).__name__ for w in found if not isinstance(w, WG.WheelOnFocusMixin)]
+    check("AN-F-4: すべて共通ウィジェット（ホイールはフォーカス時だけ）", not not_wg, str(not_wg[:5]))
+    blend.rows_table.setRowCount(0)
+    blend._fill_rows()
+    combo = blend.rows_table.cellWidget(0, 0)
+    check("AN-F-4: 表のセルのコンボも共通ウィジェット", combo is not None and isinstance(combo, WG.WheelOnFocusMixin))
+
+    def wheel(w) -> bool:
+        ev = QtGui.QWheelEvent(QtCore.QPointF(3, 3), QtCore.QPointF(3, 3), QtCore.QPoint(0, 0), QtCore.QPoint(0, 120),
+                               QtCore.Qt.NoButton, QtCore.Qt.NoModifier, QtCore.Qt.NoScrollPhase, False)
+        QtWidgets.QApplication.sendEvent(w, ev)
+        return ev.isAccepted()
+
+    spin = WG.DoubleSpinBox()
+    spin.setRange(0, 100)
+    spin.setValue(10)
+    cb = WG.ComboBox()
+    cb.addItems(["a", "b", "c"])
+    cb.setCurrentIndex(1)
+    sl = WG.Slider(QtCore.Qt.Horizontal)
+    sl.setRange(0, 100)
+    sl.setValue(50)
+    for w in (spin, cb, sl):
+        w.show()
+    check("AN-F-4: フォーカスが無いとホイールでは変わらない（親へ渡す）",
+          not wheel(spin) and spin.value() == 10 and not wheel(cb) and cb.currentIndex() == 1 and not wheel(sl) and sl.value() == 50)
+    sl.activateWindow()
+    sl.setFocus()
+    APP.processEvents()
+    if sl.hasFocus():
+        wheel(sl)
+        check("AN-F-4: フォーカスがあるとホイールで変わる", sl.value() != 50, str(sl.value()))
+    else:
+        INFO.append("オフスクリーンでフォーカスが入らないため、フォーカス時のホイールは未確認")
+    check("AN-F-4: Toon の ToonSpin / ToonSlider も同じミックスイン", issubclass(ui_look.ToonSpin, WG.WheelOnFocusMixin) and issubclass(ui_look.ToonSlider, WG.WheelOnFocusMixin) and issubclass(ui_look.ToonIntSpin, WG.WheelOnFocusMixin))
     for t in (clips_tab, blend):
         s.listeners.remove(t.refresh)
 

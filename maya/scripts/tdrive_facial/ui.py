@@ -33,7 +33,7 @@ from typing import Optional
 from maya import cmds
 from PySide6 import QtCore, QtWidgets
 
-from tdrive import lifecycle, project, services
+from tdrive import lifecycle, project, services, widgets as WG
 
 from . import correction_service
 from . import scene as scene_mod
@@ -154,7 +154,7 @@ class NewDialog(QtWidgets.QDialog):
         self.character = QtWidgets.QLineEdit(default_character)
         self.character.setToolTip("英小文字・数字・_ だけ（保存先のフォルダ名とシェイプ名に使います）")
         form.addRow("キャラクター ID", self.character)
-        self.mesh = QtWidgets.QComboBox()
+        self.mesh = WG.ComboBox()
         choices = mesh_choices()
         for m in choices:
             self.mesh.addItem(scene_mod.short_name(m), m)
@@ -163,7 +163,7 @@ class NewDialog(QtWidgets.QDialog):
             self.mesh.setCurrentIndex(choices.index(picked))
         self.mesh.setToolTip("顔のメッシュ。blendShape があるメッシュだけが並びます（選択中のものが初期値）")
         form.addRow("対象メッシュ", self.mesh)
-        self.profile = QtWidgets.QComboBox()
+        self.profile = WG.ComboBox()
         self.profile.setToolTip("シェイプ名の決まり（左右の名前・可動域）。あとでセットアップタブで変えられます")
         form.addRow("プロファイル", self.profile)
         self._fill_profiles()

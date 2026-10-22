@@ -9,6 +9,8 @@ from pathlib import Path
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from tdrive import widgets as WG
+
 from . import params, presets, project
 from .look_layout import (
     GROUP_LABELS, SHADE2_KEY, SHADE_DEFAULTS, SHADE_KEY, SHADE_RANGES, average_rgb, build_groups, first_image_from_uri_list, is_image_path, shade_pair,
@@ -129,7 +131,7 @@ class ShadeFromBaseDialog(QtWidgets.QDialog):
         self.sliders: list[QtWidgets.QSlider] = []
         self.value_labels: list[QtWidgets.QLabel] = []
         for text, default, (lo, hi) in zip(self.LABELS, SHADE_DEFAULTS, SHADE_RANGES):
-            sl = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+            sl = WG.Slider(QtCore.Qt.Horizontal)
             sl.setRange(0, 1000)
             sl.setValue(round((default - lo) / (hi - lo) * 1000))
             lab = QtWidgets.QLabel()

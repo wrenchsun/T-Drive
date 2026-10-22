@@ -18,7 +18,7 @@ from typing import Callable, Optional
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from tdrive import lifecycle
+from tdrive import lifecycle, widgets as WG
 
 from .core.presenters import (
     CONFIRM_CANCEL,
@@ -47,7 +47,7 @@ class _TrySlider(QtWidgets.QWidget):
         h.setContentsMargins(0, 0, 0, 0)
         self.label = QtWidgets.QLabel(name)
         self.label.setMinimumWidth(56)
-        self.slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        self.slider = WG.Slider(QtCore.Qt.Horizontal)
         self.slider.setRange(0, SLIDER_STEPS)
         self.value_label = QtWidgets.QLabel("0.00")
         self.value_label.setMinimumWidth(34)
@@ -73,7 +73,7 @@ class _TrySlider(QtWidgets.QWidget):
 
 
 def _spin(lo: float, hi: float, step: float, tip: str, decimals: int = 2) -> QtWidgets.QDoubleSpinBox:
-    w = QtWidgets.QDoubleSpinBox()
+    w = WG.DoubleSpinBox()
     w.setRange(lo, hi)
     w.setSingleStep(step)
     w.setDecimals(decimals)

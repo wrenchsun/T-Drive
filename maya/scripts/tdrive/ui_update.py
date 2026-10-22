@@ -14,6 +14,8 @@ import time
 from maya import cmds
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from tdrive import widgets as WG
+
 from . import REPO_ROOT, external, external_load, external_ops, project, updater
 
 WINDOW_TITLE = "T-Drive Toon の更新"
@@ -79,7 +81,7 @@ class UpdateWindow(QtWidgets.QDialog):
         self.check_btn = QtWidgets.QPushButton("最新の版を確認")
         self.check_btn.clicked.connect(self.check)
         row.addWidget(self.check_btn)
-        self.target = QtWidgets.QComboBox()
+        self.target = WG.ComboBox()
         self.target.setMinimumWidth(220)
         self.target.currentIndexChanged.connect(self.show_changes)
         row.addWidget(self.target, 1)
