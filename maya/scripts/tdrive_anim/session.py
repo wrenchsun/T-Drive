@@ -23,6 +23,7 @@ from maya import cmds
 from tdrive import lifecycle, project
 
 from .core import animset as A
+from .core import clips as C
 
 PATH_KEY = "tdAnimSetPath"  # fileInfo: animset.json のプロジェクト相対パス
 MODEL_KEY = "tdAnimModelId"  # fileInfo: ModelId
@@ -171,6 +172,62 @@ class AnimSession:
         out = A.add_clip(self.require(), clip)
         self._changed()
         return out
+
+    @undoable
+    def add_clip_from_range(self, action: str, start: int, end: int, direction: str = "", number: int | None = None) -> dict[str, Any]:
+        """範囲（タイムスライダーなど）から新しいクリップを足す。名前の重複・範囲の逆転は AnimSetError。"""
+        clip = C.from_range(self.require(), action, start, end, direction, number)
+        self._changed()
+        return clip
+
+    @undoable
+    def update_clip(self, clip_name: str, /, **fields: Any) -> dict[str, Any]:
+        """クリップの属性を変える（1 回の呼び出し = 1 Undo）。値が不正なら AnimSetError で何も変えない。"""
+        clip = C.update(self.require(), clip_name, **fields)
+        self._changed()
+        return clip
+
+    @undoable
+    def duplicate_clip(self, name: str) -> dict[str, Any]:
+        clip = C.duplicate(self.require(), name)
+        self._changed()
+        return clip
+
+    @undoable
+    def add_event(self, clip_name: str, frame: int, key: str, args: Any = None) -> dict[str, Any]:
+        clip = self._clip(clip_name)
+        ev = C.add_event(clip, frame, key, args)
+        self._changed()
+        return ev
+
+    @undoable
+    def add_foot_plant(self, clip_name: str, frame: int, side: str) -> dict[str, Any]:
+        ev = C.add_foot_plant(self._clip(clip_name), frame, side)
+        self._changed()
+        return ev
+
+    @undoable
+    def remove_event(self, clip_name: str, index: int) -> bool:
+        ok = C.remove_event(self._clip(clip_name), index)
+        if ok:
+            self._changed()
+        return ok
+
+    @undoable
+    def paste_attrs(self, names: list[str], text: str) -> int:
+        """コピーしたクリップの属性を、選んだクリップへ貼り付ける。別の形式の文字列は AnimSetError。"""
+        attrs = C.attrs_from_text(text)
+        for name in names:
+            C.update(self.require(), name, **attrs)
+        if names:
+            self._changed()
+        return len(names)
+
+    def _clip(self, name: str) -> dict[str, Any]:
+        clip = A.find_clip(self.require(), name)
+        if clip is None:
+            raise A.AnimSetError(f"クリップがありません: {name}")
+        return clip
 
     @undoable
     def rename_clip(self, old: str, new: str) -> None:
