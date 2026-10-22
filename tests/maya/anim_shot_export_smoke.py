@@ -52,12 +52,15 @@ def read_fbx(cmds, mel, path: Path) -> dict:
     cmds.file(new=True, force=True)
     cmds.currentUnit(time="ntsc")
     cmds.loadPlugin("fbxmaya", quiet=True)
+    mel.eval(f'FBXRead -f "{path.as_posix()}"')  # テイクの数を読むために先に FBXRead（取り込みの前に読む）
+    takes = [mel.eval(f"FBXGetTakeName {i}") for i in range(1, int(mel.eval("FBXGetTakeCount")) + 1)]
     cmds.file(path.as_posix(), i=True, type="FBX", ignoreVersion=True, options="fbx", mergeNamespacesOnClash=False)
     cams = [(cmds.listRelatives(c, parent=True) or [c])[0] for c in cmds.ls(type="camera")]
     curves = cmds.ls(type="animCurve")
     times = sorted({round(t, 3) for c in curves for t in (cmds.keyframe(c, query=True, timeChange=True) or [])})
     return {"cameras": [c for c in cams if c not in DEFAULT_CAMS], "meshes": cmds.ls(type="mesh", noIntermediate=True), "joints": cmds.ls(type="joint"),
-            "skins": cmds.ls(type="skinCluster"), "locators": [(cmds.listRelatives(l, parent=True) or [l])[0] for l in cmds.ls(type="locator")], "curves": curves, "times": times}
+            "skins": cmds.ls(type="skinCluster"), "locators": [(cmds.listRelatives(l, parent=True) or [l])[0] for l in cmds.ls(type="locator")], "curves": curves, "times": times,
+            "takes": takes, "constraints": cmds.ls(type="constraint"), "lights": cmds.ls(lights=True)}
 
 
 def _run(tmp: Path) -> None:
@@ -138,6 +141,10 @@ def _run(tmp: Path) -> None:
     check("カメラ FBX: カメラが 1 台だけ（Ubercam）", len(info["cameras"]) == 1, str(info["cameras"]))
     check("カメラ FBX: EVT_Hit のロケータと小道具 PRP_Mic がある", "EVT_Hit" in info["locators"] and cmds.objExists("PRP_Mic"), str(info["locators"]))
     check("カメラ FBX: キャラクター（ジョイント・スキン）は入っていない（メッシュは小道具の PRP_Mic だけ）", not info["joints"] and not info["skins"] and len(info["meshes"]) == 1, str({k: len(v) for k, v in info.items()}))
+    import fbx_probe
+
+    check("TS-13: カメラ FBX の TimeMode が 30 fps（ファイルから直接読む）", fbx_probe.fps(cam_fbx) == 30 and fbx_probe.fps(ch_fbx) == 30, f"{fbx_probe.time_mode(cam_fbx)} {fbx_probe.time_mode(ch_fbx)}")
+    check("TS-14: カメラ FBX: 1 テイク・ライトなし・コンストレイントなし", len(info["takes"]) == 1 and not info["lights"] and not info["constraints"], str((info["takes"], info["lights"], info["constraints"])))
     check("カメラ FBX: ショットの範囲（10〜130）でベイクされている", info["times"] and info["times"][0] == 10 and info["times"][-1] == 130, str(info["times"][:2] + info["times"][-2:]))
     uber = info["cameras"][0] if info["cameras"] else ""
     if uber:
@@ -152,6 +159,7 @@ def _run(tmp: Path) -> None:
     # ---- キャラクター FBX
     info = read_fbx(cmds, mel, ch_fbx)
     check("キャラ FBX: ジョイント 6 本・メッシュ/スキン/カメラなし", len(info["joints"]) == 6 and not info["meshes"] and not info["skins"] and not info["cameras"], str({k: len(v) for k, v in info.items()}))
+    check("TS-14: キャラ FBX: 1 テイク・ライトなし・コンストレイントなし", len(info["takes"]) == 1 and not info["lights"] and not info["constraints"], str((info["takes"], info["lights"], info["constraints"])))
     check("キャラ FBX: ネームスペースなしの名前", all(":" not in j for j in info["joints"]) and "spine_C0_0_jnt" in info["joints"], str(info["joints"]))
     check("キャラ FBX: ショットの範囲（10〜130）でベイク", info["times"] and info["times"][0] == 10 and info["times"][-1] == 130, str(info["times"][:2] + info["times"][-2:]))
     bad = []

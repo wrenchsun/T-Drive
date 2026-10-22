@@ -155,6 +155,22 @@ def _run(tmp: Path) -> None:
     X._write_atomically(target, lambda tmp_path: tmp_path.write_bytes(b"NEW"))
     check("SF-13: 書けたら置き換わる", target.read_bytes() == b"NEW" and [p.name for p in target.parent.iterdir()] == ["x.fbx"])
 
+    # ---- TS-7: dx11Shader を読めない環境でも、アニメの出力は続く（裏のプロセスの loadPlugin だけが dx11Shader に触れる）
+    import time as _time
+
+    os.environ["TDRIVE_TEST_FAIL_PLUGINS"] = "dx11Shader"
+    try:
+        job = X.SplitJob(d, tmp / "dx_m", tmp / "dx_a", ["A_MisotenChara_Idle"], False, None)
+        t0 = _time.time()
+        while not job.poll() and _time.time() - t0 < 300:
+            _time.sleep(0.2)
+        res = job.result()
+        job.dispose()
+    finally:
+        del os.environ["TDRIVE_TEST_FAIL_PLUGINS"]
+    check("TS-7: dx11Shader の読み込みを失敗させても出力は成功し、記録（notes）が残る",
+          res["results"][0]["ok"] and any("dx11Shader" in n for n in res.get("notes", [])) and (tmp / "dx_a" / "A_MisotenChara_Idle.fbx").is_file(), str(res)[:400])
+
     # ---- 実際の出力（モデル + クリップ）: SF-11/DD-1/DD-11/SF-15
     started = ui.start(model=True, clips=["A_MisotenChara_Idle"])
     work = ui.job.work if ui.job else None
@@ -292,6 +308,20 @@ def _run(tmp: Path) -> None:
     root_x = [cmds.getAttr("root_jnt.translateX", time=t) for t in (0, 15, 30)]
     check("SP-9: Hips の XZ が固定される（humanoid.json の Hips）", max(hips_x) - min(hips_x) < 1e-3, str(hips_x))
     check("SP-9: スケルトンのルート（Hips ではない）は固定されず動いたまま", max(root_x) - min(root_x) > 20, str(root_x))
+
+    # TS-9: ネームスペース付きのリグのクリップ FBX にネームスペースが付かない
+    cmds.file(new=True, force=True)
+    cmds.currentUnit(time="ntsc")
+    make_mini_rig.build(namespace="MisotenChara", new_scene=False)
+    for f, v in ((0, 0), (30, 30)):
+        cmds.setKeyframe("MisotenChara:spine_C0_0_jnt", attribute="translateX", time=f, value=v)
+    aset_ns = A.new_animset("MisotenChara", "spine_C0_0_jnt")
+    aset_ns["namespace"] = "MisotenChara"
+    out_ns = tmp / "ns_clip.fbx"
+    X.export_clip_in_place(aset_ns, A.default_clip("A_MisotenChara_Idle", 0, 30, "MisotenChara"), out_ns, hips="spine_C0_0_jnt")
+    info = read_fbx(cmds, mel, out_ns)
+    check("TS-9: ネームスペース付きのリグのクリップ FBX は、ジョイント名にネームスペースが付かない（SK_ と同じ名前）",
+          len(info["joints"]) == 6 and all(":" not in j for j in info["joints"]), str(info["joints"]))
 
     # DD-12: 入れ子のネームスペースでも、外したあとの名前を間違えない
     cmds.file(new=True, force=True)

@@ -186,7 +186,7 @@ def part_token(name: str, kind: str, model_id: str, profile: Profile | None = No
     s = re.sub(r"_tdToon$", "", s)
     for pre in (f"{profile.mesh_prefix}_{model_id}_", f"{profile.static_mesh_prefix}_{model_id}_", f"{profile.material_prefix}_{model_id}_",
                 f"{profile.texture_prefix}_{model_id}_"):
-        if s.startswith(pre):
+        if s.lower().startswith(pre.lower()):  # 大文字小文字の間違い（sk_misotenchara_ など）でも接頭辞を落とす（docs/21 TS-15）
             s = s[len(pre):]
             break
     for rx in profile.noise_prefixes:
@@ -251,7 +251,7 @@ def suggest_clip(name: str, model_id: str, profile: Profile | None = None) -> st
         left, right = s.split("@", 1)
         s = left if left.startswith(profile.clip_prefix + "_") else right
     s = sanitize(s)
-    s = re.sub(rf"^{re.escape(profile.clip_prefix)}_({re.escape(model_id)}_)?", "", s)
+    s = re.sub(rf"^{re.escape(profile.clip_prefix)}_({re.escape(model_id)}_)?", "", s, flags=re.IGNORECASE)
     m = re.match(r"^([A-Za-z]+)(?:_?([FBLR]))?(\d{1,2})?$", s)
     if m:
         action, d, num = m.group(1), m.group(2), m.group(3)

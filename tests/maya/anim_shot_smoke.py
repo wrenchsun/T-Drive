@@ -115,8 +115,9 @@ def _run(tmp: Path) -> None:
     res = SS.build(s.shot, s.data)
     check("反映: カメラ区間 2・イベント 2・合成 1", res["cameras"] == 2 and res["events"] == 2 and len(res["compositions"]) == 1 and not res["warnings"], str(res))
     shots = SS.sequencer_shots("Opening01")
-    check("Camera Sequencer にカメラ 2 台の区間ができる", [(x["start"], x["end"]) for x in shots] == [(10, 130), (131, 250)]
-          and [x["camera"].rstrip("Shape") for x in shots] == ["CAM_Main", "CAM_Close"] or [(x["start"], x["end"]) for x in shots] == [(10, 130), (131, 250)], str(shots))
+    cam_of = lambda x: (cmds.listRelatives(x["camera"], parent=True) or [x["camera"]])[0]  # 接続先がシェイプでもトランスフォームでも、親のトランスフォーム
+    check("Camera Sequencer にカメラ 2 台の区間ができる（区間と、shot ノードの currentCamera）",
+          [(x["start"], x["end"], cam_of(x)) for x in shots] == [(10, 130, "CAM_Main"), (131, 250, "CAM_Close")], str(shots))
     check("カメラの切り替え（区間の前半は Main、後半は Close）", [SH.camera_at(s.shot, f) for f in (10, 130, 131, 250)] == ["CAM_Main", "CAM_Main", "CAM_Close", "CAM_Close"])
     check("再生範囲がショットの範囲", SS.group_name("Opening01") == "tdShot_Opening01" and cmds.objExists("tdShot_Opening01")
           and cmds.playbackOptions(query=True, minTime=True) == 10 and cmds.playbackOptions(query=True, maxTime=True) == 250)
@@ -141,11 +142,17 @@ def _run(tmp: Path) -> None:
     check("カメラは壊れない", cmds.objExists(cam1) and cmds.objExists(cam2))
 
     # ---- 保存して開き直す
+    import copy
+
+    in_memory = copy.deepcopy(s.shot)  # 保存前のメモリの内容と比べる（保存したファイルを読み直した値同士の比較では、書き込みの欠落に気づけない。TS-10）
     path = s.save_shot()
-    saved = SH.load(path)
+    scene_file = Path(tempfile.gettempdir()) / "tdrive_shot_smoke_scene.ma"
+    cmds.file(rename=str(scene_file))
+    cmds.file(save=True, type="mayaAscii")  # kBeforeSave で fileInfo にショットの場所が入る
     s.shot = None
+    cmds.file(str(scene_file), open=True, force=True)  # 実際の保存 → 開く
     S.on_scene_opened()
-    check("保存・開き直しでショットが戻る", s.shot == saved and not s.shot_dirty, str(s.shot_path))
+    check("保存・開き直しでショットが戻る（保存前のメモリと同じ・実際にシーンを保存して開き直す）", s.shot == in_memory and not s.shot_dirty, str(s.shot_path))
 
     # ---- Undo
     s.shot_add_event(100, "Extra")

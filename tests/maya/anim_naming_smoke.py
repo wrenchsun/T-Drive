@@ -173,14 +173,14 @@ def _run(tmp: Path) -> None:
     check("UI: ❌ だけ", all(ui.table.isRowHidden(r) == (not ui.report.findings[r].is_error) for r in range(n_rows)))
     ui.only_errors.setChecked(False)
     if n_rows:
-        r = next((i for i, f in enumerate(ui.report.findings) if f.kind == "mesh" and f.suggestion), 0)
+        r = next(i for i, f in enumerate(ui.report.findings) if f.kind == "mesh" and f.suggestion)  # メッシュの行が無ければ StopIteration で失敗（別の行を編集しない）
         ui.table.item(r, ui_naming.COL_SUG).setText("bad name")
         check("UI: 規則に合わない提案は赤い", ui.table.item(r, ui_naming.COL_SUG).toolTip() != "")
         ui.apply()
         check("UI: 規則に合わない提案は適用しない", "規則に合わない" in ui.result.text(), ui.result.text())
         ui.table.item(r, ui_naming.COL_SUG).setText("SK_MisotenChara_Torso")
         ui.apply()
-        check("UI: 編集した提案で改名できる", cmds.objExists("SK_MisotenChara_Torso") or cmds.objExists("SK_MisotenChara_Body"), ui.result.text())
+        check("UI: 編集した提案で改名できる", cmds.objExists("SK_MisotenChara_Torso"), ui.result.text())
     ui.humanoid_infer()
     check("UI: Humanoid の表が出る", ui.h_table.rowCount() > 10)
     ui.h_search.setText("Hips")
@@ -209,7 +209,7 @@ def _run(tmp: Path) -> None:
 def _misoten(tmp: Path) -> None:
     ma = REPO / "assets" / "misoten" / "MisotenChara_Rig.ma"
     if not ma.exists():
-        INFO.append("assets/misoten/MisotenChara_Rig.ma が無いので本物のリグでの確認は飛ばしました")
+        INFO.append("SKIP: assets/misoten/MisotenChara_Rig.ma が無いので本物のリグでの確認（[MisotenChara] 〜）は飛ばしました")
         return
     from maya import cmds
 
@@ -217,6 +217,7 @@ def _misoten(tmp: Path) -> None:
     from tdrive_anim import scene_naming as SN
     from tdrive_anim import session as S
     from tdrive_anim.core import humanoid_map as H
+    from tdrive_anim.core import naming_rules as N
 
     project.set_root(tmp / "misoten")  # ミニリグの humanoid.json を拾わない
     cmds.file(new=True, force=True)
@@ -229,11 +230,31 @@ def _misoten(tmp: Path) -> None:
     check("[MisotenChara] メッシュ 3 枚に SK_ の提案", {f.suggestion for f in meshes} >= {"SK_MisotenChara_Body", "SK_MisotenChara_Skirt", "SK_MisotenChara_RibbonBack"}, str([(f.name, f.suggestion) for f in meshes]))
     mats = [f for f in rep.findings if f.kind == "material"]
     check("[MisotenChara] マテリアルに M_ の提案", mats and all(f.suggestion.startswith("M_MisotenChara_") for f in mats), str([(f.name, f.suggestion) for f in mats][:6]))
-    check("[MisotenChara] 掃除候補（残骸）が出る", len(rep.cleanup) > 0, str(len(rep.cleanup)))
+    kinds_found = {c.kind for c in rep.cleanup}
+    check("[MisotenChara] 掃除候補に未使用のマテリアルの残骸が出る（残骸のネームスペースが無いリグなので種類で確認）", "material" in kinds_found and all(c.kind in ("material", "texture", "namespace") for c in rep.cleanup), str(kinds_found))
     h = SN.humanoid_for("MisotenChara", "spine_C0_0_jnt")
     check("[MisotenChara] 必須 15 ボーンが自動推定で埋まる", H.missing_required(h) == [], str(H.missing_required(h)))
     probs = SN.humanoid_problems(h, "spine_C0_0_jnt")
     check("[MisotenChara] Humanoid の検証に問題なし", probs == [], str(probs[:5]))
+    # 適用: 全部の M_ / SK_ に改名しても Look の名前が追従して壊れない（本物のリグ）
+    import copy
+
+    from tdrive_toon import look as look_mod
+    from tdrive_toon import session as toon
+
+    names = [f.name for f in mats]
+    lk = look_mod.new_look("misoten", "MisotenChara")
+    for i, f in enumerate(mats[:4]):
+        look_mod.register_part(lk, f"part{i}", "cloth", [N.strip_namespace(f.name)])
+    ts = toon.current()
+    ts.look, ts.path = copy.deepcopy(lk), tmp / "looks" / "misoten" / "look.json"
+    res = SN.apply_renames([f for f in rep.findings if f.kind in ("mesh", "material")])
+    msgs = SN.follow_look(res["materials"], res["meshes"])
+    after = SN.inspect_scene("MisotenChara", s.data)
+    left = [f for f in after.findings if f.kind in ("mesh", "material")]
+    check("[MisotenChara] 適用で全部の M_ / SK_ の名前になる（残りは参照されたノードなどの理由つきのスキップだけ）", not left or len(res["skipped"]) >= len(left), f"{len(left)} {res['skipped'][:3]}")
+    look_mats = set(ts.look["materials"])
+    check("[MisotenChara] 適用で Look の名前が追従して、旧い名前が Look に残らない", look_mats and not (look_mats & set(res["materials"])) and ts.dirty, f"{sorted(look_mats)[:4]} {msgs}")
     INFO.append(f"[MisotenChara] 検査 {len(rep.findings)} 件（メッシュ {len(meshes)} / マテリアル {len(mats)}）、掃除候補 {len(rep.cleanup)} 件、extra {len(h['extra'])} 本")
 
 

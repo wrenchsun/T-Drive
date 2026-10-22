@@ -103,7 +103,7 @@ def _run(tmp: Path) -> None:
     check("命名の❌が無ければ出せる", ui.check_names() and ui.model_btn.isEnabled() and ui.anim_btn.isEnabled(), ui.blocked)
 
     started = ui.start(model=True, clips=names)
-    check("出力が始まる（別プロセス）", started and ui.job is not None and ui.progress.isVisible() is not None)
+    check("出力が始まる（別プロセス）", started and ui.job is not None and not ui.progress.isHidden())
     ui.wait(420)
     log = ui.log.toPlainText()
     check("出力が終わる", ui.job is None, log)
@@ -121,6 +121,9 @@ def _run(tmp: Path) -> None:
     info = read_fbx(cmds, mel, sk)
     check("モデル: メッシュとスキンとジョイントが入っている", len(info["meshes"]) >= 1 and info["skins"] and len(info["joints"]) == 6, str({k: len(v) for k, v in info.items()}))
     check("モデル: アニメーションが入っていない", not info["curves"], str(info["curves"][:5]))
+    import fbx_probe
+
+    check("TS-13: FBX の TimeMode が 30 fps（ファイルから直接読む）", fbx_probe.fps(idle) == 30 and fbx_probe.fps(sk) == 30, f"{fbx_probe.time_mode(idle)} {fbx_probe.time_mode(sk)}")
     info = read_fbx(cmds, mel, idle)
     check("アニメ: メッシュが入っていない・ジョイントだけ", not info["meshes"] and not info["skins"] and len(info["joints"]) == 6, str({k: len(v) for k, v in info.items()}))
     check("アニメ: ベイク済みで先頭が 0 フレーム・長さ 30", info["curves"] and info["times"][0] == 0 and info["times"][-1] == 30, str(info["times"][:3] + info["times"][-3:]))
@@ -149,10 +152,13 @@ def _run(tmp: Path) -> None:
     check("変更が無ければ何も出力しない", not started and "変更なし" in ui.log.toPlainText(), ui.log.toPlainText())
     cmds.setKeyframe("spine_C0_0_jnt", attribute="translateX", time=110, value=999)  # Run の範囲を変える
     ui.log.clear()
+    mt = {n: (anim_dir / f"{n}.fbx").stat().st_mtime_ns for n in names}
     started = ui.start(model=False, clips=names)
     ui.wait(300)
     out = ui.log.toPlainText()
-    check("変更のあるクリップ（Run）だけ出力される", started and "A_MisotenChara_Run_F.fbx" in out and "A_MisotenChara_Idle.fbx" not in out.split("変更なしのため")[-1].split("\n", 1)[-1], out)
+    mt2 = {n: (anim_dir / f"{n}.fbx").stat().st_mtime_ns for n in names}
+    check("変更のあるクリップ（Run）だけ出力される（ファイルの更新時刻で確認）",
+          started and mt2["A_MisotenChara_Run_F"] != mt["A_MisotenChara_Run_F"] and mt2["A_MisotenChara_Idle"] == mt["A_MisotenChara_Idle"], out)
     state = E.load_state(E.state_path(s.path))
     check("記録（.export-state.json）に両方のクリップが残る", set(state["clips"]) == set(names), str(state))
     ui.only_changed.setChecked(False)
@@ -166,7 +172,7 @@ def _run(tmp: Path) -> None:
     cmds.currentUnit(time="film")
     ui.log.clear()
     ok = ui.check_names()
-    check("24 fps だと❌で止まる（ボタン無効・理由つき）", not ok and not ui.model_btn.isEnabled() and not ui.anim_btn.isEnabled() and "24" in ui.block_label.text() or "film" in ui.block_label.text(), ui.block_label.text())
+    check("24 fps だと❌で止まる（ボタン無効・理由つき）", not ok and not ui.model_btn.isEnabled() and not ui.anim_btn.isEnabled() and ("24" in ui.block_label.text() or "film" in ui.block_label.text()), ui.block_label.text())
     check("止まっているときは start しない", ui.start(model=True, clips=names) is False and ui.job is None)
     cmds.currentUnit(time="ntsc")
     s.rename_clip("A_MisotenChara_Idle", "Idle@Walk")

@@ -145,3 +145,39 @@ def test_look_follow():
 def test_texture_problems_never_block_output():
     f = N.inspect(N.TEXTURE, "94fa0d80-6b72-4339-99fc-10a860321485.png", M)
     assert f.severity == N.WARNING and f.proposal_only
+
+
+# ---------------------------------------------------------------- docs/21 TS-15: 大文字小文字・ModelId の境界・自動名の誤検出
+@pytest.mark.parametrize(
+    "kind, name, expected",
+    [
+        (N.MESH, "sk_MisotenChara_Body", "SK_MisotenChara_Body"),
+        (N.MESH, "SK_misotenchara_Body", "SK_MisotenChara_Body"),
+        (N.MESH, "SK_MisotenChara_body", "SK_MisotenChara_Body"),
+        (N.MATERIAL, "m_MisotenChara_hair", "M_MisotenChara_Hair"),
+        (N.CLIP, "a_MisotenChara_idle", "A_MisotenChara_Idle"),
+        (N.CLIP, "A_MisotenChara_idle", "A_MisotenChara_Idle"),
+        (N.CLIP, "A_MISOTENCHARA_Run_F", "A_MisotenChara_Run_F"),
+    ],
+)
+def test_case_mistakes_get_a_clean_suggestion(kind, name, expected):
+    f = N.inspect(kind, name, M)
+    assert f is not None and f.suggestion == expected, f
+
+
+def test_model_id_with_underscore_is_not_a_valid_model_id():
+    from tdrive_anim.core import animset as A
+
+    assert A.MODEL_ID_PATTERN.match("MisotenChara") and not A.MODEL_ID_PATTERN.match("Misoten_Chara")
+    # 検査は ModelId の形を前提にしない（ModelId 側で止める）。`_` の入った ModelId で作った名前は、規則の形（SK_<ModelId>_<部位>）に合わない
+    assert N.inspect(N.MESH, "SK_Misoten_Chara_Body", "MisotenChara") is not None
+
+
+def test_mgear_joint_names_are_not_mistaken_for_maya_auto_names():
+    from pathlib import Path
+
+    names = [l.strip() for l in (Path(__file__).parent / "fixtures" / "anim" / "misoten_joint_names.txt").read_text(encoding="utf-8").splitlines() if l.strip()]
+    assert len(names) == 141
+    assert [n for n in names if N._AUTO_NAME.match(n)] == []  # `joint1` のような自動名と間違えない
+    assert N.common_problems("spine_C0_0_jnt", N.default_profile()) == []
+    assert N.common_problems("joint12", N.default_profile())  # 本物の自動名は止まる

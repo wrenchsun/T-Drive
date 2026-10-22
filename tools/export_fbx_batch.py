@@ -29,13 +29,17 @@ try:
 
         res = anim_export.run_shot_tasks(a)
     elif mode == "anim":
+        notes = []
         try:
+            if "dx11Shader" in os.environ.get("TDRIVE_TEST_FAIL_PLUGINS", ""):  # テスト用: dx11Shader を読めない環境を再現する（docs/21 TS-7）
+                raise RuntimeError("テスト: dx11Shader を読めません")
             cmds.loadPlugin("dx11Shader", quiet=True)  # 一時シーンの T-Drive プレビュー用ノードのため（裏のプロセスだけ）。読めなくても続ける
-        except RuntimeError:
-            pass
+        except RuntimeError as exc:
+            notes.append(f"dx11Shader を読み込めませんでした（続けます）: {exc}")
         from tdrive_anim import export as anim_export
 
         res = anim_export.run_tasks(a)
+        res["notes"] = notes
     else:
         cmds.loadPlugin("dx11Shader", quiet=True)  # 一時シーンにプレビューノードが含まれるため
         cmds.file(a["scene"], open=True, force=True)

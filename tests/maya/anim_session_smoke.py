@@ -78,20 +78,34 @@ def _run(tmp: Path) -> None:
     except S.A.AnimSetError:
         check("重複名はエラー", len(s.data["clips"]) == 1)
     check("失敗した操作は Undo に積まれない", len(s._undo) == 2, str(len(s._undo)))  # new + add_clip
-    check("tool.undo で 1 操作戻る", tool.undo() and len(s.data["clips"]) == 0)
-    check("tool.redo でやり直せる", tool.redo() and len(s.data["clips"]) == 1)
+    # 殻の Ctrl+Z の振り分け（ShellWidget._undo → 今開いているツールの undo）を通す（tool.undo() の直接呼び出しで代用しない。TS-16）
+    win = shell.ShellWidget()
+    win.select_tool("anim")
+    win._undo()
+    check("殻の Ctrl+Z（_undo）が Animation の Undo に届く", len(s.data["clips"]) == 0)
+    win._redo()
+    check("殻の Ctrl+Y（_redo）でやり直せる", len(s.data["clips"]) == 1)
+    win.detach()
+    check("tool.undo も同じ", tool.undo() and len(s.data["clips"]) == 0 and tool.redo() and len(s.data["clips"]) == 1)
     try:
         s.new("misoten")
         check("ModelId の形が違うと拒否", False)
     except S.A.AnimSetError:
         check("ModelId の形が違うと拒否", True)
 
+    import copy
+
+    in_memory = copy.deepcopy(s.data)  # 保存前のメモリの内容と比べる（TS-10）
     path = s.save()
     check("保存でファイルができる", path.exists() and not s.dirty)
     check("fileInfo に場所を覚える", cmds.fileInfo(S.PATH_KEY, query=True) == ["anim/MisotenChara/animset.json"], str(cmds.fileInfo(S.PATH_KEY, query=True)))
-    s.data = None  # 開き直しを模す
+    scene_file = tmp / "session_scene.ma"
+    cmds.file(rename=str(scene_file))
+    cmds.file(save=True, type="mayaAscii")
+    s.data = None
+    cmds.file(str(scene_file), open=True, force=True)  # 実際の保存 → 開く（fileInfo が残る経路）
     S.on_scene_opened()
-    check("シーンを開くと自動で読む", s.data is not None and len(s.data["clips"]) == 1)
+    check("シーンを開くと自動で読む（保存前のメモリと同じ）", s.data == in_memory and len(s.data["clips"]) == 1)
 
     # --- 壊れた JSON は警告だけ
     path.write_text("{broken", encoding="utf-8")

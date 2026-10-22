@@ -118,11 +118,17 @@ def _run(tmp: Path) -> None:
     check("属性の変更も 1 Undo", A.find_clip(s.data, "A_MisotenChara_Run_F")["crossFade"] == 0.1)
 
     # ---- 保存 → 開き直しで戻る
+    import copy
+
+    in_memory = copy.deepcopy(s.data)  # 保存前のメモリの内容と比べる（TS-10）
     path = s.save()
-    before = A.load(path)
+    scene_file = tmp / "clips_scene.ma"
+    cmds.file(rename=str(scene_file))
+    cmds.file(save=True, type="mayaAscii")  # kBeforeSave で fileInfo に場所が入る
     s.data = None
+    cmds.file(str(scene_file), open=True, force=True)  # 実際の保存 → 開く
     S.on_scene_opened()
-    check("保存・開き直しでクリップが戻る", s.data == before and len(s.data["clips"]) == 3 and len(A.find_clip(s.data, "A_MisotenChara_Run_F")["events"]) == 2)
+    check("保存・開き直しでクリップが戻る（保存前のメモリと同じ）", s.data == in_memory and len(s.data["clips"]) == 3 and len(A.find_clip(s.data, "A_MisotenChara_Run_F")["events"]) == 2)
     check("検証にエラーがない", A.errors(s.data) == [])
 
     # ---- サムネイル: ビューポートが無い環境では理由つきで作らない
@@ -172,8 +178,9 @@ def _run(tmp: Path) -> None:
     check("UI: 属性の貼り付け", A.find_clip(s.data, "A_MisotenChara_Jump")["crossFade"] == 0.08)
     ui._guard(s.paste_attrs, ui.selected_names(), "ぜんぜん違う文字列")
     check("UI: 別の文字列は貼り付けられず警告", "貼り付けられません" in ui.message.text(), ui.message.text())
+    ui.action.setCurrentText("Wave")
     ui.add_from_range()
-    check("UI: 現在の範囲から追加", len(s.data["clips"]) == 4 or "同じ名前" in ui.message.text(), ui.message.text())
+    check("UI: 現在の範囲から追加", len(s.data["clips"]) == 4 and A.find_clip(s.data, "A_MisotenChara_Wave") is not None, ui.message.text())
     ui.table.selectRow(0)
     ui.play_selected()
     check("UI: 再生中になる", MC.is_playing())

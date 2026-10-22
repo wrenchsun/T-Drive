@@ -51,7 +51,7 @@ def test_not_in_scene():
 def test_hierarchy_order():
     d = {"bones": {"Hips": "a", "Spine": "b"}}
     ok = {"a": None, "b": "a"}
-    assert H.validate(d, parents=ok) == [m for m in H.validate(d, parents=ok) if "必須" in m]
+    assert not any("先祖" in m for m in H.validate(d, parents=ok))  # 親子の順が正しければ「先祖」の警告は出ない（TS-18。出力から期待値を作らない）
     bad = {"a": "b", "b": None}
     assert any("先祖" in m for m in H.validate(d, parents=bad))
 
