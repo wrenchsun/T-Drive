@@ -23,6 +23,7 @@
 
 ### 修正
 - Animation 修正チケット AN-F（実機確認 2026-10-23）
+  - AN-F-1: クリップ / ブレンドタブの案内「先に animset を作ってください」が、animset を作ったあとも消えない不具合
   - AN-F-6: mGear のリグ（ジョイントの translate / rotate / scale が複合プラグごと `mgear_matrixConstraint` からつながる）で「合成できるジョイントがありません」になり、ブレンドが一度も作れなかった不具合。複合プラグの入力も見て 3 チャンネルを対象にし、外す・保存の間だけ戻す（SF-19）も複合プラグへ戻す
 - Animation（docs/21 のコードレビュー対応）
   - SP-1: 既定の状態図を MS2026 の `AC_PlayerPreview.controller` と同じ遷移・条件・並び順に（Any State なし。Idle / Run から ActionState 2 と 3 で Jump、Jump からは Speed で Idle / Run）

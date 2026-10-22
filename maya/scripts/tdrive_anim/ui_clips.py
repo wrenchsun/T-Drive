@@ -20,6 +20,7 @@ from .core import animset as A
 from .core import clips as C
 from .core import naming_rules as N
 
+NEED_ANIMSET = "先に animset を作ってください（上の ModelId 欄 → 新規）"
 COL_NAME, COL_START, COL_END, COL_LOOP, COL_LAYER, COL_EVENTS = range(6)
 HEADERS = ["名前", "開始", "終了", "ループ", "レイヤー", "イベント"]
 
@@ -188,8 +189,10 @@ class ClipsTab(QtWidgets.QWidget):
         if not has:
             self.table.setRowCount(0)
             self._clip_names = []
-            self._say("先に animset を作ってください（上の ModelId 欄 → 新規）")
+            self._say(NEED_ANIMSET)
             return
+        if self.message.text() == NEED_ANIMSET:  # animset を作ったら案内を消す（AN-F-1）
+            self._say("")
         d = self.session.data
         self._fill_vocab(d)
         self._update_range_label()

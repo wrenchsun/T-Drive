@@ -24,6 +24,7 @@ from .core import state_machine as M
 
 COMP_NAME = "blend"
 ROWS_FORMAT = "TDriveBlendRows"
+NEED_ANIMSET = "先に animset を作ってください（上の ModelId 欄 → 新規）"
 COL_CLIP, COL_HOLD, COL_FADE, COL_SWITCH, COL_SPEED = range(5)
 HEADERS = ["クリップ", "保持（秒）", "クロスフェード（秒）", "切替位置", "速度"]
 
@@ -242,8 +243,10 @@ class BlendTab(QtWidgets.QWidget):
         if not has:
             self.rows = []
             self._fill_rows()
-            self._say("先に animset を作ってください（上の ModelId 欄 → 新規）")
+            self._say(NEED_ANIMSET)
             return
+        if self.message.text() == NEED_ANIMSET:  # animset を作ったら案内を消す（AN-F-1）
+            self._say("")
         d = self.session.data
         names = list(self._clips())
         if [self.layer_clip.itemText(i) for i in range(self.layer_clip.count())] != names:
