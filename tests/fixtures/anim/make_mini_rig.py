@@ -50,6 +50,31 @@ def build(fps_unit: str = "film") -> dict:
     return {"root": ROOT, "joints": list(JOINTS), "mesh": cube}
 
 
+def add_materials(mesh: str = MESH) -> dict:
+    """MisotenChara 風の素材名をメッシュに付ける（命名タブのスモーク用）。
+
+    Hair（面 0〜2）と IdolGirl_Other2（面 3〜5）、割り当てなしの Unused、空のネームスペース ffffff、
+    Hair のプレビュー用シェーダーの代役 Hair_tdToon（dx11 ではなく lambert に tdSourceMaterial を付けたもの）。
+    """
+    from maya import cmds
+
+    out = {}
+    for mat, faces in (("Hair", "0:2"), ("IdolGirl_Other2", "3:5")):
+        shader = cmds.shadingNode("lambert", asShader=True, name=mat)
+        sg = cmds.sets(renderable=True, noSurfaceShader=True, empty=True, name=mat + "SG")
+        cmds.connectAttr(shader + ".outColor", sg + ".surfaceShader", force=True)
+        cmds.sets(f"{mesh}.f[{faces}]", edit=True, forceElement=sg)
+        out[mat] = sg
+    unused = cmds.shadingNode("lambert", asShader=True, name="Unused")
+    usg = cmds.sets(renderable=True, noSurfaceShader=True, empty=True, name="UnusedSG")
+    cmds.connectAttr(unused + ".outColor", usg + ".surfaceShader", force=True)
+    cmds.namespace(add="ffffff")
+    fake = cmds.shadingNode("lambert", asShader=True, name="Hair_tdToon")
+    cmds.addAttr(fake, longName="tdSourceMaterial", dataType="string")
+    cmds.setAttr(fake + ".tdSourceMaterial", "Hair", type="string")
+    return out
+
+
 def key_motion(start: int = 0, end: int = 30, amount: float = 20.0) -> None:
     """ルートを X 方向に動かし、腕を回すキーを打つ（ベイク・ブレンドの確認用）。"""
     from maya import cmds

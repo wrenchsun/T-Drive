@@ -10,6 +10,7 @@
 
 ### 追加
 - Animation タブ（アニメーション作業台。仕様 docs/20）: 殻の 1 段目に追加。DirectX 11 を使わない（OpenGL・ヘッドレスでも動く）
+  - AN-2: 命名タブ（MS2026 の規則の検査と提案・改名の適用を 1 回の Undo で・Look と Toon のプレビュー用シェーダーの追従・シーン設定の修正・掃除候補・Humanoid 対応表 `humanoid.json`）
   - AN-1: 骨格（5 つのサブタブの枠・`tdrive_anim` パッケージ）、`animset.json` の読み書き・検証、メニュー Tools › T-Drive › Animation…
 
 ## [0.6.2] - 2026-10-16

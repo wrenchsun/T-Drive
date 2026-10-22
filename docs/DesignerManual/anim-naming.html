@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>アニメーション作業台: 命名 - T-Drive デザイナーマニュアル</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<nav class="breadcrumb"><a href="Readme.html">トップ</a> › <a href="anim.html">アニメーション作業台</a> › 命名</nav>
+<h1>命名タブ</h1>
+<p class="lastupdate">最終更新日: 2026-10-22</p>
+
+<p>MS2026（Unity）の名前の決まりに、シーンの名前が合っているかを調べて、直す案を出します。<strong>名前を変えるだけで、マテリアルの割り当てやスキンは変わりません。</strong></p>
+
+<div class="tip">Animation タブの上で、先に animset を作っておいてください（<a href="anim.html">はじめかた</a>）。ModelId の名前が、提案する名前に使われます。</div>
+
+<h2>名前の決まり</h2>
+<table>
+<tr><th>種類</th><th>決まり</th><th>例（ModelId = MisotenChara）</th></tr>
+<tr><td>メッシュ</td><td><code>SK_&lt;ModelId&gt;_&lt;部位&gt;</code>（動かさないものは <code>SM_</code>）</td><td><code>SK_MisotenChara_Body</code></td></tr>
+<tr><td>マテリアル</td><td><code>M_&lt;ModelId&gt;_&lt;部位&gt;</code></td><td><code>M_MisotenChara_Hair</code></td></tr>
+<tr><td>テクスチャ</td><td><code>T_&lt;ModelId&gt;_&lt;部位&gt;_&lt;種類&gt;</code>（種類: BaseColor / Normal / Mask / Emission / MatCap / Sdf）</td><td><code>T_MisotenChara_Face_BaseColor.png</code></td></tr>
+<tr><td>クリップ</td><td><code>A_&lt;ModelId&gt;_&lt;動作&gt;</code>（動作のあとに方向 <code>_F/_B/_L/_R</code>、連番 <code>01</code> を付けられる）</td><td><code>A_MisotenChara_Run_F</code></td></tr>
+<tr><td>ジョイント</td><td>mGear の名前のまま（変えません）</td><td><code>spine_C0_0_jnt</code></td></tr>
+</table>
+<p>使えないもの: 日本語・全角文字・半角スペース・<code># % &amp; +</code>・<code>@</code>・先頭の数字・<code>test</code> や <code>aaa</code> のような捨て名・Maya の自動名（<code>pCube1</code> <code>polySurface3</code> <code>lambert2</code>）・版の接尾辞（<code>_v2</code>）。<code>Model@Anim.fbx</code> のような「<code>@</code> で分ける」書き方は使いません。</p>
+
+<h2>検査と改名</h2>
+<ol>
+<li><strong>検査</strong>を押す — メッシュ・マテリアル・テクスチャ・クリップの名前を調べて、一覧に出します（シーンは変わりません）</li>
+<li>一覧の見方 — <strong>❌</strong>は「このままだと出力できない」問題、<strong>⚠</strong>は「直すのがおすすめ」です。「提案」の列に直した名前が出ます</li>
+<li>提案が気に入らなければ、<strong>提案の欄を直接書き換え</strong>られます。規則に合わない名前は赤くなります</li>
+<li>直したい行にチェックを入れて<strong>チェックした提案を適用</strong>を押す — まとめて改名します。<strong>Maya の Ctrl+Z 1 回で全部戻せます</strong></li>
+</ol>
+<ul>
+<li>上の検索欄で一覧を絞り込めます。「❌ だけ」で、出力を止める問題だけを見られます</li>
+<li>行を右クリックすると、名前や提案のコピー、提案への貼り付け、シーンで選ぶ、ができます</li>
+<li>マテリアルを改名すると、<strong>Toon の Look に書かれたマテリアル名も一緒に直ります</strong>。Toon タブで Look を開いていれば未保存の変更として残るので、Toon タブで保存してください。Look を開いていないときは、プロジェクトの <span class="path">looks/&lt;キャラクター&gt;/look.json</span> を直接直します</li>
+<li>Toon 表示用の <code>…_tdToon</code> マテリアルは検査の対象外です（ツールが作り直します）。改名には追従します</li>
+<li><strong>テクスチャは提案だけ</strong>です。ファイル名も変わってしまうので、適用はしません。ファイルの名前を変えるときは、自分でお願いします（<span class="soon">仮の決め</span>）</li>
+</ul>
+
+<div class="warn">元のマテリアルや割り当てを壊す処理はありません。参照したファイルの中のノードは改名できないので、スキップされます（理由が結果欄に出ます）。</div>
+
+<h2>シーン設定</h2>
+<p>MS2026 に合わせた設定になっているかを調べます。ずれていれば<strong>直す</strong>ボタンで直せます（1 回の Undo で戻せます）。</p>
+<table>
+<tr><th>項目</th><th>あるべき値</th><th>メモ</th></tr>
+<tr><td>時間単位（フレームレート）</td><td>30 fps（ntsc）</td><td>MisotenChara は 24 fps（film）で作られています。直すと Maya の標準の変換に従い、<strong>キーは同じ実時間に保たれてフレーム番号が変わります</strong>（<span class="soon">仮の決め</span>。リグ作業者に確認が必要）</td></tr>
+<tr><td>長さの単位</td><td>cm</td><td></td></tr>
+<tr><td>上方向</td><td>Y</td><td></td></tr>
+</table>
+
+<h2>掃除候補</h2>
+<p>使われていないマテリアル・テクスチャのノード・空のネームスペースを一覧に出します。<strong>最初はどれもチェックされていません。</strong>消したいものにチェックを入れて「チェックしたものを削除」を押します（1 回の Undo で戻せます）。割り当て済みのマテリアルは候補に出ません。</p>
+
+<h2>Humanoid 対応表</h2>
+<p>Unity の Humanoid（人型）のボーン名と、Maya のジョイントの対応表です。mGear の名前は Unity の自動判定では外れやすいので、ここで決めたものをモデル出力のときに一緒に書き出します。</p>
+<ol>
+<li><strong>ジョイントから推定</strong> — mGear の名前（<code>arm_L0_0_jnt</code> など）から自動で埋めます</li>
+<li>足りない所は、表のジョイント欄に直接入力するか、ビューポートでジョイントを選んで<strong>選択中のジョイントを入れる</strong></li>
+<li><strong>保存</strong> — プロジェクトの <span class="path">anim/&lt;ModelId&gt;/humanoid.json</span> に保存</li>
+</ol>
+<p>表の下に検証の結果が出ます。<strong>必須の 15 ボーン</strong>（Hips・Spine・Head・両腕の上腕/前腕/手・両脚の太もも/すね/足）が埋まっていること、同じジョイントを 2 か所で使っていないこと、親子の順序が人型と矛盾しないこと、を調べます。髪・スカート・舌など対応表に入らないジョイントは「extra」として Unity にそのまま持ち込まれます。</p>
+
+<h2>規則を変えたいとき</h2>
+<p>プロジェクトの <span class="path">anim/_naming.json</span>（接頭辞・禁止語・部位の言い換え）と <span class="path">anim/_vocabulary.json</span>（動作の語彙を足す）で、規則を上書きできます。ファイルが壊れていても、警告が出るだけで既定の規則で検査を続けます。</p>
+<div class="tip">動作の語彙は Idle / Walk / Run / Jump / Fall / Land / Interact / Stunned / Win / Lose / Damaged / Wave / Talk / Pose です。語彙にない動作名は⚠（直さなくても出力できます）。</div>
+
+<div class="tip">この画面の写真は実機で撮ったものを足します（<span class="soon">準備中</span>）。</div>
+
+<footer><a href="anim.html">アニメーション作業台へ戻る</a> / <a href="Readme.html">トップへ戻る</a></footer>
+</body>
+</html>

@@ -133,6 +133,7 @@ Unity の Humanoid ボーン名 → Maya のジョイント名。mGear の名前
 | 改名計画 | 提案名をその場で編集 → 「適用」で **1 回の Undo** にまとめて改名。マテリアル改名は `looks/<character>/look.json` のマテリアル名（と `_tdToon` プレビュー）を同じ操作で追従させる（Look の読み書きは `tdrive_toon.look` 経由。**割り当ては変えない**） |
 | 掃除候補 | 未割り当てのマテリアル / SG / file、空のネームスペース を一覧に出す（削除はチェックして「削除」。既定はすべて未チェック） |
 | シーン設定 | 時間単位（30 fps）・単位（cm）・Y-up のワンクリック修正。fps 変更は Maya の `currentUnit -t ntsc`（キーの時間は Maya の既定どおり保持） |
+| プロファイル（実装メモ） | 動作の語彙は `anim/_naming.json` の `vocabulary` と `anim/_vocabulary.json` の両方から足せる（2026-10-22）。テクスチャの名前の問題は FBX に入らないので ⚠ のみ（❌ にしない）。Toon 表示が ON のまま保存されたシーンでは、割り当てが `_tdToon` 側にあるため、`tdSourceMaterial` から元マテリアルを辿って「未使用」と誤認しない |
 | プロファイル | 規則は `maya/scripts/tdrive_anim/core/naming_rules.py` に **Maya 非依存**で持ち、`anim/_naming.json` で接頭辞・語彙・禁止を上書きできる（MS2026 以外のプロジェクト用） |
 
 ## 3. クリップ（クリップタブ、AN-3）

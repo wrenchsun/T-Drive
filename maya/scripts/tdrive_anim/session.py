@@ -173,6 +173,21 @@ class AnimSession:
         return out
 
     @undoable
+    def rename_clip(self, old: str, new: str) -> None:
+        """クリップ名を変える（状態図が参照していればそちらも追従）。重複・存在しない名前は AnimSetError。"""
+        d = self.require()
+        clip = A.find_clip(d, old)
+        if clip is None:
+            raise A.AnimSetError(f"クリップがありません: {old}")
+        if new != old and A.find_clip(d, new) is not None:
+            raise A.AnimSetError(f"同じ名前のクリップがあります: {new}")
+        clip["name"] = new
+        for st in (d.get("stateGraph") or {}).get("states", []):
+            if st.get("clip") == old:
+                st["clip"] = new
+        self._changed()
+
+    @undoable
     def remove_clip(self, name: str) -> bool:
         ok = A.remove_clip(self.require(), name)
         if ok:
