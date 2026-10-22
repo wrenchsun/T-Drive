@@ -32,6 +32,7 @@ figcaption { font-size: 0.9em; color: #666; margin-top: 6px; }
 footer { margin-top: 48px; font-size: 0.85em; color: #888; border-top: 1px solid #ddd; padding-top: 12px; }
 .lastupdate { margin: -0.4em 0 1.2em; font-size: 0.85em; color: #777; text-align: right; }
 /* T-Drive 追加: まだ使えない機能の目印 */
+.tentative { display: inline-block; font-size: 0.78em; background: #c8a24a; color: #fff; border-radius: 4px; padding: 0 6px; margin-left: 4px; vertical-align: middle; }
 .soon { display: inline-block; font-size: 0.78em; background: #9aa6b8; color: #fff; border-radius: 4px; padding: 0 6px; margin-left: 4px; vertical-align: middle; }
 .ok { display: inline-block; font-size: 0.78em; background: #4caf50; color: #fff; border-radius: 4px; padding: 0 6px; margin-left: 4px; vertical-align: middle; }
 .swatch { display: inline-block; width: 14px; height: 14px; border: 1px solid #888; vertical-align: middle; margin-right: 4px; }

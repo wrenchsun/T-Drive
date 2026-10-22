@@ -71,10 +71,13 @@ class NamingTab(QtWidgets.QWidget):
         bv.addWidget(self.table)
         row2 = QtWidgets.QHBoxLayout()
         self.apply_btn = QtWidgets.QPushButton("チェックした提案を適用")
-        self.apply_btn.setToolTip("メッシュ・マテリアル・クリップの改名を 1 回の Undo にまとめて適用します。割り当ては変えません。\nLook の名前と T-Drive のプレビュー用シェーダーも同時に追従します。テクスチャは提案だけ（ファイル名も変わるため）")
+        self.apply_btn.setToolTip("メッシュ・マテリアルの改名は Maya の Ctrl+Z（ビューポートをクリックしてから）で 1 回で戻せます。クリップ名はツールの Ctrl+Z（このウィンドウで）で 1 回で戻せます。割り当ては変えません。\n"
+                                  "T-Drive のプレビュー用シェーダーも同時に追従します。Look は、Toon で開いていればその Look（未保存の変更として残る）、開いていなければ looks/*/look.json を書き換えます"
+                                  "（書き換えるファイルを先に見せて確認します。ファイルの書き換えはどちらの Ctrl+Z でも戻りません）。テクスチャは提案だけ（ファイル名も変わるため）")
         self.apply_btn.clicked.connect(lambda *_: self.apply())
         row2.addWidget(self.apply_btn)
         self.check_all_btn = QtWidgets.QPushButton("提案のある行をすべてチェック")
+        self.check_all_btn.setToolTip("提案のある行の「適用」にすべてチェックを入れます（テクスチャ・提案のみの行は除く）")
         self.check_all_btn.clicked.connect(lambda *_: self._check_all(True))
         row2.addWidget(self.check_all_btn)
         row2.addStretch(1)
@@ -96,7 +99,7 @@ class NamingTab(QtWidgets.QWidget):
         self.cleanup_list.setMaximumHeight(120)
         cv.addWidget(self.cleanup_list)
         self.cleanup_btn = QtWidgets.QPushButton("チェックしたものを削除")
-        self.cleanup_btn.setToolTip("チェックした未使用のマテリアル・テクスチャノード・空のネームスペースを削除します（1 回の Undo）。割り当て済みのものは候補に出ません")
+        self.cleanup_btn.setToolTip("チェックした未使用のマテリアル・テクスチャノード・空のネームスペースを削除します（確認が出ます。Maya の Ctrl+Z で戻せます）。割り当て済みのものは候補に出ません")
         self.cleanup_btn.clicked.connect(lambda *_: self.cleanup())
         cv.addWidget(self.cleanup_btn)
         v.addWidget(cbox)
@@ -260,16 +263,24 @@ class NamingTab(QtWidgets.QWidget):
             return
         try:
             scene_items = [f for f in picked if f.kind in (N.MESH, N.MATERIAL)]
+            write_files = True
+            planned = SN.plan_look_follow({N.strip_namespace(f.name): f.suggestion for f in scene_items if f.kind == N.MATERIAL},
+                                          {N.strip_namespace(f.name): f.suggestion for f in scene_items if f.kind == N.MESH})
+            if planned["files"]:  # SF-11: look.json を直接書き換える。Ctrl+Z では戻らないので、先に見せて確かめる
+                listing = "\n".join(f"・{project.to_project_path(p)}（{n} か所）" for p, n in planned["files"])
+                r = QtWidgets.QMessageBox.question(
+                    self, "T-Drive Animation", "次の Look ファイルの名前を書き換えます。ファイルの書き換えは Ctrl+Z で戻せません。\n" + listing
+                    + "\n\n書き換えますか？（「いいえ」ならメッシュ・マテリアルの改名だけ行い、Look はそのままにします）",
+                    QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No)
+                write_files = r == QtWidgets.QMessageBox.Yes
             res = SN.apply_renames(scene_items)
             msgs = [f"改名 {len(res['renamed'])} 件"] + [f"スキップ: {n}（{why}）" for n, why in res["skipped"]]
-            msgs += SN.follow_look(res["materials"], res["meshes"])
-            for f in picked:
-                if f.kind == N.CLIP:
-                    try:
-                        self.session.rename_clip(f.name, f.suggestion)
-                        msgs.append(f"クリップ {f.name} → {f.suggestion}")
-                    except Exception as exc:  # noqa: BLE001
-                        msgs.append(f"スキップ: {f.name}（{exc}）")
+            msgs += SN.follow_look(res["materials"], res["meshes"], write_files=write_files)
+            clip_pairs = [(f.name, f.suggestion) for f in picked if f.kind == N.CLIP]
+            if clip_pairs:  # クリップ名は全部で 1 つのツールの Undo
+                done = self.session.rename_clips(clip_pairs)
+                msgs += [f"クリップ {a} → {b}" for a, b in done]
+                msgs += [f"スキップ: {a}（名前の重複か、クリップがありません）" for a, b in clip_pairs if (a, b) not in done]
             self.result.setText("\n".join(msgs))
         except Exception as exc:  # noqa: BLE001
             lifecycle.report_error("改名の適用で例外", traceback.format_exc())
@@ -318,6 +329,10 @@ class NamingTab(QtWidgets.QWidget):
         items = [self.report.cleanup[self.cleanup_list.item(i).data(QtCore.Qt.UserRole)] for i in range(self.cleanup_list.count())
                  if self.cleanup_list.item(i).checkState() == QtCore.Qt.Checked]
         if items:
+            r = QtWidgets.QMessageBox.question(self, "T-Drive Animation", f"チェックした {len(items)} 件を削除します（Maya の Ctrl+Z で戻せます）。続けますか？",
+                                               QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No)
+            if r != QtWidgets.QMessageBox.Yes:
+                return
             n = SN.apply_cleanup(items)
             self.result.setText(f"掃除: {n} 件を削除しました")
             self.inspect()

@@ -306,9 +306,35 @@ def _follow_preview(old_short: str, new_name: str, ns: str) -> None:
 
 
 # ------------------------------------------------------------------ Look の追従
-def follow_look(materials: dict[str, str], meshes: dict[str, str] | None = None) -> list[str]:
+def plan_look_follow(materials: dict[str, str], meshes: dict[str, str] | None = None) -> dict[str, Any]:
+    """`follow_look` が何を書き換えるか（書き換えない）: {"open": Toon で Look が開いているか, "files": [(look.json のパス, 書き換える箇所数)]}。
+    Look が開いていなければ `looks/*/look.json` のファイルを直接書き換え、Maya の Ctrl+Z では戻らない（SF-11）ので、適用の前に見せて確かめるために使う。"""
+    meshes = meshes or {}
+    out: dict[str, Any] = {"open": False, "files": []}
+    if not materials and not meshes:
+        return out
+    try:
+        from tdrive_toon import look as look_mod
+        from tdrive_toon import session as toon
+    except Exception:  # noqa: BLE001  Toon が読めなければ書き換えもできない
+        return out
+    if toon.current().look is not None:
+        out["open"] = True
+        return out
+    for path in sorted(project.looks_dir().glob("*/look.json")):
+        try:
+            lk = look_mod.load(path)
+        except Exception:  # noqa: BLE001  壊れた Look は書き換えない
+            continue
+        n = look_follow.rename_materials(lk, materials) + look_follow.rename_meshes(lk, meshes)
+        if n:
+            out["files"].append((path, n))
+    return out
+
+
+def follow_look(materials: dict[str, str], meshes: dict[str, str] | None = None, write_files: bool = True) -> list[str]:
     """Look の名前を追従させる。開いている Look（Toon のセッション）があればそれ（未保存の変更として残る）、
-    無ければプロジェクトの `looks/*/look.json` のうち旧名を持つもの（ファイルを直す）。報告の文字列を返す。"""
+    無ければプロジェクトの `looks/*/look.json` のうち旧名を持つもの（`write_files=True` のときだけファイルを直す。Ctrl+Z では戻らない）。報告の文字列を返す。"""
     msgs: list[str] = []
     meshes = meshes or {}
     if not materials and not meshes:
@@ -335,9 +361,11 @@ def follow_look(materials: dict[str, str], meshes: dict[str, str] | None = None)
             msgs.append(f"{project.to_project_path(path)} を読めないので更新しませんでした")
             continue
         n = look_follow.rename_materials(lk, materials) + look_follow.rename_meshes(lk, meshes)
-        if n:
+        if n and write_files:
             look_mod.save(lk, path)
-            msgs.append(f"{project.to_project_path(path)} の名前を {n} か所更新しました")
+            msgs.append(f"{project.to_project_path(path)} の名前を {n} か所更新しました（ファイルを直接書き換えたので Ctrl+Z では戻りません）")
+        elif n:
+            msgs.append(f"{project.to_project_path(path)} は旧い名前のままです（{n} か所）。Toon タブでこの Look を開いてから、もう一度改名を適用するか、手で直してください")
     return msgs
 
 

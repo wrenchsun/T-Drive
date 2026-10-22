@@ -63,6 +63,7 @@ class ClipsTab(QtWidgets.QWidget):
         self.play_btn.setToolTip("選んだクリップの範囲でループ再生します（ループ OFF のクリップは 1 回）。止めると元の再生範囲に戻ります")
         self.play_btn.clicked.connect(lambda *_: self.play_selected())
         self.stop_btn = QtWidgets.QPushButton("■ 停止")
+        self.stop_btn.setToolTip("再生を止めて、元の再生範囲・時刻・ループ設定に戻します")
         self.stop_btn.clicked.connect(lambda *_: self.stop())
         row.addWidget(self.play_btn)
         row.addWidget(self.stop_btn)
@@ -99,10 +100,14 @@ class ClipsTab(QtWidgets.QWidget):
         self.cross.setSuffix(" 秒")
         self.cross.setToolTip("このクリップへ切り替わるときの既定のクロスフェード（固定秒・線形）。範囲: 0〜5。既定: 0.1（D-Drive）／ MS2026 の Controller は 0.08（仮。docs/20 §9）")
         self.cross.editingFinished.connect(lambda *_: self._apply_detail("crossFade", round(self.cross.value(), 3)))
+        self.loop_cb = QtWidgets.QCheckBox("ループする")
+        self.loop_cb.setToolTip("ループ再生・状態図でのループ（Unity の Loop Time）。一覧の「ループ」列でも変えられます。既定: 動作の語彙から決まります（Idle・Run はオン）")
+        self.loop_cb.clicked.connect(lambda *_: self._apply_detail("loop", self.loop_cb.isChecked()))
         self.state_group = QtWidgets.QComboBox()
         self.state_group.addItems(list(A.STATE_GROUPS))
         self.state_group.setToolTip("locomotion: 状態図（待機・走り…）に載せる／ oneshot: 単発の動作。既定: 動作の語彙から決まります")
         self.state_group.activated.connect(lambda *_: self._apply_detail("stateGroup", self.state_group.currentText()))
+        dv.addRow("ループ", self.loop_cb)
         dv.addRow("ルートモーション", self.root_motion)
         dv.addRow("レイヤー", self.layer)
         dv.addRow("クロスフェード", self.cross)
@@ -136,6 +141,10 @@ class ClipsTab(QtWidgets.QWidget):
         dv.addRow("サムネイル", self.thumb)
         v.addWidget(d)
         self._clip_names: list[str] = []
+        self._range_timer = QtCore.QTimer(self)  # タイムスライダーの再生範囲の表示を追従させる（前に出ているあいだだけ。UX-14）
+        self._range_timer.setInterval(500)
+        self._range_timer.timeout.connect(lambda *_: self._update_range_label())
+        self._range_timer.start()
         self.refresh()
 
     # ------------------------------------------------------------ 選択
@@ -162,6 +171,16 @@ class ClipsTab(QtWidgets.QWidget):
         return None
 
     # ------------------------------------------------------------ 更新
+    def _update_range_label(self) -> None:
+        if self.session.data is None or not self.isVisible():
+            return
+        d = self.session.data
+        lo, hi = MC.playback_range()
+        keyed = MC.keyed_range(A.root_name(d))
+        text = f"範囲 {lo}〜{hi}" + (f"（キー {keyed[0]}〜{keyed[1]}）" if keyed else "（ルート以下にキーなし）")
+        if self.range_label.text() != text:
+            self.range_label.setText(text)
+
     def refresh(self) -> None:
         has = self.session.data is not None
         for w in (self.add_btn, self.play_btn, self.table):
@@ -173,9 +192,7 @@ class ClipsTab(QtWidgets.QWidget):
             return
         d = self.session.data
         self._fill_vocab(d)
-        lo, hi = MC.playback_range()
-        keyed = MC.keyed_range(A.root_name(d))
-        self.range_label.setText(f"範囲 {lo}〜{hi}" + (f"（キー {keyed[0]}〜{keyed[1]}）" if keyed else "（ルート以下にキーなし）"))
+        self._update_range_label()
         selected = self.selected_names()
         self._building = True
         try:
@@ -213,12 +230,13 @@ class ClipsTab(QtWidgets.QWidget):
 
     def _fill_detail(self) -> None:
         c = self._one()
-        for w in (self.root_motion, self.layer, self.cross, self.state_group, self.events, self.ev_key):
+        for w in (self.loop_cb, self.root_motion, self.layer, self.cross, self.state_group, self.events, self.ev_key):
             w.setEnabled(c is not None)
         self.events.setRowCount(0)
         if c is None:
             self.thumb.setText("サムネイル: 未作成")
             return
+        self.loop_cb.setChecked(bool(c["loop"]))
         self.root_motion.setCurrentText(c["rootMotion"])
         self.layer.setCurrentText(c["layer"])
         self.cross.setValue(float(c["crossFade"]))
@@ -271,8 +289,22 @@ class ClipsTab(QtWidgets.QWidget):
         names = self.selected_names()
         if not names:
             return
-        for n in names:  # 複数選択なら全部に同じ値（1 回ずつ Undo。まとめたいときは貼り付けを使う）
-            self._guard(self.session.update_clip, n, **{key: value})
+        self._guard(self.session.update_clips, names, **{key: value})  # 複数選択なら全部に同じ値（全体で 1 回の Undo）
+
+    def _confirm(self, text: str) -> bool:
+        """壊す操作の前の確認（既定「いいえ」。UX-5）。"""
+        r = QtWidgets.QMessageBox.question(self, "T-Drive Animation", text, QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No)
+        return r == QtWidgets.QMessageBox.Yes
+
+    def delete_selected(self) -> None:
+        names = self.selected_names()
+        if names and self._confirm(f"{len(names)} 件のクリップ（{', '.join(names[:3])}{'…' if len(names) > 3 else ''}）を削除します（Ctrl+Z で戻せます）。続けますか？"):
+            self._guard(self.session.remove_clips, names)
+
+    def duplicate_selected(self) -> None:
+        names = self.selected_names()
+        if names:
+            self._guard(self.session.duplicate_clips, names)
 
     def play_selected(self) -> None:
         c = self._one()
@@ -299,11 +331,11 @@ class ClipsTab(QtWidgets.QWidget):
         if c is not None:
             self._guard(self.session.add_foot_plant, c["name"], int(cmds.currentTime(query=True)), side)
 
-    def make_thumbnail(self) -> None:
+    def make_thumbnail(self, force: bool = False) -> None:
         c = self._one()
         if c is None:
             return
-        path, why = MC.make_thumbnail(self.session.model_id, c)
+        path, why = MC.make_thumbnail(self.session.model_id, c, force=force)
         self._say(why or "サムネイルを作りました")
         self._fill_detail()
 
@@ -314,12 +346,13 @@ class ClipsTab(QtWidgets.QWidget):
             m.addAction("再生", lambda *_: self.play_selected())
             m.addAction("範囲をタイムスライダーに", lambda *_: self.to_slider())
             m.addSeparator()
-            m.addAction("複製", lambda *_: [self._guard(self.session.duplicate_clip, n) for n in names])
-            m.addAction("削除", lambda *_: [self.session.remove_clip(n) for n in names])
+            m.addAction("複製", lambda *_: self.duplicate_selected())
+            m.addAction("削除", lambda *_: self.delete_selected())
             m.addSeparator()
             m.addAction("属性をコピー", lambda *_: QtWidgets.QApplication.clipboard().setText(C.attrs_to_text(self._one())))
             m.addAction("属性を貼り付け", lambda *_: self._guard(self.session.paste_attrs, names, QtWidgets.QApplication.clipboard().text()))
             m.addAction("サムネイルを作る", lambda *_: self.make_thumbnail())
+            m.addAction("サムネイルを作り直す", lambda *_: self.make_thumbnail(force=True))
             m.addSeparator()
         m.addAction("現在の再生範囲から作る", lambda *_: self.add_from_range())
         m.exec(self.table.viewport().mapToGlobal(pos))
@@ -330,9 +363,10 @@ class ClipsTab(QtWidgets.QWidget):
         if c is None or not rows:
             return
         m = QtWidgets.QMenu(self)
-        m.addAction("イベントを削除", lambda *_: [self.session.remove_event(c["name"], r) for r in reversed(rows)])
+        m.addAction("イベントを削除", lambda *_: self._guard(self.session.remove_events, c["name"], rows))
         m.addAction("フレームへ移動", lambda *_: cmds.currentTime(c["events"][rows[0]]["frame"], edit=True))
         m.exec(self.events.viewport().mapToGlobal(pos))
 
     def detach(self) -> None:
+        self._range_timer.stop()
         MC.stop()  # 閉じるときは再生範囲を戻す

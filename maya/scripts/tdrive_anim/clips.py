@@ -56,7 +56,9 @@ def play(clip: dict[str, Any]) -> None:
         playstate.acquire(_OWNER)
         _playing = True
         lifecycle.on_reload(stop)  # リロードのとき、再生範囲を戻す
-    cmds.playbackOptions(minTime=clip["start"], maxTime=clip["end"], animationStartTime=clip["start"], animationEndTime=clip["end"],
+    # ループのクリップは最後のフレームを再生範囲に入れない（最後と最初が同じポーズのループで 1 フレーム止まって見えるのを防ぐ。Unity のループと同じ周期 = 長さ。SP-8）
+    last = clip["end"] - 1 if clip["loop"] and clip["end"] > clip["start"] else clip["end"]
+    cmds.playbackOptions(minTime=clip["start"], maxTime=last, animationStartTime=clip["start"], animationEndTime=clip["end"],
                          loop="continuous" if clip["loop"] else "once")
     cmds.currentTime(clip["start"], edit=True)
     with contextlib.suppress(RuntimeError):
@@ -87,7 +89,7 @@ def thumb_dir(model_id: str) -> Path:
 
 
 def thumb_path(model_id: str, clip: dict[str, Any]) -> Path:
-    """キャッシュの鍵: 名前 + 範囲 + 先頭フレームのポーズが変わったら作り直す（範囲を変えると古い画像は使われない）。"""
+    """キャッシュの鍵: 名前 + 範囲（範囲を変えると古い画像は使われない）。ポーズ（キー）を直しただけでは変わらないので、古い画像は右クリックの「サムネイルを作り直す」で撮り直す（UX-15）。"""
     key = hashlib.sha1(f"{clip['name']}|{clip['start']}|{clip['end']}".encode()).hexdigest()[:10]
     return thumb_dir(model_id) / f"{clip['name']}_{key}.png"
 
@@ -100,8 +102,9 @@ def can_thumbnail() -> tuple[bool, str]:
     return thumbnails.can_capture()
 
 
-def make_thumbnail(model_id: str, clip: dict[str, Any], size: int = 96) -> tuple[Path | None, str]:
-    """クリップの先頭フレームの画像を 1 枚作る。(パス, 理由)。作れない環境では (None, 理由)。Maya の Undo・選択・時刻は変えない。"""
+def make_thumbnail(model_id: str, clip: dict[str, Any], size: int = 96, force: bool = False) -> tuple[Path | None, str]:
+    """クリップの先頭フレームの画像を 1 枚作る。(パス, 理由)。作れない環境では (None, 理由)。Maya の Undo・選択・時刻は変えない。
+    `force` = 作ってある画像があっても撮り直す。"""
     ok, why = can_thumbnail()
     if not ok:
         return None, "この環境ではサムネイルを作れません: " + why
@@ -109,8 +112,10 @@ def make_thumbnail(model_id: str, clip: dict[str, Any], size: int = 96) -> tuple
 
     path = thumb_path(model_id, clip)
     path.parent.mkdir(parents=True, exist_ok=True)
-    if path.is_file():
+    if path.is_file() and not force:
         return path, ""
+    if path.is_file():
+        path.unlink()
     panel = viewport.pick_panel()
     cam = cmds.modelPanel(panel, query=True, camera=True)
     t0 = cmds.currentTime(query=True)

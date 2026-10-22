@@ -262,7 +262,7 @@ lilToon / Poiyomi のインスペクターを参考にした操作感（[05](05_
 | V-1 | Maya の ビューポート レンダリング エンジンを **OpenGL**（DirectX 11 以外）にして Maya を起動 → Tools › T-Drive › Animation… | DirectX 11 に関する警告が出ず、Animation タブの 5 つのサブタブ（命名 / クリップ / ブレンド / ショット / 出力）が開く | ✅（裏の Maya で dx11 を読み込まないことのみ） | [ ] | |
 | V-2 | OpenGL のまま、命名 → クリップ → ブレンド（合成して再生）→ 出力 → ショット → 出力を一周する（MisotenChara_Rig） | どこでも止まらず、ビューポートで再生できる。FBX が `build/` にできる | ✅（裏の Maya で一周。見た目は人） | [ ] | |
 | V-3 | OpenGL で Toon 表示が ON の状態で Animation タブを使う | Toon の DX11 警告（既存）が出るだけで、Animation タブは止まらない | ❌ 人 | [ ] | |
-| V-4 | Toon 表示が OFF（元のマテリアル）で Animation タブを使う | 全機能が使える | ✅ | [ ] | |
+| V-4 | Toon 表示が OFF（元のマテリアル）で Animation タブを使う | 全機能が使える | ✅（Toon のプレビューが無いミニリグで。Toon 表示を OFF にした状態そのものを作るテストは無い）／実機は人 | [ ] | |
 
 ## I. マニュアル
 

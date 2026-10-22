@@ -452,6 +452,61 @@ class AnimSession:
         self._changed()
 
     @undoable
+    def rename_clips(self, pairs: list[tuple[str, str]]) -> list[tuple[str, str]]:
+        """クリップ名をまとめて変える（**全体で 1 つの Undo**。命名タブの「適用」）。変えられなかったもの（重複・存在しない名前）は飛ばして、
+        変えられたものの (旧, 新) を返す。状態図の参照も追従する。"""
+        done = []
+        for old, new in pairs:
+            try:
+                self.rename_clip(old, new)
+                done.append((old, new))
+            except A.AnimSetError:
+                continue
+        return done
+
+    @undoable
+    def remove_clips(self, names: list[str]) -> int:
+        """クリップをまとめて消す（1 つの Undo）。消した数。"""
+        n = 0
+        for name in names:
+            if A.remove_clip(self.require(), name):
+                n += 1
+        if n:
+            self._changed()
+        return n
+
+    @undoable
+    def duplicate_clips(self, names: list[str]) -> list[dict[str, Any]]:
+        """クリップをまとめて複製する（1 つの Undo）。"""
+        out = [C.duplicate(self.require(), n) for n in names]
+        if out:
+            self._changed()
+        return out
+
+    @undoable
+    def update_clips(self, names: list[str], **fields: Any) -> int:
+        """選んだクリップに同じ値をまとめて入れる（1 つの Undo）。値が不正なら AnimSetError で、全体を元に戻す。"""
+        before = copy.deepcopy(self.require()["clips"])
+        try:
+            for n in names:
+                C.update(self.require(), n, **fields)
+        except A.AnimSetError:
+            self.require()["clips"] = before
+            raise
+        if names:
+            self._changed()
+        return len(names)
+
+    @undoable
+    def remove_events(self, clip_name: str, indices: list[int]) -> int:
+        """イベントをまとめて消す（1 つの Undo）。"""
+        clip = self._clip(clip_name)
+        n = sum(1 for i in sorted(set(indices), reverse=True) if C.remove_event(clip, i))
+        if n:
+            self._changed()
+        return n
+
+    @undoable
     def remove_clip(self, name: str) -> bool:
         ok = A.remove_clip(self.require(), name)
         if ok:

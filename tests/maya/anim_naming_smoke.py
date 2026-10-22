@@ -28,6 +28,7 @@ sys.path.insert(0, str(REPO / "tests" / "fixtures" / "anim"))
 from PySide6 import QtCore, QtWidgets  # noqa: E402
 
 APP = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+QtWidgets.QMessageBox.question = staticmethod(lambda *a, **k: QtWidgets.QMessageBox.Yes)  # 確認ダイアログは常に「はい」（ヘッドレスで止まらないように）
 
 import maya.standalone  # noqa: E402
 

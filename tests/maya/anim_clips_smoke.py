@@ -25,6 +25,7 @@ sys.path.insert(0, str(REPO / "tests" / "fixtures" / "anim"))
 from PySide6 import QtWidgets  # noqa: E402
 
 APP = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+QtWidgets.QMessageBox.question = staticmethod(lambda *a, **k: QtWidgets.QMessageBox.Yes)  # 確認ダイアログは常に「はい」（ヘッドレスで止まらないように）
 
 import maya.standalone  # noqa: E402
 
@@ -84,9 +85,11 @@ def _run(tmp: Path) -> None:
     cmds.currentTime(12, edit=True)
     run_clip = A.find_clip(s.data, "A_MisotenChara_Run_F")
     MC.play(run_clip)
-    check("再生中は範囲がクリップの範囲", MC.playback_range() == (100, 118) and MC.is_playing())
+    check("再生中は範囲がクリップの範囲（ループは最後の 1 フレームを除く）", MC.playback_range() == (100, 117) and MC.is_playing())
     check("ループ ON のクリップは continuous", cmds.playbackOptions(query=True, loop=True) == "continuous")
+    check("SP-8: ループのクリップは最後のフレームを再生範囲に入れない（最後と最初が同じポーズでも止まって見えない）", cmds.playbackOptions(query=True, maxTime=True) == run_clip["end"] - 1 and cmds.playbackOptions(query=True, animationEndTime=True) == run_clip["end"])
     MC.play(A.find_clip(s.data, "A_MisotenChara_Jump"))
+    check("SP-8: ループでないクリップは最後のフレームまで", cmds.playbackOptions(query=True, maxTime=True) == A.find_clip(s.data, "A_MisotenChara_Jump")["end"])
     check("再生中に別のクリップへ切り替えても元の状態は 1 つだけ保存", MC.playback_range() == (200, 230))
     MC.stop()
     check(
