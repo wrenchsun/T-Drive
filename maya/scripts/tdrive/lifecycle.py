@@ -27,7 +27,7 @@ from typing import Any, Callable
 
 PACKAGE_DIR = Path(__file__).resolve().parent  # tdrive/
 # ツールのコードがあるフォルダ（トレースバックがここを通っていればツール内のエラー）
-TOOL_DIRS = tuple(PACKAGE_DIR.parent / name for name in ("tdrive", "tdrive_toon", "tdrive_facial"))
+TOOL_DIRS = tuple(PACKAGE_DIR.parent / name for name in ("tdrive", "tdrive_toon", "tdrive_facial", "tdrive_anim"))
 INT32_MIN, INT32_MAX = -(2**31), 2**31 - 1
 
 _KEEPALIVE_ATTR = "_tdrive_toon_keepalive"  # sys の属性（リロードで消えない）

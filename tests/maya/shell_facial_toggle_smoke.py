@@ -277,7 +277,7 @@ def _run(tmp: Path) -> None:
 
     shell._tools.clear()
     ids = [t.id for t in shell.tools()]
-    check("facial 読み込み失敗: 殻は toon も facial（理由の表示）も並べる", ids == ["toon", "facial"], str(ids))
+    check("facial 読み込み失敗: 殻は toon も facial（理由の表示）も並べる", ids == ["toon", "facial", "anim"], str(ids))
     panel = shell.get_tool("toon").build_widget()
     check("facial 読み込み失敗: Toon のパネル（ヘッダー）は作れる", panel is not None and panel.header is not None)
     fc = panel.header.facial

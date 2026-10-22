@@ -40,6 +40,7 @@ def install() -> None:
     cmds.setParent(tools, menu=True)
     cmds.menuItem(MENU_NAME, label="T-Drive", subMenu=True, tearOff=True)
     cmds.menuItem(label="エディタ", command=lambda *_: _shell().show())
+    cmds.menuItem(label="Animation…", command=lambda *_: _shell().show("anim"))
     cmds.menuItem(label="プロジェクトを選ぶ…", command=lambda *_: _choose_project())
     cmds.menuItem(divider=True)
     cmds.menuItem(label="Toon", subMenu=True, tearOff=True)

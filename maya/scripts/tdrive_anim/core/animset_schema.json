@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TDriveAnimSet",
+  "description": "docs/20 §3.3。知らないキーは許す（追加は MINOR、削除・改名は MAJOR）。",
+  "type": "object",
+  "required": ["format", "version", "modelId", "frameRate", "units", "upAxis", "skeletonRoot", "meshes", "clips"],
+  "properties": {
+    "format": { "const": "TDriveAnimSet" },
+    "version": { "type": "integer", "minimum": 1 },
+    "modelId": { "type": "string", "pattern": "^[A-Z][A-Za-z0-9]*$" },
+    "frameRate": { "enum": [30, 60] },
+    "units": { "const": "cm" },
+    "upAxis": { "const": "Y" },
+    "skeletonRoot": { "type": "string", "minLength": 1 },
+    "meshes": { "type": "array", "items": { "type": "string" } },
+    "clips": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "start", "end"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "start": { "type": "integer" },
+          "end": { "type": "integer" },
+          "loop": { "type": "boolean" },
+          "rootMotion": { "enum": ["none", "bake"] },
+          "layer": { "type": "string" },
+          "crossFade": { "type": "number", "minimum": 0 },
+          "stateGroup": { "enum": ["locomotion", "oneshot"] },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["frame", "key"],
+              "properties": { "frame": { "type": "integer" }, "key": { "type": "string" }, "args": {} }
+            }
+          }
+        }
+      }
+    },
+    "layers": {
+      "type": "array",
+      "items": { "type": "object", "required": ["name"], "properties": { "name": { "type": "string" }, "maskRoot": { "type": "string" } } }
+    },
+    "stateGraph": { "type": ["object", "null"] },
+    "export": {
+      "type": "object",
+      "properties": { "modelDir": { "type": "string" }, "animDir": { "type": "string" }, "category": { "type": "string" } }
+    }
+  }
+}

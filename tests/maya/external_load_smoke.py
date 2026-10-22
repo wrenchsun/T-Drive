@@ -58,7 +58,7 @@ def _run(tmp: Path) -> None:
     tools = shell.tools()
     order = [t.id for t in tools]
     check("読み込んだ id", ids == ["tdrive_broken", "tdrive_dummy"], str(ids))
-    check("組み込みの後ろに外部が並ぶ", order[:2] == ["toon", "facial"] and order[2:] == ["tdrive_broken", "tdrive_dummy"], str(order))
+    check("組み込みの後ろに外部が並ぶ", order[:3] == ["toon", "facial", "anim"] and order[3:] == ["tdrive_broken", "tdrive_dummy"], str(order))
     dummy = shell.get_tool("tdrive_dummy")
     check("ダミーは本物のツール", dummy is not None and not isinstance(dummy, shell._UnavailableTool) and dummy.label == "Dummy")
     broken = shell.get_tool("tdrive_broken")

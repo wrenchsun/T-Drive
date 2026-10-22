@@ -6,7 +6,11 @@
 ## [Unreleased]
 
 ### 互換性
-- （リリース前に記入）
+- MINOR: アニメーション作業台（Phase AN）の追加。新規の形式 `animset.json` / `shot.json` / `humanoid.json`（以後、キーの削除・改名は MAJOR、追加は MINOR）。パラメータ契約・Look スキーマ・ToonCore の変更なし
+
+### 追加
+- Animation タブ（アニメーション作業台。仕様 docs/20）: 殻の 1 段目に追加。DirectX 11 を使わない（OpenGL・ヘッドレスでも動く）
+  - AN-1: 骨格（5 つのサブタブの枠・`tdrive_anim` パッケージ）、`animset.json` の読み書き・検証、メニュー Tools › T-Drive › Animation…
 
 ## [0.6.2] - 2026-10-16
 

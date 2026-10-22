@@ -31,6 +31,7 @@ RESTORE_SCRIPT = "from tdrive import shell; shell.restore()"
 _BUILTIN_TOOLS = (
     ("toon", "Toon", "tdrive_toon.ui"),
     ("facial", "FacialController", "tdrive_facial.ui"),
+    ("anim", "Animation", "tdrive_anim.ui"),
 )
 
 _tools: list = []

@@ -17,7 +17,7 @@ old_session = sys.modules.get("tdrive_toon.session")
 old_preview = sys.modules.get("tdrive_toon.preview")
 old_shell = sys.modules.get("tdrive.shell")
 old_ui = sys.modules.get("tdrive_toon.ui")  # 殻を切り出す前（F0-1 より前）のツールからのリロード用
-PACKAGES = ("tdrive_toon", "tdrive", "tdrive_facial")  # 殻・Toon・FacialController
+PACKAGES = ("tdrive_toon", "tdrive", "tdrive_facial", "tdrive_anim")  # 殻・Toon・FacialController・Animation
 
 carry = None
 if old_session is not None:

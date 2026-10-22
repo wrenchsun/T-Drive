@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>アニメーション作業台とは - T-Drive デザイナーマニュアル</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<nav class="breadcrumb"><a href="Readme.html">トップ</a> › アニメーション作業台とは</nav>
+<h1>アニメーション作業台とは</h1>
+<p class="lastupdate">最終更新日: 2026-10-22</p>
+
+<p>ゲーム（Unity）に入れるキャラクターのアニメーションを、<strong>Maya の中で整える・確かめる・書き出す</strong>ための道具です。MS2026 のキャラクター「MisotenChara」を対象にしています。</p>
+<ul>
+<li><strong>名前を揃える</strong> — MS2026 の名前の決まりに合っているかを調べて、直す案を出します</li>
+<li><strong>クリップを作る</strong> — 「待機」「走る」「ジャンプ」など、動きの範囲に名前を付けて並べます</li>
+<li><strong>つなぎ方を確かめる</strong> — 待機から走りへ切り替わるときのなめらかさを、ゲームと同じ秒数で見ます</li>
+<li><strong>Unity 用に分けて出す</strong> — モデルと、動き 1 つごとのファイルに分けて書き出します</li>
+<li><strong>ショット（カットシーン）を作る</strong> — カメラとキャラクターの動きを並べて、Unity のカットシーン用に書き出します</li>
+</ul>
+
+<div class="tip"><strong>DirectX 11 でなくても使えます。</strong>Toon のプレビューは DirectX 11 が必要ですが、アニメーション作業台は Maya の標準のアニメーション機能だけで動きます。Toon 表示がオフ（元のマテリアル）でも使えます。</div>
+
+<h2>画面</h2>
+<p>メニュー <strong>Tools › T-Drive › Animation…</strong>（または エディタを開いて 1 段目の「Animation」タブ）を開きます。上に ModelId と animset の表示、その下に 5 つのタブがあります。</p>
+<table>
+<tr><th>タブ</th><th>役割</th></tr>
+<tr><td>命名</td><td>名前の決まりの検査と直し、シーンの設定（フレームレートなど）、Humanoid の対応表 <span class="soon">準備中</span></td></tr>
+<tr><td>クリップ</td><td>動きの範囲（クリップ）の一覧と再生、イベント <span class="soon">準備中</span></td></tr>
+<tr><td>ブレンド</td><td>クリップからクリップへのつなぎ（ブレンド）と、状態の切り替わり（遷移）の確認 <span class="soon">準備中</span></td></tr>
+<tr><td>ショット</td><td>カメラとキャラクターの動きを並べる <span class="soon">準備中</span></td></tr>
+<tr><td>出力</td><td>Unity 用の書き出し <span class="soon">準備中</span></td></tr>
+</table>
+
+<h2>はじめかた</h2>
+<ol>
+<li>Maya にキャラクターのシーンを開きます</li>
+<li>Animation タブの上の欄に <strong>ModelId</strong> を入れて「新規」を押します。ModelId は英数字の「大文字で始まる」名前です（例: <code>MisotenChara</code>）</li>
+<li>「保存」を押すと、プロジェクトの <span class="path">anim/&lt;ModelId&gt;/animset.json</span> ができます。シーンを保存したときも自動で保存され、シーンを開き直すと自動で読み込まれます</li>
+</ol>
+<div class="warn">ModelId の <code>MisotenChara</code> は<strong>仮の決め</strong>です（ファイル名から付けました）。MS2026 側で別の名前に決まったら、ここを変えれば他は追従します。</div>
+
+<h2>用語</h2>
+<table>
+<tr><th>用語</th><th>意味</th></tr>
+<tr><td>ModelId</td><td>キャラクターを表す名前。ファイル名（<code>SK_&lt;ModelId&gt;.fbx</code>）やカットシーンの名前に使います</td></tr>
+<tr><td>animset</td><td>1 キャラクター分のアニメーションの設定ファイル（<span class="path">animset.json</span>）。クリップの一覧・つなぎ方などを持つ正本です</td></tr>
+<tr><td>クリップ</td><td>動きの範囲（開始〜終了フレーム）に付けた名前。Unity では 1 つのアニメーションになります</td></tr>
+<tr><td>ブレンド</td><td>2 つのクリップをなめらかにつなぐこと。時間で線形に混ぜます（Unity と同じ）</td></tr>
+<tr><td>遷移</td><td>待機 → 走り のように、状態が切り替わること</td></tr>
+<tr><td>ショット</td><td>カットシーン 1 つ分。カメラとキャラクターの動きの組</td></tr>
+</table>
+
+<h2 id="now">今できること</h2>
+<table>
+<tr><th>機能</th><th>状態</th></tr>
+<tr><td>animset の新規・開く・保存、シーンとの紐付け、元に戻す / やり直し（Ctrl+Z）</td><td><span class="ok">使える</span></td></tr>
+<tr><td>命名の検査と直し</td><td><span class="soon">準備中</span></td></tr>
+<tr><td>クリップ</td><td><span class="soon">準備中</span></td></tr>
+<tr><td>ブレンド・遷移の確認</td><td><span class="soon">準備中</span></td></tr>
+<tr><td>Unity 用の分割出力</td><td><span class="soon">準備中</span></td></tr>
+<tr><td>ショットの作成と出力</td><td><span class="soon">準備中</span></td></tr>
+</table>
+
+<div class="tip">この道具の画面写真は、実機で撮ったものを順次足します（<span class="soon">準備中</span>）。</div>
+
+<footer><a href="Readme.html">トップへ戻る</a></footer>
+</body>
+</html>

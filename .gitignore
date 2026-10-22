@@ -54,3 +54,6 @@ assets/unitychan/unitychan_test.ma
 assets/shizuku/
 # FacialController の Unity 向け出力（FBX にモデルが含まれる）
 facial/*/export/
+
+# MisotenChara 本体（手元の確認用。リポジトリに入れない。docs/20 §7）
+assets/misoten/

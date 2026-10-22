@@ -6,6 +6,8 @@
     <プロジェクト>/looks/_env/*.json               環境プロファイル（ツール同梱の同名より優先）
     <プロジェクト>/build/unity/                    Unity 出力
     <プロジェクト>/captures/                       キャプチャ
+    <プロジェクト>/anim/<ModelId>/animset.json     アニメーション作業台（クリップ・状態図。docs/20）
+    <プロジェクト>/shots/<Shot>.shot.json          ショット（docs/20 §5）
     <プロジェクト>/.tdrive/project.json            プロジェクトの設定（最後に更新を適用したツールの版 など）
 
 場所の決め方: set_root() で選んだもの > 環境変数 TDRIVE_PROJECT > ツール本体（開発用。このリポジトリで作業するとき）。
@@ -62,6 +64,16 @@ def export_dir() -> Path:
 
 def capture_dir() -> Path:
     return root() / "captures"
+
+
+def anim_dir() -> Path:
+    """アニメーション作業台のデータ（anim/<ModelId>/animset.json・anim/_naming.json。docs/20）。"""
+    return root() / "anim"
+
+
+def shots_dir() -> Path:
+    """ショット（shots/<Shot>.shot.json。docs/20 §5.1）。"""
+    return root() / "shots"
 
 
 def profile_dirs() -> list[Path]:
