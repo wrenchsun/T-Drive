@@ -36,7 +36,12 @@ class BatchJob:
         self.result_path = self.work / "result.json"
         scene = self.work / "scene.mb"
         # シーン名・未保存フラグを変えずに内容だけ書き出す（メインスレッドで行う）
-        cmds.file(str(scene), exportAll=True, type="mayaBinary", force=True, preserveReferences=True)
+        try:
+            cmds.file(str(scene), exportAll=True, type="mayaBinary", force=True, preserveReferences=True)
+        except RuntimeError:
+            # 不明なノード（読み込めていないプラグインのノード。mGear など）を含む .ma は、バイナリに変換できない。.ma のまま書く
+            scene = self.work / "scene.ma"
+            cmds.file(str(scene), exportAll=True, type="mayaAscii", force=True, preserveReferences=True)
         args = self.work / "args.json"
         args.write_text(json.dumps({**payload, "scene": str(scene), "result": str(self.result_path)}, ensure_ascii=False), encoding="utf-8")
         env = dict(os.environ, TDRIVE_ROOT=REPO_ROOT.as_posix(), PYTHONIOENCODING="utf-8", MAYA_DISABLE_CER="1")  # 裏の mayapy のクラッシュ画面を出さない

@@ -3,7 +3,7 @@
 優先順位は [04_technique_priority.md](04_technique_priority.md) に従い、**ルック（P0 → P1 → P2）→ アニメーション（A1 → A2）** の順で発行する。
 Unity は T-Drive for Unity パッケージ（Phase U）として実装する（2026-09-28 方針）。ルックに関わる Maya 側の作業（Phase 3）を先に仕上げる。
 FacialController（カメラ角度に応じた顔の補正。UE 版からの移植）は Phase S / F0〜F5（2026-10-03 追加。仕様 [14](14_facial_controller_spec.md)・設計 [15](15_facial_controller_design.md)）。
-アニメーション作業台（MS2026 の命名規則・クリップ・ブレンド / 遷移のプレビュー・Unity 用の分割出力・ショット）は Phase AN（2026-10-22 追加。仕様 [20](20_animation_workbench_spec.md)）。
+アニメーション作業台（MS2026 の命名規則・クリップ・ブレンド / 遷移のプレビュー・Unity 用の分割出力・ショット）は Phase AN（2026-10-22 追加・AN-1〜AN-9 実装済み。仕様 [20](20_animation_workbench_spec.md)）。
 
 - 粒度: 1 チケット = 0.5〜3 人日。依存は `←` の先行チケット
 - 状態: ✅ 完了 / 🔶 ドラフトあり（仕様確定後に見直し） / ⬜ 未着手
@@ -305,7 +305,7 @@ UE 版で未実装（文書だけ）の機能。計算に関わるものは Pyth
 
 ## Phase AN: アニメーション作業台（命名規則・クリップ・ブレンド / 遷移のプレビュー・分割出力・ショット。2026-10-22 追加）
 
-仕様 [20](20_animation_workbench_spec.md)。対象は MS2026 の本番キャラクター MisotenChara（mGear リグ）。**DirectX 11 でない環境でも動く**（dx11Shader・Render Override を使わない。[20](20_animation_workbench_spec.md) §1.1）。
+仕様 [20](20_animation_workbench_spec.md)。**AN-1〜AN-9 実装済み（2026-10-22。AN-10 は保留）**。対象は MS2026 の本番キャラクター MisotenChara（mGear リグ）。**DirectX 11 でない環境でも動く**（dx11Shader・Render Override を使わない。[20](20_animation_workbench_spec.md) §1.1）。
 Phase A（アニメの“嘘”）より先に進める（作業台が A 系の土台になる）。1 段目タブ「Animation」の中に 命名 / クリップ / ブレンド / ショット / 出力 の 5 タブ。
 共通の完了条件（マニュアル・確認項目）に加えて: **Maya 非依存の core は pytest、Maya 依存層は mayapy のヘッドレスのスモーク**で担保する。確認項目は [18](18_manual_verification_facial.md) に「AN」の節を足す。マニュアルは `docs/DesignerManual/anim*.html`。
 
@@ -320,7 +320,7 @@ Phase A（アニメの“嘘”）より先に進める（作業台が A 系の�
 | AN-6 | **Unity 用の分割出力**: `SK_<ModelId>.fbx`（Toon の `export_in_place` に相乗り + `humanoid.json` / `animset.json` の写し）、クリップごとの `A_<ModelId>_<動作>.fbx`（ジョイントのみ・ベイク・1 テイク・`rootMotion=none` は Hips の XZ 固定・`@` 不使用）、変更のあるクリップだけ、出力先プリセット（既定 / D-Drive / MS2026 の `SourceAssets`）、出力タブ（3 区画・進捗・ログ・❌ で無効）、`ExportJob` の共通化（`tdrive.export_job`、転送モジュールで公開名維持） | — | 2.5 | AN-2 AN-3 | mayapy で fixture のリグから `SK_*.fbx` 1 本と `A_*.fbx` 2 本が出て、FBX にメッシュが入っていない / 入っていることをテストで確認。命名の ❌ があると出力が止まる | ✅ 2026-10-22（テイク名は Take 001 のまま。docs/20 §6.2） |
 | AN-7 | **ショットの作成**: `shots/<Shot>.shot.json`（§5.1）、`tdShot_<Shot>` グループ、カメラ区間と Camera Sequencer の同期、キャラクターのクリップ列（ブレンドタブから「この列をショットへ」）、手付けキー用の animLayer、`EVT_` イベント、シーケンサー再生と `playblast`（`captures/shots/`） | — | 2.5 | AN-4 | ショットを作ってカメラ 2 台の切替とクリップ列が Maya で再生できる。`shot.json` の読み書き・検証は pytest | ✅ 2026-10-22 |
 | AN-8 | **ショットの出力**: `<Shot>.fbx`（Ubercam + `PRP_` + `EVT_`）、`<Shot>__<ModelId>.fbx`（ジョイント階層だけ・ベイク）、`.fctrack`（既存を呼ぶ）、D-Drive のオプション（§5.3）、同名上書き、`tools/export_fbx_batch.py --mode shot` | — | 2 | AN-6 AN-7 | fixture のショットから 2 本の FBX が出て、キャラクター FBX にメッシュが無い・カメラ FBX にカメラが 1 台だけあることをテストで確認。D-Drive（ブランチ `tdrive-facial`）に置いて CutsceneData が自動で作られる（人が確認） | ✅ 2026-10-22（D-Drive での取り込みは人の確認待ち） |
-| AN-9 | **マニュアルと確認項目の総点検**: `anim.html` `anim-naming.html` `anim-clips.html` `anim-blend.html` `anim-shot.html` `anim-export.html`、Readme の「今できること」、スクリーンショット（実機）、[18](18_manual_verification_facial.md) AN 節、[10](10_manual_verification_2026-09-28.md) に「OpenGL で Animation タブ」の項目、CHANGELOG | — | 1 | AN-1〜AN-8 | 準備中の表記と実装が食い違わない。MisotenChara で一周（命名 → クリップ → ブレンド → 出力 → ショット → 出力）を人が確認できる手順になっている | ⬜ |
+| AN-9 | **マニュアルと確認項目の総点検**: `anim.html` `anim-naming.html` `anim-clips.html` `anim-blend.html` `anim-shot.html` `anim-export.html`、Readme の「今できること」、スクリーンショット（実機）、[18](18_manual_verification_facial.md) AN 節、[10](10_manual_verification_2026-09-28.md) に「OpenGL で Animation タブ」の項目、CHANGELOG | — | 1 | AN-1〜AN-8 | 準備中の表記と実装が食い違わない。MisotenChara で一周（命名 → クリップ → ブレンド → 出力 → ショット → 出力）を人が確認できる手順になっている | ✅ 2026-10-22（スクリーンショットは実機が要るので「準備中」のまま。裏の Maya で MisotenChara_Rig の一周は通る） |
 | AN-10 | （保留）OpenGL 用の簡易セル表示（ramp / surfaceShader の 2 階調。Unity との一致は保証しない） | — | 2 | AN-1 | DX11 が無い PC でも影の段が見える | ⬜ 保留 |
 
 Unity 側（U-A1 / U-A2。[20](20_animation_workbench_spec.md) §8）は Phase U に積む。

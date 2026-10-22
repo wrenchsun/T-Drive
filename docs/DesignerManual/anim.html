@@ -53,6 +53,19 @@
 <tr><td>ショット</td><td>カットシーン 1 つ分。カメラとキャラクターの動きの組</td></tr>
 </table>
 
+<h2 id="flow">一周の手順（MisotenChara で通しで試す）</h2>
+<p>キャラクターのリグ <span class="path">MisotenChara_Rig.ma</span> を開いた状態から、Unity に渡すファイルを作るまでの流れです。どこでも止まったら、画面の赤い文字や黄色の注意を読んでください。</p>
+<ol>
+<li><strong>animset を作る</strong> — 上の欄に ModelId <code>MisotenChara</code> を入れて「新規」（このリグにネームスペースが付いているときは、「リグのネームスペース」欄も）</li>
+<li><strong><a href="anim-naming.html">命名</a></strong> — 「検査」→ フレームレート（24 → 30 fps）を「直す」→ 名前の提案にチェックを入れて「適用」→ Humanoid を「ジョイントから推定」して「保存」</li>
+<li><strong><a href="anim-clips.html">クリップ</a></strong> — タイムスライダーの範囲を合わせて、Idle・Run・Jump など動きごとに「追加」→ ▶ 再生で確認 →「保存」</li>
+<li><strong><a href="anim-blend.html">ブレンド</a></strong> — 遷移列（Idle → Run → Jump）か、MS2026 の状態図（Speed / ActionState）で合成して再生。確認できたら「合成を外す」</li>
+<li><strong><a href="anim-export.html">出力</a></strong> — 「モデルを出力」と「チェックしたクリップを出力」→ <span class="path">build/unity/MisotenChara/</span> に <code>SK_MisotenChara.fbx</code> と <code>anim/A_MisotenChara_….fbx</code></li>
+<li><strong><a href="anim-shot.html">ショット</a></strong> — 新規ショット → カメラの区間 → キャラクターを足してクリップ列（ブレンドタブの「この列をショットへ」）→ イベント →「ショットを反映」→ ▶ シーケンサー再生 →「合成を外す」→「保存」</li>
+<li><strong><a href="anim-export.html#shot">出力（ショット）</a></strong> — 「ショットを出力」→ <span class="path">build/cutscene/&lt;カテゴリ&gt;/</span> に <code>&lt;Shot&gt;.fbx</code> と <code>&lt;Shot&gt;__MisotenChara.fbx</code></li>
+</ol>
+<div class="tip">Maya の OpenGL（DirectX 11 でない）の画面でも、この流れはすべて動きます。</div>
+
 <h2 id="now">今できること</h2>
 <table>
 <tr><th>機能</th><th>状態</th></tr>
