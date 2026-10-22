@@ -341,6 +341,8 @@ Unity 側（U-A1 / U-A2。[20](20_animation_workbench_spec.md) §8）は Phase U
 | AN-F-8 | クリップタブの「▶ 再生」のあとの一時停止・コマ送りは Maya 標準（`Alt+V`、`Alt+.`／`Alt+,`）で行う旨をマニュアル anim-clips.html に書く | 低 | 0.1 | — | ⬜ |
 | AN-F-9 | 命名タブのテクスチャ検査が、どの面にも割り当てられていないマテリアルにつながる file ノードまで拾う（マテリアルは割り当て済みだけなのと食い違う）。割り当て済みマテリアルに届く file だけにし、部位名はマテリアル名から推定（`HairM` → `Hair`。`T_<ModelId>_Part_BaseColor2…` の連番を減らす） | 中 | 0.5 | 未割り当てマテリアルの file が一覧に出ない。割り当て済みの file は部位名がマテリアル由来になる（mayapy） | ⬜ |
 | AN-F-10 | 命名タブのシーン設定（fps / 単位 / 軸）の表示が、Maya 側の Undo や設定変更に追従しない（検査を押すまで古いまま）。`timeUnitChanged` / `linearUnitChanged` / `Undo` の scriptJob（`lifecycle.keep_alive` + `on_reload`）で表示だけ更新 | 低 | 0.3 | 単位を変えると表示が変わる（mayapy で scriptJob の登録と更新） | ⬜ |
+| AN-F-11 | 掃除候補の「未使用のマテリアル」が shadingEngine ごとに並び、同じマテリアル（`Hair` × 5 SG）が重複して見える。マテリアル 1 行にまとめて、消すときはその SG を全部消す（割り当てのある SG が 1 つでもあれば候補に出さない） | 低 | 0.3 | Hair が 1 行になり、削除で 5 つの SG が消える（mayapy） | ⬜ |
+| AN-F-12 | 命名タブの「適用」「直す」「削除」はシーンを変える Maya の操作なのに、エディタにフォーカスした Ctrl+Z はツールの Undo（animset だけ）に行き、戻らない。ツールの Undo 履歴に「Maya のチャンク名」を積み、ツールの undo がそれを取り出したら `cmds.undo()` を呼ぶ（順序が食い違うときは「ビューポートで Ctrl+Z してください」と出す）。マニュアル anim-naming.html にも明記 | 中 | 1 | エディタで Ctrl+Z → 改名・削除・fps が戻る（mayapy で undo の順序）。Facial の A-7 の挙動は変えない | ⬜ |
 
 
 
