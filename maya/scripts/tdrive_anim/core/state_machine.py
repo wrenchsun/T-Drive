@@ -37,7 +37,9 @@ class StateGraphError(ValueError):
 
 
 def default_graph(clips: Iterable[dict[str, Any]], model_id: str = "") -> dict[str, Any]:
-    """MS2026 の `AC_PlayerPreview` と同じ状態図（Idle / Run / Jump、0.08 秒、Exit Time なし）。
+    """MS2026 の `AC_PlayerPreview.controller` と同じ状態図（Idle / Run / Jump、遷移の条件と並び順も同じ、0.08 秒、Exit Time なし）。
+
+    Idle / Run から ActionState==2 と ==3（Fall）で Jump へ。Jump からは「ActionState が 2 でも 3 でもなく Speed<0.1」で Idle、「…Speed>0.1」で Run。
 
     状態に割り当てるクリップは、動作名（Idle / Run / Jump）で探す（Run は `_F` が先、無ければ最初に見つかったもの）。
     見つからない状態はクリップ名が空のまま残す（検証で知らせる）。
@@ -52,15 +54,29 @@ def default_graph(clips: Iterable[dict[str, Any]], model_id: str = "") -> dict[s
         return found[0] if found else ""
 
     d = DEFAULT_DURATION
+
+    def cond(param: str, op: str, value: float) -> dict[str, Any]:
+        return {"param": param, "op": op, "value": value}
+
+    def tr(src: str, dst: str, *conds: dict[str, Any]) -> dict[str, Any]:
+        return {"from": src, "to": dst, "duration": d, "conditions": list(conds)}
+
+    jump, fall = ACTION_STATES["Jump"], ACTION_STATES["Fall"]
+    not_airborne = [cond("ActionState", "!=", jump), cond("ActionState", "!=", fall)]
+    # AC_PlayerPreview.controller と同じ（m_AnyStateTransitions は空。並び順も同じ。Exit Time なし・割り込みなし）
     return {
         "format": FORMAT, "version": VERSION,
         "parameters": [{"name": "Speed", "type": "float", "default": 0}, {"name": "ActionState", "type": "int", "default": 0}],
         "states": [{"name": "Idle", "clip": pick("Idle")}, {"name": "Run", "clip": pick("Run")}, {"name": "Jump", "clip": pick("Jump")}],
         "transitions": [
-            {"from": "Idle", "to": "Run", "duration": d, "conditions": [{"param": "Speed", "op": ">", "value": 0.1}]},
-            {"from": "Run", "to": "Idle", "duration": d, "conditions": [{"param": "Speed", "op": "<", "value": 0.1}]},
-            {"from": ANY, "to": "Jump", "duration": d, "conditions": [{"param": "ActionState", "op": "==", "value": ACTION_STATES["Jump"]}]},
-            {"from": "Jump", "to": "Idle", "duration": d, "conditions": [{"param": "ActionState", "op": "!=", "value": ACTION_STATES["Jump"]}]},
+            tr("Idle", "Run", cond("Speed", ">", 0.1)),
+            tr("Idle", "Jump", cond("ActionState", "==", jump)),
+            tr("Idle", "Jump", cond("ActionState", "==", fall)),
+            tr("Run", "Idle", cond("Speed", "<", 0.1)),
+            tr("Run", "Jump", cond("ActionState", "==", jump)),
+            tr("Run", "Jump", cond("ActionState", "==", fall)),
+            tr("Jump", "Idle", *not_airborne, cond("Speed", "<", 0.1)),
+            tr("Jump", "Run", *not_airborne, cond("Speed", ">", 0.1)),
         ],
     }
 

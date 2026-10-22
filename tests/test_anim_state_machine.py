@@ -41,7 +41,7 @@ def test_idle_then_speed_goes_to_run_in_0_08s():
     assert w["A_X_Idle"] == pytest.approx(0.5)
 
 
-def test_action_state_jump_from_any_state():
+def test_action_state_jump_from_idle_and_run():
     d = make()
     g = M.default_graph(d["clips"], "X")
     # Run の最中に ActionState=2
@@ -53,18 +53,60 @@ def test_action_state_jump_from_any_state():
     assert [(s["from"], s["to"]) for s in r2.switches][:1] == [("Idle", "Jump")]
 
 
-def test_jump_returns_to_idle_when_action_state_changes():
+def test_default_graph_has_no_any_state_transition():
+    """SP-1: AC_PlayerPreview.controller は m_AnyStateTransitions: []。Idle / Run それぞれが ActionState 2 と 3 で Jump へ"""
     g = M.default_graph(make()["clips"], "X")
-    r = M.evaluate(g, [(1.0, {"ActionState": 2}), (2.0, {"ActionState": 0})], total_sec=4.0, fps=FPS)
-    assert [(s["from"], s["to"]) for s in r.switches] == [("Idle", "Jump"), ("Jump", "Idle")]
-    assert r.switches[1]["t"] == pytest.approx(2.0)
+    assert all(t["from"] != M.ANY for t in g["transitions"])
+    got = [(t["from"], t["to"], [(c["param"], c["op"], c["value"]) for c in t["conditions"]]) for t in g["transitions"]]
+    assert got == [
+        ("Idle", "Run", [("Speed", ">", 0.1)]),
+        ("Idle", "Jump", [("ActionState", "==", 2)]),
+        ("Idle", "Jump", [("ActionState", "==", 3)]),
+        ("Run", "Idle", [("Speed", "<", 0.1)]),
+        ("Run", "Jump", [("ActionState", "==", 2)]),
+        ("Run", "Jump", [("ActionState", "==", 3)]),
+        ("Jump", "Idle", [("ActionState", "!=", 2), ("ActionState", "!=", 3), ("Speed", "<", 0.1)]),
+        ("Jump", "Run", [("ActionState", "!=", 2), ("ActionState", "!=", 3), ("Speed", ">", 0.1)]),
+    ]
+
+
+def test_fall_state_3_goes_to_jump_from_idle():
+    g = M.default_graph(make()["clips"], "X")
+    r = M.evaluate(g, [(1.0, {"ActionState": 3})], total_sec=3.0, fps=FPS)
+    assert [(s["from"], s["to"]) for s in r.switches] == [("Idle", "Jump")]
+
+
+def test_jump_stays_when_action_state_goes_2_to_3():
+    g = M.default_graph(make()["clips"], "X")
+    r = M.evaluate(g, [(1.0, {"ActionState": 2}), (2.0, {"ActionState": 3})], total_sec=4.0, fps=FPS)
+    assert [(s["from"], s["to"]) for s in r.switches] == [("Idle", "Jump")]  # 2 → 3 で Idle に戻らない
+
+
+def test_landing_with_speed_goes_straight_to_run():
+    g = M.default_graph(make()["clips"], "X")
+    r = M.evaluate(g, [(0.0, {"ActionState": 2, "Speed": 0.5}), (2.0, {"ActionState": 0})], total_sec=4.0, fps=FPS)
+    pairs = [(s["from"], s["to"]) for s in r.switches]
+    assert pairs[-1] == ("Jump", "Run") and ("Jump", "Idle") not in pairs  # Jump → Idle → Run の 2 回にならない
+
+
+def test_speed_and_action_state_together_goes_idle_run_first():
+    g = M.default_graph(make()["clips"], "X")
+    r = M.evaluate(g, [(1.0, {"ActionState": 2, "Speed": 1.0})], total_sec=3.0, fps=FPS)
+    assert [(s["from"], s["to"]) for s in r.switches][:2] == [("Idle", "Run"), ("Run", "Jump")]  # 並び順で Run が先
 
 
 def test_no_interruption_during_transition_and_no_self_transition():
     g = M.default_graph(make()["clips"], "X")
-    # Jump の遷移中（0.08 秒）に Speed を変えても、Jump に入ってから 0.08 秒は次の遷移が起きない。ActionState=2 のままなら Jump に留まる
-    r = M.evaluate(g, [(1.0, {"ActionState": 2, "Speed": 1.0})], total_sec=3.0, fps=FPS)
-    assert [(s["from"], s["to"]) for s in r.switches] == [("Idle", "Jump")]  # Any → Jump が自分自身へ繰り返さない
+    r = M.evaluate(g, [(1.0, {"ActionState": 2})], total_sec=3.0, fps=FPS)
+    assert [(s["from"], s["to"]) for s in r.switches] == [("Idle", "Jump")]  # Jump に入ったあと自分自身へ繰り返さない
+    assert r.switches[0]["t"] == pytest.approx(1.0)
+
+
+def test_any_state_transition_still_works_for_custom_graph():
+    g = M.default_graph(make()["clips"], "X")
+    g["transitions"] = [{"from": M.ANY, "to": "Jump", "duration": 0.08, "conditions": [{"param": "ActionState", "op": "==", "value": 2}]}]
+    r = M.evaluate(g, [(1.0, {"ActionState": 2})], total_sec=3.0, fps=FPS)
+    assert [(s["from"], s["to"]) for s in r.switches] == [("Idle", "Jump")]
 
 
 def test_speed_dead_zone_stays():

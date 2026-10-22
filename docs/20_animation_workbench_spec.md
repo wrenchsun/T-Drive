@@ -206,13 +206,17 @@ Unity の `CrossFadeInFixedTime` は「固定秒・線形」の合成。Maya で
   "parameters": [ { "name": "Speed", "type": "float", "default": 0 }, { "name": "ActionState", "type": "int", "default": 0 } ],
   "states": [ { "name": "Idle", "clip": "A_MisotenChara_Idle" }, { "name": "Run", "clip": "A_MisotenChara_Run_F" }, { "name": "Jump", "clip": "A_MisotenChara_Jump" } ],
   "transitions": [
-    { "from": "Idle", "to": "Run", "duration": 0.08, "conditions": [ { "param": "Speed", "op": ">", "value": 0.1 } ] },
-    { "from": "Run", "to": "Idle", "duration": 0.08, "conditions": [ { "param": "Speed", "op": "<", "value": 0.1 } ] },
-    { "from": "*",   "to": "Jump", "duration": 0.08, "conditions": [ { "param": "ActionState", "op": "==", "value": 2 } ] },
-    { "from": "Jump", "to": "Idle", "duration": 0.08, "conditions": [ { "param": "ActionState", "op": "!=", "value": 2 } ] } ] }
+    { "from": "Idle", "to": "Run",  "duration": 0.08, "conditions": [ { "param": "Speed", "op": ">", "value": 0.1 } ] },
+    { "from": "Idle", "to": "Jump", "duration": 0.08, "conditions": [ { "param": "ActionState", "op": "==", "value": 2 } ] },
+    { "from": "Idle", "to": "Jump", "duration": 0.08, "conditions": [ { "param": "ActionState", "op": "==", "value": 3 } ] },
+    { "from": "Run",  "to": "Idle", "duration": 0.08, "conditions": [ { "param": "Speed", "op": "<", "value": 0.1 } ] },
+    { "from": "Run",  "to": "Jump", "duration": 0.08, "conditions": [ { "param": "ActionState", "op": "==", "value": 2 } ] },
+    { "from": "Run",  "to": "Jump", "duration": 0.08, "conditions": [ { "param": "ActionState", "op": "==", "value": 3 } ] },
+    { "from": "Jump", "to": "Idle", "duration": 0.08, "conditions": [ { "param": "ActionState", "op": "!=", "value": 2 }, { "param": "ActionState", "op": "!=", "value": 3 }, { "param": "Speed", "op": "<", "value": 0.1 } ] },
+    { "from": "Jump", "to": "Run",  "duration": 0.08, "conditions": [ { "param": "ActionState", "op": "!=", "value": 2 }, { "param": "ActionState", "op": "!=", "value": 3 }, { "param": "Speed", "op": ">", "value": 0.1 } ] } ] }
 ```
 
-- 既定の状態図は MS2026 の `AC_PlayerPreview` と同じ（Idle / Run / Jump、0.08 s、Exit Time なし）。クリップの `stateGroup=locomotion` のものを動作名で状態に割り当てる
+- 既定の状態図は MS2026 の `Assets/_Project/Art/Animations/PlayerPreview/AC_PlayerPreview.controller` と同じ状態・遷移・条件・並び順（Idle / Run / Jump、`m_AnyStateTransitions` は空、0.08 s、Exit Time なし、割り込みなし。上の例のとおり。Fall=3 も Jump 扱い）。同時に複数の遷移が成り立つときは並び順の先（Speed と ActionState=2 を同時に変えると Idle→Run が先）。`from: "*"`（Any State）はカスタムの状態図用に評価は残す（既定では使わない）。クリップの `stateGroup=locomotion` のものを動作名で状態に割り当てる
 - **遷移列**（D-Drive の AnimEditor「Blend」の Steps と同じ）: `[{state|clip, holdSec, crossFadeSec, switchAt(0..1)}]`。例: Idle 1.0 s → Run 1.5 s → Jump → Idle
 - プレビューの 2 つの入口:
   1. **遷移列を手で並べる**（表に行を足す。各行: クリップ / 保持秒 / クロスフェード秒 / 切替位置）

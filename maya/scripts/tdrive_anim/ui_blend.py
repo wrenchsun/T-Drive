@@ -104,7 +104,7 @@ class BlendTab(QtWidgets.QWidget):
         self.action_state = QtWidgets.QComboBox()
         for name, val in M.ACTION_STATES.items():
             self.action_state.addItem(f"{name} ({val})", val)
-        self.action_state.setToolTip("ActionState。Jump (2) にすると、どの状態からでも Jump へ遷移し、Jump 以外に戻すと Idle に戻ります")
+        self.action_state.setToolTip("ActionState。Jump (2) / Fall (3) にすると、Idle・Run から Jump へ遷移します。Jump 以外に戻すと、Speed に応じて Idle か Run に戻ります（AC_PlayerPreview と同じ）")
         self.action_state.activated.connect(lambda *_: self.on_param_changed())
         form.addRow("ActionState", self.action_state)
         self.total_sec = QtWidgets.QDoubleSpinBox()

@@ -21,6 +21,10 @@
   - AN-2: 命名タブ（MS2026 の規則の検査と提案・改名の適用を 1 回の Undo で・Look と Toon のプレビュー用シェーダーの追従・シーン設定の修正・掃除候補・Humanoid 対応表 `humanoid.json`）
   - AN-1: 骨格（5 つのサブタブの枠・`tdrive_anim` パッケージ）、`animset.json` の読み書き・検証、メニュー Tools › T-Drive › Animation…
 
+### 修正
+- Animation（docs/21 のコードレビュー対応）
+  - SP-1: 既定の状態図を MS2026 の `AC_PlayerPreview.controller` と同じ遷移・条件・並び順に（Any State なし。Idle / Run から ActionState 2 と 3 で Jump、Jump からは Speed で Idle / Run）
+
 ## [0.6.2] - 2026-10-16
 
 ### 互換性

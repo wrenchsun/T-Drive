@@ -45,7 +45,7 @@
 <table>
 <tr><th>パラメータ</th><th>動き</th></tr>
 <tr><td>Speed</td><td>0.1 より大きい → Idle から Run へ（0.08 秒でクロスフェード）。0.1 より小さい → Run から Idle へ</td></tr>
-<tr><td>ActionState</td><td>Jump (2) にすると、<strong>どの状態からでも</strong> Jump へ。Jump 以外に戻すと Idle へ</td></tr>
+<tr><td>ActionState</td><td>Jump (2) にすると、Idle・Run から Jump へ（Fall (3) も Jump 扱い）。Jump 以外に戻すと、Speed に応じて Idle か Run へ（MS2026 の Controller と同じ）</td></tr>
 </table>
 <ul>
 <li>遷移はゲームと同じく「条件が成り立った瞬間」に始まります（クリップの終わりを待ちません）。遷移の最中は次の遷移を始めません</li>
