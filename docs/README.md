@@ -22,7 +22,7 @@
 | 12 | [12_substance_painter.md](12_substance_painter.md) | Substance Painter の扱い（検討メモ・確認待ち） |
 | 10 | [10_manual_verification_2026-09-28.md](10_manual_verification_2026-09-28.md) | 人による確認項目（Phase 1〜4） |
 | 19 | [19_code_review_2026-10-03.md](19_code_review_2026-10-03.md) | コードレビュー結果（FacialController。opus による 5 領域のレビュー。指摘と対応状況） |
-| 21 | [21_code_review_2026-10-22.md](21_code_review_2026-10-22.md) | コードレビュー結果（アニメーション作業台 Phase AN。opus による 6 領域のレビュー。高 9・中 40・低 47、対応状況は未記入） |
+| 21 | [21_code_review_2026-10-22.md](21_code_review_2026-10-22.md) | コードレビュー結果（アニメーション作業台 Phase AN。opus による 6 領域のレビュー。高 9・中 40・低 47。全件を ✅ で対応済み（2026-10-22）。D-Drive 側の変更は docs/20 §8.1 に「要相談」として書いた） |
 | 18 | [18_manual_verification_facial.md](18_manual_verification_facial.md) | 人による確認項目（FacialController・2 段タブ・shizuku・Unity。チケットごとに追記） |
 | — | [tasks.md](tasks.md) | 優先順位順のチケット一覧 |
 | — | [DesignerManual/Readme.html](DesignerManual/Readme.html) | **デザイナーマニュアル**（HTML。デザイナー向けの使い方） |
