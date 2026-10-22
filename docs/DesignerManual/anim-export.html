@@ -9,12 +9,12 @@
 <body>
 <nav class="breadcrumb"><a href="Readme.html">トップ</a> › <a href="anim.html">アニメーション作業台</a> › 出力</nav>
 <h1>出力タブ</h1>
-<p class="lastupdate">最終更新日: 2026-10-22</p>
+<p class="lastupdate">最終更新日: 2026-10-23</p>
 
 <p>Unity（MS2026 / D-Drive）に渡すファイルを書き出します。<strong>モデルと、動き 1 つごとのファイルに分けて</strong>出します（D-Drive の決まり: モデルとアニメーションは別のファイル）。</p>
 <table>
 <tr><th>ファイル</th><th>中身</th></tr>
-<tr><td><code>SK_&lt;ModelId&gt;.fbx</code></td><td>メッシュ + スキン + スケルトン（骨）。アニメーションは入りません。バインドポーズ（基本の姿勢）で書きます</td></tr>
+<tr><td><code>SK_&lt;ModelId&gt;.fbx</code></td><td>メッシュ + スキン + スケルトン（骨）。アニメーションは入りません。バインドポーズ（基本の姿勢）で書きます。コントローラが動いたままのシーンでも、コントローラをゼロに戻してから書きます（戻せない骨があるときは出力のログに⚠が出ます）</td></tr>
 <tr><td><code>A_&lt;ModelId&gt;_&lt;動作&gt;.fbx</code>（クリップごとに 1 つ）</td><td>骨だけ（メッシュなし）。クリップの範囲を 1 フレームごとに焼き込み（ベイク）、先頭が 0 フレーム。コントローラやコンストレイントは入りません。1 ファイルに 1 つの動き</td></tr>
 <tr><td><code>humanoid.json</code> / <code>animset.json</code></td><td>モデルと同じフォルダに書きます。Unity 側で人型の設定（Avatar）やアニメーションの設定を作るときの元データ</td></tr>
 </table>

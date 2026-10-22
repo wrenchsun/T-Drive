@@ -132,19 +132,112 @@ def _write_atomically(path: Path, write) -> None:
                 tmp.unlink()
 
 
-def _to_bind_pose(joints: list[str]) -> None:
-    """ジョイントの入力のつながり（キー・コンストレイント）を切り、バインドポーズへ戻す。"""
+BIND_TOLERANCE = 1e-3  # ジョイントのワールド行列 × bindPreMatrix が単位行列からずれてよい量
+
+
+def _mat_mul(a: list[float], b: list[float]) -> list[float]:
+    """4x4 行列の積（Maya の行ベクトル規約: a を先に、b を後に掛ける）。"""
+    return [sum(a[r * 4 + k] * b[k * 4 + c] for k in range(4)) for r in range(4) for c in range(4)]
+
+
+def bind_pose_mismatches(joints: list[str]) -> list[str]:
+    """スキンの bindPreMatrix と、今のジョイントのワールド行列を突き合わせ、バインドポーズからずれているジョイントの名前を返す。
+    ジョイントのワールド行列 × bindPreMatrix は、バインドポーズなら単位行列。bindPreMatrix が単位行列のもの（設定されていない）は比べない。"""
+    ident = [1.0 if r == c else 0.0 for r in range(4) for c in range(4)]
+    wanted = {cmds.ls(j, long=True)[0] for j in joints}
+    bad: dict[str, float] = {}
+    for skin in cmds.ls(type="skinCluster") or []:
+        for i in cmds.getAttr(f"{skin}.matrix", multiIndices=True) or []:
+            src = cmds.listConnections(f"{skin}.matrix[{i}]", source=True, destination=False) or []
+            if not src:
+                continue
+            j = cmds.ls(src[0], long=True)[0]
+            if j not in wanted:
+                continue
+            bind = cmds.getAttr(f"{skin}.bindPreMatrix[{i}]")
+            if all(abs(x - y) < 1e-9 for x, y in zip(bind, ident)):
+                continue
+            m = _mat_mul(cmds.getAttr(f"{j}.worldMatrix[0]"), bind)
+            err = max(abs(x - y) for x, y in zip(m, ident))
+            if err > BIND_TOLERANCE:
+                bad[j] = max(bad.get(j, 0.0), err)
+    return sorted(j.split("|")[-1] for j in bad)
+
+
+def _anim_curves() -> list[str]:
+    return cmds.ls(type=["animCurveTL", "animCurveTA", "animCurveTU", "animCurveTT"]) or []
+
+
+def _reset_controllers() -> int:
+    """キーのあったノードと `rig_controllers_grp` セットの中身（ジョイントを除く）の keyable な属性をデフォルト値に戻す（mGear の「ゼロに戻す」相当）。
+    先に animCurve を全部消す（消すと属性は今のフレームの値のまま残る）。戻した属性の数。"""
+    nodes: set[str] = set()
+    for c in _anim_curves():
+        for plug in cmds.listConnections(f"{c}.output", source=False, destination=True, plugs=True, skipConversionNodes=True) or []:
+            nodes.add(plug.split(".")[0])
+    curves = _anim_curves()
+    if curves:  # 空のリストを cmds.delete に渡さない
+        cmds.delete(curves)
+    for st in cmds.ls("rig_controllers_grp", "*:rig_controllers_grp", type="objectSet") or []:
+        nodes.update(n.split(".")[0] for n in cmds.sets(st, query=True) or [])
+    n_reset = 0
+    for node in nodes:
+        if not cmds.objExists(node) or cmds.nodeType(node) == "joint":  # ジョイントのデフォルトは 0 ではない（バインドの値は dagPose か元のまま）
+            continue
+        for attr in cmds.listAttr(node, keyable=True, userDefined=False) or []:
+            plug = f"{node}.{attr}"
+            if cmds.getAttr(plug, lock=True) or cmds.listConnections(plug, source=True, destination=False):
+                continue
+            try:
+                default = cmds.attributeQuery(attr, node=node, listDefault=True)
+                if default and len(default) == 1:
+                    cmds.setAttr(plug, default[0])
+                    n_reset += 1
+            except (RuntimeError, TypeError):
+                continue
+    return n_reset
+
+
+def _free_joints(joints: list[str]) -> None:
+    """ジョイントの translate / rotate / scale の入力（子プラグも複合プラグも）を切り、今の値のまま残す。"""
     for j in joints:
-        for ch in TRS:
-            plug = f"{j}.{ch}"
-            for src in cmds.listConnections(plug, source=True, destination=False, plugs=True) or []:
+        vals = {ch: cmds.getAttr(f"{j}.{ch}") for ch in TRS}
+        for plug in [f"{j}.{ch}" for ch in TRS] + [f"{j}.translate", f"{j}.rotate", f"{j}.scale"]:
+            src = cmds.connectionInfo(plug, sourceFromDestination=True)
+            if src:
                 with contextlib.suppress(RuntimeError):
                     cmds.disconnectAttr(src, plug)
-    poses = cmds.ls(type="dagPose") or []
-    bind = [p for p in poses if cmds.getAttr(f"{p}.bindPose")]
-    for p in bind[:1]:
+        for ch, v in vals.items():
+            with contextlib.suppress(RuntimeError):
+                cmds.setAttr(f"{j}.{ch}", v)
+
+
+def _to_bind_pose(joints: list[str]) -> list[str]:
+    """ジョイントをバインドポーズにして、ずれが残るときの警告を返す（出力は続ける）。
+    ① animCurve を切り、キーのあったコントローラをデフォルトに戻す（コンストレイント / decomposeMatrix 駆動のリグは、これで骨が動く。AN-F-14）
+    ② ジョイントの入力を切って今の値で固定する
+    ③ バインドポーズの dagPose があればそれに戻し、スキンの bindPreMatrix と一致するか確かめる（一致しなければ ② の値に戻す）
+    ④ それでもずれるジョイントがあれば警告（「バインドポーズに戻せません」）"""
+    _reset_controllers()
+    _free_joints(joints)
+    held = {j: [cmds.getAttr(f"{j}.{ch}") for ch in TRS] for j in joints}
+    if not bind_pose_mismatches(joints):
+        return []
+    for p in [p for p in (cmds.ls(type="dagPose") or []) if cmds.getAttr(f"{p}.bindPose")][:1]:
         with contextlib.suppress(RuntimeError):
             cmds.dagPose(joints[0], restore=True, name=p)
+    bad = bind_pose_mismatches(joints)
+    if bad:  # dagPose でも合わない: ② の値に戻して、ずれを知らせる
+        for j, vals in held.items():
+            for ch, v in zip(TRS, vals):
+                with contextlib.suppress(RuntimeError):
+                    cmds.setAttr(f"{j}.{ch}", v)
+        bad = bind_pose_mismatches(joints)
+    if not bad:
+        return []
+    shown = ", ".join(bad[:5]) + (f" ほか {len(bad) - 5} 本" if len(bad) > 5 else "")
+    return [f"バインドポーズに戻せないジョイントがあります（{len(bad)} 本: {shown}）。スキンの bindPreMatrix とずれています。"
+            "リグをバインドポーズ（コントローラを全部ゼロ）にしてから出力し直してください"]
 
 
 def export_model_in_place(animset: dict[str, Any], path: str | Path) -> dict[str, Any]:
@@ -160,11 +253,12 @@ def export_model_in_place(animset: dict[str, Any], path: str | Path) -> dict[str
     if not meshes:
         raise RuntimeError("書き出すメッシュがありません（animset の meshes が空で、スキンされたメッシュも見つかりません）")
     cmds.currentUnit(time={30: "ntsc", 60: "ntscf"}[animset["frameRate"]], updateAnimation=False)
-    _to_bind_pose(joints)
+    warnings = _to_bind_pose(joints)
     result: dict[str, Any] = {}
     root_node = cmds.ls(root, long=True)[0]
     _write_atomically(path, lambda tmp: result.update(toon_export.export_in_place(meshes, tmp, roots=[root_node], animation=False)))
     result["path"] = str(path)
+    result["warnings"] = [*result.get("warnings", []), *warnings]
     return result
 
 
