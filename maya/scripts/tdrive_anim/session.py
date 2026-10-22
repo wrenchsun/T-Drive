@@ -562,6 +562,16 @@ _CALLBACKS_ATTR = "_tdrive_anim_scene_callbacks"
 @lifecycle.guarded()
 def _cb_before_save(_client=None) -> None:
     on_before_save()
+    from . import composition
+
+    composition.suspend_for_save()  # 合成中のシーンを保存するときは、保存の間だけジョイントを元のつながりへ戻す（SF-19）
+
+
+@lifecycle.guarded()
+def _cb_after_save(_client=None) -> None:
+    from . import composition
+
+    composition.resume_after_save()
 
 
 def remove_scene_callbacks() -> None:
@@ -578,7 +588,9 @@ def install_scene_callbacks() -> None:
     """保存の直前に animset / ショットの場所をシーンへ記録するコールバックを登録する。登録し直しても重ならない。"""
     remove_scene_callbacks()
     lifecycle.keep_alive(_cb_before_save)
-    setattr(sys, _CALLBACKS_ATTR, [om.MSceneMessage.addCallback(om.MSceneMessage.kBeforeSave, _cb_before_save)])
+    lifecycle.keep_alive(_cb_after_save)
+    setattr(sys, _CALLBACKS_ATTR, [om.MSceneMessage.addCallback(om.MSceneMessage.kBeforeSave, _cb_before_save),
+                                   om.MSceneMessage.addCallback(om.MSceneMessage.kAfterSave, _cb_after_save)])
 
 
 def _reload_cleanup() -> None:

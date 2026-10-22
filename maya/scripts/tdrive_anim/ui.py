@@ -193,7 +193,7 @@ class AnimPanel(QtWidgets.QWidget):
         return (self.naming_tab, self.clips_tab, self.blend_tab, self.shot_tab, self.export_tab)
 
     def detach(self) -> None:
-        for tab in self._all_tabs():
+        for tab in reversed(self._all_tabs()):  # 作った順の逆に後片付けする（ショット → ブレンド → クリップ…。再生範囲の控えが戻る順。SF-8）
             tab.detach()
         if self.refresh in self.session.listeners:
             self.session.listeners.remove(self.refresh)

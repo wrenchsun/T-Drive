@@ -20,7 +20,9 @@ from maya import cmds
 
 from tdrive import project
 
+from . import clips as MC
 from . import composition as K
+from . import playstate
 from .core import animset as A
 from .core import sequence as Seq
 from .core import shot as SH
@@ -46,19 +48,21 @@ def ensure_group(shot: dict[str, Any]) -> str:
     return g
 
 
-def _remember_playback(g: str) -> None:
+def _owner(shot_name: str) -> str:
+    return "shot:" + shot_name
+
+
+def _remember_playback(g: str, shot_name: str) -> None:
     if not cmds.attributeQuery("tdPlayback", node=g, exists=True):
         cmds.addAttr(g, longName="tdPlayback", dataType="string")
-        state = {"min": cmds.playbackOptions(query=True, minTime=True), "max": cmds.playbackOptions(query=True, maxTime=True),
-                 "start": cmds.playbackOptions(query=True, animationStartTime=True), "end": cmds.playbackOptions(query=True, animationEndTime=True),
-                 "loop": cmds.playbackOptions(query=True, loop=True), "time": cmds.currentTime(query=True)}
-        cmds.setAttr(f"{g}.tdPlayback", json.dumps(state), type="string")
+        cmds.setAttr(f"{g}.tdPlayback", json.dumps(playstate.acquire(_owner(shot_name))), type="string")
 
 
 def apply_range(shot: dict[str, Any]) -> None:
     """再生範囲をショットの範囲にする（元の範囲は覚える。`remove` で戻る）。"""
+    MC.stop()  # クリップ再生中なら先に止めて元の範囲へ戻す（控えが混ざらないように。SF-8）
     g = ensure_group(shot)
-    _remember_playback(g)
+    _remember_playback(g, shot["shot"])
     lo, hi = shot["range"]
     cmds.playbackOptions(minTime=lo, maxTime=hi, animationStartTime=lo, animationEndTime=hi)
     cmds.currentTime(lo, edit=True)
@@ -206,10 +210,8 @@ def is_reflected(shot_name: str) -> bool:
 
 def build(shot: dict[str, Any], current: dict[str, Any] | None = None) -> dict[str, Any]:
     """ショットをシーンに反映する: グループ・再生範囲・カメラ区間・イベント・キャラクターの合成。戻り値: 結果と警告。
-    全体で Maya の Undo 1 回にまとめる（SF-6）。"""
-    from .scene_naming import undo_chunk
-
-    with undo_chunk("tdShotBuild"):
+    **Maya の Undo には積まない**（グループ・shot ノード・ロケータ・合成が別々に戻って半端になるため。戻すのは「合成を外す」。SF-4 / SF-6）。"""
+    with K.undo_off():
         return _build(shot, current)
 
 
@@ -228,6 +230,11 @@ def _build(shot: dict[str, Any], current: dict[str, Any] | None) -> dict[str, An
 
 def remove(shot_name: str, delete_group: bool = False) -> int:
     """ショットの合成を外し、Camera Sequencer の shot・イベントのロケータを消して、再生範囲を戻す。元のカーブ・カメラは壊さない。外した合成の数。"""
+    with K.undo_off():
+        return _remove(shot_name, delete_group)
+
+
+def _remove(shot_name: str, delete_group: bool) -> int:
     n = sum(K.remove(c) for c in compositions(shot_name))
     for sn in cmds.ls(f"{GROUP_PREFIX}{shot_name}_*", type="shot") or []:
         cmds.delete(sn)
@@ -237,10 +244,8 @@ def remove(shot_name: str, delete_group: bool = False) -> int:
         if locs:
             cmds.delete(locs)
         if cmds.attributeQuery("tdPlayback", node=g, exists=True):
-            with contextlib.suppress(ValueError):
-                st = json.loads(cmds.getAttr(f"{g}.tdPlayback"))
-                cmds.playbackOptions(minTime=st["min"], maxTime=st["max"], animationStartTime=st["start"], animationEndTime=st["end"], loop=st["loop"])
-                cmds.currentTime(st["time"], edit=True)
+            with contextlib.suppress(ValueError, KeyError):
+                playstate.release_and_restore(_owner(shot_name), json.loads(cmds.getAttr(f"{g}.tdPlayback")))
             cmds.deleteAttr(f"{g}.tdPlayback")
         if delete_group:
             cmds.delete(g)

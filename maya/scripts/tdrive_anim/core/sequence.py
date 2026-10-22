@@ -9,8 +9,10 @@ Maya 側の合成（`composition.py`）はこの配置だけを見る。
 - 1 行目が最初に再生されるクリップ（`crossFadeSec` は使わない）
 - `crossFadeSec` = **この行へ切り替わるときの**固定秒・線形のクロスフェード（Unity の `CrossFadeInFixedTime` と同じ）
 - 次の行への切り替えを始める時刻（この行の開始からの時間）:
-  `holdSec > 0` ならその秒数（ループするクリップを指定秒だけ見せる）。0 なら `switchAt` × クリップの長さ（1 以上 = クリップの最後）
-  — D-Drive は「SwitchAt = 前のクリップの切替位置 0〜1、1 以上は終了時」。holdSec が優先（docs/20 に追記）
+  `holdSec > 0` ならその秒数（ループするクリップを指定秒だけ見せる）。0 なら**次の行の** `switchAt` × この行のクリップの長さ（1 以上 = クリップの最後）
+  — D-Drive は「Step k の SwitchAt = 前のクリップがこの位置（0〜1）に達したら Step k へ切り替える、1 以上は終了時」（切り替え先の行が持つ。
+  `AnimEditor.Blend.cs`）。同じ持ち主にした。holdSec は T-Drive の追加で、この行自身が持ち、優先する（docs/20 §4.2・§10）
+- 行に `crossFadeSec` が無ければ、そのクリップの `crossFade` 属性（無ければ 0.1 秒）
 - `speed` = 再生速度（D-Drive の SetSpeed 相当。1 = そのまま）
 
 ## 時間の単位
@@ -68,15 +70,35 @@ def _speed(row: dict[str, Any]) -> float:
     return speed
 
 
-def switch_frames(row: dict[str, Any], clip: dict[str, Any], fps: int) -> float:
-    """この行の開始から、次の行への切り替えを始めるまでのフレーム数。"""
+def switch_frames(row: dict[str, Any], clip: dict[str, Any], fps: int, nxt: dict[str, Any] | None = None) -> float:
+    """この行の開始から、次の行への切り替えを始めるまでのフレーム数。`nxt` = 次の行（その `switchAt` が、この行のクリップのどこで切り替えるかを決める。無ければ最後まで）。"""
     speed = _speed(row)
     length = (int(clip["end"]) - int(clip["start"])) / speed
     hold = float(row.get("holdSec", 0) or 0)
     if hold > 0:
         return hold * fps
-    at = float(row.get("switchAt", 1.0) if row.get("switchAt") is not None else 1.0)
+    at = float(nxt.get("switchAt", 1.0) if nxt is not None and nxt.get("switchAt") is not None else 1.0)
     return length if at >= 1.0 else max(0.0, at) * length
+
+
+def fade_sec(row: dict[str, Any], clip: dict[str, Any]) -> float:
+    """この行へ切り替わるクロスフェードの秒数。行に値があればそれ、無ければクリップの `crossFade`（無ければ 0.1。SP-4）。"""
+    v = row.get("crossFadeSec")
+    if v is None:
+        v = clip.get("crossFade", DEFAULT_CROSSFADE)
+    return float(v)
+
+
+def overlap_warnings(placements: list["Placement"], fps: int) -> list[str]:
+    """前の行のフェードが終わる前に次の行が始まる並び（SP-6）。lerp(lerp(A,B),C) で A・B とも進みながら混ざる。Unity で `CrossFadeInFixedTime` を
+    フェードの途中で呼ぶと、その時点の姿勢からの割り込みになるので、見た目が違うことがある。"""
+    out = []
+    for i in range(1, len(placements) - 1):
+        prev_end = placements[i].start + placements[i].fade_in
+        if placements[i + 1].start < prev_end - 1e-6:
+            out.append(f"{i + 2} 行目（{placements[i + 1].clip}）は、前の行へのクロスフェードが終わる前に始まります"
+                       f"（{(prev_end - placements[i + 1].start) / fps:.2f} 秒早い）。Unity では割り込みの扱いになり、見た目が違うことがあります")
+    return out
 
 
 def from_rows(rows: list[dict[str, Any]], clips: dict[str, dict[str, Any]], fps: int) -> list[Placement]:
@@ -85,10 +107,10 @@ def from_rows(rows: list[dict[str, Any]], clips: dict[str, dict[str, Any]], fps:
     t = 0.0
     for i, row in enumerate(rows):
         clip = _info(clips, row["clip"])
-        fade = 0.0 if i == 0 else float(row.get("crossFadeSec", DEFAULT_CROSSFADE)) * fps
+        fade = 0.0 if i == 0 else fade_sec(row, clip) * fps
         p = _place(clip, t, fade, _speed(row))
         out.append(p)
-        t += switch_frames(row, clip, fps)
+        t += switch_frames(row, clip, fps, rows[i + 1] if i + 1 < len(rows) else None)
     _finish(out, rows, clips, fps)
     return out
 
@@ -100,7 +122,7 @@ def _finish(placements: list[Placement], rows: list[dict[str, Any]], clips: dict
             nxt = placements[i + 1]
             p.end = nxt.start + nxt.fade_in
         else:
-            p.end = p.start + switch_frames(rows[i], _info(clips, p.clip), fps)
+            p.end = p.start + switch_frames(rows[i], _info(clips, p.clip), fps, None)
 
 
 def from_switches(first: str, switches: list[dict[str, Any]], clips: dict[str, dict[str, Any]], fps: int, total_sec: float) -> list[Placement]:
@@ -171,5 +193,6 @@ def default_rows(clips: Iterable[dict[str, Any]], model_id: str = "") -> list[di
     for action, extra in plan:
         name = pick(action)
         if name:
-            rows.append({"clip": name, "holdSec": 0.0, "crossFadeSec": DEFAULT_CROSSFADE, "switchAt": 1.0, "speed": 1.0, **extra})
+            clip = next(c for c in clips if c["name"] == name)
+            rows.append({"clip": name, "holdSec": 0.0, "crossFadeSec": fade_sec({}, clip), "switchAt": 1.0, "speed": 1.0, **extra})
     return rows

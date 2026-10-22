@@ -17,7 +17,10 @@ from maya import cmds
 
 from tdrive import lifecycle
 
-_saved: dict[str, Any] | None = None  # 再生を始める前の状態（止めたら戻す）
+from . import playstate
+
+_OWNER = "clip"
+_playing = False  # 再生を始める前の状態は playstate が持つ（合成・ショットと共有。止めたら、最後の 1 人が元へ戻す）
 
 
 # ------------------------------------------------------------------ 再生範囲
@@ -43,21 +46,15 @@ def keyed_range(root: str) -> tuple[int, int] | None:
 
 # ------------------------------------------------------------------ 再生
 def is_playing() -> bool:
-    return _saved is not None
+    return _playing
 
 
 def play(clip: dict[str, Any]) -> None:
     """クリップの範囲でループ再生する。すでに再生中なら、元の状態を保ったまま範囲だけ切り替える。"""
-    global _saved
-    if _saved is None:
-        _saved = {
-            "min": cmds.playbackOptions(query=True, minTime=True),
-            "max": cmds.playbackOptions(query=True, maxTime=True),
-            "start": cmds.playbackOptions(query=True, animationStartTime=True),
-            "end": cmds.playbackOptions(query=True, animationEndTime=True),
-            "loop": cmds.playbackOptions(query=True, loop=True),
-            "time": cmds.currentTime(query=True),
-        }
+    global _playing
+    if not _playing:
+        playstate.acquire(_OWNER)
+        _playing = True
         lifecycle.on_reload(stop)  # リロードのとき、再生範囲を戻す
     cmds.playbackOptions(minTime=clip["start"], maxTime=clip["end"], animationStartTime=clip["start"], animationEndTime=clip["end"],
                          loop="continuous" if clip["loop"] else "once")
@@ -68,20 +65,20 @@ def play(clip: dict[str, Any]) -> None:
 
 def forget() -> None:
     """再生前の状態の控えを捨てる（別のシーンを開いた・新しいシーンにしたとき。前のシーンの範囲・時刻を書き戻さない）。"""
-    global _saved
-    _saved = None
+    global _playing
+    _playing = False
+    playstate.forget()
 
 
 def stop() -> None:
     """再生を止めて、元の再生範囲・時刻・ループ設定に戻す。再生中でなければ何もしない。"""
-    global _saved
+    global _playing
     with contextlib.suppress(RuntimeError):
         cmds.play(state=False)
-    if _saved is None:
+    if not _playing:
         return
-    s, _saved = _saved, None
-    cmds.playbackOptions(minTime=s["min"], maxTime=s["max"], animationStartTime=s["start"], animationEndTime=s["end"], loop=s["loop"])
-    cmds.currentTime(s["time"], edit=True)
+    _playing = False
+    playstate.release_and_restore(_OWNER)
 
 
 # ------------------------------------------------------------------ サムネイル

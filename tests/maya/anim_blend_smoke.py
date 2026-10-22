@@ -130,8 +130,12 @@ def _run(tmp: Path) -> None:
 
     # ---- 作り直しは 1 つだけ
     K.compose("blend", pls, joints, fps)
+    n_pb = len(cmds.ls(type="pairBlend"))
     K.compose("blend", pls, joints, fps)
-    check("作り直しても合成は 1 つ・元のつながりは 1 組", K.active() == ["blend"] and len(cmds.ls(type="pairBlend")) == len(set(cmds.ls(type="pairBlend"))))
+    check("作り直しても合成は 1 つ・pairBlend の数は変わらない（TS-5）", K.active() == ["blend"] and n_pb > 0 and len(cmds.ls(type="pairBlend")) == n_pb, f"{n_pb} -> {len(cmds.ls(type='pairBlend'))}")
+    kept = K._load("tdAnimComp_blend", "tdOriginal", [])
+    got = {dst: src for src, dst in kept}
+    check("作り直しても元のつながりは 1 組（控えが合成の出力を元と取り違えない）", len(kept) == len(got) and all(got.get(p) == orig_src[p] for p in plugs), str(kept[:3]))
     K.remove()
     check("作り直しのあと外しても元に戻る", {p: cmds.listConnections(p, source=True, destination=False, plugs=True)[0] for p in plugs} == orig_src)
 
@@ -255,6 +259,8 @@ def _ui(tmp, cmds, S, A, K, clips) -> None:
     first = K.info("blend")["clips"]
     cmds.currentTime(60, edit=True)  # 2 秒の時点で Speed を 0 に戻す → その時刻から Run → Idle
     ui.speed.setValue(0)
+    check("UI: スライダーを動かしても、すぐには作り直さない（150 ms まとめる。SF-5）", K.info("blend")["clips"] == first)
+    ui.flush_rebuild()
     now = K.info("blend")["clips"]
     check("UI: 合成の最中にスライダーを動かすと、その時刻から遷移が足される", first == ["A_MisotenChara_Idle", "A_MisotenChara_Run_F"] and now == first + ["A_MisotenChara_Idle"], f"{first} -> {now}")
     check("UI: 作り直しても時刻が保たれる", cmds.currentTime(query=True) == 60)
@@ -262,7 +268,6 @@ def _ui(tmp, cmds, S, A, K, clips) -> None:
     ui.remove()
     ui.layer_clip.setCurrentText("A_MisotenChara_Run_F")
     ui.build_from_rows()
-    check("UI: 合成の最中にウィンドウを閉じる（detach）と外れる", True)
     ui.detach()
     check("UI: detach で合成が外れる", K.active() == [])
     s.listeners.remove(ui.refresh)

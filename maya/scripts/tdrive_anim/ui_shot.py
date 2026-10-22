@@ -235,7 +235,7 @@ class ShotTab(QtWidgets.QWidget):
         self.char_add.setEnabled(has and self.session.data is not None)
         self.create_btn.setEnabled(True)
         comps = SS.compositions(s["shot"]) if has else []
-        self.banner.setText(f"⚠ ショットの合成中: {', '.join(K.PREFIX + c for c in comps)}。ジョイントは合成につながっています。シーンを保存する前に「合成を外す」を押してください" if comps else "")
+        self.banner.setText(f"⚠ ショットの合成中: {', '.join(K.PREFIX + c for c in comps)}。ジョイントは合成につながっています。シーンを保存しても合成は保存されません（保存の間だけ元のつながりに戻します）。合成中はジョイントにキーを打たないでください。使い終わったら「合成を外す」" if comps else "")
         self.banner.setVisible(bool(comps))
         if not has:
             self.info.setText("ショットが開かれていません。名前を入れて「新規ショット」か、「開く…」で既存のものを選んでください")
@@ -403,6 +403,8 @@ class ShotTab(QtWidgets.QWidget):
         res = self._guard(SS.build, s, self.session.data)
         if res is not None:
             warn = "".join(f"\n⚠ {w}" for w in res["warnings"])
+            if SN.scene_fps_exact() != s["frameRate"]:
+                warn += f"\n⚠ シーンの時間単位は {SN.scene_fps_exact() or '不明な'} fps、ショットは {s['frameRate']} fps です。命名タブの「直す」で合わせてください（カメラの区間・イベントはフレーム番号のままです）"
             self._say(f"ショットを反映しました（カメラ区間 {res['cameras']}、イベント {res['events']}、合成 {len(res['compositions'])}）{warn}")
         self.refresh()
 

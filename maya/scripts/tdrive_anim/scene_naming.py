@@ -174,6 +174,14 @@ def scene_fps() -> int | None:
     return {"ntsc": 30, "ntscf": 60}.get(cmds.currentUnit(query=True, time=True))
 
 
+TIME_UNIT_FPS = {"film": 24, "ntsc": 30, "ntscf": 60, "pal": 25, "game": 15, "show": 48}
+
+
+def scene_fps_exact() -> int | None:
+    """シーンの時間単位のフレームレート（film の 24 fps なども）。知らない単位は None。"""
+    return TIME_UNIT_FPS.get(cmds.currentUnit(query=True, time=True))
+
+
 def _fps_label(unit: str) -> str:
     return {"film": "24 fps", "ntsc": "30 fps", "ntscf": "60 fps", "pal": "25 fps", "game": "15 fps", "show": "48 fps"}.get(unit, unit)
 

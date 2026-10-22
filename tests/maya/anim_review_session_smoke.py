@@ -194,7 +194,7 @@ def _run(tmp: Path) -> None:
     # ---- コールバックは重複しない
     S.install_scene_callbacks()
     S.install_scene_callbacks()
-    check("保存直前のコールバックは 1 つだけ", len(getattr(sys, S._CALLBACKS_ATTR)) == 1)
+    check("保存の前後のコールバックは 1 組だけ（重複しない）", len(getattr(sys, S._CALLBACKS_ATTR)) == 2)
 
 
 if __name__ == "__main__":

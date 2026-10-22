@@ -13,7 +13,11 @@ Time Editor（`timeEditorClip`）は、裏の mayapy ではクリップの問い
 
 **元のカーブ・コンストレイントは壊さない**: 合成を外すと、控えておいた元のつながりへ戻し、作ったノードを全部消し、再生範囲・時刻・ループ設定も戻す。
 状態は `tdAnimComp_<名前>`（network ノード）に文字列で持つので、シーンを保存して開き直しても外せる。
-**合成中にシーンを保存すると、保存されたシーンではジョイントが合成につながったまま**になる（画面が警告する）。
+**合成の作成・解除は Maya の Undo に積まない**（`undo_off`）: 積むと、Ctrl+Z でノードだけ戻って再生範囲が戻らない・元の範囲を持つノードごと消える・
+スライダーのたびの作り直しで履歴が埋まる（docs/21 SF-4 / SF-5）。戻すのは「合成を外す」。
+**合成中にシーンを保存すると**、保存の間だけジョイントを元のつながりへ戻して書き、保存したら合成につなぎ直す（`suspend_for_save` / `resume_after_save`。SF-19）。
+合成中はオートキーを切る（外すと戻す。ジョイントへ打ったキーが合成の入力に紛れないように。SF-7）。
+再生範囲・時刻の「元の状態」は `playstate` で共有する（クリップ再生・ショットと、戻す順に関係なく最後に元へ戻る。SF-8）。
 
 dx11Shader・Render Override は使わない。
 """
@@ -29,6 +33,8 @@ from maya import cmds
 
 from tdrive import lifecycle
 
+from . import clips as MC
+from . import playstate
 from .core import sequence as Seq
 
 PREFIX = "tdAnimComp_"
@@ -61,9 +67,31 @@ class Result:
     warnings: list[str] = field(default_factory=list)
 
 
+@contextlib.contextmanager
+def undo_off():
+    """中で行う操作を Maya の Undo に積まない（合成は「合成を外す」で戻す。履歴を細切れにしない・再生範囲だけ戻らない半端を作らない）。"""
+    was = cmds.undoInfo(query=True, state=True)
+    cmds.undoInfo(stateWithoutFlush=False)
+    try:
+        yield
+    finally:
+        if was:
+            cmds.undoInfo(stateWithoutFlush=True)
+
+
 # ------------------------------------------------------------------ 状態の出し入れ（network ノード）
 def _comp_node(name: str) -> str:
     return PREFIX + name
+
+
+def _owner(name: str) -> str:
+    return "comp:" + name
+
+
+def _source(plug: str) -> str | None:
+    """プラグの入力の元（単位変換ノードは飛ばした本当の元。外すとき単位変換が消えても、つなぎ直せば Maya が入れ直す。SF-3）。"""
+    src = cmds.listConnections(plug, source=True, destination=False, plugs=True, skipConversionNodes=True) or []
+    return src[0] if src else None
 
 
 def active() -> list[str]:
@@ -100,8 +128,8 @@ def animated_channels(joints: list[str]) -> dict[str, list[str]]:
         got = []
         for ch in CHANNELS:
             plug = f"{j}.{ch}"
-            src = cmds.listConnections(plug, source=True, destination=False, plugs=True) or []
-            if src and not src[0].split(".")[0].startswith(PREFIX) and not cmds.getAttr(plug, lock=True):  # 別の合成がつないだチャンネルは除く
+            src = _source(plug)
+            if src and not src.split(".")[0].startswith(PREFIX) and not cmds.getAttr(plug, lock=True):  # 別の合成がつないだチャンネルは除く
                 got.append(ch)
         if got:
             out[j] = got
@@ -168,6 +196,7 @@ class _Builder:
         if tr:
             pb = self.make("pairBlend", f"{PREFIX}{self.name}_{joint}_{tag}_pb", rotInterpolation=1)
             cmds.connectAttr(weight_plug, f"{pb}.weight")
+            cmds.connectAttr(f"{joint}.rotateOrder", f"{pb}.rotateOrder")  # 回転順がジョイントと違うと姿勢がずれる（xyz 以外のリグ。SP-10）
             for ch in TRANSLATE + ROTATE:
                 fam = "Translate" if ch.startswith("translate") else "Rotate"
                 ax = ch[-1]
@@ -198,16 +227,20 @@ def compose(name: str, placements: list[Seq.Placement], joints: list[str], fps: 
     配置が空・ジョイントにつながりが無いときは ValueError。`playback=False` は再生範囲・時刻に触れない（ショットが自分で決める）。"""
     if not placements:
         raise ValueError("遷移列が空です")
+    with undo_off():
+        return _compose(name, placements, joints, fps, layers, playback)
+
+
+def _compose(name: str, placements: list[Seq.Placement], joints: list[str], fps: int, layers: list[Layer] | None, playback: bool) -> Result:
+    MC.stop()  # クリップ再生中なら先に止めて、再生範囲を元へ戻してから合成の範囲にする（控えが混ざらないように。SF-8）
     remove(name)
     chans = animated_channels(joints)
     if not chans:
         raise ValueError("合成できるジョイントがありません（キーやコンストレイントでつながったチャンネルが無い）")
     b = _Builder(name, fps)
     warnings: list[str] = []
-    saved_time = cmds.currentTime(query=True)
     layer_list = layers or []
-    undo_was = cmds.undoInfo(query=True, state=True)
-    cmds.undoInfo(openChunk=True, chunkName="tdAnimCompose")
+    outputs: list[list[str]] = []  # [[合成の出力, ジョイントのプラグ], ...]（保存の間だけ元へ戻すため）
     try:
         node = cmds.createNode("network", name=b.node)
         b.created.append(node)
@@ -226,7 +259,7 @@ def compose(name: str, placements: list[Seq.Placement], joints: list[str], fps: 
         for j, chs in chans.items():
             for ch in chs:
                 plug = f"{j}.{ch}"
-                src = cmds.listConnections(plug, source=True, destination=False, plugs=True)[0]
+                src = _source(plug)
                 b.original.append([src, plug])
                 cmds.disconnectAttr(src, plug)
         # ---- 3. 重み（配置ごとに 1 本。ジョイント全員で共有）
@@ -260,33 +293,29 @@ def compose(name: str, placements: list[Seq.Placement], joints: list[str], fps: 
                     result = b.blend(j, f"layer{i}", result, top, f"{node}.layerWeight{i}", statics)
             for ch, plug in result.items():
                 cmds.connectAttr(plug, f"{j}.{ch}", force=True)
+                outputs.append([plug, f"{j}.{ch}"])
                 n_plugs += 1
         # ---- 5. 状態の保存・再生範囲
         total = Seq.total_frames(placements + [p for L in layer_list for p in L.placements])
         _store(node, "tdOriginal", b.original)
+        _store(node, "tdOutputs", outputs)
         _store(node, "tdCreated", b.created)
         _store(node, "tdInfo", {"frames": total, "joints": len(chans), "plugs": n_plugs, "layers": [L.name for L in layer_list],
                                 "clips": [p.clip for p in placements], "fps": fps})
+        auto = bool(cmds.autoKeyframe(query=True, state=True))
+        _store(node, "tdAutoKey", auto)
+        if auto:  # 合成中にオートキーが働くと、合成の入力に紛れたキーが「外す」で消える（SF-7）
+            cmds.autoKeyframe(state=False)
         if playback:
-            _store(node, "tdPlayback", _playback_state() | {"time": saved_time})
+            _store(node, "tdPlayback", playstate.acquire(_owner(name)))
         lifecycle.on_reload(remove)  # リロードのとき、元のつながりへ戻す
     except Exception:
-        cmds.undoInfo(closeChunk=True)
         _rollback(b)
         raise
-    cmds.undoInfo(closeChunk=True)
     if playback:
         cmds.playbackOptions(minTime=0, maxTime=total, animationStartTime=0, animationEndTime=total)
         cmds.currentTime(0, edit=True)
     return Result(name, node, total, len(chans), n_plugs, len(b.created), len(layer_list), warnings)
-
-
-def _playback_state() -> dict[str, Any]:
-    return {
-        "min": cmds.playbackOptions(query=True, minTime=True), "max": cmds.playbackOptions(query=True, maxTime=True),
-        "start": cmds.playbackOptions(query=True, animationStartTime=True), "end": cmds.playbackOptions(query=True, animationEndTime=True),
-        "loop": cmds.playbackOptions(query=True, loop=True),
-    }
 
 
 def _rollback(b: _Builder) -> None:
@@ -297,34 +326,85 @@ def _rollback(b: _Builder) -> None:
     existing = [n for n in b.created if cmds.objExists(n)]
     if existing:
         cmds.delete(existing)
+    if b.created and playstate.holds(_owner(b.name)):
+        playstate.release_and_restore(_owner(b.name))
 
 
 # ------------------------------------------------------------------ 外す
+last_warnings: list[str] = []  # 直近の `remove` の警告（合成中にユーザーが足した接続を残した、など）
+
+
 def remove(name: str | None = None) -> int:
-    """合成を外す（name 無しは全部）。元のつながりへ戻し、作ったノードを消し、再生範囲・時刻・ループ設定を戻す。外した数を返す。"""
+    """合成を外す（name 無しは全部）。元のつながりへ戻し、作ったノードを消し、再生範囲・時刻・ループ設定・オートキーを戻す。外した数を返す。
+    合成中にユーザーが足した接続（元でも合成でもない）は上書きせずに残し、`last_warnings` に書く（SF-20）。"""
+    with undo_off():
+        return _remove(name)
+
+
+def _remove(name: str | None) -> int:
     names = [name] if name else active()
+    last_warnings.clear()
     n = 0
     for nm in names:
         node = _comp_node(nm)
         if not cmds.objExists(node):
             continue
         original = _load(node, "tdOriginal", [])
-        created = _load(node, "tdCreated", [])
+        created = set(_load(node, "tdCreated", []))
         playback = _load(node, "tdPlayback", None)
+        auto = _load(node, "tdAutoKey", None)
         for src, dst in original:
-            if cmds.objExists(src.split(".")[0]) and cmds.objExists(dst.split(".")[0]):
-                with contextlib.suppress(RuntimeError):
-                    cmds.connectAttr(src, dst, force=True)
+            if not (cmds.objExists(src.split(".")[0]) and cmds.objExists(dst.split(".")[0])):
+                continue
+            cur = _source(dst)
+            if cur == src:
+                continue
+            if cur is not None and cur.split(".")[0] not in created and not cur.split(".")[0].startswith(PREFIX):
+                last_warnings.append(f"{dst} は合成中に別の接続（{cur}）が足されていたため、元のつながりへ戻しませんでした")
+                continue
+            with contextlib.suppress(RuntimeError):
+                cmds.connectAttr(src, dst, force=True)
         existing = [x for x in created if cmds.objExists(x)]
         if existing:  # 空のリストを cmds.delete に渡さない
             cmds.delete(existing)
         if cmds.objExists(node):
             cmds.delete(node)
-        if playback:
-            cmds.playbackOptions(minTime=playback["min"], maxTime=playback["max"], animationStartTime=playback["start"],
-                                 animationEndTime=playback["end"], loop=playback["loop"])
-            cmds.currentTime(playback["time"], edit=True)
+        if auto:
+            cmds.autoKeyframe(state=True)
+        if playback is not None or playstate.holds(_owner(nm)):
+            playstate.release_and_restore(_owner(nm), playback)
         n += 1
+    return n
+
+
+# ------------------------------------------------------------------ 保存の間だけ元へ戻す（SF-19）
+_suspended: list[list[str]] = []
+
+
+def suspend_for_save() -> int:
+    """合成中のシーンを保存する直前: ジョイントを元のつながりへ戻す（合成のノードは残す）。保存したあと `resume_after_save`。戻したチャンネル数。"""
+    _suspended.clear()
+    with undo_off():
+        for nm in active():
+            node = _comp_node(nm)
+            for src, dst in _load(node, "tdOriginal", []):
+                if cmds.objExists(src.split(".")[0]) and cmds.objExists(dst.split(".")[0]):
+                    with contextlib.suppress(RuntimeError):
+                        cmds.connectAttr(src, dst, force=True)
+            _suspended.extend(_load(node, "tdOutputs", []))
+    return len(_suspended)
+
+
+def resume_after_save() -> int:
+    """`suspend_for_save` のあと、ジョイントを合成につなぎ直す。つなぎ直したチャンネル数。"""
+    n = 0
+    with undo_off():
+        for out, dst in _suspended:
+            if cmds.objExists(out.split(".")[0]) and cmds.objExists(dst.split(".")[0]):
+                with contextlib.suppress(RuntimeError):
+                    cmds.connectAttr(out, dst, force=True)
+                    n += 1
+    _suspended.clear()
     return n
 
 
