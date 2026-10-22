@@ -20,34 +20,43 @@ MESH = "MisotenChara_Rig5_IdolGirl_Body_Chest"
 ROOT = "spine_C0_0_jnt"
 
 
-def build(fps_unit: str = "film") -> dict:
-    """新しいシーンに組む。時間単位は MisotenChara と同じ film（24 fps）で始める（命名タブの修正対象）。"""
+def build(fps_unit: str = "film", namespace: str = "", new_scene: bool = True) -> dict:
+    """新しいシーンに組む。時間単位は MisotenChara と同じ film（24 fps）で始める（命名タブの修正対象）。
+
+    `namespace` を渡すと全ノードがそのネームスペースに入る（ショットのキャラクターのネームスペースの確認用）。
+    `new_scene=False` は今のシーンにもう 1 体足す（2 体目のキャラクター）。戻り値の名前はネームスペース込み。
+    """
     from maya import cmds
 
-    cmds.file(new=True, force=True)
-    cmds.currentUnit(time=fps_unit)
-    cmds.group(empty=True, name="rig")
-    cmds.group(empty=True, name="jnt_org", parent="rig")
-    cmds.group(empty=True, name="miso_geo", parent="rig")
+    if new_scene:
+        cmds.file(new=True, force=True)
+        cmds.currentUnit(time=fps_unit)
+    pre = f"{namespace}:" if namespace else ""
+    if namespace and not cmds.namespace(exists=namespace):
+        cmds.namespace(add=namespace)
+    cmds.group(empty=True, name=pre + "rig")
+    cmds.group(empty=True, name=pre + "jnt_org", parent=pre + "rig")
+    cmds.group(empty=True, name=pre + "miso_geo", parent=pre + "rig")
     cmds.select(clear=True)
-    j0 = cmds.joint(name=JOINTS[0], position=(0, 90, 0))
+    joints = [pre + j for j in JOINTS]
+    j0 = cmds.joint(name=joints[0], position=(0, 90, 0))
     prev = j0
-    for name, y in zip(JOINTS[1:4], (110, 130, 150)):
+    for name, y in zip(joints[1:4], (110, 130, 150)):
         prev = cmds.joint(name=name, position=(0, y, 0))
     top = prev
     cmds.select(top)
-    cmds.joint(name=JOINTS[4], position=(15, 150, 0))
+    cmds.joint(name=joints[4], position=(15, 150, 0))
     cmds.select(top)
-    cmds.joint(name=JOINTS[5], position=(-15, 150, 0))
-    cmds.parent(j0, "jnt_org")
-    cube = cmds.polyCube(name=MESH, width=30, height=70, depth=20)[0]
+    cmds.joint(name=joints[5], position=(-15, 150, 0))
+    cmds.parent(j0, pre + "jnt_org")
+    cube = cmds.polyCube(name=pre + MESH, width=30, height=70, depth=20)[0]
     cmds.move(0, 120, 0, cube)
     cmds.makeIdentity(cube, apply=True, translate=True)
     cmds.delete(cube, constructionHistory=True)
-    cmds.parent(cube, "miso_geo")
-    cmds.skinCluster(JOINTS, cube, toSelectedBones=True, name="skinCluster_body")
+    cmds.parent(cube, pre + "miso_geo")
+    cmds.skinCluster(joints, cube, toSelectedBones=True, name=pre + "skinCluster_body")
     cmds.select(clear=True)
-    return {"root": ROOT, "joints": list(JOINTS), "mesh": cube}
+    return {"root": pre + ROOT, "joints": joints, "mesh": cube}
 
 
 def add_materials(mesh: str = MESH) -> dict:

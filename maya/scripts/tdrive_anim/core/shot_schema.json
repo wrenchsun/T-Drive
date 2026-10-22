@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TDriveShot",
+  "description": "docs/20 §5.1。知らないキーは許す（追加は MINOR、削除・改名は MAJOR）。",
+  "type": "object",
+  "required": ["format", "version", "shot", "frameRate", "range"],
+  "properties": {
+    "format": { "const": "TDriveShot" },
+    "version": { "type": "integer", "minimum": 1 },
+    "shot": { "type": "string", "pattern": "^[A-Z][A-Za-z0-9]*$" },
+    "frameRate": { "enum": [30, 60] },
+    "range": { "type": "array", "items": { "type": "integer" }, "minItems": 2, "maxItems": 2 },
+    "cameras": {
+      "type": "array",
+      "items": { "type": "object", "required": ["node", "start", "end"], "properties": { "name": { "type": "string" }, "node": { "type": "string" }, "start": { "type": "integer" }, "end": { "type": "integer" } } }
+    },
+    "characters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["modelId"],
+        "properties": { "modelId": { "type": "string", "pattern": "^[A-Z][A-Za-z0-9]*$" }, "namespace": { "type": "string" }, "sequence": { "type": "array" }, "facialTrack": { "type": "boolean" } }
+      }
+    },
+    "props": { "type": "array", "items": { "type": "object", "properties": { "modelId": { "type": "string" }, "node": { "type": "string" } } } },
+    "events": { "type": "array", "items": { "type": "object", "required": ["frame", "key"], "properties": { "frame": { "type": "integer" }, "key": { "type": "string" } } } },
+    "export": { "type": "object", "properties": { "dir": { "type": "string" }, "category": { "type": "string" } } }
+  }
+}

@@ -252,7 +252,8 @@ D-Drive の **CutsceneData 1 つ**に相当する Maya 側の単位。`anim/<Mod
 - カメラ: シーンのカメラを区間付きで並べる。**Camera Sequencer**（`sequencer` / `shot` ノード）に同期して、Maya のシーケンサー再生でカメラ切替を確認する。出力時は Ubercam（`doCreateUbercam`）を作って 1 本にし、終わったら消す
 - キャラクター: ネームスペース（= ModelId）ごとに **クリップ列**（§4.2 の遷移列と同じ型）。配置は Time Editor の合成（`tdAnimComp_<Shot>_<ModelId>`）で、ブレンドタブの「この列をショットへ」から持ち込める。手で打ったキー（口パク・視線など）は合成の上の animLayer に打てる（出力時はベイクされる）
 - 顔: FacialController のプレビューノードにキーがあれば `.fctrack` も一緒に出す（[14](14_facial_controller_spec.md) §7.3。既存の `tdrive_facial.export.export_fctrack` を呼ぶ）
-- イベント: 現在フレームに `EVT_<キー>` を追加（ロケータ `EVT_<キー>` を `tdShot_<Shot>` の下に。D-Drive の Signal マーカー `cutscene/<キー>` になる）
+- イベント: 現在フレームに `EVT_<キー>` を追加（ロケータ `EVT_<キー>` を `tdShot_<Shot>` の下に。D-Drive の Signal マーカー `cutscene/<キー>` になる）。
+  **時刻の持ち方（実装での決め 2026-10-22）**: ロケータの `visibility` を「イベントの 1 フレーム前は 0、イベントのフレームから 1」のステップキーにする（ベイクしても残る。出力時は 0 → 1 に変わる最初のフレームがイベントの時刻）。属性 `tdEventFrame` / `tdEventKey` も持つ。同じキーを 2 回使うと Maya が名前に数字を付ける
 - プレビュー: ショットの範囲でシーケンサー再生（カメラ切替 + 合成 + 顔）。`playblast` で動画（`captures/shots/<Shot>.mov`。Git 管理外）
 
 ### 5.3 出力（D-Drive のカットシーン規則そのまま）

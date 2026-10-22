@@ -24,8 +24,10 @@ from tdrive import lifecycle, project
 
 from .core import animset as A
 from .core import clips as C
+from .core import shot as SH
 
 PATH_KEY = "tdAnimSetPath"  # fileInfo: animset.json のプロジェクト相対パス
+SHOT_KEY = "tdShotPath"  # fileInfo: 開いているショット（shots/<Shot>.shot.json）のプロジェクト相対パス
 MODEL_KEY = "tdAnimModelId"  # fileInfo: ModelId
 UNDO_LIMIT = 100
 
@@ -36,13 +38,13 @@ def undoable(fn):
     @wraps(fn)
     def wrapper(self, *args, **kwargs):
         outer = self._undo_depth == 0
-        before = copy.deepcopy(self.data) if outer else None
+        before = self._snapshot() if outer else None
         self._undo_depth += 1
         try:
             result = fn(self, *args, **kwargs)
         finally:
             self._undo_depth -= 1
-            if outer and self.data != before:
+            if outer and self._snapshot() != before:
                 self._push_undo(before)
         return result
 
@@ -54,9 +56,12 @@ class AnimSession:
         self.data: dict[str, Any] | None = None
         self.path: Path | None = None
         self.dirty = False
+        self.shot: dict[str, Any] | None = None  # 開いているショット（docs/20 §5。animset と同じ Undo にまとめる）
+        self.shot_path: Path | None = None
+        self.shot_dirty = False
         self.listeners: list[Callable[[], None]] = []
-        self._undo: list[dict[str, Any] | None] = []
-        self._redo: list[dict[str, Any] | None] = []
+        self._undo: list[dict[str, Any]] = []  # {"data": animset, "shot": ショット} のスナップショット
+        self._redo: list[dict[str, Any]] = []
         self._undo_depth = 0
 
     # ------------------------------------------------------------ 状態
@@ -82,7 +87,14 @@ class AnimSession:
         return A.validate(self.data) if self.data else []
 
     # ------------------------------------------------------------ Undo（データのスナップショット）
-    def _push_undo(self, before: dict[str, Any] | None) -> None:
+    def _snapshot(self) -> dict[str, Any]:
+        return {"data": copy.deepcopy(self.data), "shot": copy.deepcopy(self.shot)}
+
+    def _restore(self, snap: dict[str, Any]) -> None:
+        self.data, self.shot = snap["data"], snap["shot"]
+        self.shot_dirty = self.shot_dirty or self.shot is not None
+
+    def _push_undo(self, before: dict[str, Any]) -> None:
         self._undo.append(before)
         del self._undo[:-UNDO_LIMIT]
         self._redo.clear()
@@ -90,16 +102,16 @@ class AnimSession:
     def undo(self) -> bool:
         if not self._undo:
             return False
-        self._redo.append(copy.deepcopy(self.data))
-        self.data = self._undo.pop()
+        self._redo.append(self._snapshot())
+        self._restore(self._undo.pop())
         self._changed()
         return True
 
     def redo(self) -> bool:
         if not self._redo:
             return False
-        self._undo.append(copy.deepcopy(self.data))
-        self.data = self._redo.pop()
+        self._undo.append(self._snapshot())
+        self._restore(self._redo.pop())
         self._changed()
         return True
 
@@ -158,7 +170,7 @@ class AnimSession:
 
     @property
     def has_unsaved_work(self) -> bool:
-        return self.data is not None and self.dirty
+        return (self.data is not None and self.dirty) or (self.shot is not None and self.shot_dirty)
 
     # ------------------------------------------------------------ 操作（データ）
     @undoable
@@ -223,6 +235,114 @@ class AnimSession:
             self._changed()
         return len(names)
 
+    # ------------------------------------------------------------ ショット（docs/20 §5）
+    def require_shot(self) -> dict[str, Any]:
+        if self.shot is None:
+            raise RuntimeError("ショットが開かれていません（新規作成 or 開く）")
+        return self.shot
+
+    @undoable
+    def new_shot(self, name: str, frame_rate: int = 30, start: int = 0, end: int = 240) -> dict[str, Any]:
+        """新しいショット（保存先は shots/<Shot>.shot.json。まだ書かない）。名前・範囲が不正なら ShotError。"""
+        self.shot = SH.new_shot(name, frame_rate, start, end)
+        self.shot_path = SH.path_for(project.shots_dir(), name)
+        self.shot_dirty = True
+        self._changed()
+        return self.shot
+
+    def open_shot(self, path: str | Path) -> dict[str, Any]:
+        """ファイルからショットを開く（壊れたファイルは ShotError）。"""
+        data = SH.load(path)
+        self.shot, self.shot_path, self.shot_dirty = data, Path(path), False
+        self._changed(dirty=False)
+        return data
+
+    def save_shot(self, path: str | Path | None = None) -> Path:
+        shot = self.require_shot()
+        errs = SH.errors(shot)
+        if errs:
+            raise SH.ShotError("保存できません:" + chr(10) + chr(10).join(str(e) for e in errs))
+        target = Path(path) if path else (self.shot_path or SH.path_for(project.shots_dir(), shot["shot"]))
+        SH.save(target, shot)
+        self.shot_path, self.shot_dirty = target, False
+        cmds.fileInfo(SHOT_KEY, project.to_project_path(target))
+        self._changed(dirty=False)
+        return target
+
+    @staticmethod
+    def remembered_shot_path() -> str | None:
+        try:
+            got = cmds.fileInfo(SHOT_KEY, query=True)
+        except RuntimeError:
+            return None
+        value = got[0] if got else ""
+        return project.from_project_path(value) if value else None
+
+    @undoable
+    def shot_set(self, key: str, value: Any) -> None:
+        self.require_shot()[key] = value
+        self.shot_dirty = True
+        self._changed()
+
+    @undoable
+    def shot_add_camera(self, node: str, start: int, end: int) -> dict[str, Any]:
+        cam = SH.add_camera(self.require_shot(), node, start, end)
+        self.shot_dirty = True
+        self._changed()
+        return cam
+
+    @undoable
+    def shot_remove_camera(self, index: int) -> bool:
+        ok = SH.remove_camera(self.require_shot(), index)
+        if ok:
+            self.shot_dirty = True
+            self._changed()
+        return ok
+
+    @undoable
+    def shot_add_character(self, model_id: str, namespace: str | None = None, sequence: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+        ch = SH.add_character(self.require_shot(), model_id, namespace, sequence)
+        self.shot_dirty = True
+        self._changed()
+        return ch
+
+    @undoable
+    def shot_set_sequence(self, index: int, rows: list[dict[str, Any]]) -> None:
+        """キャラクターのクリップ列（ブレンドタブの「この列をショットへ」）を入れる。"""
+        shot = self.require_shot()
+        if not 0 <= index < len(shot["characters"]):
+            raise SH.ShotError("キャラクターがありません")
+        shot["characters"][index]["sequence"] = copy.deepcopy(rows)
+        self.shot_dirty = True
+        self._changed()
+
+    @undoable
+    def shot_remove_character(self, index: int) -> bool:
+        shot = self.require_shot()
+        if 0 <= index < len(shot["characters"]):
+            del shot["characters"][index]
+            self.shot_dirty = True
+            self._changed()
+            return True
+        return False
+
+    @undoable
+    def shot_add_event(self, frame: int, key: str) -> dict[str, Any]:
+        ev = SH.add_event(self.require_shot(), frame, key)
+        self.shot_dirty = True
+        self._changed()
+        return ev
+
+    @undoable
+    def shot_remove_event(self, index: int) -> bool:
+        shot = self.require_shot()
+        if 0 <= index < len(shot["events"]):
+            del shot["events"][index]
+            self.shot_dirty = True
+            self._changed()
+            return True
+        return False
+
     def _clip(self, name: str) -> dict[str, Any]:
         clip = A.find_clip(self.require(), name)
         if clip is None:
@@ -265,6 +385,7 @@ def current() -> AnimSession:
 def on_scene_opened() -> None:
     """SceneOpened: シーンに記録された animset があれば開く。未保存の作業があるときは上書きしない。"""
     s = _current
+    _open_remembered_shot(s)
     path = AnimSession.remembered_path()
     if not path or not Path(path).exists():
         return
@@ -278,9 +399,26 @@ def on_scene_opened() -> None:
         print(f"[T-Drive] animset を開けませんでした: {exc}")
 
 
+def _open_remembered_shot(s: "AnimSession") -> None:
+    path = AnimSession.remembered_shot_path()
+    if not path or not Path(path).exists() or s.shot_dirty:
+        return
+    try:
+        s.open_shot(path)
+        print(f"[T-Drive] ショットを開きました: {project.to_project_path(path)}")
+    except Exception as exc:  # noqa: BLE001  壊れたデータでシーンを開く操作自体は止めない
+        print(f"[T-Drive] ショットを開けませんでした: {exc}")
+
+
 def on_scene_saved() -> None:
-    """SceneSaved: シーンの保存に合わせて、編集中の animset も保存する。"""
+    """SceneSaved: シーンの保存に合わせて、編集中の animset とショットも保存する。"""
     s = _current
+    if s.shot is not None and s.shot_dirty:
+        try:
+            print(f"[T-Drive] シーンの保存に合わせてショットを保存しました: {project.to_project_path(s.save_shot())}")
+            cmds.file(modified=False)
+        except Exception as exc:  # noqa: BLE001
+            lifecycle.report_error(f"ショットを保存できませんでした: {exc}", traceback.format_exc(), once=False)
     if s.data is None or not s.dirty:
         return
     try:

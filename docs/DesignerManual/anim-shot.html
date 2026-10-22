@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>アニメーション作業台: ショット - T-Drive デザイナーマニュアル</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<nav class="breadcrumb"><a href="Readme.html">トップ</a> › <a href="anim.html">アニメーション作業台</a> › ショット</nav>
+<h1>ショットタブ</h1>
+<p class="lastupdate">最終更新日: 2026-10-22</p>
+
+<p><strong>ショット</strong>は、カットシーン（ムービーのような演出）1 つ分です。「このカメラで、このキャラクターがこの動きをして、ここで合図を出す」を並べて作り、Maya で再生して確かめます。D-Drive のカットシーン（CutsceneData）1 つにあたります。</p>
+<div class="tip">DirectX 11 は要りません。ショットの書き出し（Unity へ渡すファイル）は、次の<a href="anim-export.html">出力タブ</a>で行います。</div>
+
+<div class="warn"><strong>「ショットを反映」すると、キャラクターのジョイントが合成につながります。</strong>元のアニメーションのカーブは壊していませんが、合成したままシーンを保存すると、保存されたシーンも合成につながったままになります。確認が終わったら<strong>「合成を外す」</strong>を押してください（オレンジ色の注意が出ている間は合成中です。ウィンドウを閉じても外れます）。</div>
+
+<h2>作り方</h2>
+<ol>
+<li><strong>ショットを作る</strong> — 名前（<code>Opening01</code> のように、大文字で始まる英数字。<code>__</code> は使えません）・フレームレート（30 か 60）・範囲を入れて「新規ショット」。シーンの時間単位も合わせます</li>
+<li><strong>カメラの区間を並べる</strong> — シーンのカメラを選び、開始〜終了を入れて「区間を追加」。例: <code>CAM_Main</code> 0〜120、<code>CAM_Close</code> 121〜240。複数のカメラを使うときは、名前を <code>CAM_&lt;名前&gt;</code> にしてください（<a href="anim-naming.html">命名</a>）</li>
+<li><strong>キャラクターを足す</strong> — 「今の animset のキャラクターを足す」。ネームスペースは、リグを参照して読み込んだときの名前（<code>MisotenChara</code> など）。D-Drive のカットシーンでは ModelId と同じにします</li>
+<li><strong>クリップ列を決める</strong> — <a href="anim-blend.html">ブレンドタブ</a>で遷移列を作り、「この列をショットへ」を押す（または、ショットタブで行を選んで「ブレンドタブの列を入れる」）。ショットの範囲の最初から、その順に再生されます</li>
+<li><strong>イベントを足す</strong> — タイムスライダーを合図を出したいフレームに合わせ、キーを入れて「現在フレームに追加」</li>
+<li><strong>ショットを反映</strong> — 再生範囲がショットの範囲になり、カメラの切り替え・イベント・キャラクターの動きがシーンに作られます。<strong>▶ シーケンサー再生</strong>で確認します</li>
+<li><strong>保存</strong> — <span class="path">shots/&lt;Shot&gt;.shot.json</span> に保存されます（シーンを保存したときも自動で保存され、開き直すと自動で読まれます）</li>
+</ol>
+
+<h2>シーンにできるもの</h2>
+<table>
+<tr><th>名前</th><th>中身</th></tr>
+<tr><td><code>tdShot_&lt;Shot&gt;</code></td><td>ショットのグループ。イベントのロケータがこの下に入ります</td></tr>
+<tr><td><code>tdShot_&lt;Shot&gt;_0</code>…</td><td>Maya のカメラ シーケンサーの区間（カメラごと）</td></tr>
+<tr><td><code>EVT_&lt;キー&gt;</code></td><td>イベントのロケータ。<strong>表示が 0 から 1 に変わるフレームが、イベントの時刻</strong>です（同じキーを 2 回使うと、名前の最後に数字が付きます）</td></tr>
+<tr><td><code>tdAnimComp_shot_&lt;Shot&gt;_&lt;ModelId&gt;</code></td><td>キャラクターのクリップ列の合成</td></tr>
+<tr><td><code>tdShotHand_&lt;Shot&gt;_&lt;ModelId&gt;</code></td><td>手付けキー用のアニメーションレイヤー（下記）</td></tr>
+</table>
+<p>名前が <code>td</code> で始まるものは、プレビュー用です。<strong>Unity へ出力するファイルには入りません</strong>（イベントのロケータ <code>EVT_</code> は例外で、ショットのファイルに入ります）。</p>
+
+<h2>手付けキー（口パク・視線など）</h2>
+<p>「手付けキーのレイヤー」を押すと、そのキャラクター用のアニメーションレイヤーができます。キーを打つコントローラを選んでレイヤーに追加し、合成の上にキーを打ってください。書き出しのときは、合成と合わせて焼き込まれます。</p>
+
+<h2>再生と動画</h2>
+<ul>
+<li>▶ シーケンサー再生: ショットの範囲で再生します。カメラの切り替えは、Maya のビューポートがシーケンサーのカメラに従います</li>
+<li>動画を撮る: <span class="path">captures/shots/&lt;Shot&gt;.mov</span> に動画を書きます（Git には入りません）。ビューポートのある Maya が必要です</li>
+</ul>
+
+<h2>仮の決め・できないこと</h2>
+<ul>
+<li>顔の演出（FacialController の <code>.fctrack</code>）は、キャラクターごとに「あり／なし」を決めるところまでです。書き出しは出力タブの対応を待ちます</li>
+<li>小道具（<code>PRP_</code>）は、書き出しのときにシーンから集めます。ショットタブで選ぶ画面は準備中です <span class="soon">準備中</span></li>
+<li>同じ ModelId のキャラクターを 2 体置いたときの 2 体目は、書き出しのファイル名が <code>_2</code> になります</li>
+</ul>
+
+<div class="tip">この画面の写真は実機で撮ったものを足します（<span class="soon">準備中</span>）。</div>
+
+<footer><a href="anim.html">アニメーション作業台へ戻る</a> / <a href="Readme.html">トップへ戻る</a></footer>
+</body>
+</html>

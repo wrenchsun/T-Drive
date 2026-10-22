@@ -32,6 +32,7 @@ class BlendTab(QtWidgets.QWidget):
         super().__init__()
         self.session = s
         self.rows: list[dict] = []
+        self.shot_tab = None  # AnimPanel が渡す（「この列をショットへ」）
         self.mode = "rows"  # "rows" | "graph"
         self.graph: dict | None = None
         self.timeline: list[tuple[float, dict]] = []
@@ -159,7 +160,8 @@ class BlendTab(QtWidgets.QWidget):
         self.remove_btn.clicked.connect(lambda *_: self.remove())
         self.shot_btn = QtWidgets.QPushButton("この列をショットへ")
         self.shot_btn.setEnabled(False)
-        self.shot_btn.setToolTip("ショットタブでキャラクターのクリップ列として使います（ショットの作成は準備中）")
+        self.shot_btn.setToolTip("ショットタブで開いているショットの、キャラクター（表で選んだ行）のクリップ列にします。ショットとキャラクターを先に用意してください")
+        self.shot_btn.clicked.connect(lambda *_: self.send_to_shot())
         for w in (self.play_btn, self.stop_btn, self.loop_cb, self.play_speed, self.remove_btn, self.shot_btn):
             ph.addWidget(w)
         v.addWidget(pbox)
@@ -170,6 +172,20 @@ class BlendTab(QtWidgets.QWidget):
         self.refresh()
 
     # ------------------------------------------------------------ 共通
+    def send_to_shot(self) -> None:
+        """遷移列をショットのキャラクターへ渡す（ショットタブが付けてくれる shot_tab を使う）。"""
+        if self.shot_tab is None:
+            return
+        if not self.rows:
+            self._say("⚠ 遷移列が空です（行を足してください）")
+            return
+        self.shot_tab.send_rows_from_blend()
+        self._say(self.shot_tab.message.text())
+
+    def _mine(self) -> list[str]:
+        """このタブが作った合成（ショットが作ったものは含めない）。"""
+        return [n for n in K.active() if n == COMP_NAME]
+
     def _say(self, text: str) -> None:
         self.message.setText(text)
 
@@ -194,7 +210,7 @@ class BlendTab(QtWidgets.QWidget):
         has = self.session.data is not None
         for w in (self.rows_table, self.build_rows_btn, self.graph_btn, self.build_graph_btn, self.play_btn, self.layer_on, self.layer_clip):
             w.setEnabled(has)
-        act = K.active()
+        act = self._mine()
         if act:
             i = K.info(act[0])
             self.banner.setText(f"⚠ 合成中: {K.PREFIX}{act[0]}（{i.get('frames', 0):.0f} フレーム、{i.get('joints', 0)} ジョイント）。"
@@ -203,6 +219,7 @@ class BlendTab(QtWidgets.QWidget):
             self.banner.setText("")
         self.banner.setVisible(bool(act))
         self.remove_btn.setEnabled(bool(act))
+        self.shot_btn.setEnabled(self.session.shot is not None and bool(self.session.shot["characters"]))
         if not has:
             self.rows = []
             self._fill_rows()
@@ -384,10 +401,10 @@ class BlendTab(QtWidgets.QWidget):
         if self.mode != "graph" or self.graph is None:
             return
         fps = self._fps()
-        t = max(0.0, cmds.currentTime(query=True) / fps) if K.active() else 0.0
+        t = max(0.0, cmds.currentTime(query=True) / fps) if self._mine() else 0.0
         self.timeline = M.with_event(self.timeline, round(t, 3), self._params())
         self._fill_graph_info()
-        if K.active() and K.info(COMP_NAME).get("graph"):
+        if self._mine() and K.info(COMP_NAME).get("graph"):
             self._rebuild_keeping_time()
 
     def _graph_placements(self) -> list[Seq.Placement]:
@@ -403,7 +420,7 @@ class BlendTab(QtWidgets.QWidget):
         if not self.timeline:
             self.timeline = [(0.0, self._params())]
         self._guard(lambda: self._compose(self._graph_placements()))
-        if K.active():
+        if self._mine():
             self._mark_graph()
 
     def _mark_graph(self) -> None:
@@ -425,8 +442,8 @@ class BlendTab(QtWidgets.QWidget):
             cmds.play(forward=True)
 
     def _layer_weight_moved(self) -> None:
-        if K.active():
-            K.set_layer_weight(K.active()[0], 0, self.layer_weight.value() / 100.0)
+        if self._mine():
+            K.set_layer_weight(COMP_NAME, 0, self.layer_weight.value() / 100.0)
 
     def _remember_speed(self) -> None:
         if self._saved_speed is None:
@@ -442,7 +459,7 @@ class BlendTab(QtWidgets.QWidget):
 
     def remove(self) -> None:
         self.stop()
-        n = K.remove()
+        n = K.remove(COMP_NAME)
         if self._saved_speed is not None:
             cmds.playbackOptions(playbackSpeed=self._saved_speed[0], maxPlaybackSpeed=self._saved_speed[1])
             self._saved_speed = None
@@ -452,5 +469,5 @@ class BlendTab(QtWidgets.QWidget):
     def detach(self) -> None:
         if cmds.play(query=True, state=True):
             cmds.play(state=False)
-        if K.active():
+        if self._mine():
             self.remove()  # 閉じるときは合成を外して、保存したシーンに合成が残らないようにする

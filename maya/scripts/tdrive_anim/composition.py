@@ -101,7 +101,7 @@ def animated_channels(joints: list[str]) -> dict[str, list[str]]:
         for ch in CHANNELS:
             plug = f"{j}.{ch}"
             src = cmds.listConnections(plug, source=True, destination=False, plugs=True) or []
-            if src and not src[0].split(".")[0].startswith(("pairBlend", "blendTwoAttr")) and not cmds.getAttr(plug, lock=True):
+            if src and not src[0].split(".")[0].startswith(PREFIX) and not cmds.getAttr(plug, lock=True):  # 別の合成がつないだチャンネルは除く
                 got.append(ch)
         if got:
             out[j] = got
@@ -193,11 +193,12 @@ def _statics(joint: str, channels: list[str]) -> dict[str, float]:
     return {ch: float(cmds.getAttr(f"{joint}.{ch}")) for ch in TRANSLATE + ROTATE if ch not in channels}
 
 
-def compose(name: str, placements: list[Seq.Placement], joints: list[str], fps: int, layers: list[Layer] | None = None) -> Result:
-    """合成を作る。同じ名前（と他の合成）は先に外す。配置が空・ジョイントにつながりが無いときは ValueError。"""
+def compose(name: str, placements: list[Seq.Placement], joints: list[str], fps: int, layers: list[Layer] | None = None, playback: bool = True) -> Result:
+    """合成を作る。同じ名前の合成は先に外す（別の名前の合成は残る。ジョイントが重ならなければ同時に使える。ショットのキャラクターごとの合成）。
+    配置が空・ジョイントにつながりが無いときは ValueError。`playback=False` は再生範囲・時刻に触れない（ショットが自分で決める）。"""
     if not placements:
         raise ValueError("遷移列が空です")
-    remove()  # 同時に合成できるのは 1 つ（元のつながりを控えるため）
+    remove(name)
     chans = animated_channels(joints)
     if not chans:
         raise ValueError("合成できるジョイントがありません（キーやコンストレイントでつながったチャンネルが無い）")
@@ -266,17 +267,17 @@ def compose(name: str, placements: list[Seq.Placement], joints: list[str], fps: 
         _store(node, "tdCreated", b.created)
         _store(node, "tdInfo", {"frames": total, "joints": len(chans), "plugs": n_plugs, "layers": [L.name for L in layer_list],
                                 "clips": [p.clip for p in placements], "fps": fps})
-        _store(node, "tdPlayback", _playback_state() | {"time": saved_time})
-        for k in range(len(layer_list)):
-            pass
+        if playback:
+            _store(node, "tdPlayback", _playback_state() | {"time": saved_time})
         lifecycle.on_reload(remove)  # リロードのとき、元のつながりへ戻す
     except Exception:
         cmds.undoInfo(closeChunk=True)
         _rollback(b)
         raise
     cmds.undoInfo(closeChunk=True)
-    cmds.playbackOptions(minTime=0, maxTime=total, animationStartTime=0, animationEndTime=total)
-    cmds.currentTime(0, edit=True)
+    if playback:
+        cmds.playbackOptions(minTime=0, maxTime=total, animationStartTime=0, animationEndTime=total)
+        cmds.currentTime(0, edit=True)
     return Result(name, node, total, len(chans), n_plugs, len(b.created), len(layer_list), warnings)
 
 

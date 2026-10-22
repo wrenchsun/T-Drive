@@ -121,6 +121,8 @@ class AnimPanel(QtWidgets.QWidget):
                            (self.shot_tab, "ショット"), (self.export_tab, "出力")):
             self.tabs.addTab(tab, label)
         layout.addWidget(self.tabs, 1)
+        self.shot_tab.blend_tab = self.blend_tab  # 遷移列の受け渡し（ブレンドタブ ⇄ ショットタブ）
+        self.blend_tab.shot_tab = self.shot_tab
 
         self.session.listeners.append(self.refresh)
         self.refresh()
