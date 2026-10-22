@@ -10,6 +10,8 @@
 
 ### 追加
 - Animation タブ（アニメーション作業台。仕様 docs/20）: 殻の 1 段目に追加。DirectX 11 を使わない（OpenGL・ヘッドレスでも動く）
+  - AN-4: ブレンドのプレビュー（遷移列 → 固定秒・線形のクロスフェード合成。ジョイントの 1 フレームごとのサンプルを複製カーブにして `pairBlend`（四元数）/ `blendTwoAttr` の連鎖でつなぐ。元のカーブは壊さず、外すと再生範囲・時刻・ループも戻る）
+  - AN-5: 遷移のプレビュー（MS2026 の AC_PlayerPreview と同じ Idle / Run / Jump・0.08 秒・Exit Time なしの状態図。Speed / ActionState を再生中に動かすと遷移。状態図を animset に保存）・UpperBody レイヤー
   - AN-3: クリップタブ（範囲から追加・一覧・検索・右クリック・ループ再生（元の再生範囲を戻す）・属性・イベント（OnFootPlant 左右）・サムネイル・`animset.json` へ保存、シーンを開くと自動で読む）
   - AN-2: 命名タブ（MS2026 の規則の検査と提案・改名の適用を 1 回の Undo で・Look と Toon のプレビュー用シェーダーの追従・シーン設定の修正・掃除候補・Humanoid 対応表 `humanoid.json`）
   - AN-1: 骨格（5 つのサブタブの枠・`tdrive_anim` パッケージ）、`animset.json` の読み書き・検証、メニュー Tools › T-Drive › Animation…
