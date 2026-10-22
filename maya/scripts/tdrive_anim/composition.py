@@ -121,16 +121,79 @@ def info(name: str) -> dict[str, Any]:
 
 
 # ------------------------------------------------------------------ 集める
+FAMILIES = ("translate", "rotate", "scale")
+
+
+def _is_compound(plug: str) -> bool:
+    """`joint.rotate` のような複合プラグか（`joint.rotateX` は子プラグ）。"""
+    return plug.rsplit(".", 1)[-1] in FAMILIES
+
+
+def _compound_source(plug: str) -> str | None:
+    """複合プラグ**自身**の入力の元（mGear は `joint.rotate` ← `mgear_matrixConstraint.rotate` のように複合ごとつなぐ。子プラグの入力は含めない。AN-F-6）。"""
+    src = cmds.connectionInfo(plug, sourceFromDestination=True)
+    if not src:
+        return None
+    node = src.split(".")[0]
+    if cmds.nodeType(node) == "unitConversion":  # 単位変換ノードが挟まれていたら、その手前の本当の元
+        up = cmds.listConnections(node + ".input", source=True, destination=False, plugs=True) or []
+        return up[0] if up else src
+    return src
+
+
+def _children(plug: str) -> list[str]:
+    fam = plug.rsplit(".", 1)[-1]
+    return [f"{plug.rsplit('.', 1)[0]}.{fam}{ax}" for ax in "XYZ"]
+
+
+def _current_source(plug: str) -> str | None:
+    """プラグの今の入力の元。複合プラグは、複合自身の入力があればそれ、無ければ子プラグの入力（元でも合成でもないものを優先）。"""
+    if not _is_compound(plug):
+        return _source(plug)
+    own = _compound_source(plug)
+    if own:
+        return own
+    kids = [x for x in (_source(c) for c in _children(plug)) if x]
+    foreign = [x for x in kids if not x.split(".")[0].startswith(PREFIX)]
+    return (foreign or kids or [None])[0]
+
+
+def _connect_original(src: str, dst: str) -> None:
+    """控えた元のつながりを戻す。複合プラグへ戻すときは、先に子プラグの入力（合成の出力）を切る。"""
+    if _is_compound(dst):
+        for c in _children(dst):
+            cur = _source(c)
+            if cur:
+                cmds.disconnectAttr(cur, c)
+    cmds.connectAttr(src, dst, force=True)
+
+
+def _connect_output(out: str, dst: str) -> None:
+    """合成の出力を子プラグへつなぐ。親の複合プラグに入力が残っていたら先に切る。"""
+    parent = dst[:-1]  # rotateX → rotate
+    own = _compound_source(parent)
+    if own:
+        cmds.disconnectAttr(own, parent)
+    cmds.connectAttr(out, dst, force=True)
+
+
 def animated_channels(joints: list[str]) -> dict[str, list[str]]:
-    """ジョイント → つながりのあるチャンネル（translateX …）。ロックされたもの・合成が作ったつながりは除く。"""
+    """ジョイント → つながりのあるチャンネル（translateX …）。ロックされたもの・合成が作ったつながりは除く。
+    複合プラグ（`joint.rotate` ← 他ノード）でつながるジョイントは、その 3 チャンネルすべてを対象にする（AN-F-6）。"""
     out: dict[str, list[str]] = {}
     for j in joints:
         got = []
-        for ch in CHANNELS:
-            plug = f"{j}.{ch}"
-            src = _source(plug)
-            if src and not src.split(".")[0].startswith(PREFIX) and not cmds.getAttr(plug, lock=True):  # 別の合成がつないだチャンネルは除く
-                got.append(ch)
+        for fam in FAMILIES:
+            chs = [f"{fam}{ax}" for ax in "XYZ"]
+            comp = _compound_source(f"{j}.{fam}")
+            if comp:
+                if not comp.split(".")[0].startswith(PREFIX) and not any(cmds.getAttr(f"{j}.{ch}", lock=True) for ch in chs):  # ロックがあると付け替えられない
+                    got.extend(chs)
+                continue
+            for ch in chs:
+                src = _source(f"{j}.{ch}")
+                if src and not src.split(".")[0].startswith(PREFIX) and not cmds.getAttr(f"{j}.{ch}", lock=True):  # 別の合成がつないだチャンネルは除く
+                    got.append(ch)
         if got:
             out[j] = got
     return out
@@ -257,11 +320,20 @@ def _compose(name: str, placements: list[Seq.Placement], joints: list[str], fps:
                         samples[key] = _sample(j, chs, list(range(p.src_start, p.src_end + 1)))
         # ---- 2. 元のつながりを切り離して控える
         for j, chs in chans.items():
-            for ch in chs:
-                plug = f"{j}.{ch}"
-                src = _source(plug)
-                b.original.append([src, plug])
-                cmds.disconnectAttr(src, plug)
+            for fam in FAMILIES:
+                fch = [c for c in chs if _family(c) == fam]
+                if not fch:
+                    continue
+                comp = _compound_source(f"{j}.{fam}")
+                if comp:  # 複合プラグごとの接続（mGear）は、複合のまま控えて切る。AN-F-6
+                    b.original.append([comp, f"{j}.{fam}"])
+                    cmds.disconnectAttr(cmds.connectionInfo(f"{j}.{fam}", sourceFromDestination=True), f"{j}.{fam}")
+                    continue
+                for ch in fch:
+                    plug = f"{j}.{ch}"
+                    src = _source(plug)
+                    b.original.append([src, plug])
+                    cmds.disconnectAttr(src, plug)
         # ---- 3. 重み（配置ごとに 1 本。ジョイント全員で共有）
         def weights(pls: list[Seq.Placement], tag: str) -> list[str]:
             return [b.weight_curve(f"{tag}_w{k}", p.start, p.fade_in) + ".output" for k, p in enumerate(pls) if k > 0]
@@ -292,7 +364,7 @@ def _compose(name: str, placements: list[Seq.Placement], joints: list[str], fps:
                     top = chain(L.placements, layer_w[i], f"L{i}_")
                     result = b.blend(j, f"layer{i}", result, top, f"{node}.layerWeight{i}", statics)
             for ch, plug in result.items():
-                cmds.connectAttr(plug, f"{j}.{ch}", force=True)
+                cmds.connectAttr(plug, f"{j}.{ch}", force=True)  # 複合プラグは上で切ってある
                 outputs.append([plug, f"{j}.{ch}"])
                 n_plugs += 1
         # ---- 5. 状態の保存・再生範囲
@@ -322,7 +394,7 @@ def _rollback(b: _Builder) -> None:
     """作りかけの合成を元へ戻す（途中で失敗したとき）。"""
     for src, dst in b.original:
         with contextlib.suppress(RuntimeError):
-            cmds.connectAttr(src, dst, force=True)
+            _connect_original(src, dst)
     existing = [n for n in b.created if cmds.objExists(n)]
     if existing:
         cmds.delete(existing)
@@ -356,14 +428,14 @@ def _remove(name: str | None) -> int:
         for src, dst in original:
             if not (cmds.objExists(src.split(".")[0]) and cmds.objExists(dst.split(".")[0])):
                 continue
-            cur = _source(dst)
+            cur = _current_source(dst)
             if cur == src:
                 continue
             if cur is not None and cur.split(".")[0] not in created and not cur.split(".")[0].startswith(PREFIX):
                 last_warnings.append(f"{dst} は合成中に別の接続（{cur}）が足されていたため、元のつながりへ戻しませんでした")
                 continue
             with contextlib.suppress(RuntimeError):
-                cmds.connectAttr(src, dst, force=True)
+                _connect_original(src, dst)
         existing = [x for x in created if cmds.objExists(x)]
         if existing:  # 空のリストを cmds.delete に渡さない
             cmds.delete(existing)
@@ -390,7 +462,7 @@ def suspend_for_save() -> int:
             for src, dst in _load(node, "tdOriginal", []):
                 if cmds.objExists(src.split(".")[0]) and cmds.objExists(dst.split(".")[0]):
                     with contextlib.suppress(RuntimeError):
-                        cmds.connectAttr(src, dst, force=True)
+                        _connect_original(src, dst)
             _suspended.extend(_load(node, "tdOutputs", []))
     return len(_suspended)
 
@@ -402,7 +474,7 @@ def resume_after_save() -> int:
         for out, dst in _suspended:
             if cmds.objExists(out.split(".")[0]) and cmds.objExists(dst.split(".")[0]):
                 with contextlib.suppress(RuntimeError):
-                    cmds.connectAttr(out, dst, force=True)
+                    _connect_output(out, dst)
                     n += 1
     _suspended.clear()
     return n

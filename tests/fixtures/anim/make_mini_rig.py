@@ -84,6 +84,28 @@ def add_materials(mesh: str = MESH) -> dict:
     return out
 
 
+def add_compound_joint(name: str = "tail_C0_0_jnt", parent: str = "spine_C0_3_jnt") -> dict:
+    """mGear 風のジョイントを 1 本足す: translate / rotate が**複合プラグ**ごと別ノードから来る（`joint.rotate` ← `decomposeMatrix.outputRotate`）。
+
+    mgear_matrixConstraint の代わりに標準ノード（composeMatrix → decomposeMatrix）で同じ形を作る。子プラグ（rotateX …）には入力が無い。
+    戻り値: ジョイント名と、複合プラグの元（{"translate": ..., "rotate": ...}）。
+    """
+    from maya import cmds
+
+    cmds.select(parent)
+    j = cmds.joint(name=name, position=(0, 170, 0))
+    comp = cmds.createNode("composeMatrix", name=name + "_compose")
+    dec = cmds.createNode("decomposeMatrix", name=name + "_decompose")
+    cmds.connectAttr(comp + ".outputMatrix", dec + ".inputMatrix")
+    for f, tx, rz in ((0, 0.0, 0.0), (30, 12.0, 45.0), (100, -5.0, -30.0), (118, 8.0, 70.0)):
+        cmds.setKeyframe(comp, attribute="inputTranslateX", time=f, value=tx)
+        cmds.setKeyframe(comp, attribute="inputRotateZ", time=f, value=rz)
+    cmds.connectAttr(dec + ".outputTranslate", j + ".translate")
+    cmds.connectAttr(dec + ".outputRotate", j + ".rotate")
+    cmds.select(clear=True)
+    return {"joint": j, "sources": {"translate": dec + ".outputTranslate", "rotate": dec + ".outputRotate"}}
+
+
 def key_motion(start: int = 0, end: int = 30, amount: float = 20.0) -> None:
     """ルートを X 方向に動かし、腕を回すキーを打つ（ベイク・ブレンドの確認用）。"""
     from maya import cmds
