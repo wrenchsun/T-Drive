@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import copy
 import json
+import math
 import re
 from pathlib import Path
 from typing import Any
@@ -227,6 +228,17 @@ def add_event(data: dict[str, Any], frame: int, key: str) -> dict[str, Any]:
     data["events"].append(ev)
     data["events"].sort(key=lambda e: (e["frame"], e["key"]))
     return ev
+
+
+def rescale_frames(data: dict[str, Any], ratio: float) -> None:
+    """ショットの範囲・カメラの区間・イベントのフレームを ratio 倍する（シーンの fps を、キーの時刻を保ったまま変えたとき。AN-F-13）。"""
+    lo, hi = data["range"]
+    data["range"] = [int(math.floor(lo * ratio + 1e-9)), int(math.ceil(hi * ratio - 1e-9))]
+    for c in data.get("cameras", []):
+        c["start"], c["end"] = int(math.floor(c["start"] * ratio + 1e-9)), int(math.ceil(c["end"] * ratio - 1e-9))
+    for e in data.get("events", []):
+        e["frame"] = int(round(e["frame"] * ratio))
+    data["events"] = sorted(data.get("events", []), key=lambda e: (e["frame"], e["key"]))
 
 
 def character_files(data: dict[str, Any]) -> list[tuple[dict[str, Any], str]]:

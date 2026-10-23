@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import copy
 import json
+import math
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -286,6 +287,21 @@ def add_clip(data: dict[str, Any], clip: dict[str, Any]) -> dict[str, Any]:
         raise AnimSetError(f"同じ名前のクリップがあります: {clip['name']}")
     data["clips"].append(clip)
     return clip
+
+
+def rescale_frames(data: dict[str, Any], ratio: float) -> int:
+    """クリップの範囲とイベントのフレームを ratio 倍する（シーンの fps を、キーの時刻を保ったまま変えたとき。24 → 30 fps なら 1.25 倍。AN-F-13）。
+    開始は切り捨て・終了は切り上げ（キーが範囲からこぼれないように）、イベントは四捨五入。変えたクリップの数を返す。"""
+    n = 0
+    for c in data.get("clips", []):
+        s, e = int(math.floor(c["start"] * ratio + 1e-9)), int(math.ceil(c["end"] * ratio - 1e-9))
+        if (s, e) != (c["start"], c["end"]):
+            n += 1
+        c["start"], c["end"] = s, e
+        for ev in c.get("events", []):
+            ev["frame"] = int(round(ev["frame"] * ratio))
+        c["events"] = sorted(c.get("events", []), key=lambda ev: (ev["frame"], ev["key"]))
+    return n
 
 
 def remove_clip(data: dict[str, Any], name: str) -> bool:

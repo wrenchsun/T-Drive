@@ -169,6 +169,20 @@ def scene_settings(frame_rate: int, skeleton_root: str = "") -> list[SettingIssu
     return out
 
 
+def clips_without_keys(animset: dict) -> list[str]:
+    """範囲にキーが 1 つも無いクリップの名前（fps を変えたあとにクリップ範囲がキーとずれたのを見つける。AN-F-13）。
+    mGear のようにキーがジョイントでなくコントローラにあるリグもあるので、シーンのすべてのアニメーションカーブを見る。"""
+    curves = cmds.ls(type=["animCurveTL", "animCurveTA", "animCurveTU", "animCurveTT"]) or []
+    if not curves:
+        return [c["name"] for c in animset.get("clips", [])]
+    out = []
+    for c in animset.get("clips", []):
+        n = cmds.keyframe(curves, query=True, time=(c["start"], c["end"]), keyframeCount=True) or 0
+        if not n:
+            out.append(c["name"])
+    return out
+
+
 def scene_fps() -> int | None:
     """シーンの時間単位が 30 / 60 fps のときそのフレームレート、それ以外（film の 24 fps など）は None。"""
     return {"ntsc": 30, "ntscf": 60}.get(cmds.currentUnit(query=True, time=True))
@@ -370,13 +384,21 @@ def follow_look(materials: dict[str, str], meshes: dict[str, str] | None = None,
 
 
 # ------------------------------------------------------------------ シーン設定の修正
-def fix_settings(keys: list[str], frame_rate: int = 30) -> list[str]:
-    """時間単位（フレームレート）・長さの単位・上方向を直す。1 回の Undo。直したキーを返す。"""
+def time_change_ratio(frame_rate: int = 30) -> float:
+    """シーンの時間単位を animset の fps にするとき、キーの時刻を保つとフレーム番号が何倍になるか（24 → 30 fps で 1.25）。"""
+    cur = TIME_UNIT_FPS.get(cmds.currentUnit(query=True, time=True))
+    return frame_rate / cur if cur else 1.0
+
+
+def fix_settings(keys: list[str], frame_rate: int = 30, keep_frames: bool = False) -> list[str]:
+    """時間単位（フレームレート）・長さの単位・上方向を直す。1 回の Undo。直したキーを返す。
+    時間単位は、既定では Maya の既定どおりキーの時刻（実時間）を保つ（フレーム番号が変わる。呼ぶ側がクリップの範囲を比率で直す）。
+    `keep_frames=True` はフレーム番号を保つ（`updateAnimation=False`。再生速度が変わる）。"""
     fixed: list[str] = []
     with undo_chunk("tdAnimSceneSettings"):
         for key in keys:
             if key == "time":
-                cmds.currentUnit(time=TIME_UNITS.get(frame_rate, "ntsc"))  # Maya の既定: キーは同じ実時間に保たれる（フレーム番号が変わる）
+                cmds.currentUnit(time=TIME_UNITS.get(frame_rate, "ntsc"), updateAnimation=not keep_frames)
             elif key == "linear":
                 cmds.currentUnit(linear="cm")
             elif key == "up":

@@ -311,8 +311,29 @@ class NamingTab(QtWidgets.QWidget):
 
     def fix_setting(self, key: str) -> None:
         rate = self.session.data["frameRate"] if self.session.data else 30
-        SN.fix_settings([key], rate)
+        keep_frames = False
+        ratio = 1.0
+        if key == "time":
+            ratio = SN.time_change_ratio(rate)
+            if abs(ratio - 1.0) > 1e-9:
+                r = QtWidgets.QMessageBox.question(
+                    self, "T-Drive Animation",
+                    f"フレームレートを変えます（フレーム番号が約 {ratio:g} 倍になります）。\n\n"
+                    "はい: キーの時刻（実時間）を保つ。フレーム番号が変わるので、クリップとショットの範囲・イベントも同じ比率で直します（既定）\n"
+                    "いいえ: フレーム番号を保つ。キーの番号はそのままで、再生の速さが変わります（クリップの範囲は変えません）\n"
+                    "キャンセル: 何もしない",
+                    QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No | QtWidgets.QMessageBox.Cancel, QtWidgets.QMessageBox.Yes)
+                if r == QtWidgets.QMessageBox.Cancel:
+                    return
+                keep_frames = r == QtWidgets.QMessageBox.No
+        SN.fix_settings([key], rate, keep_frames=keep_frames)
+        note = ""
+        if key == "time" and not keep_frames and abs(ratio - 1.0) > 1e-9 and self.session.data is not None:
+            n = self.session.rescale_time(ratio)
+            note = f"クリップの範囲とイベントを {ratio:g} 倍に直しました（{n} クリップ。ツールの Undo で戻せます）"
         self.inspect()
+        if note:
+            self.result.setText(note)
 
     # ------------------------------------------------------------ 掃除
     def _fill_cleanup(self) -> None:

@@ -507,6 +507,19 @@ class AnimSession:
         return n
 
     @undoable
+    def rescale_time(self, ratio: float) -> int:
+        """シーンの fps をキーの時刻を保ったまま変えたとき（24 → 30 fps で 1.25 倍）、クリップとショットの範囲・イベントのフレームを同じ比率で直す（1 つの Undo。AN-F-13）。
+        直したクリップの数を返す。"""
+        n = 0
+        if self.data is not None:
+            n = A.rescale_frames(self.data, ratio)
+        if self.shot is not None:
+            SH.rescale_frames(self.shot, ratio)
+            self.shot_dirty = True
+        self._changed()
+        return n
+
+    @undoable
     def remove_clip(self, name: str) -> bool:
         ok = A.remove_clip(self.require(), name)
         if ok:

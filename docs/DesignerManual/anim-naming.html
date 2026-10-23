@@ -9,7 +9,7 @@
 <body>
 <nav class="breadcrumb"><a href="Readme.html">トップ</a> › <a href="anim.html">アニメーション作業台</a> › 命名</nav>
 <h1>命名タブ</h1>
-<p class="lastupdate">最終更新日: 2026-10-22</p>
+<p class="lastupdate">最終更新日: 2026-10-23</p>
 
 <p>MS2026（Unity）の名前の決まりに、シーンの名前が合っているかを調べて、直す案を出します。<strong>名前を変えるだけで、マテリアルの割り当てやスキンは変わりません。</strong></p>
 
@@ -47,7 +47,7 @@
 <p>MS2026 に合わせた設定になっているかを調べます。ずれていれば<strong>直す</strong>ボタンで直せます（1 回の Undo で戻せます）。</p>
 <table>
 <tr><th>項目</th><th>あるべき値</th><th>メモ</th></tr>
-<tr><td>時間単位（フレームレート）</td><td>30 fps（ntsc）</td><td>MisotenChara は 24 fps（film）で作られています。直すと Maya の標準の変換に従い、<strong>キーは同じ実時間に保たれてフレーム番号が変わります</strong>（<span class="tentative">仮の決め</span>。リグ作業者に確認が必要）</td></tr>
+<tr><td>時間単位（フレームレート）</td><td>30 fps（ntsc）</td><td>MisotenChara は 24 fps（film）で作られています。直すと Maya の標準の変換に従い、「直す」を押すと選べます。<strong>キーの時刻を保つ</strong>（既定。24 → 30 fps ならフレーム番号が 1.25 倍になり、クリップとショットの範囲・イベントも同じ比率で直します。ツールの Undo で戻せます）か、<strong>フレーム番号を保つ</strong>（キーの番号はそのままで再生の速さが変わります。クリップの範囲は変わりません）</td></tr>
 <tr><td>長さの単位</td><td>cm</td><td></td></tr>
 <tr><td>上方向</td><td>Y</td><td></td></tr>
 </table>

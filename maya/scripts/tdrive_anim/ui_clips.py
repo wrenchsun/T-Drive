@@ -83,6 +83,10 @@ class ClipsTab(QtWidgets.QWidget):
         self.message = QtWidgets.QLabel()
         self.message.setWordWrap(True)
         v.addWidget(self.message)
+        self.nokey_label = QtWidgets.QLabel()  # 範囲にキーが無いクリップの警告（fps を変えて範囲がずれたときなど。AN-F-13）
+        self.nokey_label.setWordWrap(True)
+        self.nokey_label.setStyleSheet("color: #f0a040;")
+        v.addWidget(self.nokey_label)
 
         # ---- 詳細（選んだクリップ）
         d = QtWidgets.QGroupBox("選んだクリップ")
@@ -157,6 +161,15 @@ class ClipsTab(QtWidgets.QWidget):
         names = self.selected_names()
         return A.find_clip(self.session.data, names[0]) if names and self.session.data else None
 
+    def _fill_nokey(self, d: dict) -> None:
+        try:
+            names = SN.clips_without_keys(d)
+        except Exception:  # noqa: BLE001  警告の計算で画面を止めない
+            names = []
+        self.nokey_label.setText(
+            ("⚠ 範囲にキーが無いクリップ: " + "、".join(names[:6]) + (f" ほか {len(names) - 6} 件" if len(names) > 6 else "")
+             + "。フレームレートを変えたあとなどに範囲がずれていないか確かめてください（出力すると中身が止まった姿勢になります）") if names else "")
+
     def _say(self, text: str) -> None:
         self.message.setText(text)
 
@@ -187,6 +200,7 @@ class ClipsTab(QtWidgets.QWidget):
         for w in (self.add_btn, self.play_btn, self.table):
             w.setEnabled(has)
         if not has:
+            self.nokey_label.setText("")
             self.table.setRowCount(0)
             self._clip_names = []
             self._say(NEED_ANIMSET)
@@ -195,6 +209,7 @@ class ClipsTab(QtWidgets.QWidget):
             self._say("")
         d = self.session.data
         self._fill_vocab(d)
+        self._fill_nokey(d)
         self._update_range_label()
         selected = self.selected_names()
         self._building = True
