@@ -2,7 +2,8 @@
 
 - 状態図（animset の `stateGraph`）の状態のうち `blendTree` を持つものを選び、X / Y のパラメータ（状態図の float）を **2D パッド**（160 px）と
   スライダーで動かす。動かすたびに重みを計算し直し（`core/blend_tree.py`）、合成を作り直す（`composition.compose_blend_tree`）
-- 作り直しは SF-5 と同じ: ドラッグ中は作らず、止まって 0.15 秒後に 1 回。再生中でも効き、時刻と再生状態は保つ
+- 作り直しは**マウスボタンを離したとき 1 回**（パッド: 離す / スライダー: sliderReleased / キー・ホイール・数値入力: その場で 1 回。AN-F-47）。
+  ドラッグ中は作らず、重みの % とパッドの点だけ追従する。再生中でも効き、時刻と再生状態は保つ
 - 雛形: 「2D の移動ツリーを作る」（`_F/_B/_L/_R` が 2 方向以上）、「1D の Locomotion を作る」（Idle と Run がある）
 - パラメータの値は見ているだけの状態（animset には入れない）。ツリー自体の変更（雛形・パラメータ名の付け替え）は animset の変更なので Undo できる
 """
@@ -39,7 +40,7 @@ class PadWidget(QtWidgets.QWidget):
         self.x = self.y = 0.0
         self.points: list[tuple[float, float, str, float]] = []  # (x, y, 名前, 重み)
         self.setCursor(QtCore.Qt.CrossCursor)
-        self.setToolTip("2D パッド: ドラッグでパラメータ X / Y を動かします（離して 0.15 秒後に合成を作り直します）。"
+        self.setToolTip("2D パッド: ドラッグでパラメータ X / Y を動かします（離したときに合成を作り直します）。"
                         "青い点はモーションの位置、大きさは今の重み。範囲は右で 0〜1 / -1〜1 を切り替え。既定: 原点（0, 0）")
 
     def range(self) -> tuple[float, float]:
@@ -121,10 +122,6 @@ class BlendTreePanel(QtWidgets.QGroupBox):
         self.comp_name = comp_name  # ブレンドタブの合成の名前（遷移列 / 状態図の合成と同じ。1 つだけ持つ）
         self.values: dict[str, float] = {}
         self._building = False
-        self.timer = QtCore.QTimer(self)  # パッドをドラッグしている間は作り直さず、止まってから 1 回（SF-5）
-        self.timer.setSingleShot(True)
-        self.timer.setInterval(150)
-        self.timer.timeout.connect(lambda *_: self.rebuild())
         v = QtWidgets.QVBoxLayout(self)
         self.state_combo = WG.ComboBox()
         self.state_combo.setToolTip("状態図のうち、ブレンドツリーを持つ状態。雛形のボタンで作れます")
@@ -143,6 +140,7 @@ class BlendTreePanel(QtWidgets.QGroupBox):
         mid = QtWidgets.QHBoxLayout()
         self.pad = PadWidget()
         self.pad.valueChanged.connect(lambda *_: self._pad_moved())
+        self.pad.released.connect(lambda *_: self.rebuild())  # 離したとき 1 回（AN-F-47）
         mid.addWidget(self.pad)
         right = QtWidgets.QVBoxLayout()
         self.pad_range = WG.ComboBox()
@@ -157,8 +155,9 @@ class BlendTreePanel(QtWidgets.QGroupBox):
             sl = WG.Slider(QtCore.Qt.Horizontal)
             sl.setRange(-1000, 1000)
             lab = QtWidgets.QLabel("0.00")
-            sl.setToolTip(f"{'X' if i == 0 else 'Y'} パラメータの値（範囲は上の切替。既定: 0）。ドラッグを止めて 0.15 秒後に合成を作り直します")
+            sl.setToolTip(f"{'X' if i == 0 else 'Y'} パラメータの値（範囲は上の切替。既定: 0）。ドラッグを離したときに合成を作り直します")
             sl.valueChanged.connect(lambda *_, k=i: self._slider_moved(k))
+            sl.sliderReleased.connect(lambda *_: self.rebuild())
             row.addWidget(sl, 1)
             row.addWidget(lab)
             self.sliders.append((sl, lab))
@@ -329,7 +328,9 @@ class BlendTreePanel(QtWidgets.QGroupBox):
         self.sliders[i][1].setText(f"{val:.2f}")
         if len(ps) > 1:
             self.pad.set_value(self.values.get(ps[0], 0.0), self.values.get(ps[1], 0.0), emit=False)
-        self._values_changed()
+        self._show_weights()
+        if not self.sliders[i][0].isSliderDown():  # ドラッグ中は作らない（離したとき sliderReleased で 1 回）。キー・ホイールはその場で 1 回
+            self.rebuild()
 
     def _pad_moved(self) -> None:
         tree = self.current_tree()
@@ -340,7 +341,7 @@ class BlendTreePanel(QtWidgets.QGroupBox):
         if len(ps) > 1:
             self.values[ps[1]] = self.pad.y
         self._sync_sliders()
-        self._values_changed()
+        self._show_weights()  # ドラッグ中は重みの表示だけ。作り直しは離したとき（released）
 
     def set_values(self, **kw: float) -> None:
         """パラメータの値を直接入れる（テスト・スクリプト用）。パッドとスライダーも合わせて作り直しを予約する。"""
@@ -348,7 +349,8 @@ class BlendTreePanel(QtWidgets.QGroupBox):
         tree = self.current_tree()
         if tree:
             self._load_values(tree)
-            self._values_changed()
+            self._show_weights()
+            self.rebuild()
 
     def _current_values(self) -> list[float]:
         tree = self.current_tree()
@@ -385,24 +387,7 @@ class BlendTreePanel(QtWidgets.QGroupBox):
         return self.comp_name
 
     # ------------------------------------------------------------ 作り直し
-    def _values_changed(self) -> None:
-        self._show_weights()
-        self.timer.start()  # 止まって 0.15 秒後に 1 回
-
-    def flush(self) -> None:
-        """待っている作り直しがあれば今すぐ行う（テスト・合成を外す前に）。"""
-        if self.timer.isActive():
-            self.timer.stop()
-            self.rebuild()
-
-    def stop_timer(self) -> None:
-        self.timer.stop()
-
-    def timer_name(self) -> str:
-        return "ブレンドツリーの作り直し待ち" if self.timer.isActive() else ""
-
     def rebuild(self) -> None:
-        self.timer.stop()
         tree = self.current_tree()
         if tree is None:
             self.tab._say("⚠ ブレンドツリーがありません（雛形のボタンで作れます）")

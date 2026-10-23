@@ -195,23 +195,48 @@ def ui_checks(ui, cmds, K, BT, s, plugs, pre) -> None:  # noqa: PLR0915
     check("UI: 1D の Locomotion の雛形は Idle / Walk_F / Run_F がそろったときだけ", len([st for st in s.data["stateGraph"]["states"] if "blendTree" in st]) in (1, 2))
     ui.select_tree(states[0]["name"])
     check("UI: パッドが 160 px", ui.pad.width() == 160 and ui.pad.height() == 160)
-    ui.pad.set_value(1.0, 1.0)
-    ui.flush_tree()
-    check("UI: パッドの隅で合成ができる", K.active() == [UB.COMP_NAME] and K.info(UB.COMP_NAME).get("blendTree"))
-    w = K.info(UB.COMP_NAME)["blendTree"]["weights"]
-    check("UI: 重みが F と R の半々", [round(x, 3) for x in w] == [0, 0.5, 0, 0, 0.5], str(w))
-    check("UI: 重みの %% 表示", "50%" in ui.tree_weights_label.text(), ui.tree_weights_label.text())
-    ui.pad.set_value(0.0, 0.0)
-    check("UI: ドラッグ中（valueChanged）は作り直さず、止まってから 1 回", K.info(UB.COMP_NAME)["blendTree"]["weights"] == w)
-    ui.flush_tree()
-    check("UI: 原点で Idle だけ", K.info(UB.COMP_NAME)["blendTree"]["weights"][0] == 1.0)
+    from PySide6 import QtCore, QtGui
+    from PySide6.QtTest import QTest
+
+    calls = []
+    orig = K.compose_blend_tree
+    K.compose_blend_tree = lambda *a, **k: (calls.append(1), orig(*a, **k))[1]
+    try:
+        def px(x, y):  # パッド座標 → ウィジェット座標
+            pt = ui.pad._to_px(x, y)
+            return QtCore.QPoint(int(round(pt.x())), int(round(pt.y())))
+
+        ui.pad.set_range(-1.0, 1.0)
+        ui.pad_range.setCurrentIndex(1)
+        ui.tree_panel._range_changed()
+        QTest.mousePress(ui.pad, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, px(0.0, 0.0))
+        for k in range(1, 6):
+            ui.pad.mouseMoveEvent(QtGui.QMouseEvent(QtCore.QEvent.MouseMove, QtCore.QPointF(px(k / 5, k / 5)), QtCore.QPointF(px(k / 5, k / 5)), QtCore.Qt.NoButton, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier))
+        check("UI: パッドのドラッグ中は合成を作らない（AN-F-47）", calls == [] and K.active() == [], str(calls))
+        check("UI: ドラッグ中も重みの表示は追従する", "50%" in ui.tree_weights_label.text() or "%" in ui.tree_weights_label.text())
+        QTest.mouseRelease(ui.pad, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, px(1.0, 1.0))
+        check("UI: マウスを離したとき 1 回だけ作る", len(calls) == 1 and K.active() == [UB.COMP_NAME], str(calls))
+        w = K.info(UB.COMP_NAME)["blendTree"]["weights"]
+        check("UI: 隅 (1,1) は F と R の半々", [round(x, 2) for x in w] == [0, 0.5, 0, 0, 0.5], str(w))
+        check("UI: 重みの % 表示", "50%" in ui.tree_weights_label.text(), ui.tree_weights_label.text())
+        sl = ui.tree_panel.sliders[0][0]
+        sl.setSliderDown(True)
+        sl.setValue(-500)
+        check("UI: スライダーのドラッグ中は作らない", len(calls) == 1)
+        sl.setSliderDown(False)
+        check("UI: スライダーを離したとき 1 回", len(calls) == 2, str(calls))
+        sl.setValue(0)  # キー・ホイール相当（ドラッグ中ではない）: その場で 1 回
+        check("UI: キー / ホイール相当の変更はその場で 1 回", len(calls) == 3, str(calls))
+        ui.tree_panel.set_values(MoveX=0.0, MoveY=0.0)
+        check("UI: 原点で Idle だけ", K.info(UB.COMP_NAME)["blendTree"]["weights"][0] == 1.0)
+    finally:
+        K.compose_blend_tree = orig
     ui.pad_range.setCurrentIndex(0)
     check("UI: 範囲の切替（0〜1 / -1〜1）", ui.pad.range() in ((0.0, 1.0), (-1.0, 1.0)))
     ui.remove()
     check("UI: 合成を外せる", K.active() == [])
     ui.select_tree(states[0]["name"])
-    ui.pad.set_value(-1.0, 0.0)
-    ui.flush_tree()
+    ui.tree_panel.set_values(MoveX=-1.0, MoveY=0.0)
     ui.detach()
     check("UI: detach で合成が外れる", K.active() == [])
 

@@ -255,7 +255,6 @@ class BlendTab(QtWidgets.QWidget):
 
         # ---- ブレンドツリー（AN-11）
         self.tree_panel = BlendTreePanel(self, COMP_NAME)
-        T.register(self.tree_panel.stop_timer, self.tree_panel.timer_name)
         self.pad, self.pad_range, self.tree_weights_label = self.tree_panel.pad, self.tree_panel.pad_range, self.tree_panel.tree_weights_label
         v.addWidget(self.tree_panel)
 
@@ -889,9 +888,6 @@ class BlendTab(QtWidgets.QWidget):
     def select_tree(self, name: str) -> None:
         self.tree_panel.select_tree(name)
 
-    def flush_tree(self) -> None:
-        self.tree_panel.flush()
-
     def _layer_weight_moved(self) -> None:
         if self._mine():
             K.set_layer_weight(COMP_NAME, 0, self.layer_weight.value() / 100.0)
@@ -922,7 +918,6 @@ class BlendTab(QtWidgets.QWidget):
 
     def remove(self) -> None:
         self._rebuild_timer.stop()
-        self.tree_panel.stop_timer()
         self.stop()
         n = K.remove(COMP_NAME)
         self._restore_speed()
@@ -932,7 +927,6 @@ class BlendTab(QtWidgets.QWidget):
 
     def detach(self) -> None:
         self._rebuild_timer.stop()
-        self.tree_panel.stop_timer()
         if cmds.play(query=True, state=True):
             cmds.play(state=False)
         self._sync_mix(False)
