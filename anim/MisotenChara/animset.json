@@ -1,0 +1,241 @@
+{
+  "format": "TDriveAnimSet",
+  "version": 1,
+  "modelId": "MisotenChara",
+  "frameRate": 30,
+  "units": "cm",
+  "upAxis": "Y",
+  "skeletonRoot": "spine_C0_0_jnt",
+  "namespace": "",
+  "meshes": [],
+  "clips": [
+    {
+      "name": "A_MisotenChara_Idle",
+      "start": 0,
+      "end": 75,
+      "loop": true,
+      "rootMotion": "none",
+      "layer": "Base",
+      "crossFade": 0.1,
+      "events": [],
+      "stateGroup": "locomotion"
+    },
+    {
+      "name": "A_MisotenChara_Run_F",
+      "start": 125,
+      "end": 148,
+      "loop": true,
+      "rootMotion": "none",
+      "layer": "Base",
+      "crossFade": 0.1,
+      "events": [],
+      "stateGroup": "locomotion"
+    },
+    {
+      "name": "A_MisotenChara_Jump",
+      "start": 250,
+      "end": 288,
+      "loop": false,
+      "rootMotion": "none",
+      "layer": "Base",
+      "crossFade": 0.1,
+      "events": [],
+      "stateGroup": "oneshot"
+    },
+    {
+      "name": "A_MisotenChara_Run_B",
+      "start": 350,
+      "end": 373,
+      "loop": true,
+      "rootMotion": "none",
+      "layer": "Base",
+      "crossFade": 0.1,
+      "events": [],
+      "stateGroup": "locomotion"
+    },
+    {
+      "name": "A_MisotenChara_Run_L",
+      "start": 400,
+      "end": 423,
+      "loop": true,
+      "rootMotion": "none",
+      "layer": "Base",
+      "crossFade": 0.1,
+      "events": [],
+      "stateGroup": "locomotion"
+    },
+    {
+      "name": "A_MisotenChara_Run_R",
+      "start": 450,
+      "end": 473,
+      "loop": true,
+      "rootMotion": "none",
+      "layer": "Base",
+      "crossFade": 0.1,
+      "events": [],
+      "stateGroup": "locomotion"
+    }
+  ],
+  "layers": [
+    {
+      "name": "Base"
+    },
+    {
+      "name": "UpperBody",
+      "maskRoot": "spine_C0_3_jnt"
+    }
+  ],
+  "stateGraph": {
+    "format": "TDriveStateGraph",
+    "version": 1,
+    "parameters": [
+      {
+        "name": "Speed",
+        "type": "float",
+        "default": 0
+      },
+      {
+        "name": "ActionState",
+        "type": "int",
+        "default": 0
+      }
+    ],
+    "states": [
+      {
+        "name": "Idle",
+        "clip": "A_MisotenChara_Idle"
+      },
+      {
+        "name": "Run",
+        "clip": "A_MisotenChara_Run_F"
+      },
+      {
+        "name": "Jump",
+        "clip": "A_MisotenChara_Jump"
+      }
+    ],
+    "transitions": [
+      {
+        "from": "Idle",
+        "to": "Run",
+        "duration": 0.08,
+        "conditions": [
+          {
+            "param": "Speed",
+            "op": ">",
+            "value": 0.1
+          }
+        ]
+      },
+      {
+        "from": "Idle",
+        "to": "Jump",
+        "duration": 0.08,
+        "conditions": [
+          {
+            "param": "ActionState",
+            "op": "==",
+            "value": 2
+          }
+        ]
+      },
+      {
+        "from": "Idle",
+        "to": "Jump",
+        "duration": 0.08,
+        "conditions": [
+          {
+            "param": "ActionState",
+            "op": "==",
+            "value": 3
+          }
+        ]
+      },
+      {
+        "from": "Run",
+        "to": "Idle",
+        "duration": 0.08,
+        "conditions": [
+          {
+            "param": "Speed",
+            "op": "<",
+            "value": 0.1
+          }
+        ]
+      },
+      {
+        "from": "Run",
+        "to": "Jump",
+        "duration": 0.08,
+        "conditions": [
+          {
+            "param": "ActionState",
+            "op": "==",
+            "value": 2
+          }
+        ]
+      },
+      {
+        "from": "Run",
+        "to": "Jump",
+        "duration": 0.08,
+        "conditions": [
+          {
+            "param": "ActionState",
+            "op": "==",
+            "value": 3
+          }
+        ]
+      },
+      {
+        "from": "Jump",
+        "to": "Idle",
+        "duration": 0.08,
+        "conditions": [
+          {
+            "param": "ActionState",
+            "op": "!=",
+            "value": 2
+          },
+          {
+            "param": "ActionState",
+            "op": "!=",
+            "value": 3
+          },
+          {
+            "param": "Speed",
+            "op": "<",
+            "value": 0.1
+          }
+        ]
+      },
+      {
+        "from": "Jump",
+        "to": "Run",
+        "duration": 0.08,
+        "conditions": [
+          {
+            "param": "ActionState",
+            "op": "!=",
+            "value": 2
+          },
+          {
+            "param": "ActionState",
+            "op": "!=",
+            "value": 3
+          },
+          {
+            "param": "Speed",
+            "op": ">",
+            "value": 0.1
+          }
+        ]
+      }
+    ]
+  },
+  "export": {
+    "modelDir": "",
+    "animDir": "",
+    "category": "Player"
+  }
+}

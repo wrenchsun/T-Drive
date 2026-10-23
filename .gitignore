@@ -60,3 +60,6 @@ assets/misoten/
 
 # アニメーション作業台: 出力の記録（Git 管理外。docs/20 §6.2）
 anim/**/.export-state.json
+
+# ユーザーごとのプロジェクト設定（共有フォルダのパスなど。tdrive/project.py）
+.tdrive/
