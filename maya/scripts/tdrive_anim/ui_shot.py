@@ -18,6 +18,7 @@ from tdrive import lifecycle, project, widgets as WG
 from . import composition as K
 from . import scene_naming as SN
 from . import session
+from .ui_common import MessageLabel
 from . import shot_scene as SS
 from .core import animset as A
 from .core import shot as SH
@@ -197,8 +198,7 @@ class ShotTab(QtWidgets.QWidget):
         for w in (self.build_btn, self.remove_btn, self.play_btn, self.stop_btn, self.movie_btn, self.hand_btn):
             pv.addWidget(w)
         v.addWidget(pbox)
-        self.message = QtWidgets.QLabel()
-        self.message.setWordWrap(True)
+        self.message = MessageLabel()
         v.addWidget(self.message)
         v.addStretch(1)
         self.refresh()

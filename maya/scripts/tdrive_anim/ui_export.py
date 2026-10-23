@@ -21,6 +21,7 @@ from . import composition as K
 from . import export as X
 from . import scene_naming as SN
 from . import session
+from .ui_common import MessageLabel
 from . import shot_scene as SS
 from .core import animset as A
 from .core import export_plan as E
@@ -159,6 +160,7 @@ class ExportTab(QtWidgets.QWidget):
         self.cancel_btn.clicked.connect(lambda *_: self.cancel())
         prow.addWidget(self.cancel_btn)
         v.addLayout(prow)
+        self.message = MessageLabel()  # 出力の結果・警告の最新行（AnimPanel がタブの外・最上部へ移す。AN-F-17）
         self.log = QtWidgets.QPlainTextEdit()
         self.log.setReadOnly(True)
         self.log.setMinimumHeight(130)
@@ -358,6 +360,9 @@ class ExportTab(QtWidgets.QWidget):
     # ------------------------------------------------------------ 出力
     def _append(self, text: str) -> None:
         self.log.appendPlainText(text)
+        first = text.strip().splitlines()[0] if text.strip() else ""
+        if first.startswith(("✔", "⛔", "⚠")):
+            self.message.setText(first)
 
     def _confirm_write(self) -> bool:
         """MS2026 へ直接書くときの確認（既定「いいえ」。CR-6）。D-Drive の main への書き込みは block_reason が止める。"""

@@ -15,6 +15,7 @@ from tdrive import lifecycle, project
 
 from . import scene_naming as SN
 from . import session
+from .ui_common import MessageLabel
 from .core import humanoid_map as H
 from .core import naming_rules as N
 
@@ -82,8 +83,8 @@ class NamingTab(QtWidgets.QWidget):
         row2.addWidget(self.check_all_btn)
         row2.addStretch(1)
         bv.addLayout(row2)
-        self.result = QtWidgets.QLabel()
-        self.result.setWordWrap(True)
+        self.result = MessageLabel()
+        self.message = self.result  # AnimPanel がタブの外・最上部へ移す（AN-F-17）
         bv.addWidget(self.result)
         v.addWidget(box)
 

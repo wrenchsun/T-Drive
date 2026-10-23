@@ -15,6 +15,7 @@ from tdrive import lifecycle, widgets as WG
 
 from . import clips as MC
 from . import session
+from .ui_common import MessageLabel
 from . import scene_naming as SN
 from .core import animset as A
 from .core import clips as C
@@ -84,8 +85,7 @@ class ClipsTab(QtWidgets.QWidget):
         hint = QtWidgets.QLabel("表のセルをダブルクリックすると編集できます（名前・開始・終了）")
         hint.setStyleSheet("color: gray;")
         v.addWidget(hint)
-        self.message = QtWidgets.QLabel()
-        self.message.setWordWrap(True)
+        self.message = MessageLabel()
         v.addWidget(self.message)
         self.nokey_label = QtWidgets.QLabel()  # 範囲にキーが無いクリップの警告（fps を変えて範囲がずれたときなど。AN-F-13）
         self.nokey_label.setWordWrap(True)

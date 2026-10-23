@@ -162,6 +162,10 @@ class AnimPanel(QtWidgets.QWidget):
         self.warning.setWordWrap(True)
         self.warning.setStyleSheet("color: #f0a040;")
         layout.addWidget(self.warning)
+        self.msg_host = QtWidgets.QWidget()  # 各タブの結果・警告の行。スクロール領域の外・最上部に固定する（AN-F-17）
+        self.msg_layout = QtWidgets.QVBoxLayout(self.msg_host)
+        self.msg_layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.msg_host)
 
         self.tabs = QtWidgets.QTabWidget()
         self.naming_tab = NamingTab(self.session)
@@ -173,12 +177,21 @@ class AnimPanel(QtWidgets.QWidget):
                            (self.shot_tab, "ショット"), (self.export_tab, "出力")):
             self.tabs.addTab(tab, label)
         layout.addWidget(self.tabs, 1)
+        for tab in self._all_tabs():  # タブの message をタブの外へ。前に出ているタブのものだけ見せる
+            self.msg_layout.addWidget(tab.message)
+        self._show_current_message()
+        self.tabs.currentChanged.connect(lambda *_: self._show_current_message())
         self.shot_tab.blend_tab = self.blend_tab  # 遷移列の受け渡し（ブレンドタブ ⇄ ショットタブ）
         self.blend_tab.shot_tab = self.shot_tab
 
         self.tabs.currentChanged.connect(lambda *_: self._refresh_current())  # UX-1: 前に出したタブを描き直す（前に出ていない間の変更を反映）
         self.session.listeners.append(self.refresh)
         self.refresh()
+
+    def _show_current_message(self) -> None:
+        current = self.tabs.currentWidget()
+        for tab in self._all_tabs():
+            tab.message.setVisible(tab is current)
 
     def _refresh_current(self) -> None:
         current = self.tabs.currentWidget()

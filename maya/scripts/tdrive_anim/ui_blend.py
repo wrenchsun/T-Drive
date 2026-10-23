@@ -20,6 +20,7 @@ from tdrive import lifecycle, widgets as WG
 from . import composition as K
 from . import scene_naming as SN
 from . import session
+from .ui_common import MessageLabel
 from .core import animset as A
 from .core import sequence as Seq
 from .core import state_machine as M
@@ -211,8 +212,7 @@ class BlendTab(QtWidgets.QWidget):
         for w in (self.play_btn, self.stop_btn, self.loop_cb, self.play_speed, self.remove_btn, self.shot_btn):
             ph.addWidget(w)
         v.addWidget(pbox)
-        self.message = QtWidgets.QLabel()
-        self.message.setWordWrap(True)
+        self.message = MessageLabel()
         v.addWidget(self.message)
         v.addStretch(1)
         self.refresh()

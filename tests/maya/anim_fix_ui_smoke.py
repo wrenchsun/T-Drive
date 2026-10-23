@@ -157,6 +157,33 @@ def _run(tmp: Path) -> None:
     check("AN-F-5: 切り替えのあとは Run だけ", "Run_F 100%" in blend.mix_label.text() and "Idle" not in blend.mix_label.text(), blend.mix_label.text())
     blend.remove()
     check("AN-F-5: 合成を外すと表示が消える", blend.mix_label.text() == "")
+    # ---- AN-F-17: メッセージ欄はスクロール領域の外・最上部
+    from tdrive_anim.ui import AnimPanel
+    from tdrive_anim.ui_common import MessageLabel
+
+    panel = AnimPanel()
+    lay = panel.layout()
+    tabs = panel._all_tabs()
+    outside = []
+    for tab in tabs:
+        w, in_scroll = tab.message, False
+        p = w.parentWidget()
+        while p is not None:
+            in_scroll = in_scroll or isinstance(p, QtWidgets.QScrollArea)
+            p = p.parentWidget()
+        outside.append(isinstance(w, MessageLabel) and w.parentWidget() is panel.msg_host and not in_scroll)
+    check("AN-F-17: 全タブ（5 つ）の message がスクロール領域の外・タブの外にある", len(tabs) == 5 and all(outside), str(outside))
+    check("AN-F-17: メッセージ欄はタブより上", lay.indexOf(panel.msg_host) < lay.indexOf(panel.tabs))
+    panel.tabs.setCurrentIndex(3)
+    vis = [t.message.isHidden() for t in tabs]
+    check("AN-F-17: 前に出ているタブの message だけ見せる", vis == [True, True, True, False, True], str(vis))
+    panel.shot_tab.message.setText("⚠ 名前が不正です")
+    check("AN-F-17: ⚠ はオレンジの背景で目立つ", "background-color" in panel.shot_tab.message.styleSheet())
+    panel.shot_tab.message.setText("保存しました")
+    check("AN-F-17: ふつうのメッセージは背景なし", "background-color" not in panel.shot_tab.message.styleSheet())
+    panel.export_tab._append("⛔ 出せません")
+    check("AN-F-17: 出力タブも message に最新行が出る", panel.export_tab.message.text() == "⛔ 出せません")
+    panel.detach()
     for t in (clips_tab, blend):
         s.listeners.remove(t.refresh)
 
