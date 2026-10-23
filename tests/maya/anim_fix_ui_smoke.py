@@ -671,6 +671,27 @@ def _run(tmp: Path) -> None:
     cmds.setAttr(ctl_b + ".visibility", lock=False)
     cmds.delete("rig_controllers_grp", ctl_a, ctl_b, ctl_c)
 
+    # ---- AN-F-38: ショットタブのキャラクター表のクリップ列に要約
+    from tdrive_anim.ui import AnimPanel as AP38
+
+    panel38 = AP38()
+    sh_tab = panel38.shot_tab
+    s.new_shot("Sum38", 30, 0, 240)
+    s.shot_add_character("MisotenChara", "", [{"clip": "A_MisotenChara_Idle", "holdSec": 1.0, "crossFadeSec": 0.1, "switchAt": 1.0, "speed": 1.0},
+                                              {"clip": "A_MisotenChara_Run_F", "holdSec": 1.5, "crossFadeSec": 0.08, "switchAt": 1.0, "speed": 1.0},
+                                              {"clip": "A_MisotenChara_Jump", "holdSec": 0.0, "crossFadeSec": 0.08, "switchAt": 1.0, "speed": 1.0}])
+    panel38.tabs.setCurrentWidget(sh_tab)
+    sh_tab.refresh()
+    cell = sh_tab.char_table.item(0, 2)
+    check("AN-F-38: クリップ列のセルに要約が出る（Idle 1s → Run_F 1.5s → Jump）", cell is not None and cell.text() == "Idle 1s → Run_F 1.5s → Jump", cell.text() if cell else "")
+    check("AN-F-38: ツールチップに全行", cell is not None and cell.toolTip().count("保持") == 3 and "ダブルクリック" in cell.toolTip(), cell.toolTip() if cell else "")
+    dlg38 = sh_tab.show_sequence(0)
+    tbl38 = dlg38.findChild(QtWidgets.QTableWidget)
+    check("AN-F-38: ダブルクリックで読み取り専用の一覧（5 列・3 行）", tbl38.rowCount() == 3 and tbl38.columnCount() == 5 and tbl38.editTriggers() == QtWidgets.QAbstractItemView.NoEditTriggers and tbl38.item(1, 0).text() == "A_MisotenChara_Run_F", "")
+    dlg38.close()
+    panel38.detach()
+    s.close_shot()
+
     # ---- AN-F-17: メッセージ欄はスクロール領域の外・最上部
     from tdrive_anim.ui import AnimPanel
     from tdrive_anim.ui_common import MessageLabel

@@ -22,6 +22,7 @@ from . import transport as T
 from .ui_common import ComposeProgress, MessageLabel
 from . import shot_scene as SS
 from .core import animset as A
+from .core import sequence as Seq
 from .core import shot as SH
 
 
@@ -129,6 +130,7 @@ class ShotTab(QtWidgets.QWidget):
         self.char_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
         self.char_table.setMaximumHeight(120)
         self.char_table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        self.char_table.cellDoubleClicked.connect(lambda r, c, *_: self.show_sequence(r) if c == 2 else None)  # クリップ列のダブルクリックで読み取り専用の一覧（AN-F-38）
         hv.addWidget(self.char_table)
         hr = QtWidgets.QHBoxLayout()
         self.ns_edit = QtWidgets.QLineEdit()
@@ -257,7 +259,11 @@ class ShotTab(QtWidgets.QWidget):
             self.cam_start.setValue(s["range"][0])
             self.cam_end.setValue(s["range"][1])
         self._fill(self.cam_table, [(c["node"], str(c["start"]), str(c["end"])) for c in s["cameras"]])
-        self._fill(self.char_table, [(c["modelId"], c.get("namespace", ""), f"{len(c['sequence'])} 行", "あり" if c.get("facialTrack") else "なし") for c in s["characters"]])
+        self._fill(self.char_table, [(c["modelId"], c.get("namespace", ""), Seq.row_summary(c["sequence"])[0], "あり" if c.get("facialTrack") else "なし") for c in s["characters"]])
+        for r, c in enumerate(s["characters"]):  # 全行はツールチップに（AN-F-38）
+            item = self.char_table.item(r, 2)
+            if item is not None:
+                item.setToolTip(Seq.row_summary(c["sequence"])[1] + "\n（ダブルクリックで一覧）")
         self._fill(self.ev_table, [(str(e["frame"]), e["key"]) for e in s["events"]])
 
     @staticmethod
@@ -267,6 +273,32 @@ class ShotTab(QtWidgets.QWidget):
             for c, text in enumerate(row):
                 table.setItem(r, c, QtWidgets.QTableWidgetItem(text))
         table.resizeColumnsToContents()
+
+    def show_sequence(self, row: int) -> QtWidgets.QDialog | None:
+        """キャラクターのクリップ列を読み取り専用の一覧で見せる（クリップ / 保持 / クロスフェード / 切替位置 / 速度。AN-F-38）。"""
+        s = self.session.shot
+        if s is None or not 0 <= row < len(s["characters"]):
+            return None
+        ch = s["characters"][row]
+        dlg = QtWidgets.QDialog(self)
+        dlg.setWindowTitle(f"クリップ列: {ch['modelId']}")
+        lay = QtWidgets.QVBoxLayout(dlg)
+        table = QtWidgets.QTableWidget(len(ch["sequence"]), 5)
+        table.setHorizontalHeaderLabels(["クリップ", "保持（秒）", "クロスフェード（秒）", "切替位置", "速度"])
+        table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        table.verticalHeader().setVisible(False)
+        for i, r in enumerate(ch["sequence"]):
+            for j, text in enumerate((r["clip"], f"{r.get('holdSec', 0):g}", f"{r.get('crossFadeSec', 0):g}", f"{r.get('switchAt', 1.0):g}", f"{r.get('speed', 1.0):g}")):
+                table.setItem(i, j, QtWidgets.QTableWidgetItem(text))
+        table.resizeColumnsToContents()
+        lay.addWidget(table)
+        note = QtWidgets.QLabel("読み取り専用です。直すときはブレンドタブの遷移列で作って「この列をショットへ」を押します")
+        note.setStyleSheet("color: gray;")
+        lay.addWidget(note)
+        dlg.resize(560, 260)
+        self._sequence_dialog = dlg
+        dlg.show()
+        return dlg
 
     # ------------------------------------------------------------ ショット
     def _confirm_discard(self, what: str) -> bool:

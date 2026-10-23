@@ -55,3 +55,18 @@ def test_state_bands_match_evaluation():
     assert bands[0][:2] == (0.0, r.switches[0]["t"]) and bands[0][2] == "Idle"
     assert [b[2] for b in bands] == ["Idle", "Run", "Jump"] and bands[-1][1] == 3.0
     assert all(abs(bands[i][1] - bands[i + 1][0]) < 1e-9 for i in range(len(bands) - 1))
+
+
+def test_row_summary_for_shot_table():
+    """ショットタブのキャラクター表のクリップ列の要約（AN-F-38）。"""
+    from tdrive_anim.core import sequence as Seq
+
+    rows = [{"clip": "A_MisotenChara_Idle", "holdSec": 1.0, "crossFadeSec": 0.1, "switchAt": 1.0, "speed": 1.0},
+            {"clip": "A_MisotenChara_Run_F", "holdSec": 1.5, "crossFadeSec": 0.08, "switchAt": 1.0, "speed": 1.0},
+            {"clip": "A_MisotenChara_Jump", "holdSec": 0.0, "crossFadeSec": 0.08, "switchAt": 1.0, "speed": 1.0}]
+    text, tip = Seq.row_summary(rows)
+    assert text == "Idle 1s → Run_F 1.5s → Jump", text
+    assert tip.count("\n") == 2 and "Run_F: 保持 1.5s / クロスフェード 0.08s" in tip
+    long_text, _ = Seq.row_summary(rows * 5, limit=30)
+    assert len(long_text) == 30 and long_text.endswith("…")
+    assert Seq.row_summary([])[0] == "（空）"

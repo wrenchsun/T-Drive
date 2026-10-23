@@ -189,6 +189,25 @@ def mix_text(placements: list[Placement], frame: float) -> str:
     return " / ".join(parts) + f"（f={frame:g}）"
 
 
+def row_summary(rows: list[dict[str, Any]], limit: int = 48) -> tuple[str, str]:
+    """遷移列の要約（ショットタブのキャラクター表用。AN-F-38）。戻り: (一行の要約, 全行のツールチップ)。
+    例: `Idle 1.0s → Run_F 1.5s → Jump`（保持が 0 の行は秒を付けない。長ければ「…」で切る）。"""
+    import re
+
+    def short(clip: str) -> str:
+        return re.sub(r"^A_[^_]+_", "", clip)
+
+    parts, full = [], []
+    for r in rows:
+        hold = float(r.get("holdSec", 0) or 0)
+        parts.append(f"{short(r['clip'])} {hold:g}s" if hold > 0 else short(r["clip"]))
+        full.append(f"{short(r['clip'])}: 保持 {hold:g}s / クロスフェード {float(r.get('crossFadeSec', 0) or 0):g}s / 切替位置 {float(r.get('switchAt', 1.0)):g} / 速度 {float(r.get('speed', 1.0)):g}")
+    text = " → ".join(parts)
+    if len(text) > limit:
+        text = text[: limit - 1].rstrip() + "…"
+    return (text or "（空）"), "\n".join(full)
+
+
 # ------------------------------------------------------------------ 既定の行
 def default_rows(clips: Iterable[dict[str, Any]], model_id: str = "") -> list[dict[str, Any]]:
     """遷移列の初期値: Idle 1.0 秒 → Run 1.5 秒 → Jump（docs/20 §4.2 の例）。クリップは動作名で探す（Run は `_F` を優先）。無いものは飛ばす。"""

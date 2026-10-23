@@ -22,6 +22,7 @@
 <li><strong>カメラの区間を並べる</strong> — シーンのカメラを選び、開始〜終了を入れて「区間を追加」。例: <code>CAM_Main</code> 0〜120、<code>CAM_Close</code> 121〜240。複数のカメラを使うときは、名前を <code>CAM_&lt;名前&gt;</code> にしてください（<a href="anim-naming.html">命名</a>）</li>
 <li><strong>キャラクターを足す</strong> — 「今の animset のキャラクターを足す」。ネームスペースは、リグを参照して読み込んだときの名前（<code>MisotenChara</code> など）。D-Drive のカットシーンでは ModelId と同じにします</li>
 <li><strong>クリップ列を決める</strong> — <a href="anim-blend.html">ブレンドタブ</a>で遷移列を作り、「この列をショットへ」を押す（または、ショットタブで行を選んで「ブレンドタブの列を入れる」）。ショットの範囲の最初から、その順に再生されます</li>
+<li>キャラクター表の<strong>「クリップ列」</strong>には要約（例: <code>Idle 1s → Run_F 1.5s → Jump</code>）が出ます。マウスを載せると全行がツールチップで、<strong>ダブルクリック</strong>すると読み取り専用の一覧（クリップ / 保持 / クロスフェード / 切替位置 / 速度）が開きます</li>
 <li><strong>イベントを足す</strong> — タイムスライダーを合図を出したいフレームに合わせ、キーを入れて「現在フレームに追加」</li>
 <li><strong>ショットを反映</strong> — 再生範囲がショットの範囲になり、カメラの切り替え・イベント・キャラクターの動きがシーンに作られます。<strong>▶ シーケンサー再生</strong>で確認します</li>
 <li><strong>保存</strong> — <span class="path">shots/&lt;Shot&gt;.shot.json</span> に保存されます（シーンを保存したときも自動で保存され、開き直すと自動で読まれます）</li>
