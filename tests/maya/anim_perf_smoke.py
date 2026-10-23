@@ -190,6 +190,21 @@ def _misoten(tmp: Path) -> None:
     t3 = time.perf_counter() - t1
     INFO.append(f"作り直し（サンプリングを使い回す）: {t3:.2f} 秒、読み取り {r3.timings['sample']:.2f} 秒")
     check("実機リグ: 作り直しはサンプリングを使い回す（読み取りがほぼ 0）", r3.timings["sample"] < 0.2, f"{t3:.2f} {r3.timings}")
+    # ---- ブレンドツリー（AN-11-2）: 2D の 5 モーションを 113 フレームで。作り直し（サンプリングを使い回す）が 1 秒以内
+    from tdrive_anim.core import blend_tree as BT
+
+    K.remove("real")
+    for d in ("B", "L", "R"):
+        s.add_clip_from_range("Walk", 0, 112, direction=d)
+    s.add_clip_from_range("Walk", 0, 112, direction="F")
+    clips = {c["name"]: c for c in s.data["clips"]}
+    tree = BT.template_2d(s.data["clips"], "MisotenChara")
+    K.compose_blend_tree("real", K.tree_motions(tree, [0.5, 0.5], clips), joints, 30, use_cache=True)  # キャッシュを作る
+    t2 = time.perf_counter()
+    r4 = K.compose_blend_tree("real", K.tree_motions(tree, [-0.3, 0.8], clips), joints, 30, use_cache=True)
+    t4 = time.perf_counter() - t2
+    INFO.append(f"ブレンドツリー 2D（{len(tree['motions'])} モーション × 113 フレーム × {len(joints)} ジョイント）の作り直し: {t4:.2f} 秒 {r4.timings}")
+    check("実機リグ: ブレンドツリーの作り直し（サンプリングを使い回す）が 1 秒以内", t4 <= 1.0 and r4.timings["sample"] < 0.2, f"{t4:.2f} {r4.timings}")
     cmds.setKeyframe(joints[0], attribute="translateX", time=5, value=123.0) if not cmds.listConnections(joints[0] + ".translateX", source=True, destination=False) else None
     K.remove("real")
     cmds.file(new=True, force=True)

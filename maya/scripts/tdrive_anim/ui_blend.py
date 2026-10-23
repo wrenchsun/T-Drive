@@ -21,6 +21,7 @@ from . import composition as K
 from . import scene_naming as SN
 from . import session
 from . import transport as T
+from .ui_blendtree import BlendTreePanel
 from .ui_common import ComposeProgress, MessageLabel
 from .ui_timeline import ParamTimeline
 from .core import animset as A
@@ -102,6 +103,7 @@ class BlendTab(QtWidgets.QWidget):
         self._rebuild_timer.setInterval(150)
         self._rebuild_timer.timeout.connect(lambda *_: self._rebuild_keeping_time())
         T.register(self._stop_timers, self._timer_name)
+        self.tree_panel: BlendTreePanel | None = None
         outer = QtWidgets.QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         scroll = QtWidgets.QScrollArea()
@@ -251,6 +253,12 @@ class BlendTab(QtWidgets.QWidget):
         gv.addWidget(self.graph_reset_btn, 0, QtCore.Qt.AlignLeft)
         v.addWidget(gbox)
 
+        # ---- ブレンドツリー（AN-11）
+        self.tree_panel = BlendTreePanel(self, COMP_NAME)
+        T.register(self.tree_panel.stop_timer, self.tree_panel.timer_name)
+        self.pad, self.pad_range, self.tree_weights_label = self.tree_panel.pad, self.tree_panel.pad_range, self.tree_panel.tree_weights_label
+        v.addWidget(self.tree_panel)
+
         # ---- レイヤー
         lbox = QtWidgets.QGroupBox("レイヤー（上半身だけ別のクリップを重ねる）")
         lf = QtWidgets.QFormLayout(lbox)
@@ -333,6 +341,11 @@ class BlendTab(QtWidgets.QWidget):
 
     def update_mix(self) -> None:
         self.timeline_view.set_current_frame(cmds.currentTime(query=True))
+        if self._mine() and K.info(COMP_NAME).get("blendTree") and self.tree_panel is not None:  # ブレンドツリーの合成: 重みは時刻によらず一定
+            text = "今のブレンド（ブレンドツリー）: " + self.tree_panel.mix_text()
+            self.mix_label.setText(text)
+            _hud_show(text)
+            return
         if not self._mine() or not self._mix_placements:
             self.mix_label.setText("")
             _hud_hide()
@@ -394,9 +407,13 @@ class BlendTab(QtWidgets.QWidget):
         if not has:
             self.rows = []
             self._fill_rows()
+            if self.tree_panel is not None:
+                self.tree_panel.refresh()
             self._reset_graph_section()  # animset を閉じたら、状態図・記録・タイムラインも初期表示に（AN-F-44）
             self._say(NEED_ANIMSET)
             return
+        if self.tree_panel is not None:
+            self.tree_panel.refresh()
         self._load_timeline()  # 開き直したシーンの記録を戻す（AN-F-29）
         if self.timeline and self.graph is None and isinstance(d_ := self.session.data.get("stateGraph"), dict):
             self.graph, self.mode = d_, "graph"
@@ -446,7 +463,7 @@ class BlendTab(QtWidgets.QWidget):
             self.switch_label.setText("")
             return
         probs = M.validate(self.graph, self.session.data["clips"] if self.session.data else [])
-        states = " / ".join(f"{s['name']}={s.get('clip') or '（未割り当て）'}" for s in self.graph.get("states", []))
+        states = " / ".join(f"{s['name']}={'ブレンドツリー ' + s['blendTree'].get('type', '') if 'blendTree' in s else (s.get('clip') or '（未割り当て）')}" for s in self.graph.get("states", []))
         self.graph_info.setText(f"状態: {states}" + ("\n" + "\n".join("⚠ " + p for p in probs[:4]) if probs else ""))
         self._fill_timeline_view()
 
@@ -862,6 +879,19 @@ class BlendTab(QtWidgets.QWidget):
         if playing:
             cmds.play(forward=True)
 
+    # ---- ブレンドツリー（AN-11）への入口（ボタンとテスト用）
+    def make_template_2d(self) -> None:
+        self.tree_panel.make_template_2d()
+
+    def make_template_1d(self) -> None:
+        self.tree_panel.make_template_1d()
+
+    def select_tree(self, name: str) -> None:
+        self.tree_panel.select_tree(name)
+
+    def flush_tree(self) -> None:
+        self.tree_panel.flush()
+
     def _layer_weight_moved(self) -> None:
         if self._mine():
             K.set_layer_weight(COMP_NAME, 0, self.layer_weight.value() / 100.0)
@@ -892,6 +922,7 @@ class BlendTab(QtWidgets.QWidget):
 
     def remove(self) -> None:
         self._rebuild_timer.stop()
+        self.tree_panel.stop_timer()
         self.stop()
         n = K.remove(COMP_NAME)
         self._restore_speed()
@@ -901,6 +932,7 @@ class BlendTab(QtWidgets.QWidget):
 
     def detach(self) -> None:
         self._rebuild_timer.stop()
+        self.tree_panel.stop_timer()
         if cmds.play(query=True, state=True):
             cmds.play(state=False)
         self._sync_mix(False)

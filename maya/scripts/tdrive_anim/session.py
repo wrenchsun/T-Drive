@@ -482,6 +482,9 @@ class AnimSession:
         for st in (d.get("stateGraph") or {}).get("states", []):
             if st.get("clip") == old:
                 st["clip"] = new
+            for m in (st.get("blendTree") or {}).get("motions", []):  # ブレンドツリーのモーション（AN-11）
+                if isinstance(m, dict) and m.get("clip") == old:
+                    m["clip"] = new
         self._changed()
 
     @undoable

@@ -390,22 +390,7 @@ def _compose(name: str, placements: list[Seq.Placement], joints: list[str], fps:
                     out[ch].append(float(table[f][(j, _family(ch))]["XYZ".index(ch[-1])]))
             samples[key] = out
         t_detach = time.perf_counter()
-        # ---- 2. 元のつながりを切り離して控える
-        for j, chs in chans.items():
-            for fam in FAMILIES:
-                fch = [c for c in chs if _family(c) == fam]
-                if not fch:
-                    continue
-                comp = _compound_source(f"{j}.{fam}")
-                if comp:  # 複合プラグごとの接続（mGear）は、複合のまま控えて切る。AN-F-6
-                    b.original.append([comp, f"{j}.{fam}"])
-                    cmds.disconnectAttr(cmds.connectionInfo(f"{j}.{fam}", sourceFromDestination=True), f"{j}.{fam}")
-                    continue
-                for ch in fch:
-                    plug = f"{j}.{ch}"
-                    src = _source(plug)
-                    b.original.append([src, plug])
-                    cmds.disconnectAttr(src, plug)
+        _detach(b, chans)  # ---- 2. 元のつながりを切り離して控える
         # ---- 3. 重み（配置ごとに 1 本。ジョイント全員で共有）
         def weights(pls: list[Seq.Placement], tag: str) -> list[str]:
             return [b.weight_curve(f"{tag}_w{k}", p.start, p.fade_in) + ".output" for k, p in enumerate(pls) if k > 0]
@@ -448,22 +433,8 @@ def _compose(name: str, placements: list[Seq.Placement], joints: list[str], fps:
             progress(n_steps, n_steps)
         # ---- 5. 状態の保存・再生範囲
         total = Seq.total_frames(placements + [p for L in layer_list for p in L.placements])
-        _store(node, "tdOriginal", b.original)
-        _store(node, "tdOutputs", outputs)
-        _store(node, "tdCreated", b.created)
-        _store(node, "tdInfo", {"frames": total, "joints": len(chans), "plugs": n_plugs, "layers": [L.name for L in layer_list],
-                                "clips": [p.clip for p in placements], "fps": fps})
-        n_hidden = hide_controllers(node, joints, name) if hide_ctls else 0  # 合成中はコントローラは元のキーのポーズのままで合わないので隠す（AN-F-37）
-        info_now = _load(node, "tdInfo", {})
-        info_now["hiddenControllers"] = n_hidden
-        _store(node, "tdInfo", info_now)
-        auto = bool(cmds.autoKeyframe(query=True, state=True))
-        _store(node, "tdAutoKey", auto)
-        if auto:  # 合成中にオートキーが働くと、合成の入力に紛れたキーが「外す」で消える（SF-7）
-            cmds.autoKeyframe(state=False)
-        if playback:
-            _store(node, "tdPlayback", playstate.acquire(_owner(name)))
-        lifecycle.on_reload(remove)  # リロードのとき、元のつながりへ戻す
+        _finalize(b, node, name, joints, outputs, {"frames": total, "joints": len(chans), "plugs": n_plugs, "layers": [L.name for L in layer_list],
+                                                   "clips": [p.clip for p in placements], "fps": fps}, playback, hide_ctls)
     except Exception:
         _rollback(b)
         raise
@@ -472,6 +443,194 @@ def _compose(name: str, placements: list[Seq.Placement], joints: list[str], fps:
         cmds.currentTime(0, edit=True)
     timings["total"] = time.perf_counter() - t_all
     return Result(name, node, total, len(chans), n_plugs, len(b.created), len(layer_list), warnings, timings)
+
+
+# ------------------------------------------------------------------ ブレンドツリーの合成（docs/20 §4.5、AN-11-2）
+@dataclass
+class TreeMotion:
+    """ブレンドツリーの 1 モーション: クリップ名・範囲・ループ・重み（合計 1）。"""
+
+    clip: str
+    src_start: int
+    src_end: int
+    loop: bool
+    weight: float
+
+
+def tree_motions(tree: dict[str, Any], values: list[float], clips: dict[str, dict[str, Any]]) -> list[TreeMotion]:
+    """ブレンドツリーとパラメータの値 → モーションごとの重み。クリップが無ければ SequenceError。"""
+    from .core import blend_tree as BT
+
+    ws = BT.weights(tree, values)
+    out = []
+    for m, w in zip(tree["motions"], ws):
+        c = clips.get(m["clip"])
+        if c is None:
+            raise Seq.SequenceError(f"クリップがありません: {m['clip']}")
+        out.append(TreeMotion(c["name"], int(c["start"]), int(c["end"]), bool(c["loop"]), float(w)))
+    return out
+
+
+def compose_blend_tree(name: str, motions: list[TreeMotion], joints: list[str], fps: int, tree_info: dict[str, Any] | None = None, playback: bool = True,
+                       progress: Progress | None = None, use_cache: bool = False, hide_ctls: bool = True) -> Result:
+    """ブレンドツリーの合成を作る（Unity の Blend Tree と同じ: 各モーションを**正規化時間**で同期し、重み付きの長さで再生する）。
+
+    出力の長さ N = 重み付き平均の長さ（Σ 重み × クリップのフレーム数、四捨五入）。出力フレーム f（0〜N）で、モーション i はクリップの範囲の `f / N` の位置を読む。
+    位置・スケールは重み付き和、回転は正規化重みのクォータニオンを順に slerp（Unity と同じ順序依存の近似。重みが 1 本に偏れば一致）。
+    重みは合成のノードの `weight<i>`（と tdInfo の `blendTree.weights`）に残す。パラメータが変われば作り直す（重みは定数なので、`pairBlend` では組まず 1 本のカーブに焼く）。
+    それ以外（元のつながりの切り離し・戻し・再生範囲・保存の間の扱い・コントローラの非表示）は `compose` と同じ。"""
+    if not [m for m in motions if m.weight > 1e-6]:
+        raise ValueError("重みのあるモーションがありません")
+    with undo_off():
+        return _compose_tree(name, motions, joints, fps, tree_info or {}, playback, progress, use_cache, hide_ctls)
+
+
+def _compose_tree(name: str, motions: list[TreeMotion], joints: list[str], fps: int, tree_info: dict[str, Any], playback: bool,
+                  progress: Progress | None, use_cache: bool, hide_ctls: bool) -> Result:
+    MC.stop()
+    remove(name)
+    removed = remove_conflicting(name, joints)
+    chans = animated_channels(joints)
+    if not chans:
+        taken = [nm for nm in active() if nm != name]
+        why = f"別の合成（{', '.join(PREFIX + n for n in taken)}）がジョイントを使っています。" if taken else ""
+        raise ValueError(why + "合成できるジョイントがありません（キーやコンストレイントでつながったチャンネルが無い）")
+    total_w = sum(m.weight for m in motions)
+    norm = [TreeMotion(m.clip, m.src_start, m.src_end, m.loop, m.weight / total_w) for m in motions]
+    act = [m for m in norm if m.weight > 1e-6]
+    length = sum(m.weight * (m.src_end - m.src_start) for m in act)
+    n_out = max(1, int(round(length)))
+    loop = any(m.loop for m in act)
+    b = _Builder(name, fps)
+    warnings: list[str] = [f"同じジョイントを使っていた別の合成（{', '.join(PREFIX + n for n in removed)}）を外しました"] if removed else []
+    timings: dict[str, float] = {}
+    t_all = time.perf_counter()
+    outputs: list[list[str]] = []
+    try:
+        node = cmds.createNode("network", name=b.node)
+        b.created.append(node)
+        frame_set = sorted({f for m in act for f in range(m.src_start, m.src_end + 1)})
+        n_steps = len(frame_set) + len(chans)
+        t_sample = time.perf_counter()
+        cache_key = (tuple((j, tuple(chs)) for j, chs in chans.items()), tuple(frame_set), _anim_fingerprint()) if use_cache else None
+        if cache_key is not None and _sample_cache["key"] == cache_key:
+            table = _sample_cache["table"]
+        else:
+            table = _sample_table(chans, frame_set, (lambda d, _t: progress(d, n_steps)) if progress else None)
+            _sample_cache.update(key=cache_key, table=table if cache_key is not None else None)
+        timings["sample"] = time.perf_counter() - t_sample
+        t_detach = time.perf_counter()
+        _detach(b, chans)
+        for i, m in enumerate(norm):
+            cmds.addAttr(node, longName=f"weight{i}", attributeType="double", minValue=0.0, maxValue=1.0, defaultValue=0.0)
+            cmds.setAttr(f"{node}.weight{i}", m.weight)
+        timings["detach"] = time.perf_counter() - t_detach
+        t_chain = time.perf_counter()
+        times = [float(f) for f in range(n_out + 1)]
+        n_plugs = 0
+        for ji, (j, chs) in enumerate(chans.items()):
+            if progress is not None and not progress(len(frame_set) + ji, n_steps):
+                raise ComposeCancelled()
+            series = _blend_series(j, chs, act, table, n_out)
+            for ch in chs:
+                cur = b.curve(_family(ch), f"{j}_{ch}", times, series[ch], loop) + ".output"
+                cmds.connectAttr(cur, f"{j}.{ch}", force=True)
+                outputs.append([cur, f"{j}.{ch}"])
+                n_plugs += 1
+        timings["chain"] = time.perf_counter() - t_chain
+        if progress is not None:
+            progress(n_steps, n_steps)
+        info = {"frames": n_out, "joints": len(chans), "plugs": n_plugs, "layers": [], "clips": [m.clip for m in norm], "fps": fps,
+                "blendTree": {"weights": [round(m.weight, 6) for m in norm], **tree_info}}
+        _finalize(b, node, name, joints, outputs, info, playback, hide_ctls)
+    except Exception:
+        _rollback(b)
+        raise
+    if playback:
+        cmds.playbackOptions(minTime=0, maxTime=n_out, animationStartTime=0, animationEndTime=n_out)
+        cmds.currentTime(0, edit=True)
+    timings["total"] = time.perf_counter() - t_all
+    return Result(name, node, n_out, len(chans), n_plugs, len(b.created), 0, warnings, timings)
+
+
+def _blend_series(joint: str, chs: list[str], act: list[TreeMotion], table: dict[int, dict[tuple[str, str], tuple[float, ...]]], n_out: int) -> dict[str, list[float]]:
+    """ジョイントの各チャンネルの、出力フレーム 0〜n_out の値（正規化時間で同期した重み付き合成）。"""
+    fams = sorted({_family(c) for c in chs})
+    out: dict[str, list[float]] = {c: [] for c in chs}
+    order = int(cmds.getAttr(f"{joint}.rotateOrder")) if "rotate" in fams else 0
+    unit = om.MAngle.uiUnit()
+    prev: om.MEulerRotation | None = None
+
+    def at(m: TreeMotion, u: float, fam: str) -> tuple[float, ...]:
+        pos = m.src_start + u * (m.src_end - m.src_start)
+        f0 = min(int(pos), m.src_end)
+        f1 = min(f0 + 1, m.src_end)
+        k = pos - f0
+        a, c = table[f0][(joint, fam)], table[f1][(joint, fam)]
+        return tuple(x + (y - x) * k for x, y in zip(a, c))
+
+    for f in range(n_out + 1):
+        u = f / n_out
+        for fam in fams:
+            vals = [at(m, u, fam) for m in act]
+            if fam == "rotate":
+                quats = [om.MEulerRotation(*(om.MAngle(x, unit).asRadians() for x in v), order).asQuaternion() for v in vals]
+                acc, wsum = quats[0], act[0].weight
+                for q, m in zip(quats[1:], act[1:]):
+                    wsum += m.weight
+                    if acc.x * q.x + acc.y * q.y + acc.z * q.z + acc.w * q.w < 0:  # 近い側へ
+                        q = om.MQuaternion(-q.x, -q.y, -q.z, -q.w)
+                    acc = om.MQuaternion.slerp(acc, q, m.weight / wsum)
+                e = om.MEulerRotation.decompose(acc.asMatrix(), order)
+                if prev is not None:
+                    e = e.closestCut(prev)
+                prev = e
+                res = tuple(om.MAngle(x, om.MAngle.kRadians).asUnits(unit) for x in (e.x, e.y, e.z))
+            else:
+                res = tuple(sum(m.weight * v[i] for m, v in zip(act, vals)) for i in range(3))
+            for i, ax in enumerate("XYZ"):
+                ch = f"{fam}{ax}"
+                if ch in out:
+                    out[ch].append(float(res[i]))
+    return out
+
+
+def _detach(b: _Builder, chans: dict[str, list[str]]) -> None:
+    """対象チャンネルの元のつながりを切り離して `b.original` に控える（複合プラグごとの接続は複合のまま。AN-F-6）。"""
+    for j, chs in chans.items():
+        for fam in FAMILIES:
+            fch = [c for c in chs if _family(c) == fam]
+            if not fch:
+                continue
+            comp = _compound_source(f"{j}.{fam}")
+            if comp:  # 複合プラグごとの接続（mGear）は、複合のまま控えて切る。AN-F-6
+                b.original.append([comp, f"{j}.{fam}"])
+                cmds.disconnectAttr(cmds.connectionInfo(f"{j}.{fam}", sourceFromDestination=True), f"{j}.{fam}")
+                continue
+            for ch in fch:
+                plug = f"{j}.{ch}"
+                src = _source(plug)
+                b.original.append([src, plug])
+                cmds.disconnectAttr(src, plug)
+
+
+def _finalize(b: _Builder, node: str, name: str, joints: list[str], outputs: list[list[str]], info_dict: dict[str, Any], playback: bool, hide_ctls: bool) -> None:
+    """合成の状態をノードに保存し、コントローラを隠し、オートキーを切り、再生範囲の控えを取る。"""
+    _store(node, "tdOriginal", b.original)
+    _store(node, "tdOutputs", outputs)
+    _store(node, "tdCreated", b.created)
+    _store(node, "tdInfo", info_dict)
+    n_hidden = hide_controllers(node, joints, name) if hide_ctls else 0  # 合成中はコントローラは元のキーのポーズのままで合わないので隠す（AN-F-37）
+    info_now = _load(node, "tdInfo", {})
+    info_now["hiddenControllers"] = n_hidden
+    _store(node, "tdInfo", info_now)
+    auto = bool(cmds.autoKeyframe(query=True, state=True))
+    _store(node, "tdAutoKey", auto)
+    if auto:  # 合成中にオートキーが働くと、合成の入力に紛れたキーが「外す」で消える（SF-7）
+        cmds.autoKeyframe(state=False)
+    if playback:
+        _store(node, "tdPlayback", playstate.acquire(_owner(name)))
+    lifecycle.on_reload(remove)  # リロードのとき、元のつながりへ戻す
 
 
 # ------------------------------------------------------------------ 別の合成との取り合い（AN-F-46）
