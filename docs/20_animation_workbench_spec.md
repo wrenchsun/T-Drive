@@ -382,17 +382,20 @@ tests/fixtures/anim/          # 小さなリグ（ジョイント 6 本 + 立方
 
 ### 8.1 D-Drive 側（要相談）
 
-D-Drive（`C:/Users/yamag/wrench/unity/D-Drive`）は読み取りのみ（変更しない）。T-Drive 側でできる対応は済ませたうえで、D-Drive 側にあるとよい変更を書く（docs/21 のレビューで D-Drive のコードと突き合わせた結果。ID は docs/21）。
+D-Drive（`C:/Users/yamag/wrench/unity/D-Drive`）は読み取りのみ（変更しない）。T-Drive 側でできる対応は済ませたうえで、D-Drive 側にあるとよい変更を書く（docs/21 のレビューで D-Drive のコードと突き合わせた結果。ID は docs/21）。2026-10-23 に MS2026（D-Drive 1.11.0、置き場所 `Assets/_Project/DDrive/SourceAssets`）で T-Drive の出力を取り込んで確かめた結果を「状態」に書く（docs/18 AN-6-9 / AN-8-8 / AN-R-24〜30）。
 
-| ID | D-Drive 側に欲しい変更 | T-Drive 側の対応（済み） |
-|---|---|---|
-| DD-1 | `SK_<ModelId>.fbx` から作る ModelData の識別子が `SK<ModelId>` になる（`Import/ImportRuleService.cs:495-496`、`AssetBrowser/AssetNamingService.cs:150-173` の `ToIdentifier` は `_` を落として次を大文字にする）ため、`FindModelDataByIdentifier`（`Cutscene/CutsceneImportService.cs:654-671`）がカットシーンの `<Shot>__<ModelId>` の `ModelId` と一致しない。識別子を作る前に MS2026 の接頭辞 `SK_` / `SM_` を外す案 | 出力タブのログとマニュアルに「取り込み後に ModelData の識別子を ModelId に直す」手順を書いた |
-| DD-2 | `EVT_<キー>` + `ddEvent`（docs/26 §5.5）を読むコードが無い（6-10c で不採用）。`CutsceneImportService.cs:351-360` はカメラ以外のルート直下の子を全部小物にするので `EVT_` が小物のトラックになる。`EVT_` を小物から除いて Signal マーカーにする実装（アニメ付きユーザープロパティの取り込み `importAnimatedCustomProperties` も要る、推定） | 既定で `EVT_` を `<Shot>.fbx` に入れない（`export.includeEvents`）。仕様・マニュアルを「D-Drive は未対応」に直した |
-| DD-3 | トップレベルが 1 つの FBX（`A_*.fbx` は Hips、`<Shot>__<ModelId>.fbx` はルート）は Unity の既定でそのノードがプレハブのルートになり、名前がファイル名に替わって階層の道筋がずれる。D-Drive は `preserveHierarchy` を設定していない。`OnPreprocessModel` で Cutscene / Anim の FBX に `preserveHierarchy = true` を提案 | 確認項目（docs/18 AN-R）に足した。Unity で確かめてから |
-| DD-7 | Ubercam のカットはステップのタンジェントだが、ベイクで毎フレームのキーになる。D-Drive（`CutsceneCameraCurveExtractor.cs:30-70`、StepFps 既定 0）は写すだけなので、30 fps のデータを 60 fps で補間して、カットの前後に 2 台の間の絵が 1 コマ出る可能性。D-Drive 側でカット（隣のキーで位置が大きく飛ぶ）を検出してステップにする案 | 確認項目に足した |
-| DD-9 | ショットの先頭フレームのイベントは `ddEvent` が 1 のキーだけで 0 → 1 の変化が無い。「最初に 1 になったフレーム（先頭を含む）」と読む案（docs/26 §5.5 の実装時に） | shot.json の検証で警告 |
-| DD-14 | `humanoid.json` / `animset.json` の写しを `SourceAssets/Model/<cat>/` に置くと「対象外の拡張子」の案内ログ（`ImportRuleHandlers.cs:88`）が出る。.json を無視する、または別の置き場所の取り決め | ログに出ても害がないことをマニュアルとログに書いた |
-| DD-15 | 小物のトラックに FBX 全体のクリップを渡している（`CutsceneImportService.cs:359,380-383`）ので、カーブの道筋 `PRP_Mic/...` が小物に当たらない可能性 | `<Shot>.fbx` の小物が動くかを確認項目に足した |
+| ID | D-Drive 側に欲しい変更 | T-Drive 側の対応（済み） | 状態（2026-10-23） |
+|---|---|---|---|
+| DD-1 | `SK_<ModelId>.fbx` から作る ModelData の識別子が `SK<ModelId>` になる（`Import/ImportRuleService.cs:495-496`、`AssetBrowser/AssetNamingService.cs:150-173` の `ToIdentifier` は `_` を落として次を大文字にする）ため、`FindModelDataByIdentifier`（`Cutscene/CutsceneImportService.cs:654-671`）がカットシーンの `<Shot>__<ModelId>` の `ModelId` と一致しない。識別子を作る前に MS2026 の接頭辞 `SK_` / `SM_` を外す案 | 出力タブのログとマニュアルに「取り込み後に ModelData の識別子を ModelId に直す」手順を書いた → 1.11.0 向けに書き換え | **解決**: 1.11.0 は `SK_`/`SM_` を外し、識別子 MisotenChara でカットシーンのバインド表が自動で埋まった |
+| DD-2 | `EVT_<キー>` + `ddEvent`（docs/26 §5.5）を読むコードが無い（6-10c で不採用）。`CutsceneImportService.cs:351-360` はカメラ以外のルート直下の子を全部小物にするので `EVT_` が小物のトラックになる。`EVT_` を小物から除いて Signal マーカーにする実装（アニメ付きユーザープロパティの取り込み `importAnimatedCustomProperties` も要る、推定） | 既定で `EVT_` を `<Shot>.fbx` に入れない（`export.includeEvents`）。仕様・マニュアルを「D-Drive は未対応」に直した | 未対応のまま（オフで警告なしを確認） |
+| DD-3 | トップレベルが 1 つの FBX（`A_*.fbx` は Hips、`<Shot>__<ModelId>.fbx` はルート）は Unity の既定でそのノードがプレハブのルートになり、名前がファイル名に替わって階層の道筋がずれる。D-Drive は `preserveHierarchy` を設定していない。`OnPreprocessModel` で Cutscene / Anim の FBX に `preserveHierarchy = true` を提案 | 確認項目（docs/18 AN-R）に足した。Unity で確かめてから | **問題なし**: T-Drive はルートの下に `jnt_org` を残して出すので、preserveHierarchy が OFF でもカーブの道筋 `jnt_org/spine_C0_0_jnt/…` がモデルと一致した。1.11.0 の自動 ON は DD-16 の理由で効いていない |
+| DD-7 | Ubercam のカットはステップのタンジェントだが、ベイクで毎フレームのキーになる。D-Drive（`CutsceneCameraCurveExtractor.cs:30-70`、StepFps 既定 0）は写すだけなので、30 fps のデータを 60 fps で補間して、カットの前後に 2 台の間の絵が 1 コマ出る可能性。D-Drive 側でカット（隣のキーで位置が大きく飛ぶ）を検出してステップにする案 | 確認項目に足した | **D-Drive 側で対応済み**: 1.11.0 の取り込みが「カメラのカットを 1 箇所検出し、ステップにしました」と出る。60 fps 再生の見た目は未確認 |
+| DD-9 | ショットの先頭フレームのイベントは `ddEvent` が 1 のキーだけで 0 → 1 の変化が無い。「最初に 1 になったフレーム（先頭を含む）」と読む案（docs/26 §5.5 の実装時に） | shot.json の検証で警告 | 未確認（EVT_ は入れていない） |
+| DD-14 | `humanoid.json` / `animset.json` の写しを `SourceAssets/Model/<cat>/` に置くと「対象外の拡張子」の案内ログ（`ImportRuleHandlers.cs:88`）が出る。.json を無視する、または別の置き場所の取り決め | ログに出ても害がないことをマニュアルとログに書いた | **解決**: 1.11.0 は `.json` / `.txt` / `.md` を無視し、ログも出ない |
+| DD-15 | 小物のトラックに FBX 全体のクリップを渡している（`CutsceneImportService.cs:359,380-383`）ので、カーブの道筋 `PRP_Mic/...` が小物に当たらない可能性 | `<Shot>.fbx` の小物が動くかを確認項目に足した | 未確認（小道具のあるショットを作っていない） |
+| DD-16 | `Import/AnimFbxPreprocessor.cs:39` と `Cutscene/CutsceneFbxPostprocessor.cs:118` が置き場所を `ImportRuleService.DefaultSourceRoot`（`Assets/SourceAssets`）との前方一致で判定している。MS2026 のように `DDriveProjectSettings.SourceAssetsRoot` を変えたプロジェクト（`Assets/_Project/DDrive/SourceAssets`）では `OnPreprocessModel` が何もせず、初回取り込みの preserveHierarchy ON・キャラ FBX の Humanoid 化・カメラ FBX の `importAnimatedCustomProperties` が効かない。`ResolveSourceRoot` で判定する案 | T-Drive は `jnt_org` を残して出すので道筋はずれない。Humanoid は Inspector で手で設定する手順をマニュアルに書いた | 2026-10-23 MS2026 で 4 本とも preserveHierarchy=0・Generic のままなのを .meta で確認 |
+| DD-17 | `animset.json`（ループ・crossFade）と `humanoid.json`（Humanoid の対応表）を D-Drive が読まないので、AnimData の `Loop` は全部 OFF、ModelData の `Avatar` は空で作られる。Model/Anim の ImportRule で横の `animset.json` を読んで `Loop` / `DefaultCrossFade` を埋め、`humanoid.json` から Humanoid の Avatar を作る案 | ループ・Humanoid は Unity 側で手で直す手順をマニュアルに書いた | 2026-10-23 Idle / Run_F の AnimData が `Loop: 0` なのを確認 |
+| DD-18 | 置いた直後の自動検知（`ImportRulePostprocessor` の delayCall）で Data が作られず、`Tools > D-Drive > Generate > SourceAssets からインポートルールを再実行`（Cutscene も同名の再実行）で作られた。CLI（isuzu-unity-cli の asset_reimport）経由の取り込みだったため、Unity の UI から置いた場合は未確認 | マニュアルに「作られないときは再実行メニュー」を書いた | 2026-10-23 観察のみ（原因未調査） |
 
 ## 9. 決めること（要確認）
 

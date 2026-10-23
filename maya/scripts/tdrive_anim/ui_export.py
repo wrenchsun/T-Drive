@@ -492,8 +492,8 @@ class ExportTab(QtWidgets.QWidget):
                     for w in r.get("warnings", []):
                         self._append(f"   ⚠ {w}")
                     if r.get("type") == "model":
-                        self._append(f"   ℹ D-Drive に取り込むと ModelData の識別子は SK{self.session.model_id} になり、カットシーンの {self.session.model_id} と結び付きません。"
-                                     f"取り込み後に識別子を {self.session.model_id} に直してください（docs/20 §8）。humanoid.json / animset.json の写しは D-Drive が「対象外の拡張子」のログを出しますが害はありません")
+                        self._append(f"   ℹ D-Drive 1.11.0 以降は ModelData の識別子が {self.session.model_id}（SK_ を外したもの）になり、カットシーンの __{self.session.model_id} と結び付きます。"
+                                     f"それより古い D-Drive では SK{self.session.model_id} になるので、取り込み後に直してください（docs/20 §8.1）。humanoid.json / animset.json は D-Drive が読まないので、ループと Humanoid は Unity 側で設定します")
                 else:
                     self._append(f"✖ {r['name']}: {r.get('error', '失敗')}")
         except Exception as exc:  # noqa: BLE001

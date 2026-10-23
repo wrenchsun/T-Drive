@@ -40,7 +40,7 @@
 <li>出力中は進捗バーの横に<strong>「中止」</strong>が出ます。押すと書き出しを止めます（書き終えたファイルは残ります）。ウィンドウを閉じても止まります</li>
 <li>同じ名前のファイルは上書きされます。ただし FBX は<strong>いったん別の名前で書いてから置き換える</strong>ので、書き出しの途中で失敗・中止しても、Unity プロジェクトの以前の正しい FBX は壊れません</li>
 <li>FBX は単位 cm・バイナリ・FBX 2020 形式で書きます</li>
-<li>モデルを出力すると、ログに「D-Drive に取り込むと ModelData の識別子は SK&lt;ModelId&gt; になる」という注意が出ます。D-Drive は <code>SK_MisotenChara.fbx</code> から <code>SKMisotenChara</code> という識別子を作り、カットシーンの <code>MisotenChara</code> と結び付かないので、<strong>取り込んだあとに ModelData の識別子を <code>MisotenChara</code> に直してください</strong>（D-Drive 側の直しを相談中。<code>humanoid.json</code> / <code>animset.json</code> の写しは、D-Drive が「対象外の拡張子」のログを出しますが、害はありません）</li>
+<li>D-Drive 1.11.0 以降は、<code>SK_MisotenChara.fbx</code> から識別子 <code>MisotenChara</code> の ModelData（<code>MODEL_&lt;カテゴリ&gt;_MisotenChara</code>）ができ、カットシーンの <code>__MisotenChara</code> と自動で結び付きます（古い D-Drive では <code>SKMisotenChara</code> になるので、取り込んだあとに直してください）。<code>humanoid.json</code> / <code>animset.json</code> の写しは D-Drive が無視します（ログも出ません）</li>
 <li>参照（リファレンス）で読み込んだリグでも出力できます（書き出し用の一時シーンで参照を取り込んでから、ネームスペースを外します）</li>
 </ul>
 
@@ -69,12 +69,26 @@
 <li>ショットの出力ボタンが灰色のときは、赤い文字の理由を直してください（ショット名、フレームレートがシーンの時間単位と違う、キャラクターの animset のフレームレートがショットと違う、カメラの区間がシーンにない、キャラクターの animset がない、合成中、など）。ボタンを押す前に、理由が見えます</li>
 <li>同じ ModelId のキャラクターを 2 体置くときは、別のネームスペースにしてください（同じネームスペースは同じスケルトンを指すので、出力できません）。2 体目のファイルは <code>_2</code> が付きます</li>
 </ul>
-<div class="warn">Unity（D-Drive）に置いて CutsceneData が自動で作られることは、まだ人が確認していません（確認中）。</div>
+<h2 id="unity">Unity（D-Drive）に置いたあと</h2>
+<p>2026-10-23 に MS2026（D-Drive 1.11.0）で、このページの出力をそのまま置いて確かめた結果です。</p>
+<table>
+<tr><th>置く場所（MS2026 は <span class="path">Assets/_Project/DDrive/SourceAssets/</span> の下）</th><th>できるもの</th></tr>
+<tr><td><span class="path">Model/&lt;カテゴリ&gt;/SK_MisotenChara.fbx</span></td><td>ModelData <code>MODEL_&lt;カテゴリ&gt;_MisotenChara</code>（Material は未割当の警告が出ます。見た目の <a href="export.html">Unity 出力</a>で MaterialData を作ってから Model Editor で割り当て）</td></tr>
+<tr><td><span class="path">Anim/&lt;カテゴリ&gt;/A_MisotenChara_Idle.fbx</span> …</td><td>AnimData <code>ANIM_&lt;カテゴリ&gt;_AMisotenCharaIdle</code> …（30 fps、クリップの長さは Maya のとおり）</td></tr>
+<tr><td><span class="path">Cutscene/&lt;カテゴリ&gt;/Opening01.fbx</span> + <span class="path">Opening01__MisotenChara.fbx</span></td><td>CutsceneData <code>CUT_&lt;カテゴリ&gt;_Opening01</code> と Timeline（カメラのトラック + キャラクターのトラック。バインド表の Model は自動で埋まり、カメラの切り替わりはステップになります）</td></tr>
+</table>
+<ul>
+<li>置いても数秒待って作られないときは、<strong>Tools &gt; D-Drive &gt; Generate &gt; SourceAssets からインポートルールを再実行</strong>（ショットは「SourceAssets/Cutscene からインポートルールを再実行」）を押してください</li>
+<li><strong>ループ</strong>は D-Drive に伝わりません。Idle や Run のように繰り返す動きは、AnimData の Inspector で <code>Loop</code> を ON にしてください（<code>animset.json</code> のループ列が目安）</li>
+<li><strong>人型（Humanoid）</strong>も自動では設定されません。SK_ と A_ の FBX の Inspector で Rig を Humanoid にし、<code>humanoid.json</code> の対応表のとおりに Avatar を確認してください（Generic のままでも Timeline のキャラクターは動きます）</li>
+<li>カーブは <code>jnt_org/spine_C0_0_jnt/…</code> の道筋で入り、モデルの階層と一致します（Preserve Hierarchy を変えなくて構いません）</li>
+</ul>
+<div class="tip">Unity で実際に再生したときの見た目（ゲームの Animator・Timeline の再生）は、まだ人が確認していません。</div>
 
 <h2>仮の決め</h2>
 <ul>
 <li>出力先の既定は <span class="path">build/</span> です。共有するときは「共有フォルダ…」を選んでください</li>
-<li>Unity 側での Avatar や AnimatorController、AnimData の自動作成は、このツールではまだ行いません（<span class="path">humanoid.json</span> / <span class="path">animset.json</span> を元に、あとで作る予定です）</li>
+<li>Unity 側での Avatar や AnimatorController の自動作成は、このツールではまだ行いません（<span class="path">humanoid.json</span> / <span class="path">animset.json</span> を元に、あとで作る予定です。AnimData / ModelData / CutsceneData は D-Drive が作ります）</li>
 <li>「変更のあるクリップだけ」は、キーの動きに加えて、クリップの設定（範囲・ルートモーション・ループ・イベント）と、T-Drive の出力の版が変わったときも出力し直します</li>
 <li>出力のあいだ、シーンのコピーを一時フォルダ（<span class="path">%TEMP%</span> の <code>tdrive_*export_*</code>）に作ります。出力が終わる・失敗する・中止すると消えます。Maya が落ちたときなどに残ったものは、次に T-Drive を読み込んだとき、1 日より古いものを自動で消します</li>
 <li>mGear などのリグ（ジョイントの移動・回転がまとめて別のノードに駆動されるもの）でも、クリップはキーが <strong>0 フレームから始まる</strong>形で出ます。ツールがジョイントの動きを 1 フレームずつ読み取って打ち直すためです（出力するシーンは別のプロセスで開くので、開いているシーンは変わりません）</li>
