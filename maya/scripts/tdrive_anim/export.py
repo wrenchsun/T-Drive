@@ -6,7 +6,7 @@
   シーンを開いた直後に合成を外す（`_prepare_scene`。SF-1）
 - モデル: Toon の `export_in_place` に相乗り（頂点カラー `tdToonMask`・UV `tdSmoothNormal`・参照のフラット化・`_tdToon` を元に戻す）。
   メッシュ + スケルトンのルート以下だけ。アニメーションは含めない・バインドポーズで書く
-- アニメーション: ルート以下のジョイントだけ。クリップ範囲で `bakeResults`（コントローラやコンストレイントは出さない）、
+- アニメーション: ルート以下のジョイントだけ。クリップ範囲を自前でベイク（`bake_joints`。mGear の複合プラグ駆動でも動く。コントローラやコンストレイントは出さない。AN-F-24）、
   `rootMotion=none` は **humanoid.json の Hips**（無ければスケルトンのルート）の XZ をクリップ開始フレームの値に固定、範囲の先頭を 0 フレームへ寄せ、
   1 テイク（Maya の既定の名前 `Take 001`。D-Drive は最初の埋め込みクリップをファイル名で取り込むので、テイク名は使われない。名前付きのテイクを足すと 2 テイクになる）
 - **FBX は一時名で書いてから置き換える**（`_write_atomically`）: 書き出し中の失敗・閉じたときの kill で、Unity プロジェクトの以前の正しい FBX を壊さない（SF-13）
@@ -28,6 +28,8 @@ from pathlib import Path
 from typing import Any
 
 from maya import cmds, mel
+from maya.api import OpenMaya as om
+from maya.api import OpenMayaAnim as oma
 
 from tdrive import export_job, project
 
@@ -240,6 +242,49 @@ def _to_bind_pose(joints: list[str]) -> list[str]:
             "リグをバインドポーズ（コントローラを全部ゼロ）にしてから出力し直してください"]
 
 
+def bake_joints(joints: list[str], start: int, end: int, shift: int = 0) -> int:
+    """ジョイントの translate / rotate / scale を start〜end フレームでベイクする（AN-F-24）。`bakeResults` には頼らない。
+
+    mGear のように `joint.rotate` が複合プラグごと `mgear_matrixConstraint` / `decomposeMatrix` に駆動されるリグでは、`bakeResults` は複合の接続を外さず、
+    子プラグに animCurve をつなぐ二重の状態になり、キーの移動（timeChange）も効かない。そこで合成と同じ経路で、
+    ① 各フレームの値をまとめて読み（フレームごとに currentTime を 1 回） ② ジョイントの入力（子プラグも複合プラグも）を切り
+    ③ 動くチャンネルにだけ、`frame - shift` の時刻でキーを打つ（動かないチャンネルは値のまま）。
+    打った後、キーの先頭が start - shift であることを確かめる（違えば RuntimeError）。打ったカーブの数を返す。"""
+    from . import composition as K
+
+    frames = list(range(start, end + 1))
+    table = K._sample_table({j: list(K.CHANNELS) for j in joints}, frames, None)
+    _free_joints(joints)
+    units = om.MTime.uiUnit()
+    kinds = {"translate": oma.MFnAnimCurve.kAnimCurveTL, "rotate": oma.MFnAnimCurve.kAnimCurveTA, "scale": oma.MFnAnimCurve.kAnimCurveTU}
+    times = om.MTimeArray([om.MTime(f - shift, units) for f in frames])
+    sel = om.MSelectionList()
+    n_curves = 0
+    for j in joints:
+        for fam, kind in kinds.items():
+            for i, ax in enumerate("XYZ"):
+                vals = [float(table[f][(j, fam)][i]) for f in frames]
+                plug_name = f"{j}.{fam}{ax}"
+                if fam == "rotate":  # 180 度の反転で値が飛ばないように、前のフレームに近い向きへ巻き直す（bakeResults の minimizeRotation 相当）
+                    for k in range(1, len(vals)):
+                        vals[k] += 360.0 * round((vals[k - 1] - vals[k]) / 360.0)
+                if max(vals) - min(vals) <= 1e-7:
+                    with contextlib.suppress(RuntimeError):
+                        cmds.setAttr(plug_name, vals[0])  # 動かないチャンネルは値のまま
+                    continue
+                conv = {"translate": om.MDistance.uiToInternal, "rotate": om.MAngle.uiToInternal, "scale": float}[fam]
+                sel.clear()
+                sel.add(plug_name)
+                curve = oma.MFnAnimCurve()
+                curve.create(sel.getPlug(0), kind)
+                curve.addKeys(times, om.MDoubleArray([conv(v) for v in vals]), oma.MFnAnimCurve.kTangentLinear, oma.MFnAnimCurve.kTangentLinear)
+                n_curves += 1
+    keyed = cmds.keyframe(joints, query=True, timeChange=True) or []
+    if keyed and min(keyed) != start - shift:
+        raise RuntimeError(f"ベイクしたキーの先頭が {min(keyed):g} です（{start - shift} のはずです）。リグのつなぎ方が想定外のため、FBX を書きません")
+    return n_curves
+
+
 def export_model_in_place(animset: dict[str, Any], path: str | Path) -> dict[str, Any]:
     """`SK_<ModelId>.fbx`（メッシュ + スキン + スケルトン、アニメ無し）を書く。破壊的（mayapy 専用）。"""
     from tdrive_toon import export as toon_export
@@ -278,8 +323,7 @@ def export_clip_in_place(animset: dict[str, Any], clip: dict[str, Any], path: st
     motion = f"{ns}:{hips}" if ns and hips and ":" not in hips else hips
     motion_node = cmds.ls(motion, long=True)[0] if motion and cmds.objExists(motion) else top
     fixed = {ax: cmds.getAttr(f"{motion_node}.translate{ax}", time=s) for ax in "XZ"} if clip["rootMotion"] == "none" else {}
-    cmds.bakeResults(joints, time=(s, e), simulation=True, sampleBy=1, disableImplicitControl=True, preserveOutsideKeys=False,
-                     sparseAnimCurveBake=False, minimizeRotation=True, controlPoints=False, shape=False, attribute=list(TRS))
+    bake_joints(joints, s, e, shift=s)  # 範囲の先頭を 0 フレームへ寄せて打つ（AN-F-24）
     cons = cmds.ls(joints, dagObjects=True, type="constraint", long=True) or []
     if cons:  # 空のリストを cmds.delete に渡さない。コンストレイントは書き出さない
         cmds.delete(cons)
@@ -288,7 +332,6 @@ def export_clip_in_place(animset: dict[str, Any], clip: dict[str, Any], path: st
         with contextlib.suppress(RuntimeError):
             cmds.cutKey(plug, clear=True)
             cmds.setAttr(plug, v)
-    cmds.keyframe(joints, edit=True, relative=True, timeChange=-s)  # 範囲の先頭を 0 フレームへ
     length = e - s
     cmds.playbackOptions(minTime=0, maxTime=length, animationStartTime=0, animationEndTime=length)
     cmds.currentTime(0, edit=True)
@@ -529,8 +572,7 @@ def export_shot_character_in_place(shot: dict[str, Any], index: int, animset: di
                 cmds.delete(root)
     SS.compose_characters(shot, animsets=animsets, only=index)
     joints = SS.character_joints(ch, animset)
-    cmds.bakeResults(joints, time=(lo, hi), simulation=True, sampleBy=1, disableImplicitControl=True, preserveOutsideKeys=False,
-                     sparseAnimCurveBake=False, minimizeRotation=True, controlPoints=False, shape=False, attribute=list(TRS))
+    bake_joints(joints, lo, hi)
     junk = (cmds.ls(joints, dagObjects=True, type="constraint", long=True) or []) + (cmds.ls("tdAnimComp_*") or [])
     existing = [n for n in junk if cmds.objExists(n)]  # 先に絞り込む（コンストレイントの削除に巻き込まれて先に消えたものがある。CR-2）
     if existing:  # 空のリストを cmds.delete に渡さない
