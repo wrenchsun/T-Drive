@@ -142,6 +142,8 @@ def _run(tmp: Path) -> None:
         INFO.append("オフスクリーンでフォーカスが入らないため、フォーカス時のホイールは未確認")
     check("AN-F-4: Toon の ToonSpin / ToonSlider も同じミックスイン", issubclass(ui_look.ToonSpin, WG.WheelOnFocusMixin) and issubclass(ui_look.ToonSlider, WG.WheelOnFocusMixin) and issubclass(ui_look.ToonIntSpin, WG.WheelOnFocusMixin))
     # ---- AN-F-5: 今のブレンドの割合
+    from tdrive_anim import ui_blend as ui_blend_mod
+
     blend.reset_rows()
     for f, v in ((0, 0), (30, 10), (100, 0), (118, 40)):
         cmds.setKeyframe("spine_C0_0_jnt", attribute="translateX", time=f, value=v)
@@ -155,7 +157,13 @@ def _run(tmp: Path) -> None:
     cmds.currentTime(80, edit=True)
     blend.update_mix()
     check("AN-F-5: 切り替えのあとは Run だけ", "Run_F 100%" in blend.mix_label.text() and "Idle" not in blend.mix_label.text(), blend.mix_label.text())
+    hud = ui_blend_mod.HUD_NAME
+    hud_exists = cmds.headsUpDisplay(hud, exists=True)
+    INFO.append(f"HUD（batch で作れるか）: {hud_exists}")
+    if hud_exists:
+        check("AN-F-22: 合成中はビューポートの HUD にも割合が出る", "Run_F" in (cmds.headsUpDisplay(hud, query=True, label=True) or ""))
     blend.remove()
+    check("AN-F-22: 合成を外すと HUD が消える", not cmds.headsUpDisplay(hud, exists=True))
     check("AN-F-5: 合成を外すと表示が消える", blend.mix_label.text() == "")
     # ---- AN-F-10: 命名タブが Maya の Undo / 時間単位の変化に追従する
     from tdrive_anim import ui_naming

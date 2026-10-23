@@ -32,6 +32,28 @@ COL_CLIP, COL_HOLD, COL_FADE, COL_SWITCH, COL_SPEED = range(5)
 HEADERS = ["クリップ", "保持（秒）", "クロスフェード（秒）", "切替位置", "速度"]
 
 
+HUD_NAME = "tdAnimMixHUD"
+
+
+def _hud_show(text: str) -> None:
+    """ビューポートの HUD にも今のブレンドの割合を出す（再生中も更新される。合成中だけ。AN-F-22）。UI の無い環境（batch）では何もしない。"""
+    try:
+        if cmds.headsUpDisplay(HUD_NAME, exists=True):
+            cmds.headsUpDisplay(HUD_NAME, edit=True, label=text)
+        else:
+            cmds.headsUpDisplay(HUD_NAME, section=7, block=cmds.headsUpDisplay(nextFreeBlock=7), blockSize="medium", label=text, labelFontSize="large")
+    except (RuntimeError, TypeError):
+        pass
+
+
+def _hud_hide() -> None:
+    with contextlib.suppress(RuntimeError, TypeError):
+        if cmds.headsUpDisplay(HUD_NAME, exists=True):
+            cmds.headsUpDisplay(HUD_NAME, remove=True)
+
+
+lifecycle.on_reload(_hud_hide)
+
 _active_tab: "BlendTab | None" = None
 
 
@@ -249,8 +271,12 @@ class BlendTab(QtWidgets.QWidget):
     def update_mix(self) -> None:
         if not self._mine() or not self._mix_placements:
             self.mix_label.setText("")
+            _hud_hide()
             return
-        self.mix_label.setText("今のブレンド: " + Seq.mix_text(self._mix_placements, cmds.currentTime(query=True)))
+        text = "今のブレンド: " + Seq.mix_text(self._mix_placements, cmds.currentTime(query=True))
+        self.mix_label.setText(text)
+        self.mix_label.repaint()  # 再生中・ドラッグ中は Qt の再描画が走りにくいので明示する（AN-F-22）
+        _hud_show(text)
 
     def _mine(self) -> list[str]:
         """このタブが作った合成（ショットが作ったものは含めない）。"""
