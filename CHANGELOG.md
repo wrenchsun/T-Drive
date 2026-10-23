@@ -6,11 +6,16 @@
 ## [Unreleased]
 
 ### 互換性
+- （リリース前に記入）
+
+## [0.7.0] - 2026-10-23
+
+### 互換性
 - MINOR: アニメーション作業台（Phase AN）の追加。新規の形式 `animset.json` / `shot.json` / `humanoid.json`（以後、キーの削除・改名は MAJOR、追加は MINOR）。パラメータ契約・Look スキーマ・ToonCore の変更なし
 
 ### 追加
 - Animation タブ（アニメーション作業台。仕様 docs/20）: 殻の 1 段目に追加。DirectX 11 を使わない（OpenGL・ヘッドレスでも動く）
-  - AN-11: ブレンドツリー（D-Drive の AnimEditor「Blend Tree パラメータ」に相当）。AN-11-1: 重み計算 `tdrive_anim/core/blend_tree.py`（Maya 非依存。1D / 2DSimpleDirectional / 2DFreeformDirectional / 2DFreeformCartesian）。AN-11-2: ブレンドタブの「Blend Tree パラメータ」節（160 px の 2D パッド・スライダー・重みの %・止まって 0.15 秒後に作り直し）と、正規化時間で同期した N 本の合成 `composition.compose_blend_tree`（位置は重み付き和・回転は slerp。重みは合成のノードの `weight<i>`）。AN-F-48: モーションの表・足す / 消す・ツリーの新規 / 削除・パッドの青い点のドラッグ（AN-F-49: 点の当たり判定を優先、Shift で常に十字）。AN-11-3: 雛形（2D の移動ツリー / 1D の Locomotion）・マニュアル anim-blend.html（D-Drive の AnimEditor との対応表）。MINOR: 状態図 JSON の状態に `clip` の代わりに `blendTree` を持てる
+  - AN-11: ブレンドツリー（D-Drive の AnimEditor「Blend Tree パラメータ」に相当）。AN-11-1: 重み計算 `tdrive_anim/core/blend_tree.py`（Maya 非依存。1D / 2DSimpleDirectional / 2DFreeformDirectional / 2DFreeformCartesian）。AN-11-2: ブレンドタブの「Blend Tree パラメータ」節（160 px の 2D パッド・スライダー・重みの %・マウスを離したときに作り直し = AN-F-47）と、正規化時間で同期した N 本の合成 `composition.compose_blend_tree`（位置は重み付き和・回転は slerp。重みは合成のノードの `weight<i>`）。AN-F-48: モーションの表・足す / 消す・ツリーの新規 / 削除・パッドの青い点のドラッグ（AN-F-49: 点の当たり判定を優先、Shift で常に十字）。AN-11-3: 雛形（2D の移動ツリー / 1D の Locomotion）・マニュアル anim-blend.html（D-Drive の AnimEditor との対応表）。MINOR: 状態図 JSON の状態に `clip` の代わりに `blendTree` を持てる
   - AN-9: 総点検（マニュアル anim*.html 6 ページ・Readme の「今できること」・確認項目 docs/18 AN 節と docs/10 V・一周の手順）。裏の Maya で命名 → クリップ → ブレンド → 出力 → ショット → 出力の一周のスモーク（MisotenChara_Rig.ma があればそれ）
   - 共通: Toon の `export_in_place` に `roots` / `animation` を追加（既定は従来どおり）。出力ジョブの共通部分 `tdrive.export_job.BatchJob`（不明なノードを含むシーンは .ma のまま渡す）
   - AN-8: ショットの出力（`<Shot>.fbx` = Ubercam 1 台に焼いたカメラ + `PRP_` + `EVT_`、`<Shot>__<ModelId>.fbx` = ルートジョイントの階層だけ・ショットの範囲でベイク・ネームスペースなし、`.fctrack`（既存の export_fctrack）、`<Shot>.shot.json`、D-Drive のオプション、同名上書き、出力先プリセット、`tools/export_fbx_batch.py` の `mode: "shot"`）。animset に `namespace`（リグのネームスペース。MINOR）
@@ -21,6 +26,10 @@
   - AN-3: クリップタブ（範囲から追加・一覧・検索・右クリック・ループ再生（元の再生範囲を戻す）・属性・イベント（OnFootPlant 左右）・サムネイル・`animset.json` へ保存、シーンを開くと自動で読む）
   - AN-2: 命名タブ（MS2026 の規則の検査と提案・改名の適用を 1 回の Undo で・Look と Toon のプレビュー用シェーダーの追従・シーン設定の修正・掃除候補・Humanoid 対応表 `humanoid.json`）
   - AN-1: 骨格（5 つのサブタブの枠・`tdrive_anim` パッケージ）、`animset.json` の読み書き・検証、メニュー Tools › T-Drive › Animation…
+
+### 変更
+  - MS2026 / D-Drive のフォルダを直接参照する機能を廃止（docs/20 §9.1。AN-F-18）: 出力先の「MS2026 のパス」「D-Drive のパス」プリセットとブランチ判定 → 「共有フォルダ…」（Google Drive などの任意のフォルダ。選んだ場所は PC に記憶、Git には入らない）。「MS2026 の状態図から」ボタンと `.controller` の読み込みを廃止し、命名規則・状態図は T-Drive 内蔵の写しだけを使う
+  - AN-F-50: Unity（MS2026 + D-Drive 1.11.0）で出力を取り込んで確認。ModelData（識別子 MisotenChara）・AnimData・CutsceneData（カメラ + キャラクターの Timeline、バインド表の Model は自動）ができる。D-Drive への依頼 DD-1 / DD-3 / DD-7 / DD-14 は解決・問題なし、新規 DD-16〜18（置き場所の判定・animset.json / humanoid.json の読み込み・自動検知）を docs/20 §8.1 に記録。マニュアルの出力ページに「Unity に置いたあと」（再実行メニュー・Loop・Humanoid は手で）
 
 ### 修正
   - AN-F-46: ブレンドの合成が残ったまま「ショットを反映」すると「合成できるジョイントがありません」で止まる不具合。同じジョイントを使っている別の合成を自動で外し（ブレンド ⇄ ショットどちらも）、外したことを警告に出す。どうしても作れないときの文言に、ジョイントを使っている別の合成の名前を入れる
