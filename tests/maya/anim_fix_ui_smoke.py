@@ -237,6 +237,26 @@ def _run(tmp: Path) -> None:
     SN2.apply_cleanup(items)
     check("AN-F-11: 削除で Unused と 5 つの SG が消える", not cmds.objExists("Unused") and not cmds.ls("UnusedSG", "UnusedHairSG*"))
 
+    # ---- AN-F-20: 遷移列の表が animset の変更の直後に更新される（前に出ているブレンドタブ）
+    for nm_ in list(s.data["clips"]):
+        s.remove_clip(nm_["name"])
+    from tdrive_anim.ui import AnimPanel as AP20
+
+    panel20 = AP20()
+    panel20.tabs.setCurrentWidget(panel20.blend_tab)
+    s.add_clip_from_range("Idle", 0, 30)
+    s.add_clip_from_range("Run", 100, 118, direction="F")
+    rows_after_two = panel20.blend_tab.rows_table.rowCount()
+    s.add_clip_from_range("Jump", 200, 230)
+    check("AN-F-20: クリップを足した直後に遷移列の表の行が増える（2 → 3）", rows_after_two == 2 and panel20.blend_tab.rows_table.rowCount() == 3, f"{rows_after_two} {panel20.blend_tab.rows_table.rowCount()}")
+    first_cell = panel20.blend_tab.rows_table.cellWidget(2, 0)
+    check("AN-F-20: 3 行目のクリップのコンボが Jump", first_cell is not None and first_cell.currentText() == "A_MisotenChara_Jump")
+    s.remove_clip("A_MisotenChara_Jump")
+    check("AN-F-20: クリップを消した直後に行が減る", panel20.blend_tab.rows_table.rowCount() == 2)
+    s.undo()
+    check("AN-F-20: Undo の直後にも表が戻る", panel20.blend_tab.rows_table.rowCount() == 3)
+    panel20.detach()
+
     # ---- AN-F-15: シーケンサー再生でパネルのカメラが切り替わる
     from tdrive_anim import shot_scene as SS
 

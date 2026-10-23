@@ -337,6 +337,8 @@ class BlendTab(QtWidgets.QWidget):
             self.rows_table.resizeColumnsToContents()
         finally:
             self._building = False
+        self.rows_table.updateGeometries()
+        self.rows_table.viewport().repaint()  # 作り直した直後に表が古いまま見える（再描画されない）ことがあった（AN-F-20）
 
     def _fill_graph_info(self) -> None:
         if self.graph is None:
