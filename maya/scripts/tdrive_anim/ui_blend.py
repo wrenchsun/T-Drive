@@ -148,19 +148,17 @@ class BlendTab(QtWidgets.QWidget):
         bv.addWidget(self.build_rows_btn)
         v.addWidget(box)
 
-        # ---- 状態図（MS2026）
-        gbox = QtWidgets.QGroupBox("MS2026 の状態図（Idle / Run / Jump）をパラメータで動かす")
+        # ---- 状態図
+        gbox = QtWidgets.QGroupBox("状態図（Idle / Run / Jump）をパラメータで動かす")
         gv = QtWidgets.QVBoxLayout(gbox)
-        self.graph_btn = QtWidgets.QPushButton("MS2026 の状態図から")
-        self.graph_btn.setToolTip("AC_PlayerPreview.controller と同じ状態図（Idle / Run / Jump、遷移の条件と並び順も同じ、0.08 秒のクロスフェード、Exit Time なし）で動かします。animset に保存されます（animset に既にあるときはそれを使います）")
-        self.graph_btn.clicked.connect(lambda *_: self.use_graph())
-        gv.addWidget(self.graph_btn)
         form = QtWidgets.QFormLayout()
         self.speed = WG.Slider(QtCore.Qt.Horizontal)
         self.speed.setRange(0, 100)
-        self.speed.setToolTip("Speed（0〜1）。0.1 より大きいと Idle → Run、小さいと Run → Idle。再生中に動かすと、その時刻から遷移します")
+        self.speed.setToolTip("Speed（0〜1）。0.1 を境に Idle ⇄ Run が切り替わります（この状態図では速さの違いは出ません。速さのブレンドは AN-11）。"
+                              "ドラッグを離したときに記録されます。再生中に動かすと、その時刻から遷移します")
         self.speed_label = QtWidgets.QLabel("0.00")
         self.speed.valueChanged.connect(lambda *_: self._speed_moved())
+        self.speed.sliderReleased.connect(lambda *_: self.on_param_changed())  # 記録はドラッグを離したときだけ（AN-F-27）
         sp = QtWidgets.QHBoxLayout()
         sp.addWidget(self.speed, 1)
         sp.addWidget(self.speed_label)
@@ -175,7 +173,9 @@ class BlendTab(QtWidgets.QWidget):
         self.total_sec.setRange(1.0, 120.0)
         self.total_sec.setValue(8.0)
         self.total_sec.setSuffix(" 秒")
-        self.total_sec.setToolTip("合成する長さ。範囲: 1〜120 秒。既定: 8 秒")
+        self.total_sec.setToolTip("合成する長さ。範囲: 1〜120 秒。既定: 記録の最後の時刻 + 2 秒（手で変えるとそのまま）")
+        self._total_manual = False  # 手で変えたら、記録の最後 + 2 秒への自動追従を止める
+        self.total_sec.valueChanged.connect(lambda *_: self._on_total_changed())
         form.addRow("長さ", self.total_sec)
         gv.addLayout(form)
         self.reset_btn = QtWidgets.QPushButton("パラメータを最初から（記録を消す）")
@@ -189,6 +189,23 @@ class BlendTab(QtWidgets.QWidget):
         self.graph_info = QtWidgets.QLabel()
         self.graph_info.setWordWrap(True)
         gv.addWidget(self.graph_info)
+        self.timeline_table = QtWidgets.QTableWidget(0, 3)  # 記録したパラメータ（時刻 / 変えたパラメータ / その結果の状態。読み取り専用。AN-F-27）
+        self.timeline_table.setHorizontalHeaderLabels(["時刻", "変えたパラメータ", "その結果の状態"])
+        self.timeline_table.horizontalHeader().setStretchLastSection(True)
+        self.timeline_table.verticalHeader().setVisible(False)
+        self.timeline_table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        self.timeline_table.setMinimumHeight(90)
+        self.timeline_table.setMaximumHeight(170)
+        self.timeline_table.setToolTip("スライダーを動かした時刻ごとの記録です（最大 50 行。古いものは畳みます）。同じ時刻の記録は上書きされます")
+        gv.addWidget(self.timeline_table)
+        self.switch_label = QtWidgets.QLabel()  # 評価してできた遷移列（読み取り専用）
+        self.switch_label.setWordWrap(True)
+        self.switch_label.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
+        gv.addWidget(self.switch_label)
+        self.graph_reset_btn = QtWidgets.QPushButton("状態図を既定に戻す")
+        self.graph_reset_btn.setToolTip("animset の状態図を既定（Idle / Run / Jump）に作り直します（記録したパラメータは残ります）")
+        self.graph_reset_btn.clicked.connect(lambda *_: self.reset_graph())
+        gv.addWidget(self.graph_reset_btn, 0, QtCore.Qt.AlignLeft)
         v.addWidget(gbox)
 
         # ---- レイヤー
@@ -312,7 +329,7 @@ class BlendTab(QtWidgets.QWidget):
     # ------------------------------------------------------------ 表示
     def refresh(self) -> None:
         has = self.session.data is not None
-        for w in (self.rows_table, self.build_rows_btn, self.graph_btn, self.build_graph_btn, self.play_btn, self.layer_on, self.layer_clip):
+        for w in (self.rows_table, self.build_rows_btn, self.graph_reset_btn, self.build_graph_btn, self.play_btn, self.layer_on, self.layer_clip):
             w.setEnabled(has)
         act = self._mine()
         if act:
@@ -368,12 +385,45 @@ class BlendTab(QtWidgets.QWidget):
 
     def _fill_graph_info(self) -> None:
         if self.graph is None:
-            self.graph_info.setText("状態図はまだ使っていません（「MS2026 の状態図から」で作ります）")
+            self.graph_info.setText("スライダーを動かすか「状態図で合成を作る」を押すと、既定の状態図（Idle / Run / Jump）で動かします")
+            self.timeline_table.setRowCount(0)
+            self.switch_label.setText("")
             return
         probs = M.validate(self.graph, self.session.data["clips"] if self.session.data else [])
         states = " / ".join(f"{s['name']}={s.get('clip') or '（未割り当て）'}" for s in self.graph.get("states", []))
-        events = ", ".join(f"{t:.2f}s:{v}" for t, v in self.timeline) or "なし"
-        self.graph_info.setText(f"状態: {states}\n記録したパラメータ: {events}" + ("\n" + "\n".join("⚠ " + p for p in probs[:4]) if probs else ""))
+        self.graph_info.setText(f"状態: {states}" + ("\n" + "\n".join("⚠ " + p for p in probs[:4]) if probs else ""))
+        self._fill_timeline_view()
+
+    def _fill_timeline_view(self) -> None:
+        """記録の表と、評価した遷移列（読み取り専用）。評価できない状態図のときは空にする。"""
+        self._auto_total()
+        try:
+            r = M.evaluate(self.graph, self.timeline, self.total_sec.value(), self._fps())
+        except Exception:  # noqa: BLE001  壊れた状態図は上の警告で知らせる
+            self.timeline_table.setRowCount(0)
+            self.switch_label.setText("")
+            return
+        rows = M.timeline_rows(self.timeline, r, M.initial_params(self.graph))
+        self.timeline_table.setRowCount(len(rows))
+        for i, cells in enumerate(rows):
+            for j, text in enumerate(cells):
+                self.timeline_table.setItem(i, j, QtWidgets.QTableWidgetItem(text))
+        self.switch_label.setText("評価した遷移列: " + M.describe_switches(r))
+
+    def _auto_total(self) -> None:
+        """「長さ」の既定は記録の最後の時刻 + 2 秒（手で変えたあとは触らない）。"""
+        if self._total_manual or not self.timeline:
+            return
+        want = min(120.0, max(1.0, max(t for t, _ in self.timeline) + 2.0))
+        if abs(self.total_sec.value() - want) > 1e-9:
+            self.total_sec.blockSignals(True)
+            self.total_sec.setValue(want)
+            self.total_sec.blockSignals(False)
+
+    def _on_total_changed(self) -> None:
+        self._total_manual = True
+        if self.graph is not None:
+            self._fill_timeline_view()
 
     # ------------------------------------------------------------ 行の編集
     def _set(self, row: int, key: str, value) -> None:
@@ -524,6 +574,17 @@ class BlendTab(QtWidgets.QWidget):
 
     def reset_timeline(self) -> None:
         self.timeline = []
+        self._total_manual = False
+        self._fill_graph_info()
+
+    def reset_graph(self) -> None:
+        """animset の状態図を既定に作り直す（AN-F-28）。"""
+        d = self.session.data
+        if d is None:
+            return
+        self._guard(self.session.set_value, "stateGraph", M.default_graph(d["clips"], d["modelId"]))
+        self.graph = d.get("stateGraph")
+        self._say("状態図を既定（Idle / Run / Jump）に戻しました")
         self._fill_graph_info()
 
     def _params(self) -> dict[str, float]:
@@ -531,18 +592,26 @@ class BlendTab(QtWidgets.QWidget):
 
     def _speed_moved(self) -> None:
         self.speed_label.setText(f"{self.speed.value() / 100.0:.2f}")
-        self.on_param_changed()
+        if not self.speed.isSliderDown():  # ドラッグ中は記録しない（離したとき sliderReleased で 1 回。キー操作・ホイール・プログラムからの変更はここで記録）
+            self.on_param_changed()
 
     def on_param_changed(self) -> None:
         """パラメータを動かした: 今の時刻の変更として記録する。状態図の合成が出ていれば、その時刻から遷移するように作り直す。"""
+        if self.session.data is None:
+            return
         if self.mode != "graph" or self.graph is None:
+            self.use_graph()  # 「MS2026 の状態図から」ボタンは廃止。パラメータを動かしたら既定の状態図を自動で使う（AN-F-28）
+        if self.graph is None:
             return
         fps = self._fps()
         t = max(0.0, cmds.currentTime(query=True) / fps) if self._mine() else 0.0
-        self.timeline = M.with_event(self.timeline, round(t, 3), self._params())
+        t = round(round(t * fps) / fps, 3)  # 同じフレームの記録は上書き（AN-F-27）
+        self.timeline = M.with_event(self.timeline, t, self._params())
         self._fill_graph_info()
         if self._mine() and K.info(COMP_NAME).get("graph"):
             self._rebuild_timer.start()  # ドラッグが止まってから 1 回だけ作り直す
+        elif self._mine():
+            self._say("⚠ 今の合成は遷移列から作ったものなので、スライダーを動かしても反映されません。「状態図で合成を作る」を押してください")
 
     def _graph_placements(self) -> list[Seq.Placement]:
         r = M.evaluate(self.graph, self.timeline, self.total_sec.value(), self._fps())
@@ -556,6 +625,7 @@ class BlendTab(QtWidgets.QWidget):
         self.mode = "graph"
         if not self.timeline:
             self.timeline = [(0.0, self._params())]
+        self._fill_timeline_view()
         self._guard(lambda: self._compose(self._graph_placements()))
         if self._mine():
             self._mark_graph()
@@ -580,6 +650,8 @@ class BlendTab(QtWidgets.QWidget):
         t = cmds.currentTime(query=True)
         playing = cmds.play(query=True, state=True)
         cmds.play(state=False)
+        self._say("作り直し中…")
+        QtWidgets.QApplication.processEvents()
         self._guard(lambda: self._compose(self._graph_placements(), use_cache=True))  # スライダーの作り直しは、アニメーションが同じならサンプリングを使い回す（AN-F-26）
         self._mark_graph()
         cmds.currentTime(t, edit=True)

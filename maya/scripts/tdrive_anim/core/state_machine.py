@@ -200,6 +200,40 @@ def to_placements(result: Result, clips: dict[str, dict[str, Any]], fps: int) ->
                                   clips, fps, result.total_sec)
 
 
+def state_at(result: Result, t: float) -> str:
+    """時刻 t の状態の名前（遷移が始まった時刻から、行き先の状態とみなす）。"""
+    cur = result.first_state
+    for sw in result.switches:
+        if sw["t"] <= t + 1e-9:
+            cur = sw["to"]
+    return cur
+
+
+def describe_switches(result: Result) -> str:
+    """評価した遷移の列を一行に（例: `0.00s Idle → 1.23s Run（0.08s）→ 3.00s Jump（0.08s）`）。"""
+    parts = [f"0.00s {result.first_state}"]
+    parts += [f"{sw['t']:.2f}s {sw['to']}（{sw['duration']:g}s）" for sw in result.switches]
+    return " → ".join(parts)
+
+
+MAX_TIMELINE_ROWS = 50
+
+
+def timeline_rows(timeline: list[tuple[float, dict[str, float]]], result: Result, defaults: dict[str, float] | None = None) -> list[tuple[str, str, str]]:
+    """記録したパラメータの表の行: (時刻, 変えたパラメータ, その時刻の状態)。前の記録から変わったパラメータだけを出す。
+    最大 `MAX_TIMELINE_ROWS` 行で、古い記録は先頭の 1 行（「…ほか N 件」）に畳む。"""
+    prev = dict(defaults or {})
+    rows: list[tuple[str, str, str]] = []
+    for t, vals in sorted(timeline, key=lambda e: e[0]):
+        changed = {k: v for k, v in vals.items() if prev.get(k) != v}
+        prev.update(vals)
+        rows.append((f"{t:.2f}s", ", ".join(f"{k}={v:g}" for k, v in changed.items()) or "（変化なし）", state_at(result, t)))
+    if len(rows) > MAX_TIMELINE_ROWS:
+        hidden = len(rows) - (MAX_TIMELINE_ROWS - 1)
+        rows = [("…", f"古い記録 {hidden} 件", "")] + rows[hidden:]
+    return rows
+
+
 def with_event(timeline: list[tuple[float, dict[str, float]]], t: float, values: dict[str, float]) -> list[tuple[float, dict[str, float]]]:
     """時刻 t にパラメータの変更を足した新しい時系列（同じ時刻の変更は上書き）。"""
     out = [(tt, dict(v)) for tt, v in timeline if abs(tt - t) > 1e-9]

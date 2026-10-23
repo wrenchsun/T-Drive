@@ -343,6 +343,47 @@ def _run(tmp: Path) -> None:
     check("AN-F-23: 押すと合成が外れ、出力ボタンが有効になる", n23 == 1 and K23.active() == [] and "合成" not in ex23.block_reason() and ex23.unblend_btn.isHidden(), f"{n23} {K23.active()} {ex23.block_reason()!r} {ex23.unblend_btn.isHidden()}")
     panel23.detach()
 
+    # ---- AN-F-27 / AN-F-28: 状態図のパラメータ操作
+    from tdrive_anim.ui import AnimPanel as AP27
+
+    panel27 = AP27()
+    b27 = panel27.blend_tab
+    panel27.tabs.setCurrentWidget(b27)
+    check("AN-F-28: 「MS2026 の状態図から」ボタンが無い", not hasattr(b27, "graph_btn"))
+    check("AN-F-28: 見出しが「状態図（Idle / Run / Jump）をパラメータで動かす」", any(g.title().startswith("状態図（Idle") for g in b27.findChildren(QtWidgets.QGroupBox)))
+    b27.reset_timeline()
+    b27.graph = None
+    b27.mode = "rows"
+    b27.speed.setSliderDown(True)
+    for v in (10, 20, 30, 40, 50):  # ドラッグ中
+        b27.speed.setValue(v)
+    check("AN-F-27: ドラッグ中は記録しない", b27.timeline == [], str(b27.timeline))
+    b27.speed.setSliderDown(False)  # 離す → sliderReleased
+    check("AN-F-28: スライダーを動かすと既定の状態図が自動で使われる", b27.mode == "graph" and b27.graph is not None)
+    check("AN-F-27: ドラッグを離すと記録は 1 件（最後の値）", len(b27.timeline) == 1 and b27.timeline[0][1]["Speed"] == 0.5, str(b27.timeline))
+    check("AN-F-27: 記録の表は 1 行（時刻 / 変えたパラメータ / 結果の状態）", b27.timeline_table.rowCount() == 1 and "Speed=0.5" in b27.timeline_table.item(0, 1).text() and b27.timeline_table.item(0, 2).text() == "Run", [b27.timeline_table.item(0, c).text() for c in range(3)] if b27.timeline_table.rowCount() else "")
+    check("AN-F-27: 評価した遷移列が一行で出る", b27.switch_label.text().startswith("評価した遷移列: 0.00s Idle → ") and "Run（0.08s）" in b27.switch_label.text(), b27.switch_label.text())
+    check("AN-F-27: 「長さ」の既定は記録の最後 + 2 秒", abs(b27.total_sec.value() - 2.0) < 1e-9, str(b27.total_sec.value()))
+    b27.total_sec.setValue(6.0)
+    b27.speed.setValue(0)
+    check("AN-F-27: 手で変えた「長さ」は自動で変えない", abs(b27.total_sec.value() - 6.0) < 1e-9)
+    b27.reset_graph()
+    check("AN-F-28: 「状態図を既定に戻す」", b27.graph is not None and "既定" in b27.message.text())
+    # rows の合成のままパラメータを動かすと案内
+    b27.reset_timeline()
+    b27.rows = [{"clip": "A_MisotenChara_Idle", "holdSec": 1.0, "crossFadeSec": 0.1, "switchAt": 1.0, "speed": 1.0}]
+    b27.mode = "rows"
+    b27.build_from_rows()
+    b27.speed.setValue(80)
+    check("AN-F-27: 遷移列の合成のままパラメータを動かすと「状態図で合成を作る」を案内", "状態図で合成を作る" in b27.message.text() and "反映されません" in b27.message.text(), b27.message.text())
+    b27.remove()
+    # 記録は最大 50 行
+    for i in range(60):
+        b27.timeline = __import__("tdrive_anim.core.state_machine", fromlist=["x"]).with_event(b27.timeline, i * 0.1, {"Speed": (i % 2) * 0.5})
+    b27._fill_graph_info()
+    check("AN-F-27: 記録の表は最大 50 行（古いものは畳む）", b27.timeline_table.rowCount() <= 50, str(b27.timeline_table.rowCount()))
+    panel27.detach()
+
     # ---- AN-F-17: メッセージ欄はスクロール領域の外・最上部
     from tdrive_anim.ui import AnimPanel
     from tdrive_anim.ui_common import MessageLabel
