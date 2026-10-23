@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import traceback
 
 from maya import cmds
@@ -24,12 +25,44 @@ KIND_LABEL = {N.MESH: "メッシュ", N.MATERIAL: "マテリアル", N.TEXTURE: 
 COL_APPLY, COL_SEV, COL_KIND, COL_NAME, COL_SUG, COL_REASON = range(6)
 
 
+SCENE_EVENTS = ("Undo", "Redo", "timeUnitChanged", "NameChanged")  # これらが起きたら、検査の表示を作り直す（AN-F-10）
+_active_tab: "NamingTab | None" = None
+
+
+@lifecycle.guarded()
+def _cb_scene_event() -> None:
+    tab = _active_tab
+    if tab is not None:
+        tab.request_reinspect()
+
+
+lifecycle.keep_alive(_cb_scene_event)
+
+
+def _reload_cleanup() -> None:
+    tab = _active_tab
+    if tab is not None:
+        with contextlib.suppress(RuntimeError):
+            tab.detach()
+
+
+lifecycle.on_reload(_reload_cleanup)
+
+
 class NamingTab(QtWidgets.QWidget):
     def __init__(self, s: session.AnimSession) -> None:
         super().__init__()
         self.session = s
         self.report = SN.Report()
         self.humanoid: dict | None = None
+        self._inspected = False  # 一度でも「検査」した（それまでは自動で検査しない）
+        self._stale = False  # 検査のあとシーンが変わった（前に出たときに検査し直す）
+        self._inspecting = False
+        self._jobs: list = []
+        self._reinspect_timer = QtCore.QTimer(self)  # 連続する変化（改名の連打・Undo の連打）は 0.3 秒まとめて 1 回
+        self._reinspect_timer.setSingleShot(True)
+        self._reinspect_timer.setInterval(300)
+        self._reinspect_timer.timeout.connect(lambda *_: self._reinspect())
         outer = QtWidgets.QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         scroll = QtWidgets.QScrollArea()
@@ -143,16 +176,49 @@ class NamingTab(QtWidgets.QWidget):
         self.refresh()
 
     # ------------------------------------------------------------ 検査
+    def _start_jobs(self) -> None:
+        """Maya の Undo / Redo / 時間単位 / 名前の変化を見る scriptJob（最初の検査のあとから。detach で外す）。"""
+        global _active_tab
+        if self._jobs:
+            return
+        _active_tab = self
+        for ev in SCENE_EVENTS:
+            with contextlib.suppress(RuntimeError):
+                self._jobs.append(cmds.scriptJob(event=[ev, _cb_scene_event]))
+
+    def request_reinspect(self) -> None:
+        """シーンが変わった: 検査済みなら、0.3 秒まとめてから検査し直す（前に出ていなければ、前に出たときに）。"""
+        if not self._inspected or self._inspecting or self.session.data is None:
+            return
+        self._stale = True
+        self._reinspect_timer.start()
+
+    def _reinspect(self, force: bool = False) -> None:
+        if self._stale and (force or self.isVisible()):
+            self._stale = False
+            self.inspect()
+
+    def showEvent(self, event) -> None:  # noqa: N802
+        super().showEvent(event)
+        if self._stale:
+            self._reinspect()
+
     def inspect(self) -> None:
         if self.session.data is None:
             self.summary.setText("先に animset を作ってください（上の ModelId 欄 → 新規）")
             return
+        self._inspecting = True
         try:
             self.report = SN.inspect_scene(self.session.model_id, self.session.data)
         except Exception as exc:  # noqa: BLE001
             lifecycle.report_error("命名の検査で例外", traceback.format_exc())
             self.summary.setText(f"検査できませんでした: {exc}")
             return
+        finally:
+            self._inspecting = False
+        self._inspected = True
+        self._stale = False
+        self._start_jobs()
         self._fill_table()
         self._fill_settings()
         self._fill_cleanup()
@@ -446,4 +512,11 @@ class NamingTab(QtWidgets.QWidget):
             self.humanoid = None
 
     def detach(self) -> None:
-        pass
+        global _active_tab
+        self._reinspect_timer.stop()
+        for j in self._jobs:
+            with contextlib.suppress(RuntimeError, TypeError):  # batch では scriptJob が番号を返さない
+                cmds.scriptJob(kill=j, force=True)
+        self._jobs = []
+        if _active_tab is self:
+            _active_tab = None

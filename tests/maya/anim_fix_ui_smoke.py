@@ -157,6 +157,41 @@ def _run(tmp: Path) -> None:
     check("AN-F-5: 切り替えのあとは Run だけ", "Run_F 100%" in blend.mix_label.text() and "Idle" not in blend.mix_label.text(), blend.mix_label.text())
     blend.remove()
     check("AN-F-5: 合成を外すと表示が消える", blend.mix_label.text() == "")
+    # ---- AN-F-10: 命名タブが Maya の Undo / 時間単位の変化に追従する
+    from tdrive_anim import ui_naming
+
+    cmds.undoInfo(state=True)
+    recorded: list[dict] = []
+    orig_job = cmds.scriptJob
+    cmds.scriptJob = lambda **kw: (recorded.append(kw), len(recorded))[1]
+    try:
+        nt = ui_naming.NamingTab(s)
+        nt.request_reinspect()
+        check("AN-F-10: 検査する前は自動では検査しない", not nt._stale and not recorded)
+        nt.inspect()
+        events = [kw["event"][0] for kw in recorded]
+        check("AN-F-10: 最初の検査で Undo / Redo / timeUnitChanged / NameChanged の scriptJob を登録", events == ["Undo", "Redo", "timeUnitChanged", "NameChanged"], str(events))
+        mesh_before = [f.name for f in nt.report.findings if f.kind == "mesh"]
+        mesh = make_mini_rig.MESH
+        cmds.rename(mesh, "RenamedMesh")
+        nt.request_reinspect()
+        check("AN-F-10: 変化を受けると 0.3 秒まとめてから検査し直す予約になる", nt._stale and nt._reinspect_timer.isActive())
+        nt._reinspect(force=True)
+        check("AN-F-10: 改名のあと一覧の「今の名前」が変わる", any("RenamedMesh" in f.name for f in nt.report.findings if f.kind == "mesh"), str([f.name for f in nt.report.findings]))
+        cmds.undo()
+        nt.request_reinspect()
+        nt._reinspect(force=True)
+        check("AN-F-10: Maya の Undo のあと一覧の「今の名前」が戻る", [f.name for f in nt.report.findings if f.kind == "mesh"] == mesh_before, str([f.name for f in nt.report.findings]))
+        cmds.currentUnit(time="film")
+        nt.request_reinspect()
+        nt._reinspect(force=True)
+        check("AN-F-10: 単位を変えるとシーン設定の表示が変わる", any(i.key == "time" for i in nt.report.settings))
+        cmds.currentUnit(time="ntsc")
+        nt.detach()
+        check("AN-F-10: detach で scriptJob を外す", nt._jobs == [] and ui_naming._active_tab is None)
+    finally:
+        cmds.scriptJob = orig_job
+
     # ---- AN-F-15: シーケンサー再生でパネルのカメラが切り替わる
     from tdrive_anim import shot_scene as SS
 
