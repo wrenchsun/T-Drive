@@ -425,6 +425,8 @@ class BlendTab(QtWidgets.QWidget):
                 combo.addItems(names)
                 combo.setCurrentText(row["clip"])
                 combo.activated.connect(lambda *_, rr=r, c=combo: self._set(rr, "clip", c.currentText()))
+                combo.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)  # 埋め込みコンボが右クリックを受けてしまうので、行メニューへ転送する（AN-F-40）
+                combo.customContextMenuRequested.connect(lambda pos, rr=r, c=combo: self._combo_menu(rr, c, pos))
                 self.rows_table.setCellWidget(r, COL_CLIP, combo)
                 for col, key, val in ((COL_HOLD, "holdSec", row.get("holdSec", 0)), (COL_FADE, "crossFadeSec", Seq.fade_sec(row, self._clips().get(row["clip"], {}))),
                                       (COL_SWITCH, "switchAt", row.get("switchAt", 1.0)), (COL_SPEED, "speed", row.get("speed", 1.0))):
@@ -566,6 +568,11 @@ class BlendTab(QtWidgets.QWidget):
         self.rows += got
         self._fill_rows()
         self._say(f"{len(got)} 行を貼り付けました" + (f"（クリップが無い {len(raw['rows']) - len(got)} 行は飛ばしました）" if len(got) != len(raw["rows"]) else ""))
+
+    def _combo_menu(self, row: int, combo: QtWidgets.QWidget, pos) -> None:
+        """表の中のコンボの上の右クリック: その行を選んで、表と同じ行メニューを出す。"""
+        self.rows_table.selectRow(row)
+        self._menu(combo.mapTo(self.rows_table.viewport(), pos))
 
     def _menu(self, pos) -> None:
         m = QtWidgets.QMenu(self)

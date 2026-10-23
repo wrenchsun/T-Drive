@@ -437,8 +437,7 @@ class SplitJob(export_job.BatchJob):
                 if r["type"] == "clip" and r["ok"]:
                     E.record(state, r["name"], self.fingerprints[r["name"]], self.anim_dir)
             E.save_state(sp, state)
-        if all(r["ok"] for r in res):
-            self.dispose()  # 成功したら作業フォルダ（シーンのコピー）を消す。失敗したときはログのために残す（SF-15）
+        self.dispose()  # 成功・失敗のどちらでも作業フォルダ（シーンのコピー）を消す。失敗の理由は結果（error / trace）に入っている（SF-15 / AN-F-41）
         return res
 
 
@@ -696,6 +695,5 @@ class ShotJob(export_job.BatchJob):
         if any(r["ok"] for r in res):
             SH.save(self.out_dir / f"{self.shot['shot']}{SH.SUFFIX}", self.shot)
             self.extra = self.write_facial_tracks()
-        if all(r["ok"] for r in res):
-            self.dispose()  # 成功したら作業フォルダを消す（SF-15）
+        self.dispose()  # 成功・失敗のどちらでも作業フォルダを消す（SF-15 / AN-F-41）
         return res

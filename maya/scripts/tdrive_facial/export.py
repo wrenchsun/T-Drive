@@ -65,6 +65,14 @@ FCPOSE_SUFFIX = ".fcpose"
 UE_SUFFIX = ".fcpose.json"
 
 
+try:  # 古い作業フォルダの掃除（読み込み時に 1 回。AN-F-41）
+    from tdrive.export_job import purge_stale_workdirs as _purge_stale_workdirs
+
+    _purge_stale_workdirs()
+except Exception:  # noqa: BLE001  掃除の失敗で出力を止めない
+    pass
+
+
 class ExportError(RuntimeError):
     """出力できない。メッセージはそのまま画面に出せる日本語。"""
 
@@ -369,7 +377,7 @@ class UnityExportJob:
         self.warnings = _bake_warnings(doc)
         self._doc = copy.deepcopy(doc)  # 出力中にデータを編集しても、FBX と .fcpose が食い違わないよう開始時の内容を持つ（M-7）
         self.out_dir.mkdir(parents=True, exist_ok=True)
-        self.work = Path(tempfile.mkdtemp(prefix="tdrive_facial_export_"))
+        self.work = Path(tempfile.mkdtemp(prefix="tdrive_facial_export_"))  # 古い残りは tdrive.export_job.purge_stale_workdirs が読み込み時に掃除する（AN-F-41）
         self._log = None
         try:
             self._start(doc)

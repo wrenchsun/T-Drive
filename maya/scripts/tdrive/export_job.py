@@ -30,6 +30,33 @@ def mayapy() -> Path:
     return Path(os.environ.get("MAYA_LOCATION", r"C:\Program Files\Autodesk\Maya2026")) / "bin" / "mayapy.exe"
 
 
+WORK_PREFIXES = ("tdrive_export_", "tdrive_anim_export_", "tdrive_facial_export_")  # 出力の作業フォルダ（%TEMP% の下）
+STALE_AFTER_SEC = 24 * 3600
+
+
+def purge_stale_workdirs(prefixes: tuple[str, ...] = WORK_PREFIXES, max_age_sec: float = STALE_AFTER_SEC) -> int:
+    """作業フォルダ（出力のたびに作るシーンのコピー）のうち、`max_age_sec` より古いものを消す。Maya が落ちた・消せなかったときの残りの掃除。
+    新しいもの（ほかの Maya で出力中かもしれない）は触らない。消した数を返す。"""
+    import time
+
+    n = 0
+    root = Path(tempfile.gettempdir())
+    now = time.time()
+    for p in root.iterdir() if root.is_dir() else []:
+        if p.is_dir() and p.name.startswith(prefixes):
+            try:
+                if now - p.stat().st_mtime > max_age_sec:
+                    shutil.rmtree(p, ignore_errors=True)
+                    n += 1
+            except OSError:
+                continue
+    return n
+
+
+with contextlib.suppress(Exception):
+    purge_stale_workdirs()  # 読み込み時（Maya の起動 / ツールのリロード）に 1 回
+
+
 class BatchJob:
     """`tools/<script>` を別プロセスの mayapy で実行する。payload は args.json として渡る（scene・result は自動で足す）。"""
 
@@ -68,7 +95,7 @@ class BatchJob:
 
     def dispose(self) -> None:
         """ログを閉じ、作業フォルダ（シーンの丸ごとのコピー）を消す。何度呼んでもよい。成功のあとと kill のあとに呼ぶ。
-        失敗したときは呼ばない（ログを読めるように残す）。"""
+        失敗したときも呼ぶ（ログは例外の文に入れてから消す。残すと %TEMP% に溜まる。AN-F-41）。"""
         with contextlib.suppress(Exception):
             self.log.close()
         shutil.rmtree(self.work, ignore_errors=True)
@@ -82,5 +109,7 @@ class BatchJob:
     def result(self) -> dict[str, Any]:
         self.log.close()
         if not self.result_path.exists():
-            raise RuntimeError("FBX 書き出しに失敗しました:\n" + self.log_tail())
+            tail = self.log_tail()
+            self.dispose()  # ログを読んだあと、作業フォルダを残さない（AN-F-41）
+            raise RuntimeError("FBX 書き出しに失敗しました:\n" + tail)
         return json.loads(self.result_path.read_text(encoding="utf-8"))

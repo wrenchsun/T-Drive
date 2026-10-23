@@ -733,6 +733,62 @@ def _run(tmp: Path) -> None:
         shell_w.hide()
     check("AN-F-39: ツールに知らせの関数が無い殻（Toon / Facial）は何も起きない", not hasattr(object(), "on_hidden"))
 
+    # ---- AN-F-40: 遷移列の表のコンボの上の右クリックでも行メニューが出る
+    from PySide6 import QtCore as QC40
+
+    from tdrive_anim.ui import AnimPanel as AP40
+
+    panel40 = AP40()
+    b40 = panel40.blend_tab
+    b40.rows = [{"clip": "A_MisotenChara_Idle", "holdSec": 1.0, "crossFadeSec": 0.1, "switchAt": 1.0, "speed": 1.0}]
+    b40._fill_rows()
+    combo40 = b40.rows_table.cellWidget(0, 0)
+    shown40: list[list[str]] = []
+
+    def grab_popup() -> None:  # 出たメニュー（モーダル）の中身を記録して閉じる
+        pop = QtWidgets.QApplication.activePopupWidget()
+        if pop is not None:
+            shown40.append([x.text() for x in pop.actions()])
+            pop.close()
+
+    check("AN-F-40: コンボの右クリックが転送される設定", combo40.contextMenuPolicy() == QC40.Qt.CustomContextMenu)
+    QC40.QTimer.singleShot(300, grab_popup)
+    combo40.customContextMenuRequested.emit(QC40.QPoint(3, 3))
+    check("AN-F-40: コンボ上の右クリックで行メニュー（コピー / 貼り付け / 行を消す）が出る", len(shown40) == 1 and "行を消す" in shown40[0] and "貼り付け" in shown40[0], str(shown40))
+    check("AN-F-40: 右クリックした行が選ばれる", [i.row() for i in b40.rows_table.selectedIndexes()][:1] == [0])
+    panel40.detach()
+
+    # ---- AN-F-41: 出力の作業フォルダは失敗でも残らない・古いものは掃除
+    import os as os41
+    import tempfile as tf41
+    import time as time41
+    from pathlib import Path as P41
+
+    from tdrive import export_job as EJ41
+
+    old_dir = P41(tf41.mkdtemp(prefix="tdrive_anim_export_"))
+    new_dir = P41(tf41.mkdtemp(prefix="tdrive_anim_export_"))
+    other = P41(tf41.mkdtemp(prefix="unrelated_"))
+    past = time41.time() - 3 * 24 * 3600
+    os41.utime(old_dir, (past, past))
+    os41.utime(other, (past, past))
+    n41 = EJ41.purge_stale_workdirs()
+    check("AN-F-41: 1 日より古い作業フォルダは掃除され、新しいものと関係ないフォルダは残る", n41 >= 1 and not old_dir.exists() and new_dir.exists() and other.exists(), f"{n41} {old_dir.exists()} {new_dir.exists()}")
+    new_dir.rmdir()
+    other.rmdir()
+    job41 = EJ41.BatchJob.__new__(EJ41.BatchJob)  # 結果が書かれなかった（失敗）ジョブ
+    job41.work = P41(tf41.mkdtemp(prefix="tdrive_anim_export_"))
+    job41.result_path = job41.work / "result.json"
+    job41.log = open(job41.work / "log.txt", "wb")
+    job41.log.write("エラーの内容".encode("utf-8"))
+    job41.log.flush()
+    msg41 = ""
+    try:
+        job41.result()
+    except RuntimeError as exc:
+        msg41 = str(exc)
+    check("AN-F-41: 失敗したジョブも作業フォルダを残さず、ログの内容は例外の文に入る", not job41.work.exists() and "エラーの内容" in msg41, msg41)
+
     # ---- AN-F-17: メッセージ欄はスクロール領域の外・最上部
     from tdrive_anim.ui import AnimPanel
     from tdrive_anim.ui_common import MessageLabel
