@@ -74,7 +74,13 @@ class ExportTab(QtWidgets.QWidget):
         self.block_label = QtWidgets.QLabel()
         self.block_label.setWordWrap(True)
         self.block_label.setStyleSheet("color: #ff6060;")
-        v.addWidget(self.block_label)
+        block_row = QtWidgets.QHBoxLayout()
+        block_row.addWidget(self.block_label, 1)
+        self.unblend_btn = QtWidgets.QPushButton("合成を外す")  # 合成中で出力が止まっているとき、ブレンド / ショットタブへ戻らずにその場で外す（AN-F-23）
+        self.unblend_btn.setToolTip("ブレンド / ショットの合成を外して、元のカーブ・再生範囲に戻します（出力できるようになります）")
+        self.unblend_btn.clicked.connect(lambda *_: self.remove_compositions())
+        block_row.addWidget(self.unblend_btn)
+        v.addLayout(block_row)
         self.recheck_btn = QtWidgets.QPushButton("命名を確認")
         self.recheck_btn.setToolTip("命名タブと同じ検査をして、出力を止める問題（❌）がないか確かめます。出力ボタンを押したときにも確認します")
         self.recheck_btn.clicked.connect(lambda *_: self.check_names())
@@ -246,6 +252,7 @@ class ExportTab(QtWidgets.QWidget):
         why_shot = self.shot_problem() if (ok and self.session.shot is not None) else ""
         self.shot_btn.setEnabled(ok and self.session.shot is not None and not why_shot)
         self.block_label.setText(("⛔ 出力できません: " + reason) if reason and self.session.data else "")
+        self.unblend_btn.setVisible(bool(K.active()) and not busy)
         self.shot_block_label.setText(("⛔ ショットを出力できません: " + why_shot) if why_shot else "")  # UX-8: 押す前に理由が見える
         self.cancel_btn.setVisible(busy)
         events_on = bool((self.session.shot or {}).get("export", {}).get("includeEvents", False)) if self.session.shot else False
@@ -254,6 +261,19 @@ class ExportTab(QtWidgets.QWidget):
             self.events_cb.blockSignals(True)
             self.events_cb.setChecked(events_on)
             self.events_cb.blockSignals(False)
+
+    def remove_compositions(self) -> int:
+        """ブレンド / ショットの合成を全部外す（出力タブから）。外した数を返す。"""
+        SS.stop()
+        n = 0
+        sh = self.session.shot
+        if sh is not None and SS.is_reflected(sh["shot"]):
+            n += SS.remove(sh["shot"])
+        n += K.remove()
+        self._append(f"合成を外しました（{n} 件）。出力できます" if n else "外す合成はありません")
+        self.session._changed(dirty=False)
+        self._update_buttons()
+        return n
 
     def _set_include_events(self, on: bool) -> None:
         sh = self.session.shot

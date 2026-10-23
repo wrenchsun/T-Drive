@@ -325,6 +325,24 @@ def _run(tmp: Path) -> None:
     finally:
         SS._model_panel, SS._panel_camera, SS._look_thru = saved2
 
+    # ---- AN-F-23: 出力タブの「合成を外す」
+    from tdrive_anim import composition as K23
+    from tdrive_anim.core import sequence as Seq23
+
+    from tdrive_anim.ui import AnimPanel as AP23
+
+    panel23 = AP23()
+    ex23 = panel23.export_tab
+    clips23 = {c["name"]: c for c in s.data["clips"]}
+    cmds.setKeyframe("spine_C0_0_jnt", attribute="translateX", time=0, value=0)
+    cmds.setKeyframe("spine_C0_0_jnt", attribute="translateX", time=30, value=9)
+    K23.compose("blend", Seq23.from_rows([{"clip": "A_MisotenChara_Idle", "holdSec": 1.0}], clips23, 30), make_mini_rig.JOINTS, 30)
+    ex23._update_buttons()
+    check("AN-F-23: 合成中は出力タブに「合成を外す」が出て、出力ボタンは灰色", not ex23.unblend_btn.isHidden() and not ex23.model_btn.isEnabled())
+    n23 = ex23.remove_compositions()
+    check("AN-F-23: 押すと合成が外れ、出力ボタンが有効になる", n23 == 1 and K23.active() == [] and "合成" not in ex23.block_reason() and ex23.unblend_btn.isHidden(), f"{n23} {K23.active()} {ex23.block_reason()!r} {ex23.unblend_btn.isHidden()}")
+    panel23.detach()
+
     # ---- AN-F-17: メッセージ欄はスクロール領域の外・最上部
     from tdrive_anim.ui import AnimPanel
     from tdrive_anim.ui_common import MessageLabel
