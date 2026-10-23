@@ -289,7 +289,7 @@ def _run(tmp: Path) -> None:
         check("AN-F-25: 同じフレームでは繰り返さない", SS.transport_step(121) and seq[-1] == 121 and seq.count(121) == 1)
         check("AN-F-25: 範囲の最後で False（止まる）", SS.transport_step(240) is False and seq[-1] == 240)
         SS.stop()
-        check("AN-F-25: 止めたらタイマーが止まり、lookThru で元のカメラに戻して結び直す", not SS.is_playing() and looks == ["CAM_Orig1"] and binds == ["modelPanel4", "modelPanel4"], f"{looks} {binds}")
+        check("AN-F-25: 止めたらタイマーが止まり、lookThru で元のカメラに戻す（結び付けは外れたまま。結び直すのは次の ▶）", not SS.is_playing() and looks == ["CAM_Orig1"] and binds == ["modelPanel4"], f"{looks} {binds}")
     finally:
         SS._model_panel, SS._panel_camera, SS._look_thru, SS._set_sequence_time, SS._bind_sequencer = saved
     # 本物の Camera Sequencer: 121 フレーム以降は CAM_Close の shot になる（パネルは無いのでカメラの切り替わりは shot の currentCamera で確認）
@@ -306,6 +306,54 @@ def _run(tmp: Path) -> None:
     check("AN-F-25: 実際の sequenceManager で、50 フレームは CAM_Main・130 フレームは CAM_Close", cams == (cam_a, cam_b) and cmds.currentTime(query=True) == 130, f"{cams} {cmds.currentTime(query=True)}")
     SS._transport.update(shot=None)
     SS.remove("Seq01")
+    # ---- AN-F-31: 何度再生しても毎回切り替わる・元のカメラは反映の直前に 1 回だけ覚える
+    state31 = {"cam": "persp", "bound": False}
+    cams31 = {"cam_a": cam_a, "cam_b": cam_b}
+
+    def look31(p, c):
+        state31["cam"], state31["bound"] = c, False  # lookThru は sequenceManager の結び付けを外す（実機の挙動）
+
+    def bind31(p):
+        state31["bound"] = True
+
+    def seq31(f):
+        if state31["bound"]:
+            state31["cam"] = cam_a if f <= 120 else cam_b
+
+    saved31 = (SS._model_panel, SS._panel_camera, SS._look_thru, SS._set_sequence_time, SS._bind_sequencer)
+    SS._model_panel, SS._panel_camera, SS._look_thru, SS._set_sequence_time, SS._bind_sequencer = (lambda: "modelPanel4", lambda p: state31["cam"], look31, seq31, bind31)
+    try:
+        sh31 = {"shot": "Loop31", "frameRate": 30, "range": [0, 240], "cameras": [{"name": "CAM_Main", "node": cam_a, "start": 0, "end": 120},
+                                                                                    {"name": "CAM_Close", "node": cam_b, "start": 121, "end": 240}]}
+        s.new_shot("Loop31", 30, 0, 240)
+        s.shot_add_camera(cam_a, 0, 120)
+        s.shot_add_camera(cam_b, 121, 240)
+        SS.build(s.shot)
+        got31 = []
+        for rnd in range(3):
+            SS.play(sh31)
+            SS.transport_step(10)
+            a31 = state31["cam"]
+            SS.transport_step(150)
+            b31 = state31["cam"]
+            got31.append((a31, b31))
+            SS.transport_step(240)
+            SS.stop()
+            got31.append(state31["cam"])
+        check("AN-F-31: ▶ → 終了を繰り返しても毎回 50→CAM_Main・150→CAM_Close に切り替わり、終わるたびに persp に戻る",
+              got31 == [(cam_a, cam_b), "persp"] * 3, str(got31))
+        SS.remove("Loop31")
+        check("AN-F-31: 「外す」で元のカメラ（persp）", state31["cam"] == "persp")
+        SS.build(s.shot)
+        SS.play(sh31)
+        SS.transport_step(150)
+        c31 = state31["cam"]
+        SS.stop()
+        check("AN-F-31: 外す → 反映 → ▶ でも切り替わる", c31 == cam_b and state31["cam"] == "persp", f"{c31} {state31}")
+        SS.remove("Loop31")
+    finally:
+        SS._model_panel, SS._panel_camera, SS._look_thru, SS._set_sequence_time, SS._bind_sequencer = saved31
+
     SS._model_panel = lambda: None
     check("AN-F-25: パネルが無い環境でも再生できる（時刻だけ進む）", SS.play(shot) is True)
     SS.stop()

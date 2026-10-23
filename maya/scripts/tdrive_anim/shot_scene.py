@@ -356,9 +356,16 @@ def play(shot: dict[str, Any], loop: bool = False) -> bool:
     panel = _model_panel()
     restore = None
     if panel is not None:
-        with contextlib.suppress(RuntimeError):
-            restore = _panel_camera(panel)
-        _bind_sequencer(panel)
+        # 元のカメラは、反映の直前に覚えたもの。▶ の直前のカメラを元にすると、前回の終わりに CAM_* のまま残ったカメラを元と取り違える（AN-F-31）
+        remembered = _reflected_camera.get(shot.get("shot", ""))
+        if remembered is not None and remembered[0] == panel:
+            restore = remembered[1]
+        else:
+            with contextlib.suppress(RuntimeError):
+                now = _panel_camera(panel)
+                if now not in {c["node"] for c in shot.get("cameras", [])}:
+                    restore = now
+        _bind_sequencer(panel)  # 再生のあいだだけ結ぶ（止めるときの lookThru が結び付けを外す）
     _transport.update(shot=shot, panel=panel, restore=restore, lo=lo, hi=hi, fps=shot["frameRate"], t0=time.perf_counter(), last=None, loop=loop)
     transport_step(lo)
     from PySide6 import QtCore
@@ -372,7 +379,7 @@ def play(shot: dict[str, Any], loop: bool = False) -> bool:
 
 
 def stop() -> None:
-    """再生を止めて、パネルのカメラを元に戻す（lookThru はここだけ。戻したあと、また結び直す）。"""
+    """再生を止めて、パネルのカメラを元に戻す（lookThru はここだけ。結び付けも外れる）。"""
     timer = _transport["timer"]
     if timer is not None:
         timer.stop()
@@ -381,8 +388,7 @@ def stop() -> None:
     _transport.update(timer=None, shot=None, panel=None, restore=None, last=None)
     if panel and restore and cmds.objExists(restore):
         with contextlib.suppress(RuntimeError):
-            _look_thru(panel, restore)
-        _bind_sequencer(panel)
+            _look_thru(panel, restore)  # 元のカメラへ戻す。lookThru は sequenceManager の結び付けを外すので、結び直さない（結ぶのは次の ▶ の始めと反映のとき）
 
 
 lifecycle.on_reload(stop)
