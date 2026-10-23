@@ -11,6 +11,8 @@
 from __future__ import annotations
 
 import copy
+import math
+import re
 
 from maya import cmds
 from PySide6 import QtCore, QtGui, QtWidgets
@@ -32,6 +34,7 @@ class PadWidget(QtWidgets.QWidget):
 
     valueChanged = QtCore.Signal(float, float)  # 動かした（ドラッグ中も毎回）
     released = QtCore.Signal()
+    pointMoved = QtCore.Signal(int, float, float)  # 青い点（モーションの位置）をドラッグして離した: (モーションの番号, x, y)（AN-F-48）
 
     def __init__(self) -> None:
         super().__init__()
@@ -39,9 +42,10 @@ class PadWidget(QtWidgets.QWidget):
         self.lo, self.hi = 0.0, 1.0
         self.x = self.y = 0.0
         self.points: list[tuple[float, float, str, float]] = []  # (x, y, 名前, 重み)
+        self._drag_point: int | None = None
         self.setCursor(QtCore.Qt.CrossCursor)
         self.setToolTip("2D パッド: ドラッグでパラメータ X / Y を動かします（離したときに合成を作り直します）。"
-                        "青い点はモーションの位置、大きさは今の重み。範囲は右で 0〜1 / -1〜1 を切り替え。既定: 原点（0, 0）")
+                        "青い点はモーションの位置（Ctrl を押しながらドラッグで動かせます）、大きさは今の重み。範囲は右で 0〜1 / -1〜1 を切り替え。既定: 原点（0, 0）")
 
     def range(self) -> tuple[float, float]:
         return self.lo, self.hi
@@ -100,17 +104,42 @@ class PadWidget(QtWidgets.QWidget):
         x, y = self._from_px(event.position())
         self.set_value(x, y)
 
+    def _point_at(self, pos: QtCore.QPointF) -> int | None:
+        best = None
+        for i, (x, y, _n, w) in enumerate(self.points):
+            c = self._to_px(x, y)
+            d = math.hypot(c.x() - pos.x(), c.y() - pos.y())
+            if d <= 3.0 + 6.0 * w + 4.0 and (best is None or d < best[0]):
+                best = (d, i)
+        return best[1] if best else None
+
     def mousePressEvent(self, event) -> None:  # noqa: N802
-        if event.button() == QtCore.Qt.LeftButton:
+        if event.button() != QtCore.Qt.LeftButton:
+            return
+        # Ctrl を押しながら青い点をドラッグしたときだけモーションの位置を動かす（ふつうのドラッグはパラメータの値。原点の Idle の上を誤って動かさないため）
+        self._drag_point = self._point_at(event.position()) if event.modifiers() & QtCore.Qt.ControlModifier else None
+        if self._drag_point is None:
             self._drag(event)
 
     def mouseMoveEvent(self, event) -> None:  # noqa: N802
-        if event.buttons() & QtCore.Qt.LeftButton:
+        if not event.buttons() & QtCore.Qt.LeftButton:
+            return
+        if self._drag_point is None:
             self._drag(event)
+            return
+        x, y = self._from_px(event.position())
+        _x, _y, name, w = self.points[self._drag_point]
+        self.points[self._drag_point] = (round(self._clamp(x), 2), round(self._clamp(y), 2), name, w)
+        self.update()
 
     def mouseReleaseEvent(self, event) -> None:  # noqa: N802
-        if event.button() == QtCore.Qt.LeftButton:
+        if event.button() != QtCore.Qt.LeftButton:
+            return
+        i, self._drag_point = self._drag_point, None
+        if i is None:
             self.released.emit()
+        else:
+            self.pointMoved.emit(i, self.points[i][0], self.points[i][1])
 
 
 class BlendTreePanel(QtWidgets.QGroupBox):
@@ -168,6 +197,28 @@ class BlendTreePanel(QtWidgets.QGroupBox):
         self.tree_weights_label = QtWidgets.QLabel()  # モーションごとの重み
         self.tree_weights_label.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
         v.addWidget(self.tree_weights_label)
+        self.pad.pointMoved.connect(lambda i, x, y: self.move_motion(i, x, y))  # 青い点のドラッグ（AN-F-48）
+        self.motion_table = QtWidgets.QTableWidget(0, 4)  # モーションの表（クリップ / しきい値 or 位置 / 削除。AN-F-48）
+        self.motion_table.verticalHeader().setVisible(False)
+        self.motion_table.setSelectionMode(QtWidgets.QAbstractItemView.NoSelection)
+        self.motion_table.setMinimumHeight(110)
+        self.motion_table.setToolTip("ブレンドツリーのモーションの一覧です。クリップを選び、しきい値（1D）か位置 X / Y（2D）を入れます。"
+                                     "Enter かフォーカスを外すと保存されます（animset の変更なので Ctrl+Z で戻せます）。2D はパッドの青い点を Ctrl+ドラッグしても動かせます")
+        v.addWidget(self.motion_table)
+        mb = QtWidgets.QHBoxLayout()
+        self.add_motion_btn = QtWidgets.QPushButton("＋ モーションを足す")
+        self.add_motion_btn.setToolTip("ツリーにモーションを 1 つ足します（クリップは未使用のものから、しきい値 / 位置は空いている所）。あとで表で直します")
+        self.add_motion_btn.clicked.connect(lambda *_: self.add_motion())
+        self.new_tree_btn = QtWidgets.QPushButton("ツリーを新規…")
+        self.new_tree_btn.setToolTip("名前・種類（1D / 2DSimpleDirectional / 2DFreeformDirectional / 2DFreeformCartesian）・パラメータ名を決めて、新しいブレンドツリーを状態図に足します")
+        self.new_tree_btn.clicked.connect(lambda *_: self.new_tree_dialog())
+        self.del_tree_btn = QtWidgets.QPushButton("ツリーを削除")
+        self.del_tree_btn.setToolTip("選んでいるブレンドツリーを状態図から消します（確認あり。Ctrl+Z で戻せます）")
+        self.del_tree_btn.clicked.connect(lambda *_: self.delete_tree())
+        for b in (self.add_motion_btn, self.new_tree_btn, self.del_tree_btn):
+            mb.addWidget(b)
+        mb.addStretch(1)
+        v.addLayout(mb)
         btns = QtWidgets.QHBoxLayout()
         self.t2d_btn = QtWidgets.QPushButton("2D の移動ツリーを作る")
         self.t2d_btn.setToolTip("Walk（無ければ Run）の _F / _B / _L / _R が 2 方向以上そろっているとき、Idle を中央にした 2DSimpleDirectional（MoveX / MoveY）を状態図に足します")
@@ -232,6 +283,10 @@ class BlendTreePanel(QtWidgets.QGroupBox):
             self.pad.setEnabled(bool(tree) and BT.is_2d(tree))
             self.sliders[1][0].setEnabled(bool(tree) and BT.is_2d(tree))
             self.build_btn.setEnabled(bool(tree))
+            self.add_motion_btn.setEnabled(bool(tree))
+            self.del_tree_btn.setEnabled(bool(tree))
+            self.new_tree_btn.setEnabled(d is not None)
+            self._fill_motion_table(tree)
             clips = d["clips"] if d else []
             mid = d["modelId"] if d else ""
             self.t2d_btn.setEnabled(d is not None and BT.template_2d(clips, mid) is not None)
@@ -250,6 +305,200 @@ class BlendTreePanel(QtWidgets.QGroupBox):
         finally:
             self._building = False
         self._show_weights()
+
+    # ------------------------------------------------------------ モーションの編集（AN-F-48）
+    def _fill_motion_table(self, tree: dict | None) -> None:
+        t = self.motion_table
+        t.setRowCount(0)
+        if tree is None:
+            t.setColumnCount(0)
+            return
+        two = BT.is_2d(tree)
+        heads = ["クリップ", "X", "Y", ""] if two else ["クリップ", "しきい値", ""]
+        t.setColumnCount(len(heads))
+        t.setHorizontalHeaderLabels(heads)
+        t.horizontalHeader().setStretchLastSection(False)
+        t.horizontalHeader().setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
+        names = list(self.tab._clips())
+        for i, m in enumerate(tree["motions"]):
+            t.insertRow(i)
+            combo = WG.ComboBox()
+            combo.addItems(names if m["clip"] in names else [m["clip"], *names])
+            combo.setCurrentText(m["clip"])
+            combo.setToolTip("このモーションのクリップ（クリップタブで作ったもの）")
+            combo.activated.connect(lambda *_, k=i, c=combo: self.edit_motion(k, clip=c.currentText()))
+            t.setCellWidget(i, 0, combo)
+            vals = list(BT.motion_pos(m)) if two else [float(m["threshold"])]
+            for j, val in enumerate(vals):
+                sp = WG.DoubleSpinBox()
+                sp.setRange(-100.0, 100.0)
+                sp.setDecimals(3)
+                sp.setSingleStep(0.1)
+                sp.setValue(val)
+                sp.setToolTip(("しきい値" if not two else "位置 " + "XY"[j]) + "（範囲 -100〜100）。Enter かフォーカスを外すと保存。他のモーションと同じ値にしないでください（重なると警告）")
+                sp.editingFinished.connect(lambda *_, k=i: self._row_edited(k))
+                t.setCellWidget(i, 1 + j, sp)
+            btn = QtWidgets.QPushButton("削除")
+            btn.setToolTip("このモーションをツリーから消します（最後の 1 つは消せません）")
+            btn.clicked.connect(lambda *_, k=i: self.remove_motion(k))
+            t.setCellWidget(i, len(heads) - 1, btn)
+        t.setMaximumHeight(60 + 30 * len(tree["motions"]))
+
+    def _row_edited(self, row: int) -> None:
+        if self._building:
+            return
+        tree = self.current_tree()
+        if tree is None or row >= len(tree["motions"]):
+            return
+        n = 2 if BT.is_2d(tree) else 1
+        vals = [self.motion_table.cellWidget(row, 1 + j).value() for j in range(n)]
+        cur = list(BT.motion_pos(tree["motions"][row])) if n == 2 else [float(tree["motions"][row]["threshold"])]
+        if all(abs(a - b) < 1e-9 for a, b in zip(vals, cur)):  # フォーカスを外しただけ（値は同じ）では保存しない
+            return
+        if n == 2:
+            self.edit_motion(row, position=[vals[0], vals[1]])
+        else:
+            self.edit_motion(row, threshold=vals[0])
+
+    def _modify_tree(self, fn, what: str) -> bool:
+        """現在のツリーを fn(tree) で書き換えて animset に保存する（1 操作 = 1 Undo）。重複があれば警告（保存はする）。"""
+        tree = self.current_tree()
+        d = self.tab.session.data
+        if tree is None or d is None:
+            return False
+        name = self.state_combo.currentText()
+        g = copy.deepcopy(self._graph())
+        st = next(x for x in g["states"] if x["name"] == name)
+        fn(st["blendTree"])
+        self.tab._guard(self.tab.session.set_value, "stateGraph", g)
+        self.tab.graph = d.get("stateGraph")
+        self.refresh()
+        dup = [e for e in BT.validate(self.current_tree() or {}) if "重なって" in e]
+        self.tab._say(what + "".join(f"\n⚠ {e}（保存はしましたが、重みが決まりません。値を変えてください）" for e in dup))
+        if K.info(self.comp_name).get("blendTree") and not dup:
+            self.rebuild()  # 合成中なら、ツリーの変更を反映する
+        return True
+
+    def edit_motion(self, index: int, clip: str | None = None, position: list | None = None, threshold: float | None = None) -> bool:
+        def fn(tree: dict) -> None:
+            m = tree["motions"][index]
+            if clip is not None:
+                m["clip"] = clip
+            if position is not None:
+                m["position"] = [round(float(position[0]), 4), round(float(position[1]), 4)]
+            if threshold is not None:
+                m["threshold"] = round(float(threshold), 4)
+        return self._modify_tree(fn, "モーションを変えました")
+
+    def move_motion(self, index: int, x: float, y: float) -> bool:
+        """パッドの青い点をドラッグして離した: モーションの位置を変える。"""
+        return self.edit_motion(index, position=[x, y])
+
+    def add_motion(self) -> bool:
+        tree = self.current_tree()
+        if tree is None:
+            return False
+        used = {m["clip"] for m in tree["motions"]}
+        names = list(self.tab._clips())
+        clip = next((n for n in names if n not in used), names[0] if names else "")
+        if not clip:
+            self.tab._say("⚠ クリップがありません")
+            return False
+
+        def fn(t: dict) -> None:
+            if t["type"] == "1D":
+                t["motions"].append({"clip": clip, "threshold": round(max(float(m["threshold"]) for m in t["motions"]) + 0.5, 4)})
+                return
+            taken = [BT.motion_pos(m) for m in t["motions"]]
+            cands = ((0, 0), (0, 1), (0, -1), (-1, 0), (1, 0), (1, 1), (-1, 1), (1, -1), (-1, -1), (0.5, 0.5))
+            free = next(((x, y) for x, y in cands if not any(abs(x - a) < 1e-6 and abs(y - b) < 1e-6 for a, b in taken)), (2.0, 2.0))
+            t["motions"].append({"clip": clip, "position": [free[0], free[1]]})
+        return self._modify_tree(fn, f"モーション {clip} を足しました（表でしきい値 / 位置を直してください）")
+
+    def remove_motion(self, index: int) -> bool:
+        tree = self.current_tree()
+        if tree is None:
+            return False
+        if len(tree["motions"]) <= 1:
+            self.tab._say("⚠ 最後のモーションは消せません（ツリーごと消すときは「ツリーを削除」）")
+            return False
+        return self._modify_tree(lambda t: t["motions"].pop(index), "モーションを消しました")
+
+    def create_tree(self, name: str, typ: str, params: list[str]) -> bool:
+        """新しいブレンドツリーを状態図に足す（最初のモーションはクリップの 1 つ目。あとで足す）。"""
+        d = self.tab.session.data
+        if d is None:
+            return False
+        ident = r"^[A-Za-z][A-Za-z0-9_]*$"
+        if not re.match(ident, name or ""):
+            self.tab._say("⚠ 名前は英字で始まる英数字と _ にしてください")
+            return False
+        if typ not in BT.TYPES:
+            self.tab._say(f"⚠ 種類は {' / '.join(BT.TYPES)} のどれか")
+            return False
+        n = 1 if typ == "1D" else 2
+        params = [p.strip() for p in params][:n]
+        if len(params) != n or not all(re.match(ident, p) for p in params) or len(set(params)) != n:
+            self.tab._say(f"⚠ パラメータ名は {n} つ（英字で始まる英数字と _、重複なし）")
+            return False
+        if not d["clips"]:
+            self.tab._say("⚠ クリップがありません（先にクリップを作ってください）")
+            return False
+        first = d["clips"][0]["name"]
+        motion = {"clip": first, "threshold": 0} if typ == "1D" else {"clip": first, "position": [0, 0]}
+        before = len(self._tree_states())
+        self._add_state(name, {"type": typ, "parameters": params, "motions": [motion]}, params)
+        return len(self._tree_states()) == before + 1
+
+    def new_tree_dialog(self) -> None:
+        d = self.tab.session.data
+        if d is None:
+            return
+        dlg = QtWidgets.QDialog(self)
+        dlg.setWindowTitle("ブレンドツリーを新規")
+        form = QtWidgets.QFormLayout(dlg)
+        name = QtWidgets.QLineEdit("Move")
+        name.setToolTip("状態の名前（英字で始まる英数字と _）。既定: Move")
+        typ = WG.ComboBox()
+        typ.addItems(BT.TYPES)
+        typ.setCurrentText("2DSimpleDirectional")
+        typ.setToolTip("Unity の Blend Tree の種類。1D はパラメータ 1 つ、2D は 2 つ")
+        floats = [p["name"] for p in (self._graph() or {}).get("parameters", []) if p.get("type") == "float"]
+        px, py = WG.ComboBox(), WG.ComboBox()
+        for c, dflt in ((px, "MoveX"), (py, "MoveY")):
+            c.setEditable(True)
+            c.addItems(list(dict.fromkeys([*floats, dflt])))
+            c.setCurrentText(dflt)
+            c.setToolTip("パラメータ名（状態図の float か、新しい名前。新しい名前は状態図に float として足されます）")
+        form.addRow("名前", name)
+        form.addRow("種類", typ)
+        form.addRow("X パラメータ", px)
+        form.addRow("Y パラメータ（2D のみ）", py)
+        typ.currentTextChanged.connect(lambda t, c=py: c.setEnabled(t != "1D"))
+        box = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+        box.accepted.connect(dlg.accept)
+        box.rejected.connect(dlg.reject)
+        form.addRow(box)
+        if dlg.exec():
+            self.create_tree(name.text().strip(), typ.currentText(), [px.currentText(), py.currentText()])
+
+    def delete_tree(self, confirm: bool = True) -> bool:
+        name = self.state_combo.currentText()
+        d = self.tab.session.data
+        if self.current_tree() is None or d is None:
+            return False
+        if confirm and QtWidgets.QMessageBox.question(self, "ツリーを削除", f"ブレンドツリー {name} を状態図から消します。よろしいですか？（Ctrl+Z で戻せます）") != QtWidgets.QMessageBox.Yes:
+            return False
+        g = copy.deepcopy(self._graph())
+        g["states"] = [x for x in g["states"] if x["name"] != name]
+        g["transitions"] = [t for t in g.get("transitions", []) if name not in (t.get("from"), t.get("to"))]
+        if K.info(self.comp_name).get("blendTree"):
+            K.remove(self.comp_name)
+        self.tab._guard(self.tab.session.set_value, "stateGraph", g)
+        self.tab.graph = d.get("stateGraph")
+        self.refresh()
+        self.tab._say(f"ブレンドツリー {name} を消しました")
+        return True
 
     def _load_values(self, tree: dict) -> None:
         g = self._graph() or {}
