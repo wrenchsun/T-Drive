@@ -209,9 +209,9 @@ def ui_checks(ui, cmds, K, BT, s, plugs, pre) -> None:  # noqa: PLR0915
         ui.pad.set_range(-1.0, 1.0)
         ui.pad_range.setCurrentIndex(1)
         ui.tree_panel._range_changed()
-        QTest.mousePress(ui.pad, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, px(0.0, 0.0))
+        QTest.mousePress(ui.pad, QtCore.Qt.LeftButton, QtCore.Qt.ShiftModifier, px(0.0, 0.0))  # 原点には Idle の点がある。Shift で常に十字
         for k in range(1, 6):
-            ui.pad.mouseMoveEvent(QtGui.QMouseEvent(QtCore.QEvent.MouseMove, QtCore.QPointF(px(k / 5, k / 5)), QtCore.QPointF(px(k / 5, k / 5)), QtCore.Qt.NoButton, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier))
+            ui.pad.mouseMoveEvent(QtGui.QMouseEvent(QtCore.QEvent.MouseMove, QtCore.QPointF(px(k / 5, k / 5)), QtCore.QPointF(px(k / 5, k / 5)), QtCore.Qt.NoButton, QtCore.Qt.LeftButton, QtCore.Qt.ShiftModifier))
         check("UI: パッドのドラッグ中は合成を作らない（AN-F-47）", calls == [] and K.active() == [], str(calls))
         check("UI: ドラッグ中も重みの表示は追従する", "50%" in ui.tree_weights_label.text() or "%" in ui.tree_weights_label.text())
         QTest.mouseRelease(ui.pad, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, px(1.0, 1.0))
@@ -258,14 +258,30 @@ def ui_checks(ui, cmds, K, BT, s, plugs, pre) -> None:  # noqa: PLR0915
     def ppx(x, y):
         pt = panel.pad._to_px(x, y)
         return QtCore.QPoint(int(round(pt.x())), int(round(pt.y())))
-    QTest.mousePress(panel.pad, QtCore.Qt.LeftButton, QtCore.Qt.ControlModifier, ppx(0.0, 1.0))
+    QTest.mousePress(panel.pad, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, ppx(0.0, 1.0))
     tgt = QtCore.QPointF(ppx(0.5, 0.5))
-    panel.pad.mouseMoveEvent(QtGui.QMouseEvent(QtCore.QEvent.MouseMove, tgt, tgt, QtCore.Qt.NoButton, QtCore.Qt.LeftButton, QtCore.Qt.ControlModifier))
+    panel.pad.mouseMoveEvent(QtGui.QMouseEvent(QtCore.QEvent.MouseMove, tgt, tgt, QtCore.Qt.NoButton, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier))
     check("AN-F-48: 点のドラッグ中は animset を変えない", panel.current_tree()["motions"][idx]["position"] == [0, 1])
-    QTest.mouseRelease(panel.pad, QtCore.Qt.LeftButton, QtCore.Qt.ControlModifier, ppx(0.5, 0.5))
+    QTest.mouseRelease(panel.pad, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, ppx(0.5, 0.5))
     pos = panel.current_tree()["motions"][idx]["position"]
-    check("AN-F-48: 青い点を Ctrl+ドラッグして離すとモーションの位置が変わる（表と同期）", abs(pos[0] - 0.5) < 0.05 and abs(pos[1] - 0.5) < 0.05 and abs(panel.motion_table.cellWidget(idx, 2).value() - pos[1]) < 1e-6, str(pos))
+    check("AN-F-48: 青い点を押してドラッグして離すとモーションの位置が変わる（表と同期）", abs(pos[0] - 0.5) < 0.05 and abs(pos[1] - 0.5) < 0.05 and abs(panel.motion_table.cellWidget(idx, 2).value() - pos[1]) < 1e-6, str(pos))
     check("AN-F-48: 点のドラッグも 1 回の Undo で戻る", s.undo() and panel.current_tree()["motions"][idx]["position"] == [0, 1])
+    # ---- AN-F-49: 点の当たり判定が優先・離れた所は十字・Shift は点の上でも十字
+    cross0 = (panel.pad.x, panel.pad.y)
+    QTest.mousePress(panel.pad, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, ppx(0.0, 1.0))  # F の点の上（すこしずれた所）
+    t2 = QtCore.QPointF(ppx(0.4, 0.8))
+    panel.pad.mouseMoveEvent(QtGui.QMouseEvent(QtCore.QEvent.MouseMove, t2, t2, QtCore.Qt.NoButton, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier))
+    check("AN-F-49: 点を押してドラッグしても十字（今の値）は動かない", (panel.pad.x, panel.pad.y) == cross0 and panel.pad._drag_point == 1)
+    QTest.mouseRelease(panel.pad, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, ppx(0.4, 0.8))
+    check("AN-F-49: 離すと position が確定し、Undo 1 回で戻る", abs(panel.current_tree()["motions"][1]["position"][0] - 0.4) < 0.05 and s.undo() and panel.current_tree()["motions"][1]["position"] == [0, 1])
+    panel.pad.set_range(-1.0, 1.0)  # Undo のあとの再表示で既定の範囲に戻るので合わせ直す
+    QTest.mousePress(panel.pad, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, ppx(0.3, -0.6))  # 点から離れた所
+    check("AN-F-49: 点から離れた所を押すと十字が動く（点は動かない）", panel.pad._drag_point is None and abs(panel.pad.x - 0.3) < 0.05 and abs(panel.pad.y + 0.6) < 0.05, str((panel.pad._drag_point, panel.pad.x, panel.pad.y, panel.pad.range(), panel.pad.points)))
+    QTest.mouseRelease(panel.pad, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, ppx(0.3, -0.6))
+    QTest.mousePress(panel.pad, QtCore.Qt.LeftButton, QtCore.Qt.ShiftModifier, ppx(0.0, 1.0))
+    check("AN-F-49: Shift なら点の上でも十字が動く", panel.pad._drag_point is None and abs(panel.pad.y - 1.0) < 0.05)
+    QTest.mouseRelease(panel.pad, QtCore.Qt.LeftButton, QtCore.Qt.ShiftModifier, ppx(0.0, 1.0))
+    panel.pad.set_value(*cross0, emit=False)
     check("AN-F-48: 消す", panel.remove_motion(n0 - 1) and len(panel.current_tree()["motions"]) == n0 - 1)
     s.undo()
     check("AN-F-48: 新規（1D）が状態図に入りパラメータも足される", panel.create_tree("Loco2", "1D", ["Spd"]) and any(p["name"] == "Spd" for p in s.data["stateGraph"]["parameters"]) and panel.current_tree()["type"] == "1D" and panel.motion_table.columnCount() == 3)

@@ -26,6 +26,7 @@ from .ui_common import ComposeProgress
 
 PAD_SIZE = 160
 PAD_MARGIN = 10
+HIT_RADIUS = 8.0  # 青い点の当たり判定（px。AN-F-49）
 RANGES = (("0 〜 1", (0.0, 1.0)), ("-1 〜 1", (-1.0, 1.0)))
 
 
@@ -43,9 +44,10 @@ class PadWidget(QtWidgets.QWidget):
         self.x = self.y = 0.0
         self.points: list[tuple[float, float, str, float]] = []  # (x, y, 名前, 重み)
         self._drag_point: int | None = None
+        self.setMouseTracking(True)
         self.setCursor(QtCore.Qt.CrossCursor)
         self.setToolTip("2D パッド: ドラッグでパラメータ X / Y を動かします（離したときに合成を作り直します）。"
-                        "青い点はモーションの位置（Ctrl を押しながらドラッグで動かせます）、大きさは今の重み。範囲は右で 0〜1 / -1〜1 を切り替え。既定: 原点（0, 0）")
+                        "青い点はモーションの位置（点を押してドラッグで動かせます。Shift を押しながらなら点の上でも値を動かします）、大きさは今の重み。範囲は右で 0〜1 / -1〜1 を切り替え。既定: 原点（0, 0）")
 
     def range(self) -> tuple[float, float]:
         return self.lo, self.hi
@@ -87,10 +89,10 @@ class PadWidget(QtWidgets.QWidget):
         zero = self._to_px(0.0, 0.0)
         p.drawLine(QtCore.QPointF(PAD_MARGIN, zero.y()), QtCore.QPointF(PAD_SIZE - PAD_MARGIN, zero.y()))
         p.drawLine(QtCore.QPointF(zero.x(), PAD_MARGIN), QtCore.QPointF(zero.x(), PAD_SIZE - PAD_MARGIN))
-        for x, y, _name, w in self.points:
+        for k, (x, y, _name, w) in enumerate(self.points):
             c = self._to_px(x, y)
             r = 3.0 + 6.0 * w
-            p.setPen(QtGui.QColor("#6fa8dc"))
+            p.setPen(QtGui.QPen(QtGui.QColor("#ffffff"), 2) if k == self._drag_point else QtGui.QColor("#6fa8dc"))  # ドラッグ中の点は白い縁で強調
             p.setBrush(QtGui.QColor(111, 168, 220, 60 + int(150 * w)))
             p.drawEllipse(c, r, r)
         cur = self._to_px(self.x, self.y)
@@ -109,20 +111,23 @@ class PadWidget(QtWidgets.QWidget):
         for i, (x, y, _n, w) in enumerate(self.points):
             c = self._to_px(x, y)
             d = math.hypot(c.x() - pos.x(), c.y() - pos.y())
-            if d <= 3.0 + 6.0 * w + 4.0 and (best is None or d < best[0]):
+            if d <= HIT_RADIUS and (best is None or d < best[0]):
                 best = (d, i)
         return best[1] if best else None
 
     def mousePressEvent(self, event) -> None:  # noqa: N802
         if event.button() != QtCore.Qt.LeftButton:
             return
-        # Ctrl を押しながら青い点をドラッグしたときだけモーションの位置を動かす（ふつうのドラッグはパラメータの値。原点の Idle の上を誤って動かさないため）
-        self._drag_point = self._point_at(event.position()) if event.modifiers() & QtCore.Qt.ControlModifier else None
+        # 青い点（半径 8 px 以内で一番近いもの）を押したら、その点のドラッグ（モーションの位置）。Shift を押していれば常に橙の十字（パラメータの値）のドラッグ（AN-F-49）
+        self._drag_point = None if event.modifiers() & QtCore.Qt.ShiftModifier else self._point_at(event.position())
+        self.update()
         if self._drag_point is None:
             self._drag(event)
 
     def mouseMoveEvent(self, event) -> None:  # noqa: N802
-        if not event.buttons() & QtCore.Qt.LeftButton:
+        if not event.buttons() & QtCore.Qt.LeftButton:  # ボタンを押していない: 点の上ではカーソルを変える
+            on = self._drag_point is None and not event.modifiers() & QtCore.Qt.ShiftModifier and self._point_at(event.position()) is not None
+            self.setCursor(QtCore.Qt.SizeAllCursor if on else QtCore.Qt.CrossCursor)
             return
         if self._drag_point is None:
             self._drag(event)
@@ -136,6 +141,7 @@ class PadWidget(QtWidgets.QWidget):
         if event.button() != QtCore.Qt.LeftButton:
             return
         i, self._drag_point = self._drag_point, None
+        self.update()
         if i is None:
             self.released.emit()
         else:
@@ -203,7 +209,7 @@ class BlendTreePanel(QtWidgets.QGroupBox):
         self.motion_table.setSelectionMode(QtWidgets.QAbstractItemView.NoSelection)
         self.motion_table.setMinimumHeight(110)
         self.motion_table.setToolTip("ブレンドツリーのモーションの一覧です。クリップを選び、しきい値（1D）か位置 X / Y（2D）を入れます。"
-                                     "Enter かフォーカスを外すと保存されます（animset の変更なので Ctrl+Z で戻せます）。2D はパッドの青い点を Ctrl+ドラッグしても動かせます")
+                                     "Enter かフォーカスを外すと保存されます（animset の変更なので Ctrl+Z で戻せます）。2D はパッドの青い点をドラッグしても動かせます")
         v.addWidget(self.motion_table)
         mb = QtWidgets.QHBoxLayout()
         self.add_motion_btn = QtWidgets.QPushButton("＋ モーションを足す")
