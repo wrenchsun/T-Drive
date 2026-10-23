@@ -38,7 +38,8 @@ from .core import animset as A
 from .core import export_plan as E
 
 TRS = ("tx", "ty", "tz", "rx", "ry", "rz", "sx", "sy", "sz")
-EXPORT_VERSION = 2  # 出力のコード・FBX のオプションを変えたら上げる（指紋に入れ、古い FBX が「変更なし」で飛ばされないように。SF-12）
+EXPORT_FORMAT_VERSION = 3  # 出力の中身を変える修正（ベイクの方式・FBX のオプションなど）をしたら上げる。指紋に入れ、古い FBX が「変更なし」で飛ばされないように（SF-12 / AN-F-30。3 = AN-F-24 の自前ベイク）
+EXPORT_VERSION = EXPORT_FORMAT_VERSION  # 旧い名前
 COMPOSITION_BLOCK = "ブレンド / ショットの合成中は出力できません（合成の動きが FBX に焼かれます）。ブレンドタブ・ショットタブで「合成を外す」を押してから出力してください"
 # 単位 cm・バイナリ・FBX 2020（Unity が読める上限）を明示する（FBXResetExport の既定に任せない。DD-11）
 FBX_COMMON = ("FBXExportConvertUnitString cm", "FBXExportInAscii -v false", "FBXExportFileVersion -v FBX202000")
@@ -73,8 +74,8 @@ def fingerprint(clip: dict[str, Any], animset: dict[str, Any]) -> str:
     変わったかどうかの判定にだけ使う。評価した値なので、接線・範囲外のキー（範囲内の補間が変わる）・コンストレイントやリグ・アニメーションレイヤーの
     重みとミュートの変更も拾う（以前は範囲内のキーの時刻と値だけ見ていた。SF-12）。現在の時刻は元に戻す。"""
     h = hashlib.sha1()
-    h.update(json.dumps({k: clip[k] for k in ("name", "start", "end", "rootMotion")} | {"fps": animset["frameRate"], "root": A.root_name(animset),
-                                                                                       "v": EXPORT_VERSION}, sort_keys=True).encode())
+    # クリップの属性は丸ごと（範囲・rootMotion・loop・イベントなど。名前の付け替え以外の変更で再出力される）+ 出力形式の版（AN-F-30）
+    h.update(json.dumps({"clip": clip, "fps": animset["frameRate"], "root": A.root_name(animset), "v": EXPORT_FORMAT_VERSION}, sort_keys=True, ensure_ascii=False, default=str).encode())
     joints = skeleton_joints(A.root_name(animset))
     s, e = int(clip["start"]), int(clip["end"])
     t0 = cmds.currentTime(query=True)

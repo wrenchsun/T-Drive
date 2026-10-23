@@ -501,6 +501,32 @@ def _run(tmp: Path) -> None:
     b27.remove()
     panel27.detach()
 
+    # ---- AN-F-30: 「変更のあるクリップだけ」の指紋が、出力形式の版とクリップ属性を含む
+    import copy as copy30
+
+    from tdrive_anim import export as X30
+
+    base30 = s.data
+    clip30 = base30["clips"][0]
+    fp0 = X30.fingerprint(clip30, base30)
+    check("AN-F-30: 同じなら同じ指紋", X30.fingerprint(copy30.deepcopy(clip30), base30) == fp0)
+    c1 = copy30.deepcopy(clip30)
+    c1["loop"] = not c1.get("loop", False)
+    check("AN-F-30: loop を変えると指紋が変わる", X30.fingerprint(c1, base30) != fp0)
+    c2 = copy30.deepcopy(clip30)
+    c2["events"] = [*c2.get("events", []), {"frame": clip30["start"], "key": "Hit"}]
+    check("AN-F-30: イベントを足すと指紋が変わる", X30.fingerprint(c2, base30) != fp0)
+    c3 = copy30.deepcopy(clip30)
+    c3["rootMotion"] = "bake" if c3.get("rootMotion") == "none" else "none"
+    check("AN-F-30: rootMotion を変えると指紋が変わる", X30.fingerprint(c3, base30) != fp0)
+    v_old = X30.EXPORT_FORMAT_VERSION
+    X30.EXPORT_FORMAT_VERSION = v_old + 1
+    try:
+        check("AN-F-30: 出力形式の版を上げると全クリップの指紋が変わる（再出力される）", X30.fingerprint(clip30, base30) != fp0)
+    finally:
+        X30.EXPORT_FORMAT_VERSION = v_old
+    check("AN-F-30: 出力形式の版が AN-F-24 の自前ベイクで上がっている（3 以上）", v_old >= 3)
+
     # ---- AN-F-17: メッセージ欄はスクロール領域の外・最上部
     from tdrive_anim.ui import AnimPanel
     from tdrive_anim.ui_common import MessageLabel

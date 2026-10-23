@@ -75,6 +75,7 @@
 <ul>
 <li>出力先の既定は <span class="path">build/</span> です。共有するときは「共有フォルダ…」を選んでください</li>
 <li>Unity 側での Avatar や AnimatorController、AnimData の自動作成は、このツールではまだ行いません（<span class="path">humanoid.json</span> / <span class="path">animset.json</span> を元に、あとで作る予定です）</li>
+<li>「変更のあるクリップだけ」は、キーの動きに加えて、クリップの設定（範囲・ルートモーション・ループ・イベント）と、T-Drive の出力の版が変わったときも出力し直します</li>
 <li>mGear などのリグ（ジョイントの移動・回転がまとめて別のノードに駆動されるもの）でも、クリップはキーが <strong>0 フレームから始まる</strong>形で出ます。ツールがジョイントの動きを 1 フレームずつ読み取って打ち直すためです（出力するシーンは別のプロセスで開くので、開いているシーンは変わりません）</li>
 <li>FBX のテイク名は Maya の既定（Take 001）です。D-Drive は最初の動きをファイル名で取り込むので、影響しません</li>
 <li>Ubercam は、Maya の「Ubercam 作成」ではなく、この道具が各フレームのカメラの位置・向き・画角を 1 台のカメラに写して作ります（結果は同じ考え方です）。カメラの名前は <code>Ubercam</code> です</li>
