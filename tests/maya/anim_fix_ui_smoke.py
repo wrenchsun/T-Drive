@@ -240,6 +240,20 @@ def _run(tmp: Path) -> None:
     check("AN-F-15: パネルが無い環境では追従しない", SS.start_follow(shot) is False)
     SS._model_panel = saved[0]
 
+    # ---- AN-F-16: 反映したパネルのカメラを、外すと元に戻す
+    looks2: list[tuple[str, str]] = []
+    saved2 = (SS._model_panel, SS._panel_camera, SS._look_thru)
+    SS._model_panel, SS._panel_camera, SS._look_thru = (lambda: "modelPanel4", lambda p: "persp", lambda p, c: looks2.append((p, c)))
+    try:
+        s.new_shot("Refl01", 30, 0, 60)
+        s.shot_add_camera(cam_a, 0, 60)
+        SS.build(s.shot)
+        check("AN-F-16: 反映する前のパネルのカメラを覚える", SS._reflected_camera.get("Refl01") == ("modelPanel4", "persp"), str(SS._reflected_camera))
+        SS.remove("Refl01")
+        check("AN-F-16: 外すとパネルのカメラが persp に戻る", looks2 == [("modelPanel4", "persp")] and "Refl01" not in SS._reflected_camera, str(looks2))
+    finally:
+        SS._model_panel, SS._panel_camera, SS._look_thru = saved2
+
     # ---- AN-F-17: メッセージ欄はスクロール領域の外・最上部
     from tdrive_anim.ui import AnimPanel
     from tdrive_anim.ui_common import MessageLabel

@@ -22,6 +22,7 @@
   - AN-1: 骨格（5 つのサブタブの枠・`tdrive_anim` パッケージ）、`animset.json` の読み書き・検証、メニュー Tools › T-Drive › Animation…
 
 ### 修正
+  - AN-F-16: 「ショットを反映」がパネルのカメラを CAM_* に切り替えたまま戻さない不具合。反映前のカメラを覚え、「合成を外す」・ショットを閉じる・ウィンドウを閉じるで戻す
   - AN-F-12: 命名タブの「適用」「直す」「削除」（Maya のシーンを変える操作）が、エディタにフォーカスした Ctrl+Z / Ctrl+Y で戻らない不具合。ツールの Undo 履歴に Maya のチャンクの印を積み、取り出したら Maya の Undo / Redo を呼ぶ（間に別の Maya 操作があるときはビューポートでの Ctrl+Z を案内）。Facial の A-7 の挙動は変えない
   - AN-F-10: 命名タブの表示（検査の一覧・シーン設定・掃除候補）が、Maya の Undo / Redo / 時間単位の変更 / 名前の変更に追従しない不具合。検査したあとは scriptJob（Undo / Redo / timeUnitChanged / NameChanged）で 0.3 秒まとめて検査し直す
   - AN-F-18: 出力タブの出力先を「既定」と「共有フォルダ…」の 2 択に（D-Drive / MS2026 のパス・ブランチ判定・確認ダイアログを削除。共有フォルダの下は Model / Anim / Cutscene の <Category>。選んだフォルダは project 設定 animSharedRoot に覚える）。MINOR/互換: project.json の animMs2026Root / animDdriveRoot は使わなくなった

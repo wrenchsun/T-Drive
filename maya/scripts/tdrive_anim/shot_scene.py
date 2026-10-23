@@ -215,7 +215,28 @@ def build(shot: dict[str, Any], current: dict[str, Any] | None = None) -> dict[s
         return _build(shot, current)
 
 
+_reflected_camera: dict[str, tuple[str, str]] = {}  # ショット名 → (パネル, 反映する前のパネルのカメラ)。外すとき戻す（AN-F-16）
+
+
+def _remember_panel_camera(shot_name: str) -> None:
+    """Camera Sequencer の shot を作ると、ビューポートのカメラが CAM_* に切り替わったままになる。反映する前のカメラを覚える。"""
+    if shot_name in _reflected_camera:
+        return
+    panel = _model_panel()
+    if panel is not None:
+        with contextlib.suppress(RuntimeError):
+            _reflected_camera[shot_name] = (panel, _panel_camera(panel))
+
+
+def _restore_panel_camera(shot_name: str) -> None:
+    got = _reflected_camera.pop(shot_name, None)
+    if got and cmds.objExists(got[1]):
+        with contextlib.suppress(RuntimeError):
+            _look_thru(got[0], got[1])
+
+
 def _build(shot: dict[str, Any], current: dict[str, Any] | None) -> dict[str, Any]:
+    _remember_panel_camera(shot["shot"])
     ensure_group(shot)
     try:
         apply_range(shot)
@@ -249,6 +270,7 @@ def _remove(shot_name: str, delete_group: bool) -> int:
             cmds.deleteAttr(f"{g}.tdPlayback")
         if delete_group:
             cmds.delete(g)
+    _restore_panel_camera(shot_name)
     return n
 
 
@@ -332,6 +354,7 @@ def stop_follow() -> None:
 
 
 lifecycle.on_reload(stop_follow)
+lifecycle.on_reload(_reflected_camera.clear)
 
 
 def play(shot: dict[str, Any]) -> bool:
