@@ -20,6 +20,7 @@ class ParamTimeline(QtWidgets.QWidget):
     markerMoved = QtCore.Signal(str, float, float)  # (パラメータ名, 元の時刻, 新しい時刻)
     deleteRequested = QtCore.Signal(str, float)
     addRequested = QtCore.Signal(int, str)  # (フレーム, "ActionState" | "Speed")
+    scrubRequested = QtCore.Signal(int)  # マーカーの上以外をクリック / ドラッグ: Maya の現在時刻をそのフレームへ（AN-F-32）
 
     def __init__(self) -> None:
         super().__init__()
@@ -31,6 +32,8 @@ class ParamTimeline(QtWidgets.QWidget):
         self.selected: tuple[str, float] | None = None
         self._drag: tuple[str, float] | None = None  # ドラッグ中のマーカー（パラメータ, 元の時刻）
         self._drag_t = 0.0
+        self._scrubbing = False
+        self._last_scrub = 0.0
         self.setMinimumHeight(TOP + LANE_H * 2 + BAND_H + 22)
         self.setFocusPolicy(QtCore.Qt.StrongFocus)
         self.setToolTip("記録したパラメータ（上段: ActionState / 下段: Speed）。クリックで選択、ドラッグで移動（フレームにスナップ）、"
@@ -73,6 +76,14 @@ class ParamTimeline(QtWidgets.QWidget):
         x = self.t_to_x(t)
         return QtCore.QRectF(x - w / 2, lane.center().y() - h / 2, w, h)
 
+    def _tick_step_frames(self) -> int:
+        """目盛りの間隔（フレーム）。幅に収まる最小のきりのよい値。"""
+        total_f = max(1, int(round(self.total_sec * self.fps)))
+        for step in (5, 10, 15, 30, 60, 90, 120, 150, 300, 600, 900):
+            if total_f / step <= max(2, self._plot_w() / 48):
+                return step
+        return 900
+
     def marker_at(self, pos: QtCore.QPointF) -> tuple[str, float] | None:
         for t, p, _ in reversed(self.markers):
             if self._marker_rect(t, p).adjusted(-3, -3, 3, 3).contains(pos):
@@ -100,15 +111,16 @@ class ParamTimeline(QtWidgets.QWidget):
             qp.fillRect(r, QtGui.QColor(STATE_COLORS.get(state, "#888888")))
             qp.setPen(QtGui.QColor("white"))
             qp.drawText(r, QtCore.Qt.AlignCenter, state)
-        # 目盛り（秒）
+        # 目盛り（フレーム番号。AN-F-34）
         qp.setPen(pal.mid().color())
-        step = 1.0 if self.total_sec <= 12 else 2.0 if self.total_sec <= 30 else 5.0
-        k = 0.0
-        while k <= self.total_sec + 1e-9:
-            x = self.t_to_x(k)
+        step_f = self._tick_step_frames()
+        f = 0
+        total_f = int(round(self.total_sec * self.fps))
+        while f <= total_f:
+            x = self.t_to_x(f / self.fps)
             qp.drawLine(QtCore.QPointF(x, band_y + BAND_H), QtCore.QPointF(x, band_y + BAND_H + 3))
-            qp.drawText(QtCore.QPointF(x + 2, band_y + BAND_H + 13), f"{k:g}s")
-            k += step
+            qp.drawText(QtCore.QPointF(x + 2, band_y + BAND_H + 13), f"{f}")
+            f += step_f
         # マーカー
         for t, p, v in self.markers:
             drag = self._drag is not None and self._drag == (p, t)
@@ -119,13 +131,17 @@ class ParamTimeline(QtWidgets.QWidget):
             sel = self.selected == (p, t)
             qp.setPen(QtGui.QPen(QtGui.QColor("white") if sel else color.darker(150), 2 if sel else 1))
             qp.drawRoundedRect(r, 2, 2)
-            label = (f"{ {0: 'Idle', 1: 'Walk', 2: 'Jump', 3: 'Fall'}.get(int(v), 'ActionState')}({int(v)})" if p == "ActionState" else f"{v:g}")
+            fr = round(tt * self.fps)
+            name = {0: "Idle", 1: "Walk", 2: "Jump", 3: "Fall"}.get(int(v), "ActionState")
+            label = f"{name}({int(v)}) f={fr}" if p == "ActionState" else f"{v:g} f={fr}"
             qp.setPen(pal.text().color())
             qp.drawText(QtCore.QPointF(r.right() + 3, r.center().y() + 4), label)
         # 現在時刻の線
         x = self.t_to_x(self.current_frame / max(1, self.fps))
         qp.setPen(QtGui.QPen(QtGui.QColor("#e04040"), 2))
         qp.drawLine(QtCore.QPointF(x, 0), QtCore.QPointF(x, self.height()))
+        qp.setPen(QtGui.QColor("#e04040"))
+        qp.drawText(QtCore.QPointF(min(x + 3, self.width() - 40), self.height() - 3), f"f={int(round(self.current_frame))}")  # 今のフレーム
 
     # ---------------------------------------------------------- 入力
     def mousePressEvent(self, event) -> None:  # noqa: N802
@@ -135,6 +151,9 @@ class ParamTimeline(QtWidgets.QWidget):
             self.selected = hit
             if hit is not None:
                 self._drag, self._drag_t = hit, hit[1]
+            else:
+                self._scrubbing = True  # マーカーの上以外: 現在時刻をそのフレームへ動かす（AN-F-32）
+                self.scrubRequested.emit(self.x_to_frame(event.position().x()))
             self.selectionChanged.emit(*(hit if hit else ("", 0.0)))
         self.update()
 
@@ -142,8 +161,18 @@ class ParamTimeline(QtWidgets.QWidget):
         if self._drag is not None:
             self._drag_t = self.x_to_frame(event.position().x()) / self.fps
             self.update()
+        elif self._scrubbing:
+            import time
+
+            now = time.perf_counter()
+            if now - self._last_scrub >= 0.03:  # ドラッグ中は 0.03 秒ごとにまとめる
+                self._last_scrub = now
+                self.scrubRequested.emit(self.x_to_frame(event.position().x()))
 
     def mouseReleaseEvent(self, event) -> None:  # noqa: N802
+        if self._scrubbing:
+            self._scrubbing = False
+            self.scrubRequested.emit(self.x_to_frame(event.position().x()))  # 離した位置を最後に必ず反映
         if self._drag is not None:
             p, t = self._drag
             new_t = self._drag_t

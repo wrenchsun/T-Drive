@@ -174,6 +174,13 @@ class BlendTab(QtWidgets.QWidget):
         sp = QtWidgets.QHBoxLayout()
         sp.addWidget(self.speed, 1)
         sp.addWidget(self.speed_label)
+        self.speed_spin = WG.DoubleSpinBox()  # 数値で入れる（Enter / フォーカスを外したときに記録。AN-F-33）
+        self.speed_spin.setRange(0.0, 1.0)
+        self.speed_spin.setDecimals(2)
+        self.speed_spin.setSingleStep(0.05)
+        self.speed_spin.setToolTip("Speed を数値で入れます（0.00〜1.00）。Enter かフォーカスを外すと記録されます。0.1 を境に Idle ⇄ Run")
+        self.speed_spin.editingFinished.connect(lambda *_: self._speed_typed())
+        sp.addWidget(self.speed_spin)
         form.addRow("Speed", sp)
         self.action_state = WG.ComboBox()
         for name, val in M.ACTION_STATES.items():
@@ -206,6 +213,7 @@ class BlendTab(QtWidgets.QWidget):
         self.timeline_view.markerMoved.connect(self._on_marker_moved)
         self.timeline_view.deleteRequested.connect(self._on_marker_delete)
         self.timeline_view.addRequested.connect(self._on_marker_add)
+        self.timeline_view.scrubRequested.connect(self._on_scrub)
         gv.addWidget(self.timeline_view)
         tl_row = QtWidgets.QHBoxLayout()
         self.add_marker_btn = QtWidgets.QPushButton("現在フレームに追加")
@@ -445,13 +453,17 @@ class BlendTab(QtWidgets.QWidget):
             self.timeline_view.set_data([], [], self.total_sec.value(), self._fps())
             self.switch_label.setText("")
             return
-        rows = M.marker_rows(self.timeline, r)
+        rows = M.marker_rows(self.timeline, r, self._fps())
+        ms = M.markers(self.timeline)
         self._syncing_table = True
         try:
             self.timeline_table.setRowCount(len(rows))
+            offset = len(rows) - len(ms)  # 古い記録を畳んだときは先頭に 1 行ある
             for i, cells in enumerate(rows):
                 for j, text in enumerate(cells):
                     self.timeline_table.setItem(i, j, QtWidgets.QTableWidgetItem(text))
+                if i >= offset >= 0 and i - offset < len(ms):  # 時刻（秒）を覚えておく（タイムラインの選択との同期に使う）
+                    self.timeline_table.item(i, 0).setData(QtCore.Qt.UserRole, ms[i - offset][0])
         finally:
             self._syncing_table = False
         self.timeline_view.set_data(M.markers(self.timeline), M.state_bands(r, self.total_sec.value()), self.total_sec.value(), self._fps())
@@ -640,8 +652,21 @@ class BlendTab(QtWidgets.QWidget):
     def _params(self) -> dict[str, float]:
         return {"Speed": self.speed.value() / 100.0, "ActionState": float(self.action_state.currentData())}
 
+    def _speed_typed(self) -> None:
+        """数値欄に入れた: スライダーを合わせて記録する（AN-F-33）。"""
+        v = int(round(self.speed_spin.value() * 100))
+        self.speed.blockSignals(True)
+        self.speed.setValue(v)
+        self.speed.blockSignals(False)
+        self.speed_label.setText(f"{v / 100.0:.2f}")
+        self.on_param_changed()
+
     def _speed_moved(self) -> None:
         self.speed_label.setText(f"{self.speed.value() / 100.0:.2f}")
+        if not self.speed_spin.hasFocus():  # スライダーを動かしたら数値欄も合わせる
+            self.speed_spin.blockSignals(True)
+            self.speed_spin.setValue(self.speed.value() / 100.0)
+            self.speed_spin.blockSignals(False)
         if not self.speed.isSliderDown():  # ドラッグ中は記録しない（離したとき sliderReleased で 1 回。キー操作・ホイール・プログラムからの変更はここで記録）
             self.on_param_changed()
 
@@ -730,6 +755,11 @@ class BlendTab(QtWidgets.QWidget):
         self.timeline = M.with_event(self.timeline, t, self._params())
         self._commit_timeline()
 
+    def _on_scrub(self, frame: int) -> None:
+        """タイムラインのクリック / ドラッグ: Maya の現在時刻をそのフレームへ（AN-F-32）。"""
+        cmds.currentTime(frame, edit=True)
+        self.timeline_view.set_current_frame(frame)
+
     def _on_marker_selected(self, param: str, t: float) -> None:
         """タイムラインで選んだ → 表の行も選ぶ。"""
         if self._syncing_table:
@@ -740,7 +770,7 @@ class BlendTab(QtWidgets.QWidget):
             for i in range(self.timeline_table.rowCount()):
                 it = self.timeline_table.item(i, 1)
                 tt = self.timeline_table.item(i, 0)
-                if it is not None and tt is not None and it.text() == param and tt.text() == f"{t:.2f}s":
+                if it is not None and tt is not None and it.text() == param and tt.data(QtCore.Qt.UserRole) is not None and abs(float(tt.data(QtCore.Qt.UserRole)) - t) < 1e-6:
                     self.timeline_table.selectRow(i)
                     break
         finally:
@@ -755,8 +785,8 @@ class BlendTab(QtWidgets.QWidget):
             self.timeline_view.select("", 0.0)
             return
         t_item, p_item = self.timeline_table.item(rows[0], 0), self.timeline_table.item(rows[0], 1)
-        if t_item is not None and p_item is not None and t_item.text().endswith("s") and p_item.text() in ("Speed", "ActionState"):
-            self.timeline_view.select(p_item.text(), float(t_item.text()[:-1]))
+        if t_item is not None and p_item is not None and t_item.data(QtCore.Qt.UserRole) is not None and p_item.text() in ("Speed", "ActionState"):
+            self.timeline_view.select(p_item.text(), float(t_item.data(QtCore.Qt.UserRole)))
 
     def _graph_placements(self) -> list[Seq.Placement]:
         r = M.evaluate(self.graph, self.timeline, self.total_sec.value(), self._fps())

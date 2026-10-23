@@ -410,7 +410,7 @@ def _run(tmp: Path) -> None:
     check("AN-F-28: スライダーを動かすと既定の状態図が自動で使われる", b27.mode == "graph" and b27.graph is not None)
     check("AN-F-27: ドラッグを離すと記録は 1 件（最後の値）", len(b27.timeline) == 1 and b27.timeline[0][1]["Speed"] == 0.5, str(b27.timeline))
     rows27 = [[b27.timeline_table.item(r, c).text() for c in range(4)] for r in range(b27.timeline_table.rowCount())]
-    check("AN-F-27: 記録の表は マーカーごと 1 行（時刻 / パラメータ / 値 / 結果の状態）", rows27 == [["0.00s", "ActionState", "0", "Idle"], ["0.00s", "Speed", "0.5", "Idle"]] or rows27[1][:3] == ["0.00s", "Speed", "0.5"], str(rows27))
+    check("AN-F-27: 記録の表は マーカーごと 1 行（時刻 / パラメータ / 値 / 結果の状態）", rows27[1][:3] == ["f=0（0.00s）", "Speed", "0.5"], str(rows27))
     check("AN-F-27: 評価した遷移列が一行で出る", b27.switch_label.text().startswith("評価した遷移列: 0.00s Idle → ") and "Run（0.08s）" in b27.switch_label.text(), b27.switch_label.text())
     check("AN-F-27: 「長さ」の既定は記録の最後 + 2 秒", abs(b27.total_sec.value() - 2.0) < 1e-9, str(b27.total_sec.value()))
     b27.total_sec.setValue(6.0)
@@ -481,6 +481,29 @@ def _run(tmp: Path) -> None:
     check("AN-F-29: Delete キーでマーカーが消える", not M29.markers(b27.timeline), str(b27.timeline))
     QTest.mouseDClick(tv, QC29.Qt.LeftButton, QC29.Qt.NoModifier, QC29.QPoint(int(tv.t_to_x(3.0)), 10))
     check("AN-F-29: ダブルクリックで上段（ActionState）のそのフレームに追加", any(m[1] == "ActionState" and abs(m[0] - 3.0) < 1e-6 for m in M29.markers(b27.timeline)), str(b27.timeline))
+    # AN-F-34 / AN-F-32 / AN-F-33
+    b27.timeline = [(3.0, {"ActionState": 2.0})]
+    b27._fill_graph_info()
+    check("AN-F-34: 表の時刻にフレームと秒の両方（f=90（3.00s））", b27.timeline_table.item(0, 0).text() == "f=90（3.00s）", b27.timeline_table.item(0, 0).text())
+    check("AN-F-34: 目盛りの間隔がフレーム（30 の倍数など）", tv._tick_step_frames() in (5, 10, 15, 30, 60, 90, 120, 150, 300, 600, 900))
+    tv.select("ActionState", 3.0)
+    tv.selectionChanged.emit("ActionState", 3.0)
+    check("AN-F-34: 選択の同期（フレーム表記の表）", [i.row() for i in b27.timeline_table.selectedIndexes()][:1] == [0])
+    cmds.currentTime(5, edit=True)
+    far = QC29.QPoint(int(tv.t_to_x(1.0)), 40)  # マーカーの無い所
+    QTest.mouseClick(tv, QC29.Qt.LeftButton, QC29.Qt.NoModifier, far)
+    check("AN-F-32: マーカーの上以外をクリックすると Maya の現在時刻がそのフレームへ動く（1.0 秒 = 30）", cmds.currentTime(query=True) == 30, str(cmds.currentTime(query=True)))
+    QTest.mousePress(tv, QC29.Qt.LeftButton, QC29.Qt.NoModifier, far)
+    QTest.mouseMove(tv, QC29.QPoint(int(tv.t_to_x(1.5)), 40))
+    QTest.mouseRelease(tv, QC29.Qt.LeftButton, QC29.Qt.NoModifier, QC29.QPoint(int(tv.t_to_x(1.5)), 40))
+    check("AN-F-32: ドラッグして離すと、離した位置のフレームになる（45）", cmds.currentTime(query=True) == 45, str(cmds.currentTime(query=True)))
+    b27.timeline = []
+    b27.speed_spin.setValue(0.37)
+    b27.speed_spin.editingFinished.emit()
+    check("AN-F-33: 数値入力で Speed の記録が 1 件増える（0.37）", len(b27.timeline) == 1 and abs(b27.timeline[0][1]["Speed"] - 0.37) < 1e-9 and b27.speed.value() == 37, str(b27.timeline))
+    b27.speed.setValue(60)
+    check("AN-F-33: スライダーを動かすと数値欄も合う", abs(b27.speed_spin.value() - 0.60) < 1e-9, str(b27.speed_spin.value()))
+
     # まとめて作成
     check("AN-F-29: 「変更のたびに作り直す」は既定オフ", not b27.auto_rebuild.isChecked())
     b27.reset_timeline()
@@ -600,6 +623,27 @@ def _run(tmp: Path) -> None:
     t_out = cmds.keyTangent(loc36[0], attribute="ddEvent", query=True, outTangentType=True)
     check("AN-F-36: イベントのキーは outTangent だけ step（inTangent は step にしない）", set(t_out) == {"step"} and "step" not in t_in, f"{t_in} {t_out}")
     SS.remove("Evt36")
+
+    # ---- AN-F-35 の続き: 取り残された古い scriptJob の掃除（batch では scriptJob が動かないので、cmds をモックして名前の判定と kill を確かめる）
+    from tdrive_anim import transport as T35b
+
+    killed: list[int] = []
+    orig_sj = cmds.scriptJob
+
+    def fake_sj(**kw):
+        if kw.get("listJobs"):
+            return ['518: "conditionChange", "playingBack", <function _cb_playing_changed at 0x1>', '746: "event", "timeChanged", <function _cb_time_changed at 0x2>',
+                    '900: "event", "SelectionChanged", <function _cb_selection_changed at 0x3>', '901: "event", "Undo", <function _cb_scene_event at 0x4>']
+        if "kill" in kw:
+            killed.append(kw["kill"])
+        return None
+
+    cmds.scriptJob = fake_sj
+    try:
+        n35 = T35b.purge_stale_jobs()
+    finally:
+        cmds.scriptJob = orig_sj
+    check("AN-F-35: 古い tdrive_anim の scriptJob だけを掃除（他ツールの job は触らない）", killed == [518, 746, 901] and n35 == 3, str(killed))
 
     # ---- AN-F-17: メッセージ欄はスクロール領域の外・最上部
     from tdrive_anim.ui import AnimPanel

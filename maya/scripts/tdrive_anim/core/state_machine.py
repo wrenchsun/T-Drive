@@ -251,9 +251,14 @@ def state_bands(result: Result, total_sec: float) -> list[tuple[float, float, st
     return [(t0, cuts[i + 1][0] if i + 1 < len(cuts) else float(total_sec), name) for i, (t0, name) in enumerate(cuts)]
 
 
-def marker_rows(timeline: Timeline, result: Result) -> list[tuple[str, str, str, str]]:
+def frame_label(t: float, fps: int = 30) -> str:
+    """時刻の表示（フレームと秒の両方。例: `f=90（3.00s）`）。"""
+    return f"f={round(t * fps)}（{t:.2f}s）"
+
+
+def marker_rows(timeline: Timeline, result: Result, fps: int = 30) -> list[tuple[str, str, str, str]]:
     """記録の表の行: (時刻, パラメータ, 値, その時刻の状態)。最大 `MAX_TIMELINE_ROWS` 行で、古い記録は先頭の 1 行（「古い記録 N 件」）に畳む。"""
-    rows = [(f"{t:.2f}s", p, f"{v:g}", state_at(result, t)) for t, p, v in markers(timeline)]
+    rows = [(frame_label(t, fps), p, f"{v:g}", state_at(result, t)) for t, p, v in markers(timeline)]
     if len(rows) > MAX_TIMELINE_ROWS:
         hidden = len(rows) - (MAX_TIMELINE_ROWS - 1)
         rows = [("…", f"古い記録 {hidden} 件", "", "")] + rows[hidden:]

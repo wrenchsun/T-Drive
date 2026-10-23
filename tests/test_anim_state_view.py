@@ -19,7 +19,8 @@ def test_describe_and_rows():
     text = M.describe_switches(r)
     assert text.startswith("0.00s Idle → ") and "Run（0.08s）" in text and "Jump（0.08s）" in text, text
     rows = M.marker_rows(tl, r)
-    assert rows[0] == ("1.00s", "Speed", "0.5", "Run") and rows[1] == ("2.00s", "ActionState", "2", "Jump")
+    assert rows[0] == ("f=30（1.00s）", "Speed", "0.5", "Run") and rows[1] == ("f=60（2.00s）", "ActionState", "2", "Jump")
+    assert M.frame_label(3.0) == "f=90（3.00s）" and M.frame_label(1.0, 60) == "f=60（1.00s）"
 
 
 def test_same_time_overwrites_and_rows_are_capped():

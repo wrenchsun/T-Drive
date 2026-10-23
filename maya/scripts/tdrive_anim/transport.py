@@ -77,3 +77,25 @@ def status_text() -> str:
 
 
 lifecycle.on_reload(stop_all)
+
+# リロードのたびに増えた古い scriptJob（旧モジュールの関数のまま生きていて、時刻が動くたびに古いコードが走る）を掃除する保険。
+# tdrive_anim 由来の関数名だけを対象にし、他のツールの job には触らない。このモジュールの読み込み時（= ツールの読み込み / リロード時。タブを作る前）に 1 回行う。
+STALE_JOB_FUNCTIONS = ("_cb_playing_changed", "_cb_time_changed", "_cb_scene_event")
+
+
+def purge_stale_jobs() -> int:
+    """tdrive_anim の古い scriptJob を kill する。kill した数。"""
+    import re
+
+    n = 0
+    for line in cmds.scriptJob(listJobs=True) or []:
+        m = re.match(r"\s*(\d+)\s*:", line)
+        if m and any(name in line for name in STALE_JOB_FUNCTIONS):
+            with contextlib.suppress(RuntimeError, TypeError):
+                cmds.scriptJob(kill=int(m.group(1)), force=True)
+                n += 1
+    return n
+
+
+with contextlib.suppress(Exception):
+    purge_stale_jobs()
