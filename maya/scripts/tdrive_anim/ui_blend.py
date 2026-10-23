@@ -106,6 +106,9 @@ class BlendTab(QtWidgets.QWidget):
         self.rows_table.horizontalHeaderItem(COL_SPEED).setToolTip("再生速度（1 = そのまま）。範囲: 0 より大きい値。既定: 1")
         self.rows_table.setMinimumHeight(140)
         bv.addWidget(self.rows_table)
+        hint = QtWidgets.QLabel("表のセルをダブルクリックすると編集できます（クリップはプルダウンで選びます）")
+        hint.setStyleSheet("color: gray;")
+        bv.addWidget(hint)
         rb = QtWidgets.QHBoxLayout()
         for text, fn, tip in (("＋ 行を足す", self.add_row, "末尾に行を足します"), ("－ 行を消す", self.remove_row, "選んだ行を消します"),
                               ("↑", lambda: self.move_row(-1), "選んだ行を上へ"), ("↓", lambda: self.move_row(1), "選んだ行を下へ"),
