@@ -133,6 +133,9 @@ def _misoten(tmp: Path) -> None:
         return
     cmds.file(new=True, force=True)
     cmds.file(str(MISOTEN), open=True, force=True, ignoreVersion=True, prompt=False)  # 読むだけ。保存しない
+    from tdrive_anim import composition as K0
+
+    K0.remove()  # 保存されたリグに合成が残っていても外す（メモリ上だけ。ファイルは書き換えない）
     joints = cmds.ls(type="joint")
     sets = cmds.ls("rig_controllers_grp", "*:rig_controllers_grp", type="objectSet")
     members = [m for st in sets for m in (cmds.sets(st, query=True) or [])]

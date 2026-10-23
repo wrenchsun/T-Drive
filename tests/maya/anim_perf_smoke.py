@@ -156,6 +156,9 @@ def _misoten(tmp: Path) -> None:
     project.set_root(tmp)
     cmds.file(new=True, force=True)
     cmds.file(str(MISOTEN), open=True, force=True, ignoreVersion=True, prompt=False)  # 読むだけ
+    from tdrive_anim import composition as K0
+
+    K0.remove()  # 保存されたリグに合成が残っていても外す（メモリ上だけ。ファイルは書き換えない）
     cmds.currentUnit(time="ntsc")
     joints = cmds.ls(type="joint")
     s = S.current()

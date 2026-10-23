@@ -129,6 +129,9 @@ def _misoten(tmp: Path) -> None:
     project.set_root(tmp)
     cmds.file(new=True, force=True)
     cmds.file(str(MISOTEN), open=True, force=True, ignoreVersion=True, prompt=False)  # 読むだけ。保存しない
+    from tdrive_anim import composition as K0
+
+    K0.remove()  # 保存されたリグに合成が残っていても外す（メモリ上だけ。ファイルは書き換えない）
     joints = cmds.ls(type="joint")
     INFO.append(f"ジョイント {len(joints)} 本")
     ch = K.animated_channels(joints)
