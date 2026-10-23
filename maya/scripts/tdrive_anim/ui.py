@@ -11,11 +11,12 @@ import traceback
 from pathlib import Path
 
 from maya import cmds
-from PySide6 import QtWidgets
+from PySide6 import QtCore, QtWidgets
 
 from tdrive import lifecycle, project, shell
 
 from . import session
+from . import transport as T
 from .core import animset as A
 from .ui_blend import BlendTab
 from .ui_clips import ClipsTab
@@ -162,6 +163,18 @@ class AnimPanel(QtWidgets.QWidget):
         self.warning.setWordWrap(True)
         self.warning.setStyleSheet("color: #f0a040;")
         layout.addWidget(self.warning)
+        bar = QtWidgets.QHBoxLayout()  # 再生の状態の常時表示と「■ すべて停止」（AN-F-35）
+        self.transport_label = QtWidgets.QLabel(T.status_text())
+        bar.addWidget(self.transport_label, 1)
+        self.stop_all_btn = QtWidgets.QPushButton("■ すべて停止")
+        self.stop_all_btn.setToolTip("Maya の再生・クリップ / ショットの再生・作り直しの待ちを全部止めます")
+        self.stop_all_btn.clicked.connect(lambda *_: self.stop_all())
+        bar.addWidget(self.stop_all_btn)
+        layout.addLayout(bar)
+        self._transport_timer = QtCore.QTimer(self)
+        self._transport_timer.setInterval(300)
+        self._transport_timer.timeout.connect(lambda *_: self._update_transport())
+        self._transport_timer.start()
         self.msg_host = QtWidgets.QWidget()  # 各タブの結果・警告の行。スクロール領域の外・最上部に固定する（AN-F-17）
         self.msg_layout = QtWidgets.QVBoxLayout(self.msg_host)
         self.msg_layout.setContentsMargins(0, 0, 0, 0)
@@ -205,7 +218,19 @@ class AnimPanel(QtWidgets.QWidget):
     def _all_tabs(self):
         return (self.naming_tab, self.clips_tab, self.blend_tab, self.shot_tab, self.export_tab)
 
+    def stop_all(self) -> None:
+        T.stop_all()
+        self._update_transport()
+
+    def _update_transport(self) -> None:
+        text = T.status_text()
+        if self.transport_label.text() != text:
+            self.transport_label.setText(text)
+            self.transport_label.setStyleSheet("color: #f0a040;" if T.status() else "")
+
     def detach(self) -> None:
+        self._transport_timer.stop()
+        T.stop_all()  # ウィンドウを閉じるときも全部止める（AN-F-35）
         for tab in reversed(self._all_tabs()):  # 作った順の逆に後片付けする（ショット → ブレンド → クリップ…。再生範囲の控えが戻る順。SF-8）
             tab.detach()
         if self.refresh in self.session.listeners:
@@ -234,6 +259,7 @@ class AnimTool:
         return self._panel
 
     def on_scene_opened(self) -> None:
+        T.stop_all()  # 別のシーンを開いたら、再生・トランスポートを全部止める（AN-F-35）
         session.on_scene_opened()
 
     def on_scene_saved(self) -> None:

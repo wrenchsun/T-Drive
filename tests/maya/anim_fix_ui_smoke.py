@@ -527,6 +527,80 @@ def _run(tmp: Path) -> None:
         X30.EXPORT_FORMAT_VERSION = v_old
     check("AN-F-30: 出力形式の版が AN-F-24 の自前ベイクで上がっている（3 以上）", v_old >= 3)
 
+    # ---- AN-F-35: 停止ボタンは全部止める
+    from tdrive import lifecycle as LC35
+    from tdrive_anim import transport as T35
+    from tdrive_anim.ui import AnimPanel as AP35
+    from tdrive_anim.ui import AnimTool as AT35
+
+    panel35 = AP35()
+    idle35 = T35.status_text()
+    sh35 = {"shot": "Stop35", "frameRate": 30, "range": [0, 240], "cameras": [{"name": "CAM_Main", "node": cam_a, "start": 0, "end": 240}]}
+    SS._model_panel = lambda: None  # パネルが無い環境でも時刻は進む
+
+    def timers_left() -> list[str]:
+        left = []
+        if SS._transport["timer"] is not None:
+            left.append("shot-timer")
+        if panel35.blend_tab._rebuild_timer.isActive():
+            left.append("rebuild-timer")
+        if cmds.play(query=True, state=True):
+            left.append("maya-play")
+        if SS.is_playing() or MC35.is_playing():
+            left.append("flag")
+        return left
+
+    from tdrive_anim import clips as MC35
+
+    check("AN-F-35: 最上部に「■ 停止」が出ている", idle35 == "■ 停止" and panel35.transport_label.text() == "■ 停止", idle35)
+    SS.play(sh35)
+    panel35.blend_tab._rebuild_timer.start()
+    panel35._update_transport()
+    check("AN-F-35: 再生中は最上部に「▶ 再生中（ショット / 作り直し待ち）」", "ショット" in panel35.transport_label.text() and "作り直し待ち" in panel35.transport_label.text() and panel35.transport_label.text().startswith("▶"), panel35.transport_label.text())
+    panel35.clips_tab.stop_btn.click()  # クリップタブの ■ からでも全部止まる
+    check("AN-F-35: 「▶ → ■（クリップタブ）」のあとに何も残らない", timers_left() == [], str(timers_left()))
+    SS.play(sh35)
+    panel35.shot_tab.stop_btn.click()
+    check("AN-F-35: 「▶ → ■（ショットタブ）」のあとに何も残らない", timers_left() == [], str(timers_left()))
+    SS.play(sh35)
+    panel35.blend_tab._rebuild_timer.start()
+    panel35.stop_all_btn.click()
+    check("AN-F-35: 「■ すべて停止」で全部止まり、表示が「■ 停止」に戻る", timers_left() == [] and panel35.transport_label.text() == "■ 停止", f"{timers_left()} {panel35.transport_label.text()}")
+    SS.play(sh35)
+    LC35.run_reload_cleanups()
+    check("AN-F-35: 「▶ → リロード」のあとに何も残らない", timers_left() == [], str(timers_left()))
+    SS.play(sh35)
+    AT35().on_scene_opened()
+    check("AN-F-35: 「▶ → シーンを開く」のあとに何も残らない", timers_left() == [], str(timers_left()))
+    SS.play(sh35)
+    panel35.blend_tab._rebuild_timer.start()
+    panel35.detach()
+    check("AN-F-35: 「▶ → ウィンドウを閉じる」のあとに何も残らず、表示用タイマーも止まる", timers_left() == [] and not panel35._transport_timer.isActive(), str(timers_left()))
+    jobs35 = cmds.scriptJob(listJobs=True) or []
+    check("AN-F-35: 時刻を動かす追従の scriptJob が残っていない", not [j for j in jobs35 if "shot_scene" in j or "follow" in j.lower()], str(jobs35[:3]))
+    SS._model_panel = saved[0]
+
+    # ---- AN-F-36: イベントのキーの接線は out だけ step（in を step にしようとして出る警告を出さない）
+    from tdrive_anim.core import shot as SH36
+
+    s.new_shot("Evt36", 30, 0, 60)
+    s.shot_add_event(30, "Hit")
+    SS.ensure_group(s.shot)
+    from maya.api import OpenMaya as OM36
+
+    warned36: list[str] = []
+    cb36 = OM36.MCommandMessage.addCommandOutputCallback(lambda msg, kind, _d: warned36.append(msg) if kind == OM36.MCommandMessage.kWarning else None)
+    try:
+        SS.sync_events(s.shot)
+    finally:
+        OM36.MMessage.removeCallback(cb36)
+    check("AN-F-36: イベントの反映で「ステップに設定できません」の警告が出ない", not [w for w in warned36 if "ステップ" in w or "step" in w.lower()], str(warned36[:2]))
+    loc36 = SS.event_locators("Evt36")
+    t_in = cmds.keyTangent(loc36[0], attribute="ddEvent", query=True, inTangentType=True)
+    t_out = cmds.keyTangent(loc36[0], attribute="ddEvent", query=True, outTangentType=True)
+    check("AN-F-36: イベントのキーは outTangent だけ step（inTangent は step にしない）", set(t_out) == {"step"} and "step" not in t_in, f"{t_in} {t_out}")
+    SS.remove("Evt36")
+
     # ---- AN-F-17: メッセージ欄はスクロール領域の外・最上部
     from tdrive_anim.ui import AnimPanel
     from tdrive_anim.ui_common import MessageLabel
@@ -555,7 +629,8 @@ def _run(tmp: Path) -> None:
     check("AN-F-17: 出力タブも message に最新行が出る", panel.export_tab.message.text() == "⛔ 出せません")
     panel.detach()
     for t in (clips_tab, blend):
-        s.listeners.remove(t.refresh)
+        if t.refresh in s.listeners:  # リロードの後片付け（AN-F-35 の検査）で外れていることがある
+            s.listeners.remove(t.refresh)
 
 
 if __name__ == "__main__":

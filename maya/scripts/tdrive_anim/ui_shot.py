@@ -18,6 +18,7 @@ from tdrive import lifecycle, project, widgets as WG
 from . import composition as K
 from . import scene_naming as SN
 from . import session
+from . import transport as T
 from .ui_common import ComposeProgress, MessageLabel
 from . import shot_scene as SS
 from .core import animset as A
@@ -188,7 +189,7 @@ class ShotTab(QtWidgets.QWidget):
         self.play_btn.clicked.connect(lambda *_: self.play())
         self.stop_btn = QtWidgets.QPushButton("■")
         self.stop_btn.setToolTip("再生を止めます")
-        self.stop_btn.clicked.connect(lambda *_: SS.stop())
+        self.stop_btn.clicked.connect(lambda *_: T.stop_all())  # どのタブの再生・タイマーも全部止める（AN-F-35）
         self.movie_btn = QtWidgets.QPushButton("動画を撮る")
         self.movie_btn.setToolTip("captures/shots/<Shot>.mov に playblast します（ビューポートが必要）")
         self.movie_btn.clicked.connect(lambda *_: self.capture())

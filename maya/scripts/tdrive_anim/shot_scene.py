@@ -121,7 +121,7 @@ def sync_events(shot: dict[str, Any]) -> list[str]:
         if ev["frame"] > lo:  # ショットの範囲の外にキーを置かない（同じショットの全ファイルで開始〜終了を揃える）
             cmds.setKeyframe(loc, attribute="ddEvent", time=lo, value=0)
         cmds.setKeyframe(loc, attribute="ddEvent", time=ev["frame"], value=1)
-        cmds.keyTangent(loc, attribute="ddEvent", inTangentType="step", outTangentType="step")
+        cmds.keyTangent(loc, attribute="ddEvent", outTangentType="step")  # step は outTangent だけ（inTangent を step にしようとすると警告が出る。AN-F-36）
         made.append(loc)
     return made
 

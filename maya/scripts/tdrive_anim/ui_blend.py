@@ -20,6 +20,7 @@ from tdrive import lifecycle, widgets as WG
 from . import composition as K
 from . import scene_naming as SN
 from . import session
+from . import transport as T
 from .ui_common import ComposeProgress, MessageLabel
 from .ui_timeline import ParamTimeline
 from .core import animset as A
@@ -100,6 +101,7 @@ class BlendTab(QtWidgets.QWidget):
         self._rebuild_timer.setSingleShot(True)
         self._rebuild_timer.setInterval(150)
         self._rebuild_timer.timeout.connect(lambda *_: self._rebuild_keeping_time())
+        T.register(self._stop_timers, self._timer_name)
         outer = QtWidgets.QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         scroll = QtWidgets.QScrollArea()
@@ -817,7 +819,13 @@ class BlendTab(QtWidgets.QWidget):
         cmds.play(forward=True)
 
     def stop(self) -> None:
-        cmds.play(state=False)
+        T.stop_all()  # どのタブの再生・タイマーも全部止める（AN-F-35）
+
+    def _stop_timers(self) -> None:
+        self._rebuild_timer.stop()
+
+    def _timer_name(self) -> str:
+        return "作り直し待ち" if self._rebuild_timer.isActive() else ""
 
     def _restore_speed(self) -> None:
         if self._saved_speed is not None:

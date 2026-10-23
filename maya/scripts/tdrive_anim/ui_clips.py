@@ -15,6 +15,7 @@ from tdrive import lifecycle, widgets as WG
 
 from . import clips as MC
 from . import session
+from . import transport as T
 from .ui_common import MessageLabel
 from . import scene_naming as SN
 from .core import animset as A
@@ -335,7 +336,7 @@ class ClipsTab(QtWidgets.QWidget):
             self._say(f"再生中: {c['name']}（{c['start']}〜{c['end']}）。止めると元の再生範囲に戻ります")
 
     def stop(self) -> None:
-        MC.stop()
+        T.stop_all()  # どのタブの再生・タイマーも全部止める（AN-F-35）
         self._say("停止しました（元の再生範囲に戻しました）")
 
     def to_slider(self) -> None:
