@@ -141,16 +141,26 @@ def scene_materials() -> dict[str, str]:
 
 
 def scene_textures() -> list[tuple[str, str]]:
-    """(file ノード, ファイル名) 。つながっている file ノードだけ。"""
+    """(file ノード, ファイル名)。**メッシュに割り当てられたマテリアルに届く** file ノードだけ（未割り当てのマテリアルにつながるものは出さない。AN-F-9）。"""
+    return [(f, name) for f, name, _ in scene_textures_with_materials()]
+
+
+def scene_textures_with_materials() -> list[tuple[str, str, str]]:
+    """(file ノード, ファイル名, 届いている割り当て済みマテリアル)。同じファイルを指す file ノードは 1 行にまとめる。"""
+    assigned = set(scene_materials())
     out, seen = [], set()
     for f in cmds.ls(type="file") or []:
         if not cmds.listConnections(f, source=False, destination=True):
+            continue
+        hist = set(cmds.listHistory(f, future=True) or [])
+        reach = sorted(m for m in assigned if m in hist)
+        if not reach:
             continue
         path = cmds.getAttr(f"{f}.fileTextureName") or ""
         name = path.replace("\\", "/").rsplit("/", 1)[-1]
         if name and name not in seen:  # 同じファイルを指す file ノードは 1 行にまとめる
             seen.add(name)
-            out.append((f, name))
+            out.append((f, name, reach[0]))
     return out
 
 
@@ -237,8 +247,8 @@ def inspect_scene(model_id: str, animset: dict[str, Any] | None = None) -> Repor
         f = N.inspect(N.MATERIAL, shader, model_id, prof, node=shader)
         if f:
             rep.findings.append(f)
-    for node, fname in scene_textures():
-        f = N.inspect(N.TEXTURE, fname, model_id, prof, node=node)
+    for node, fname, mat in scene_textures_with_materials():
+        f = N.inspect(N.TEXTURE, fname, model_id, prof, node=node, part_hint=N.part_from_material(mat, model_id, prof))
         if f:
             rep.findings.append(f)
     for clip in (animset or {}).get("clips", []):

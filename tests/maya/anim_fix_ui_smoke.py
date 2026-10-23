@@ -212,6 +212,26 @@ def _run(tmp: Path) -> None:
     cmds.undo()  # 別の操作をビューポートで戻す
     check("AN-F-12: ビューポートで戻したあとはエディタの Ctrl+Z で戻せる", s.undo() is True and cmds.objExists("LocA"), s.last_undo_message)
 
+    # ---- AN-F-9: テクスチャ検査は割り当て済みマテリアルに届く file だけ・部位名はマテリアル由来
+    make_mini_rig.add_materials()
+    for i in range(4):  # Hair の SG をあと 4 つ（割り当ての無い SG）。同じマテリアルが SG ごとに並ぶ状況（AN-F-11）
+        sg = cmds.sets(renderable=True, noSurfaceShader=True, empty=True, name=f"UnusedHairSG{i}")
+        cmds.connectAttr("Unused.outColor", sg + ".surfaceShader", force=True)
+    uuid_a, uuid_b = "0123456789abcdef0123456789abcdef", "fedcba9876543210fedcba9876543210"
+    f_hair = cmds.shadingNode("file", asTexture=True, name="file_hair")
+    cmds.setAttr(f_hair + ".fileTextureName", f"C:/tex/{uuid_a}.png", type="string")
+    cmds.connectAttr(f_hair + ".outColor", "Hair.color", force=True)
+    f_unused = cmds.shadingNode("file", asTexture=True, name="file_unused")
+    cmds.setAttr(f_unused + ".fileTextureName", f"C:/tex/{uuid_b}.png", type="string")
+    cmds.connectAttr(f_unused + ".outColor", "Unused.color", force=True)
+    rep = SN2.inspect_scene("MisotenChara", s.data)
+    tex = [f for f in rep.findings if f.kind == "texture"]
+    check("AN-F-9: 未割り当てのマテリアルにつながる file は検査に出ない", len(tex) == 1 and uuid_b not in " ".join(f.name for f in tex), str([f.name for f in tex]))
+    check("AN-F-9: 割り当て済みの file は部位名がマテリアル由来（Hair）", tex and tex[0].suggestion == "T_MisotenChara_Hair_BaseColor.png", str([f.suggestion for f in tex]))
+    from tdrive_anim.core import naming_rules as NR
+
+    check("AN-F-9: HairM → Hair / SkinM2 → Skin", NR.part_from_material("HairM", "MisotenChara") == "Hair" and NR.part_from_material("SkinM2", "MisotenChara") == "Skin")
+
     # ---- AN-F-15: シーケンサー再生でパネルのカメラが切り替わる
     from tdrive_anim import shot_scene as SS
 

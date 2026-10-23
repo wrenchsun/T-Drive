@@ -231,8 +231,15 @@ def suggest_material(name: str, model_id: str, profile: Profile | None = None) -
     return f"{profile.material_prefix}_{model_id}_{part_token(name, MATERIAL, model_id, profile)}"
 
 
-def suggest_texture(stem: str, model_id: str, profile: Profile | None = None) -> str:
-    """テクスチャのファイル名（拡張子なし）の提案。種類は名前から推定（BaseColor を既定）。"""
+def part_from_material(material: str, model_id: str, profile: Profile | None = None) -> str:
+    """マテリアル名から部位の語（`HairM` → `Hair`、`SkinM2` → `Skin`。末尾の M と番号は落とす）。AN-F-9。"""
+    tok = part_token(material, MATERIAL, model_id, profile)
+    return re.sub(r"(?<=[a-z])M\d*$", "", tok) or tok
+
+
+def suggest_texture(stem: str, model_id: str, profile: Profile | None = None, part_hint: str = "") -> str:
+    """テクスチャのファイル名（拡張子なし）の提案。種類は名前から推定（BaseColor を既定）。
+    ファイル名から部位が分からない（uuid など）ときは、つながっているマテリアル由来の部位の語 `part_hint` を使う（AN-F-9）。"""
     profile = profile or default_profile()
     low = stem.lower()
     kind = next((k for k in profile.texture_kinds if k.lower() in low), "")
@@ -240,7 +247,7 @@ def suggest_texture(stem: str, model_id: str, profile: Profile | None = None) ->
         kind = "Normal" if "norm" in low or "nrm" in low else "Mask" if "mask" in low else "Emission" if "emi" in low else "BaseColor"
     base = re.sub(re.escape(kind), "", stem, flags=re.IGNORECASE) if kind.lower() in low else stem
     if re.fullmatch(r"[0-9a-fA-F-]{16,}", sanitize(base)):
-        base = "Part"  # uuid のファイル名は部位が分からない
+        base = part_hint or "Part"  # uuid のファイル名は部位が分からない（つながっているマテリアルから推定）
     return f"{profile.texture_prefix}_{model_id}_{part_token(base, TEXTURE, model_id, profile)}_{kind}"
 
 
@@ -275,7 +282,7 @@ def action_word(clip_name: str, model_id: str, profile: Profile | None = None) -
 
 
 # ------------------------------------------------------------------ 検査
-def inspect(kind: str, name: str, model_id: str, profile: Profile | None = None, node: str = "") -> Finding | None:
+def inspect(kind: str, name: str, model_id: str, profile: Profile | None = None, node: str = "", part_hint: str = "") -> Finding | None:
     """1 つの名前を検査する。問題が無ければ None。問題が複数なら最も重いものを理由の先頭に、残りを「／」でつなぐ。"""
     profile = profile or default_profile()
     shown = strip_namespace(name)
@@ -296,7 +303,7 @@ def inspect(kind: str, name: str, model_id: str, profile: Profile | None = None,
         problems = common_problems(stem, profile) if "." in shown else problems
         if not texture_pattern(model_id, profile).match(stem):
             problems.append((WARNING, f"テクスチャは {profile.texture_prefix}_{model_id}_<部位>_<種類> の形にします（種類: {' / '.join(profile.texture_kinds)}）"))
-            suggestion = suggest_texture(stem, model_id, profile) + (("." + shown.rsplit(".", 1)[1]) if "." in shown else "")
+            suggestion = suggest_texture(stem, model_id, profile, part_hint) + (("." + shown.rsplit(".", 1)[1]) if "." in shown else "")
     elif kind == CLIP:
         m = clip_pattern(model_id, profile).match(shown)
         if not m:
