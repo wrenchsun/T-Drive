@@ -10,6 +10,7 @@
 
 ### 追加
 - Animation タブ（アニメーション作業台。仕様 docs/20）: 殻の 1 段目に追加。DirectX 11 を使わない（OpenGL・ヘッドレスでも動く）
+  - AN-11: ブレンドツリー（D-Drive の AnimEditor「Blend Tree パラメータ」に相当）。AN-11-1: 重み計算 `tdrive_anim/core/blend_tree.py`（Maya 非依存。1D / 2DSimpleDirectional / 2DFreeformDirectional / 2DFreeformCartesian）。MINOR: 状態図 JSON の状態に `clip` の代わりに `blendTree` を持てる
   - AN-9: 総点検（マニュアル anim*.html 6 ページ・Readme の「今できること」・確認項目 docs/18 AN 節と docs/10 V・一周の手順）。裏の Maya で命名 → クリップ → ブレンド → 出力 → ショット → 出力の一周のスモーク（MisotenChara_Rig.ma があればそれ）
   - 共通: Toon の `export_in_place` に `roots` / `animation` を追加（既定は従来どおり）。出力ジョブの共通部分 `tdrive.export_job.BatchJob`（不明なノードを含むシーンは .ma のまま渡す）
   - AN-8: ショットの出力（`<Shot>.fbx` = Ubercam 1 台に焼いたカメラ + `PRP_` + `EVT_`、`<Shot>__<ModelId>.fbx` = ルートジョイントの階層だけ・ショットの範囲でベイク・ネームスペースなし、`.fctrack`（既存の export_fctrack）、`<Shot>.shot.json`、D-Drive のオプション、同名上書き、出力先プリセット、`tools/export_fbx_batch.py` の `mode: "shot"`）。animset に `namespace`（リグのネームスペース。MINOR）

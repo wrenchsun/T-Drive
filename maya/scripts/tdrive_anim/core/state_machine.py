@@ -20,6 +20,7 @@ import copy
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
+from . import blend_tree as BT
 from . import sequence
 
 FORMAT = "TDriveStateGraph"
@@ -101,8 +102,11 @@ def validate(graph: dict[str, Any], clips: Iterable[dict[str, Any]] = ()) -> lis
     states = {s.get("name"): s for s in dicts("states")}
     if not states and not out:
         out.append("状態がありません")
+    clip_list = [c for c in clips if isinstance(c, dict)]
     for n, s in states.items():
-        if not s.get("clip"):
+        if "blendTree" in s:  # ブレンドツリーの状態（docs/20 §4.5）。遷移列には使えないが、確認はブレンドタブの Blend Tree パラメータで
+            out += [f"状態 {n}: {e}" for e in BT.validate(s["blendTree"], clip_list, params)]
+        elif not s.get("clip"):
             out.append(f"状態 {n} にクリップが割り当てられていません")
         elif names and s["clip"] not in names:
             out.append(f"状態 {n} のクリップ {s['clip']} が animset にありません")
@@ -192,7 +196,7 @@ def evaluate(graph: dict[str, Any], timeline: list[tuple[float, dict[str, float]
 def to_placements(result: Result, clips: dict[str, dict[str, Any]], fps: int) -> list[sequence.Placement]:
     """評価結果 → 配置。クリップが割り当てられていない状態があれば SequenceError。"""
     if not result.first_clip:
-        raise sequence.SequenceError(f"状態 {result.first_state} にクリップが割り当てられていません")
+        raise sequence.SequenceError(f"状態 {result.first_state} にクリップが割り当てられていません（ブレンドツリーの状態は Blend Tree パラメータの節で確認します）")
     for sw in result.switches:
         if not sw["clip"]:
             raise sequence.SequenceError(f"状態 {sw['to']} にクリップが割り当てられていません")
