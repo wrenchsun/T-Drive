@@ -107,17 +107,50 @@ class AnimSession:
         del self._undo[:-UNDO_LIMIT]
         self._redo.clear()
 
+    # Maya のシーンを変える操作（命名タブの「適用」「直す」「削除」）は Maya の Undo チャンクで戻す。エディタ内の Undo にはその印（{"maya": チャンク名}）を積み、
+    # 取り出したら cmds.undo() / cmds.redo() を呼ぶ（Maya の Undo の先頭がそのチャンクのときだけ。食い違うときはビューポートでの Ctrl+Z を案内する。AN-F-12）
+    last_undo_message = ""
+
+    def push_maya_undo(self, chunk: str) -> None:
+        """直前に行った Maya の操作（Undo チャンク名 chunk）を、エディタ内の Undo の履歴に積む。"""
+        self._push_undo({"maya": chunk})
+
+    def _maya_step(self, chunk: str, redo: bool) -> bool:
+        info = cmds.undoInfo(query=True, redoName=True) if redo else cmds.undoInfo(query=True, undoName=True)
+        if info != chunk:
+            self.last_undo_message = (f"Maya のシーンの操作（{chunk}）を挟んでいます。先にビューポートで Ctrl+Z / Ctrl+Y を押して、Maya 側の操作を順に戻してください"
+                                      f"（今の先頭: {info or 'なし'}）")
+            return False
+        (cmds.redo if redo else cmds.undo)()
+        return True
+
     def undo(self) -> bool:
+        self.last_undo_message = ""
         if not self._undo:
             return False
+        top = self._undo[-1]
+        if "maya" in top:
+            if not self._maya_step(top["maya"], redo=False):
+                return False
+            self._redo.append(self._undo.pop())
+            self._changed()
+            return True
         self._redo.append(self._snapshot())
         self._restore(self._undo.pop())
         self._changed()
         return True
 
     def redo(self) -> bool:
+        self.last_undo_message = ""
         if not self._redo:
             return False
+        top = self._redo[-1]
+        if "maya" in top:
+            if not self._maya_step(top["maya"], redo=True):
+                return False
+            self._undo.append(self._redo.pop())
+            self._changed()
+            return True
         self._undo.append(self._snapshot())
         self._restore(self._redo.pop())
         self._changed()

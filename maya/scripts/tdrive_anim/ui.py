@@ -253,10 +253,10 @@ class AnimTool:
                 self._panel = None  # 枠ごと破棄済み
 
     def undo_message(self) -> str:
-        return "Animation: これ以上元に戻せません"
+        return "Animation: " + (session.current().last_undo_message or "これ以上元に戻せません")
 
     def redo_message(self) -> str:
-        return "Animation: やり直せる操作がありません"
+        return "Animation: " + (session.current().last_undo_message or "やり直せる操作がありません")
 
 
 def make_tool() -> AnimTool:

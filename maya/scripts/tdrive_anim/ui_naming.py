@@ -341,6 +341,8 @@ class NamingTab(QtWidgets.QWidget):
                     QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No)
                 write_files = r == QtWidgets.QMessageBox.Yes
             res = SN.apply_renames(scene_items)
+            if scene_items:
+                self.session.push_maya_undo("tdAnimRename")  # Maya のチャンクを、エディタの Ctrl+Z で戻せるように印を積む（AN-F-12）
             msgs = [f"改名 {len(res['renamed'])} 件"] + [f"スキップ: {n}（{why}）" for n, why in res["skipped"]]
             msgs += SN.follow_look(res["materials"], res["meshes"], write_files=write_files)
             clip_pairs = [(f.name, f.suggestion) for f in picked if f.kind == N.CLIP]
@@ -393,7 +395,9 @@ class NamingTab(QtWidgets.QWidget):
                 if r == QtWidgets.QMessageBox.Cancel:
                     return
                 keep_frames = r == QtWidgets.QMessageBox.No
-        SN.fix_settings([key], rate, keep_frames=keep_frames)
+        fixed = SN.fix_settings([key], rate, keep_frames=keep_frames)
+        if fixed:
+            self.session.push_maya_undo("tdAnimSceneSettings")
         note = ""
         if key == "time" and not keep_frames and abs(ratio - 1.0) > 1e-9 and self.session.data is not None:
             n = self.session.rescale_time(ratio)
@@ -422,6 +426,8 @@ class NamingTab(QtWidgets.QWidget):
             if r != QtWidgets.QMessageBox.Yes:
                 return
             n = SN.apply_cleanup(items)
+            if n:
+                self.session.push_maya_undo("tdAnimCleanup")
             self.result.setText(f"掃除: {n} 件を削除しました")
             self.inspect()
 

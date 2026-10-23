@@ -192,6 +192,26 @@ def _run(tmp: Path) -> None:
     finally:
         cmds.scriptJob = orig_job
 
+    # ---- AN-F-12: エディタの Ctrl+Z で命名タブの Maya 操作が戻る
+    from tdrive_anim import scene_naming as SN2
+
+    cmds.undoInfo(state=True)
+    cmds.spaceLocator(name="LocA")
+    with SN2.undo_chunk("tdAnimRename"):
+        cmds.rename("LocA", "LocB")
+    s.push_maya_undo("tdAnimRename")
+    s.add_clip_from_range("Tmp", 0, 10)  # そのあとツールの操作（animset）
+    check("AN-F-12: 履歴に Maya の印が積まれる", any("maya" in e for e in s._undo))
+    check("AN-F-12: 1 回目の Ctrl+Z は animset の操作", s.undo() is True and cmds.objExists("LocB"))
+    check("AN-F-12: 2 回目の Ctrl+Z で Maya の改名が戻る", s.undo() is True and cmds.objExists("LocA") and not cmds.objExists("LocB"))
+    check("AN-F-12: Ctrl+Y で Maya の改名をやり直す", s.redo() is True and cmds.objExists("LocB"))
+    with SN2.undo_chunk("tdOther"):
+        cmds.rename("LocB", "LocC")
+    ok = s.undo()
+    check("AN-F-12: 間に別の Maya 操作があると戻さず、ビューポートでの Ctrl+Z を案内する", ok is False and "ビューポート" in s.last_undo_message and cmds.objExists("LocC"), s.last_undo_message)
+    cmds.undo()  # 別の操作をビューポートで戻す
+    check("AN-F-12: ビューポートで戻したあとはエディタの Ctrl+Z で戻せる", s.undo() is True and cmds.objExists("LocA"), s.last_undo_message)
+
     # ---- AN-F-15: シーケンサー再生でパネルのカメラが切り替わる
     from tdrive_anim import shot_scene as SS
 
