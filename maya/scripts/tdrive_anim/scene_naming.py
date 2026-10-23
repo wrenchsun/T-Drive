@@ -214,15 +214,22 @@ def cleanup_candidates() -> list[CleanupItem]:
     """未使用のマテリアル / file、空のネームスペース。削除は人が選ぶ（ここでは何も消さない）。"""
     out: list[CleanupItem] = []
     sources = preview_sources()
+    by_shader: dict[str, list[str]] = {}  # マテリアル → その shadingEngine（同じマテリアルが SG ごとに並ばないよう 1 行にまとめる。AN-F-11）
+    used: set[str] = set()  # 割り当てのある SG が 1 つでもあるマテリアルは候補に出さない
     for sg in cmds.ls(type="shadingEngine") or []:
-        if sg in DEFAULT_SGS or cmds.sets(sg, query=True) or _is_referenced(sg):
+        if sg in DEFAULT_SGS or _is_referenced(sg):
             continue
         shader = _surface_shader(sg)
         if not shader or shader in DEFAULT_MATERIALS or shader.endswith(PREVIEW_SUFFIX) or _is_td_node(shader):
             continue  # プレビュー用は T-Drive が作り直す
         if shader in sources:
             continue  # Toon 表示 ON で割り当てがプレビュー側にある元マテリアル（未使用ではない）
-        out.append(CleanupItem("material", f"未使用のマテリアル: {shader}", [shader, sg]))
+        if cmds.sets(sg, query=True):
+            used.add(shader)
+        by_shader.setdefault(shader, []).append(sg)
+    for shader, sgs in by_shader.items():
+        if shader not in used:
+            out.append(CleanupItem("material", f"未使用のマテリアル: {shader}", [shader, *sgs]))
     for f in cmds.ls(type="file") or []:
         if not cmds.listConnections(f, source=False, destination=True) and not _is_referenced(f):
             out.append(CleanupItem("file", f"未使用のテクスチャノード: {f}", [f]))

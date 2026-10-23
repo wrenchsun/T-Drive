@@ -212,7 +212,7 @@ def _run(tmp: Path) -> None:
     cmds.undo()  # 別の操作をビューポートで戻す
     check("AN-F-12: ビューポートで戻したあとはエディタの Ctrl+Z で戻せる", s.undo() is True and cmds.objExists("LocA"), s.last_undo_message)
 
-    # ---- AN-F-9: テクスチャ検査は割り当て済みマテリアルに届く file だけ・部位名はマテリアル由来
+    # ---- AN-F-9 / AN-F-11: テクスチャ検査は割り当て済みマテリアルに届く file だけ・部位名はマテリアル由来 / 掃除候補は同じマテリアルを 1 行に
     make_mini_rig.add_materials()
     for i in range(4):  # Hair の SG をあと 4 つ（割り当ての無い SG）。同じマテリアルが SG ごとに並ぶ状況（AN-F-11）
         sg = cmds.sets(renderable=True, noSurfaceShader=True, empty=True, name=f"UnusedHairSG{i}")
@@ -231,6 +231,11 @@ def _run(tmp: Path) -> None:
     from tdrive_anim.core import naming_rules as NR
 
     check("AN-F-9: HairM → Hair / SkinM2 → Skin", NR.part_from_material("HairM", "MisotenChara") == "Hair" and NR.part_from_material("SkinM2", "MisotenChara") == "Skin")
+    items = [i for i in rep.cleanup if i.kind == "material"]
+    check("AN-F-11: 同じマテリアルは掃除候補の 1 行にまとまる", len(items) == 1 and "Unused" in items[0].label, str([i.label for i in rep.cleanup]))
+    check("AN-F-11: 消すときはその SG を全部消す（5 つ）", sorted(n for n in items[0].nodes if n.endswith(tuple("01234")) or n == "UnusedSG").__len__() == 5 if items else False, str(items[0].nodes if items else None))
+    SN2.apply_cleanup(items)
+    check("AN-F-11: 削除で Unused と 5 つの SG が消える", not cmds.objExists("Unused") and not cmds.ls("UnusedSG", "UnusedHairSG*"))
 
     # ---- AN-F-15: シーケンサー再生でパネルのカメラが切り替わる
     from tdrive_anim import shot_scene as SS
