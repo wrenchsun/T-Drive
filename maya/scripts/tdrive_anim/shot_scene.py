@@ -18,7 +18,7 @@ from typing import Any
 
 from maya import cmds
 
-from tdrive import project
+from tdrive import lifecycle, project
 
 from . import clips as MC
 from . import composition as K
@@ -253,12 +253,102 @@ def _remove(shot_name: str, delete_group: bool) -> int:
 
 
 # ------------------------------------------------------------------ 再生・動画
-def play(shot: dict[str, Any]) -> None:
+# シーケンサー再生: Maya の通常の再生ではビューポートのカメラは変わらないので、timeChanged でショットのカメラの区間に合わせて
+# パネルのカメラを切り替える（シーケンス時間 = ショットのフレーム番号。カメラの区間は同じ番号で作ってある）。止めたら元のカメラに戻す。AN-F-15
+_follow: dict[str, Any] = {"shot": None, "panel": None, "restore": None, "current": None, "jobs": []}
+
+
+def _model_panel() -> str | None:
+    """カメラを切り替えるビューポート: フォーカスのあるモデルパネル、無ければ最初のモデルパネル。ヘッドレスでは None。"""
+    focus = cmds.getPanel(withFocus=True)
+    if focus and cmds.getPanel(typeOf=focus) == "modelPanel":
+        return focus
+    panels = cmds.getPanel(type="modelPanel") or []
+    return panels[0] if panels else None
+
+
+def _panel_camera(panel: str) -> str:
+    return cmds.modelPanel(panel, query=True, camera=True)
+
+
+def _look_thru(panel: str, camera: str) -> None:
+    cmds.lookThru(panel, camera)
+
+
+def follow_frame(frame: float | None = None) -> str | None:
+    """今のフレームのショットのカメラへ、パネルのカメラを切り替える（区間が無ければ変えない）。切り替えたカメラ、変えなければ None。"""
+    shot, panel = _follow["shot"], _follow["panel"]
+    if shot is None or panel is None:
+        return None
+    cam = SH.camera_at(shot, int(round(cmds.currentTime(query=True) if frame is None else frame)))
+    if cam is None or cam == _follow["current"] or not cmds.objExists(cam):
+        return None
+    _look_thru(panel, cam)
+    _follow["current"] = cam
+    return cam
+
+
+@lifecycle.guarded()
+def _cb_time_changed() -> None:
+    follow_frame()
+
+
+@lifecycle.guarded()
+def _cb_playing_changed() -> None:
+    if _follow["shot"] is not None and not cmds.play(query=True, state=True):
+        stop_follow()  # 再生が止まった（最後まで・停止ボタン・Esc）→ 元のカメラへ
+
+
+lifecycle.keep_alive(_cb_time_changed)
+lifecycle.keep_alive(_cb_playing_changed)
+
+
+def start_follow(shot: dict[str, Any]) -> bool:
+    """カメラの追従を始める。戻り: 始めたか（パネルが無い環境では False）。"""
+    stop_follow()
+    panel = _model_panel()
+    if panel is None:
+        return False
+    _follow.update(shot=shot, panel=panel, restore=_panel_camera(panel), current=None)
+    jobs = []
+    with contextlib.suppress(RuntimeError):
+        jobs.append(cmds.scriptJob(event=["timeChanged", _cb_time_changed]))
+        jobs.append(cmds.scriptJob(conditionChange=["playingBack", _cb_playing_changed]))
+    _follow["jobs"] = jobs
+    follow_frame()
+    return True
+
+
+def stop_follow() -> None:
+    """追従を止めて、パネルのカメラを元に戻す。"""
+    for j in _follow["jobs"]:
+        with contextlib.suppress(RuntimeError, TypeError):
+            cmds.scriptJob(kill=j, force=True)
+    panel, restore = _follow["panel"], _follow["restore"]
+    _follow.update(shot=None, panel=None, restore=None, current=None, jobs=[])
+    if panel and restore and cmds.objExists(restore):
+        with contextlib.suppress(RuntimeError):
+            _look_thru(panel, restore)
+
+
+lifecycle.on_reload(stop_follow)
+
+
+def play(shot: dict[str, Any]) -> bool:
+    """ショットの範囲を 1 回再生する。カメラの区間にあわせてパネルのカメラを切り替える。戻り: カメラを追従するか。"""
     lo, hi = shot["range"]
     cmds.playbackOptions(minTime=lo, maxTime=hi, loop="once")
     cmds.currentTime(lo, edit=True)
+    following = start_follow(shot) if shot.get("cameras") else False
     with contextlib.suppress(RuntimeError):
         cmds.play(forward=True)
+    return following
+
+
+def stop() -> None:
+    """再生を止めて、カメラを元に戻す。"""
+    cmds.play(state=False)
+    stop_follow()
 
 
 def movie_path(shot_name: str) -> Path:

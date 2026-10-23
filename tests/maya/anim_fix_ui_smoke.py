@@ -157,6 +157,34 @@ def _run(tmp: Path) -> None:
     check("AN-F-5: 切り替えのあとは Run だけ", "Run_F 100%" in blend.mix_label.text() and "Idle" not in blend.mix_label.text(), blend.mix_label.text())
     blend.remove()
     check("AN-F-5: 合成を外すと表示が消える", blend.mix_label.text() == "")
+    # ---- AN-F-15: シーケンサー再生でパネルのカメラが切り替わる
+    from tdrive_anim import shot_scene as SS
+
+    cam_a = cmds.camera(name="CAM_Main")[0]
+    cam_b = cmds.camera(name="CAM_Close")[0]
+    cmds.camera(name="CAM_Orig")
+    shot = {"shot": "Opening01", "range": [0, 240], "cameras": [{"name": "CAM_Main", "node": cam_a, "start": 0, "end": 120},
+                                                                  {"name": "CAM_Close", "node": cam_b, "start": 121, "end": 240}]}
+    looks: list[str] = []
+    saved = (SS._model_panel, SS._panel_camera, SS._look_thru)
+    SS._model_panel, SS._panel_camera, SS._look_thru = (lambda: "modelPanel4", lambda p: "CAM_Orig1", lambda p, c: looks.append(c))
+    try:
+        following = SS.play(shot)
+        check("AN-F-15: 再生を始めると最初のカメラ（CAM_Main）に切り替わる", following and looks == [cam_a], str(looks))
+        cmds.currentTime(50, edit=True)
+        SS.follow_frame()
+        check("AN-F-15: 区間の中では切り替え直さない", looks == [cam_a], str(looks))
+        cmds.currentTime(130, edit=True)
+        SS.follow_frame()
+        check("AN-F-15: 121 フレーム以降は CAM_Close に切り替わる", looks == [cam_a, cam_b], str(looks))
+        SS.stop()
+        check("AN-F-15: 止めたら元のカメラに戻る", looks[-1] == "CAM_Orig1" and SS._follow["shot"] is None, str(looks))
+    finally:
+        SS._model_panel, SS._panel_camera, SS._look_thru = saved
+    SS._model_panel = lambda: None
+    check("AN-F-15: パネルが無い環境では追従しない", SS.start_follow(shot) is False)
+    SS._model_panel = saved[0]
+
     # ---- AN-F-17: メッセージ欄はスクロール領域の外・最上部
     from tdrive_anim.ui import AnimPanel
     from tdrive_anim.ui_common import MessageLabel

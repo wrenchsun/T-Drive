@@ -188,7 +188,7 @@ class ShotTab(QtWidgets.QWidget):
         self.play_btn.clicked.connect(lambda *_: self.play())
         self.stop_btn = QtWidgets.QPushButton("■")
         self.stop_btn.setToolTip("再生を止めます")
-        self.stop_btn.clicked.connect(lambda *_: cmds.play(state=False))
+        self.stop_btn.clicked.connect(lambda *_: SS.stop())
         self.movie_btn = QtWidgets.QPushButton("動画を撮る")
         self.movie_btn.setToolTip("captures/shots/<Shot>.mov に playblast します（ビューポートが必要）")
         self.movie_btn.clicked.connect(lambda *_: self.capture())
@@ -412,7 +412,7 @@ class ShotTab(QtWidgets.QWidget):
         s = self._shot()
         if s is None:
             return
-        cmds.play(state=False)
+        SS.stop()
         n = SS.remove(s["shot"])
         self._say(f"外しました（合成 {n} 件）。再生範囲を戻しました")
         self.refresh()
@@ -440,5 +440,5 @@ class ShotTab(QtWidgets.QWidget):
     def detach(self) -> None:
         s = self._shot()
         if s is not None and SS.is_reflected(s["shot"]):
-            cmds.play(state=False)
+            SS.stop()
             SS.remove(s["shot"])  # 閉じるときは反映したもの（合成・shot ノード・ロケータ・再生範囲）を外す（SF-18）

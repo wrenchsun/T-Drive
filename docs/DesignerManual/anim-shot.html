@@ -9,7 +9,7 @@
 <body>
 <nav class="breadcrumb"><a href="Readme.html">トップ</a> › <a href="anim.html">アニメーション作業台</a> › ショット</nav>
 <h1>ショットタブ</h1>
-<p class="lastupdate">最終更新日: 2026-10-22</p>
+<p class="lastupdate">最終更新日: 2026-10-23</p>
 
 <p><strong>ショット</strong>は、カットシーン（ムービーのような演出）1 つ分です。「このカメラで、このキャラクターがこの動きをして、ここで合図を出す」を並べて作り、Maya で再生して確かめます。D-Drive のカットシーン（CutsceneData）1 つにあたります。</p>
 <div class="tip">DirectX 11 は要りません。ショットの書き出し（Unity へ渡すファイル）は、<a href="anim-export.html#shot">出力タブ</a>で行います。</div>
@@ -43,7 +43,7 @@
 
 <h2>再生と動画</h2>
 <ul>
-<li>▶ シーケンサー再生: ショットの範囲で再生します。カメラの切り替えは、Maya のビューポートがシーケンサーのカメラに従います</li>
+<li>▶ シーケンサー再生: ショットの範囲を 1 回再生します。<strong>ビューポートのカメラが、カメラの区間に合わせて切り替わります</strong>（フォーカスのあるビューポート。無ければ最初のビューポート）。止める・最後まで再生すると、再生前のカメラに戻ります</li>
 <li>動画を撮る: <span class="path">captures/shots/&lt;Shot&gt;.mov</span> に動画を書きます（Git には入りません）。ビューポートのある Maya が必要です</li>
 </ul>
 
