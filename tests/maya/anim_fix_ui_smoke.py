@@ -851,6 +851,26 @@ def _run(tmp: Path) -> None:
     panel.export_tab._append("⛔ 出せません")
     check("AN-F-17: 出力タブも message に最新行が出る", panel.export_tab.message.text() == "⛔ 出せません")
     panel.detach()
+    # ---- AN-F-43 / AN-F-44
+    from tdrive_anim.ui import AnimPanel as AP43
+
+    if not s.data["clips"]:
+        s.add_clip_from_range("Idle", 0, 30)
+        s.add_clip_from_range("Run", 100, 118, direction="F")
+    panel43 = AP43()  # リロード直後に相当: 前に出ているのは命名タブ。ブレンドタブへ移らなくても遷移列の表が描かれている
+    check("AN-F-43: パネルを作った直後に、ブレンドタブの遷移列の表が描かれている", panel43.blend_tab.rows_table.rowCount() >= 1, f"{panel43.blend_tab.rows_table.rowCount()} rows={panel43.blend_tab.rows} mode={panel43.blend_tab.mode} msg={panel43.blend_tab.message.text()} model={s.data['modelId']}")
+    b43 = panel43.blend_tab
+    b43.use_graph()
+    b43.timeline = [(1.0, {"Speed": 0.5})]
+    b43._total_manual = True
+    b43._fill_graph_info()
+    check("AN-F-44: 前提: 状態図・記録・タイムラインに内容がある", b43.graph is not None and b43.timeline_view.markers and b43.mode == "graph")
+    s.close_animset()
+    check("AN-F-44: animset を閉じると状態図の節が初期表示（状態図・記録・タイムライン・長さ）",
+          b43.graph is None and b43.timeline == [] and b43.timeline_view.markers == [] and b43.mode == "rows" and b43.timeline_table.rowCount() == 0
+          and abs(b43.total_sec.value() - 8.0) < 1e-9 and "スライダーを動かすか" in b43.graph_info.text(), b43.graph_info.text())
+    panel43.detach()
+
     for t in (clips_tab, blend):
         if t.refresh in s.listeners:  # リロードの後片付け（AN-F-35 の検査）で外れていることがある
             s.listeners.remove(t.refresh)

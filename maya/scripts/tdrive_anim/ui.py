@@ -201,6 +201,11 @@ class AnimPanel(QtWidgets.QWidget):
         self.tabs.currentChanged.connect(lambda *_: self._refresh_current())  # UX-1: 前に出したタブを描き直す（前に出ていない間の変更を反映）
         self.session.listeners.append(self.refresh)
         self.refresh()
+        for tab in self._all_tabs():  # 前に出ていないタブも一度は描く（リロード直後に、別のタブへ移るまで表が空に見えた。AN-F-43）
+            try:
+                tab.refresh()
+            except Exception:  # noqa: BLE001  壊れたデータで panel 全体を止めない
+                lifecycle.report_error(f"{tab.__class__.__name__} の初回の描画で例外", traceback.format_exc())
 
     def _show_current_message(self) -> None:
         current = self.tabs.currentWidget()
@@ -273,6 +278,13 @@ class AnimPanel(QtWidgets.QWidget):
         self.warning.setText("\n".join(str(i) for i in issues[:5]) + (f"\n…ほか {len(issues) - 5} 件" if len(issues) > 5 else ""))
         self.warning.setVisible(bool(issues))
         self._refresh_current()
+        if self.session.data is None:  # animset を閉じた（新規シーン）: 前に出ていないタブも初期表示に戻す（前のシーンの内容を残さない。AN-F-44）
+            for tab in self._all_tabs():
+                if tab is not self.tabs.currentWidget():
+                    try:
+                        tab.refresh()
+                    except Exception:  # noqa: BLE001
+                        lifecycle.report_error(f"{tab.__class__.__name__} の更新で例外", traceback.format_exc())
 
 
 class AnimTool:

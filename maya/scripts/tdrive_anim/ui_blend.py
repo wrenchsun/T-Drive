@@ -394,6 +394,7 @@ class BlendTab(QtWidgets.QWidget):
         if not has:
             self.rows = []
             self._fill_rows()
+            self._reset_graph_section()  # animset を閉じたら、状態図・記録・タイムラインも初期表示に（AN-F-44）
             self._say(NEED_ANIMSET)
             return
         self._load_timeline()  # 開き直したシーンの記録を戻す（AN-F-29）
@@ -407,7 +408,7 @@ class BlendTab(QtWidgets.QWidget):
         if [self.layer_clip.itemText(i) for i in range(self.layer_clip.count())] != names:
             self.layer_clip.clear()
             self.layer_clip.addItems(names)
-        if self.mode == "rows" and (not self.rows or self.rows == self._default_rows):  # 未編集の既定の列は、クリップの増減に追従する
+        if not self.rows or self.rows == self._default_rows:  # 状態図モードでも、遷移列の表は空にしない（リロード直後に空に見えた。AN-F-43）  # 未編集の既定の列は、クリップの増減に追従する
             self.rows = Seq.default_rows(d["clips"], d["modelId"])
             self._default_rows = copy.deepcopy(self.rows)
         self.rows = [r for r in self.rows if r["clip"] in self._clips()]  # 消えたクリップの行は落とす
@@ -641,6 +642,22 @@ class BlendTab(QtWidgets.QWidget):
         if not isinstance(d.get("stateGraph"), dict):
             self._guard(self.session.set_value, "stateGraph", M.default_graph(d["clips"], d["modelId"]))
         self.graph = d.get("stateGraph")
+        self._fill_graph_info()
+
+    def _reset_graph_section(self) -> None:
+        """animset が無くなった（新規シーン・閉じる）: 前のシーンの状態図・パラメータの記録・タイムライン・「長さ」を捨てて初期表示にする。"""
+        self._rebuild_timer.stop()
+        self.graph = None
+        self.mode = "rows"
+        self.timeline = []
+        self._default_rows = []
+        self._total_manual = False
+        self._timeline_loaded = False  # 次のシーンの fileInfo から戻せるように
+        self._mix_placements = []
+        self._set_pending(False)
+        self.total_sec.blockSignals(True)
+        self.total_sec.setValue(8.0)
+        self.total_sec.blockSignals(False)
         self._fill_graph_info()
 
     def reset_timeline(self) -> None:
