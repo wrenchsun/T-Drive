@@ -18,7 +18,7 @@ from tdrive import lifecycle, project, widgets as WG
 from . import composition as K
 from . import scene_naming as SN
 from . import session
-from .ui_common import MessageLabel
+from .ui_common import ComposeProgress, MessageLabel
 from . import shot_scene as SS
 from .core import animset as A
 from .core import shot as SH
@@ -210,6 +210,8 @@ class ShotTab(QtWidgets.QWidget):
     def _guard(self, fn, *args, **kwargs):
         try:
             return fn(*args, **kwargs)
+        except K.ComposeCancelled:
+            self._say("ショットの反映を中止しました（何も作っていません）")
         except (SH.ShotError, A.AnimSetError, ValueError) as exc:
             self._say(f"⚠ {exc}")
         except Exception as exc:  # noqa: BLE001
@@ -400,7 +402,11 @@ class ShotTab(QtWidgets.QWidget):
         if SH.errors(s):
             self._say("⚠ " + str(SH.errors(s)[0]))
             return
-        res = self._guard(SS.build, s, self.session.data)
+        progress = ComposeProgress(self, "ショットの合成を作っています…")
+        try:
+            res = self._guard(SS.build, s, self.session.data, progress)
+        finally:
+            progress.close()
         if res is not None:
             warn = "".join(f"\n⚠ {w}" for w in res["warnings"])
             if SN.scene_fps_exact() != s["frameRate"]:

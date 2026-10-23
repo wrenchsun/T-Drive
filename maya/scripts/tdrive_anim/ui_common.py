@@ -25,3 +25,25 @@ class MessageLabel(QtWidgets.QLabel):
             self.setStyleSheet(WARN_STYLE)
         else:
             self.setStyleSheet(INFO_STYLE)
+
+
+class ComposeProgress:
+    """合成の作成中の進捗バーと「中止」（AN-F-21）。`K.compose(progress=…)` に渡す。短い処理（0.3 秒未満）では出ない。"""
+
+    def __init__(self, parent: QtWidgets.QWidget | None, text: str = "合成を作っています…") -> None:
+        self.dialog = QtWidgets.QProgressDialog(text, "中止", 0, 100, parent)
+        self.dialog.setWindowTitle("T-Drive Animation")
+        self.dialog.setWindowModality(QtCore.Qt.WindowModal)
+        self.dialog.setMinimumDuration(300)
+        self.dialog.setAutoClose(False)
+        self.dialog.setAutoReset(False)
+
+    def __call__(self, done: int, total: int) -> bool:
+        self.dialog.setMaximum(max(1, total))
+        self.dialog.setValue(done)
+        QtWidgets.QApplication.processEvents()
+        return not self.dialog.wasCanceled()
+
+    def close(self) -> None:
+        self.dialog.close()
+        self.dialog.deleteLater()

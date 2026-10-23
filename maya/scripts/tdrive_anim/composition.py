@@ -27,7 +27,7 @@ from __future__ import annotations
 import contextlib
 import json
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable
 
 from maya import cmds
 
@@ -203,6 +203,30 @@ def _family(ch: str) -> str:
     return "translate" if ch.startswith("translate") else "rotate" if ch.startswith("rotate") else "scale"
 
 
+class ComposeCancelled(Exception):
+    """進捗の「中止」で合成を作らずに終えた（元のまま）。"""
+
+
+Progress = Callable[[int, int], bool]  # (済んだ数, 全体) → 続けるか（False で中止）
+
+
+def _sample_table(chans: dict[str, list[str]], frames: list[int], progress: Progress | None) -> dict[int, dict[tuple[str, str], tuple[float, ...]]]:
+    """frames の各フレームについて、全ジョイントの translate / rotate / scale をまとめて読む（AN-F-21）。
+    フレームごとに `currentTime` を 1 回動かして全部読む（評価の回数 ≈ フレーム数）。元のつながりのままの評価で、終わったら時刻を戻す。"""
+    fams = {j: sorted({_family(c) for c in chs}) for j, chs in chans.items()}
+    table: dict[int, dict[tuple[str, str], tuple[float, ...]]] = {}
+    original = cmds.currentTime(query=True)
+    try:
+        for i, f in enumerate(frames):
+            if progress is not None and not progress(i, len(frames)):
+                raise ComposeCancelled()
+            cmds.currentTime(f, edit=True)
+            table[f] = {(j, fam): tuple(cmds.getAttr(f"{j}.{fam}")[0]) for j, fs in fams.items() for fam in fs}
+    finally:
+        cmds.currentTime(original, edit=True)
+    return table
+
+
 def _sample(joint: str, channels: list[str], frames: list[int]) -> dict[str, list[float]]:
     """frames の各フレームのチャンネル値（元のつながりのままの評価）。"""
     out = {ch: [] for ch in channels}
@@ -285,16 +309,18 @@ def _statics(joint: str, channels: list[str]) -> dict[str, float]:
     return {ch: float(cmds.getAttr(f"{joint}.{ch}")) for ch in TRANSLATE + ROTATE if ch not in channels}
 
 
-def compose(name: str, placements: list[Seq.Placement], joints: list[str], fps: int, layers: list[Layer] | None = None, playback: bool = True) -> Result:
+def compose(name: str, placements: list[Seq.Placement], joints: list[str], fps: int, layers: list[Layer] | None = None, playback: bool = True,
+            progress: Progress | None = None) -> Result:
     """合成を作る。同じ名前の合成は先に外す（別の名前の合成は残る。ジョイントが重ならなければ同時に使える。ショットのキャラクターごとの合成）。
-    配置が空・ジョイントにつながりが無いときは ValueError。`playback=False` は再生範囲・時刻に触れない（ショットが自分で決める）。"""
+    配置が空・ジョイントにつながりが無いときは ValueError。`progress(済, 全体)` が False を返すと `ComposeCancelled`（何も作らず元のまま）。`playback=False` は再生範囲・時刻に触れない（ショットが自分で決める）。"""
     if not placements:
         raise ValueError("遷移列が空です")
     with undo_off():
-        return _compose(name, placements, joints, fps, layers, playback)
+        return _compose(name, placements, joints, fps, layers, playback, progress)
 
 
-def _compose(name: str, placements: list[Seq.Placement], joints: list[str], fps: int, layers: list[Layer] | None, playback: bool) -> Result:
+def _compose(name: str, placements: list[Seq.Placement], joints: list[str], fps: int, layers: list[Layer] | None, playback: bool,
+             progress: Progress | None = None) -> Result:
     MC.stop()  # クリップ再生中なら先に止めて、再生範囲を元へ戻してから合成の範囲にする（控えが混ざらないように。SF-8）
     remove(name)
     chans = animated_channels(joints)
@@ -308,16 +334,23 @@ def _compose(name: str, placements: list[Seq.Placement], joints: list[str], fps:
         node = cmds.createNode("network", name=b.node)
         b.created.append(node)
         # ---- 1. サンプリング（つながりを切る前）
-        samples: dict[tuple[str, str, int, int], dict[str, list[float]]] = {}
         all_layers = [(None, placements)] + [(L, L.placements) for L in layer_list]
+        needed: dict[tuple[str, str, int, int], tuple[str, list[str]]] = {}  # key → (ジョイント, チャンネル)
         for L, pls in all_layers:
             for p in pls:
                 for j, chs in chans.items():
                     if L is not None and j not in L.joints:
                         continue
-                    key = (j, p.clip, p.src_start, p.src_end)
-                    if key not in samples:
-                        samples[key] = _sample(j, chs, list(range(p.src_start, p.src_end + 1)))
+                    needed[(j, p.clip, p.src_start, p.src_end)] = (j, chs)
+        frame_set = sorted({f for (_, _, a, b) in needed for f in range(a, b + 1)})
+        table = _sample_table(chans, frame_set, progress)
+        samples: dict[tuple[str, str, int, int], dict[str, list[float]]] = {}
+        for key, (j, chs) in needed.items():
+            out: dict[str, list[float]] = {ch: [] for ch in chs}
+            for f in range(key[2], key[3] + 1):
+                for ch in chs:
+                    out[ch].append(float(table[f][(j, _family(ch))]["XYZ".index(ch[-1])]))
+            samples[key] = out
         # ---- 2. 元のつながりを切り離して控える
         for j, chs in chans.items():
             for fam in FAMILIES:

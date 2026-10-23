@@ -20,7 +20,7 @@ from tdrive import lifecycle, widgets as WG
 from . import composition as K
 from . import scene_naming as SN
 from . import session
-from .ui_common import MessageLabel
+from .ui_common import ComposeProgress, MessageLabel
 from .core import animset as A
 from .core import sequence as Seq
 from .core import state_machine as M
@@ -459,7 +459,15 @@ class BlendTab(QtWidgets.QWidget):
 
     def _compose(self, placements: list[Seq.Placement]) -> None:
         self._remember_speed()
-        res = K.compose(COMP_NAME, placements, self._skeleton(), self._fps(), self._layers(Seq.total_frames(placements)))
+        progress = ComposeProgress(self)
+        try:
+            res = K.compose(COMP_NAME, placements, self._skeleton(), self._fps(), self._layers(Seq.total_frames(placements)), progress=progress)
+        except K.ComposeCancelled:
+            self._say("合成の作成を中止しました（合成は作っていません）")
+            self.refresh()
+            return
+        finally:
+            progress.close()
         cmds.playbackOptions(loop="continuous" if self.loop_cb.isChecked() else "once")
         warns = "".join(f"\n⚠ {w}" for w in Seq.overlap_warnings(placements, self._fps()))
         self._mix_placements = list(placements)

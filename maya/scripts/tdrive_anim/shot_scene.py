@@ -167,7 +167,7 @@ def character_joints(ch: dict[str, Any], animset: dict[str, Any]) -> list[str]:
 
 
 def compose_characters(shot: dict[str, Any], current: dict[str, Any] | None = None, animsets: dict[str, dict[str, Any]] | None = None,
-                       only: int | None = None) -> list[K.Result]:
+                       only: int | None = None, progress: K.Progress | None = None) -> list[K.Result]:
     """各キャラクターのクリップ列をショットの範囲の先頭から並べて合成する。列が空のキャラクターは飛ばす。
     `animsets`（ModelId → animset）を渡すとそれを使う（別プロセスの書き出し用）。`only` はそのインデックスのキャラクターだけ。"""
     fps = shot["frameRate"]
@@ -184,7 +184,7 @@ def compose_characters(shot: dict[str, Any], current: dict[str, Any] | None = No
             p.start += lo
             p.end += lo
         suffix = fname.split("__", 1)[1]
-        results.append(K.compose(comp_name(shot["shot"], suffix), pls, character_joints(ch, aset), fps, playback=False))
+        results.append(K.compose(comp_name(shot["shot"], suffix), pls, character_joints(ch, aset), fps, playback=False, progress=progress))
     return results
 
 
@@ -208,11 +208,11 @@ def is_reflected(shot_name: str) -> bool:
                 or (cmds.objExists(g) and (event_locators(shot_name) or cmds.attributeQuery("tdPlayback", node=g, exists=True))))
 
 
-def build(shot: dict[str, Any], current: dict[str, Any] | None = None) -> dict[str, Any]:
+def build(shot: dict[str, Any], current: dict[str, Any] | None = None, progress: K.Progress | None = None) -> dict[str, Any]:
     """ショットをシーンに反映する: グループ・再生範囲・カメラ区間・イベント・キャラクターの合成。戻り値: 結果と警告。
     **Maya の Undo には積まない**（グループ・shot ノード・ロケータ・合成が別々に戻って半端になるため。戻すのは「合成を外す」。SF-4 / SF-6）。"""
     with K.undo_off():
-        return _build(shot, current)
+        return _build(shot, current, progress)
 
 
 _reflected_camera: dict[str, tuple[str, str]] = {}  # ショット名 → (パネル, 反映する前のパネルのカメラ)。外すとき戻す（AN-F-16）
@@ -235,14 +235,14 @@ def _restore_panel_camera(shot_name: str) -> None:
             _look_thru(got[0], got[1])
 
 
-def _build(shot: dict[str, Any], current: dict[str, Any] | None) -> dict[str, Any]:
+def _build(shot: dict[str, Any], current: dict[str, Any] | None, progress: K.Progress | None = None) -> dict[str, Any]:
     _remember_panel_camera(shot["shot"])
     ensure_group(shot)
     try:
         apply_range(shot)
         warnings = sync_cameras(shot)
         events = sync_events(shot)
-        comps = compose_characters(shot, current)
+        comps = compose_characters(shot, current, progress=progress)
     except Exception:
         remove(shot["shot"])  # 途中で失敗したら、ここまでに作ったものを全部戻す（ジョイントを合成につないだまま残さない）
         raise
