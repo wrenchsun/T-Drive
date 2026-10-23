@@ -141,6 +141,22 @@ def _run(tmp: Path) -> None:
     else:
         INFO.append("オフスクリーンでフォーカスが入らないため、フォーカス時のホイールは未確認")
     check("AN-F-4: Toon の ToonSpin / ToonSlider も同じミックスイン", issubclass(ui_look.ToonSpin, WG.WheelOnFocusMixin) and issubclass(ui_look.ToonSlider, WG.WheelOnFocusMixin) and issubclass(ui_look.ToonIntSpin, WG.WheelOnFocusMixin))
+    # ---- AN-F-5: 今のブレンドの割合
+    blend.reset_rows()
+    for f, v in ((0, 0), (30, 10), (100, 0), (118, 40)):
+        cmds.setKeyframe("spine_C0_0_jnt", attribute="translateX", time=f, value=v)
+    blend.rows = [{"clip": "A_MisotenChara_Idle", "holdSec": 1.0, "crossFadeSec": 1.0, "switchAt": 1.0, "speed": 1.0},
+                  {"clip": "A_MisotenChara_Run_F", "holdSec": 1.5, "crossFadeSec": 1.0, "switchAt": 1.0, "speed": 1.0}]
+    blend.build_from_rows()
+    check("AN-F-5: 合成中は割合の表示が出る", "今のブレンド" in blend.mix_label.text() and "Idle 100%" in blend.mix_label.text(), blend.mix_label.text())
+    cmds.currentTime(45, edit=True)  # 保持 1 秒（30 フレーム）のあと 1 秒（30 フレーム）で Idle → Run
+    blend.update_mix()
+    check("AN-F-5: 切り替えの途中は割合が変わる（Idle 50% / Run 50%）", "Idle 50%" in blend.mix_label.text() and "Run_F 50%" in blend.mix_label.text() and "f=45" in blend.mix_label.text(), blend.mix_label.text())
+    cmds.currentTime(80, edit=True)
+    blend.update_mix()
+    check("AN-F-5: 切り替えのあとは Run だけ", "Run_F 100%" in blend.mix_label.text() and "Idle" not in blend.mix_label.text(), blend.mix_label.text())
+    blend.remove()
+    check("AN-F-5: 合成を外すと表示が消える", blend.mix_label.text() == "")
     for t in (clips_tab, blend):
         s.listeners.remove(t.refresh)
 

@@ -177,6 +177,18 @@ def pose_weights(placements: list[Placement], t: float) -> list[tuple[str, float
     return out
 
 
+def mix_text(placements: list[Placement], frame: float) -> str:
+    """時刻 frame のブレンドの割合の表示（例: `Idle 70% / Run 30%（f=35）`）。同じクリップの重みは合算し、1% 未満は出さない。AN-F-5。"""
+    import re
+
+    shares: dict[str, float] = {}
+    for clip, w in pose_weights(placements, frame):
+        name = re.sub(r"^A_[^_]+_", "", clip)
+        shares[name] = shares.get(name, 0.0) + w
+    parts = [f"{n} {round(w * 100):d}%" for n, w in shares.items() if round(w * 100) >= 1]
+    return " / ".join(parts) + f"（f={frame:g}）"
+
+
 # ------------------------------------------------------------------ 既定の行
 def default_rows(clips: Iterable[dict[str, Any]], model_id: str = "") -> list[dict[str, Any]]:
     """遷移列の初期値: Idle 1.0 秒 → Run 1.5 秒 → Jump（docs/20 §4.2 の例）。クリップは動作名で探す（Run は `_F` を優先）。無いものは飛ばす。"""

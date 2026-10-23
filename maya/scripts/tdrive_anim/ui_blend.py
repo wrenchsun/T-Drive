@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import copy
 import json
 import traceback
@@ -30,6 +31,29 @@ COL_CLIP, COL_HOLD, COL_FADE, COL_SWITCH, COL_SPEED = range(5)
 HEADERS = ["クリップ", "保持（秒）", "クロスフェード（秒）", "切替位置", "速度"]
 
 
+_active_tab: "BlendTab | None" = None
+
+
+@lifecycle.guarded()
+def _cb_time_changed() -> None:
+    tab = _active_tab
+    if tab is not None:
+        tab.update_mix()
+
+
+lifecycle.keep_alive(_cb_time_changed)
+
+
+def _reload_cleanup() -> None:
+    tab = _active_tab
+    if tab is not None:
+        with contextlib.suppress(RuntimeError):  # 画面が先に消えていても止めない
+            tab._sync_mix(False)
+
+
+lifecycle.on_reload(_reload_cleanup)
+
+
 class BlendTab(QtWidgets.QWidget):
     def __init__(self, s: session.AnimSession) -> None:
         super().__init__()
@@ -41,6 +65,8 @@ class BlendTab(QtWidgets.QWidget):
         self.graph: dict | None = None
         self.timeline: list[tuple[float, dict]] = []
         self._building = False
+        self._mix_placements: list[Seq.Placement] = []
+        self._mix_job: int | None = None
         self._saved_speed: tuple[float, float] | None = None
         self._rebuild_timer = QtCore.QTimer(self)  # Speed スライダーのドラッグ中は作り直さず、止まってからまとめて 1 回（SF-5）
         self._rebuild_timer.setSingleShot(True)
@@ -59,6 +85,9 @@ class BlendTab(QtWidgets.QWidget):
         self.banner.setWordWrap(True)
         self.banner.setStyleSheet("color: #f0a040;")
         v.addWidget(self.banner)
+        self.mix_label = QtWidgets.QLabel()  # 合成中の今のブレンドの割合（タイムスライダーを動かすと変わる。AN-F-5）
+        self.mix_label.setStyleSheet("color: #f0a040;")
+        v.addWidget(self.mix_label)
 
         # ---- 遷移列
         box = QtWidgets.QGroupBox("遷移列（上から順に再生。次の行へ固定秒・線形でクロスフェード）")
@@ -196,6 +225,30 @@ class BlendTab(QtWidgets.QWidget):
         self.shot_tab.send_rows_from_blend()
         self._say(self.shot_tab.message.text())
 
+    # ------------------------------------------------------------ 今のブレンドの割合（AN-F-5）
+    def _sync_mix(self, active: bool) -> None:
+        """合成中だけ timeChanged の scriptJob を持ち、割合を表示する。"""
+        global _active_tab
+        if active and self._mix_job is None:
+            _active_tab = self
+            try:
+                self._mix_job = cmds.scriptJob(event=["timeChanged", _cb_time_changed])
+            except RuntimeError:
+                self._mix_job = None
+        elif not active and self._mix_job is not None:
+            with contextlib.suppress(RuntimeError):
+                cmds.scriptJob(kill=self._mix_job, force=True)
+            self._mix_job = None
+            if _active_tab is self:
+                _active_tab = None
+        self.update_mix()
+
+    def update_mix(self) -> None:
+        if not self._mine() or not self._mix_placements:
+            self.mix_label.setText("")
+            return
+        self.mix_label.setText("今のブレンド: " + Seq.mix_text(self._mix_placements, cmds.currentTime(query=True)))
+
     def _mine(self) -> list[str]:
         """このタブが作った合成（ショットが作ったものは含めない）。"""
         return [n for n in K.active() if n == COMP_NAME]
@@ -241,6 +294,7 @@ class BlendTab(QtWidgets.QWidget):
         else:
             self.banner.setText("")
         self.banner.setVisible(bool(act))
+        self._sync_mix(bool(act))
         self.remove_btn.setEnabled(bool(act))
         self.shot_btn.setEnabled(self.session.shot is not None and bool(self.session.shot["characters"]))
         if not has:
@@ -405,6 +459,7 @@ class BlendTab(QtWidgets.QWidget):
         res = K.compose(COMP_NAME, placements, self._skeleton(), self._fps(), self._layers(Seq.total_frames(placements)))
         cmds.playbackOptions(loop="continuous" if self.loop_cb.isChecked() else "once")
         warns = "".join(f"\n⚠ {w}" for w in Seq.overlap_warnings(placements, self._fps()))
+        self._mix_placements = list(placements)
         self._say(f"合成を作りました（{res.frames:.0f} フレーム、{res.joints} ジョイント、{res.plugs} チャンネル）。▶ 再生で確認できます{warns}{self._fps_note()}")
         self.refresh()
 
@@ -525,6 +580,7 @@ class BlendTab(QtWidgets.QWidget):
         self._rebuild_timer.stop()
         if cmds.play(query=True, state=True):
             cmds.play(state=False)
+        self._sync_mix(False)
         if self._mine():
             self.remove()  # 閉じるときは合成を外して、保存したシーンに合成が残らないようにする
         self._restore_speed()  # 合成を作らずに再生しただけでも、再生の速さを戻す

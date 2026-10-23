@@ -22,6 +22,7 @@
   - AN-1: 骨格（5 つのサブタブの枠・`tdrive_anim` パッケージ）、`animset.json` の読み書き・検証、メニュー Tools › T-Drive › Animation…
 
 ### 修正
+  - AN-F-5: ブレンドタブに、合成中の今のブレンドの割合（「Idle 70% / Run 30%（f=35）」）を表示。タイムスライダーを動かすと変わる（timeChanged の scriptJob）
   - AN-F-7: 「ツールをリロード」で、export_state の無い古い版の Animation セッションから引き継ぐとき AttributeError の警告が出る不具合。\`tdrive.carry\` で守り、「引き継ぎなし」と出す
   - AN-F-13: 命名タブで fps を「直す」（24 → 30 fps）と、キーの時刻が保たれてフレーム番号が 1.25 倍になるのにクリップ範囲が追従せず、別の動きが出力される不具合。「直す」で「キーの時刻を保つ（クリップ・ショットの範囲とイベントも同じ比率で直す。既定）/ フレーム番号を保つ」を選べるようにし、クリップタブは範囲にキーが無いクリップに⚠を出す
   - AN-F-14: モデル出力 (SK_<ModelId>.fbx) の骨がバインドポーズにならない不具合（mGear のようにジョイントが decomposeMatrix / matrixConstraint に駆動されるリグでは dagPose の restore が効かず、出力時のフレームのポーズで書かれていた）。animCurve を切ってキーのあったコントローラ・rig_controllers_grp をデフォルトに戻してから書き、bindPreMatrix と突き合わせて、戻せないときは警告
