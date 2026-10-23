@@ -181,10 +181,8 @@ def _run(tmp: Path) -> None:
     check("同名のファイルは上書きされる", ch_fbx.stat().st_mtime > before[0] and cam_fbx.stat().st_mtime > before[1] and sorted(p.name for p in out.glob("*.fbx")) == ["Opening01.fbx", "Opening01__MisotenChara.fbx"], ui.log.toPlainText())
 
     # ---- 出力先プリセット
-    ui.choose_root("animMs2026Root", str(tmp / "ms"))
-    ui.preset.setCurrentIndex(1)
-    ui.refresh()
-    check("MS2026 のプリセット: …/SourceAssets/Cutscene/<Category>/", str((tmp / "ms" / "Assets" / "_Project" / "DDrive" / "SourceAssets" / "Cutscene" / "Cutscene").as_posix()) in ui.shot_label.text().replace("\\", "/"), ui.shot_label.text())
+    ui.choose_shared(str(tmp / "shared"))
+    check("共有フォルダ: …/Cutscene/<Category>/", (tmp / "shared" / "Cutscene" / "Cutscene").as_posix() in ui.shot_label.text().replace("\\", "/"), ui.shot_label.text())
     ui.preset.setCurrentIndex(0)
     ui.refresh()
 

@@ -300,7 +300,7 @@ D-Drive の **CutsceneData 1 つ**に相当する Maya 側の単位。`anim/<Mod
 | `<Shot>__<ModelId>.fctrack` | 顔の演出（任意） | 既存 |
 | `<Shot>.shot.json` | 上の内容（Unity 側は読まない。T-Drive の再現用） | |
 
-- 出力先の既定: `build/cutscene/<Category>/`。「D-Drive の SourceAssets へ」プリセット: `<D-Drive または MS2026 のパス>/Assets/_Project/DDrive/SourceAssets/Cutscene/<Category>/`（MS2026）/ `Assets/SourceAssets/Cutscene/<Category>/`（D-Drive）。パスはプロジェクト設定（`project.py`）に持つ
+- 出力先の既定: `build/cutscene/<Category>/`。「共有フォルダ…」: `<共有フォルダ>/Cutscene/<Category>/`（Google Drive など任意のフォルダ。パスは `project.py` の設定 `animSharedRoot`＝ユーザーごと・Git 管理外。AN-F-18）
 - 同名で上書き（D-Drive の再取り込みの流儀）。出力前に命名検査（§2.5）の ❌ があれば止める
 - **実装での変更（2026-10-22, AN-8）**: Ubercam は Maya の `doCreateUbercam` ではなく、出力のとき各フレームの「その時刻のカメラ」のワールド行列・焦点距離・フィルム・クリップ面を 1 台のカメラ `Ubercam` に写してキーを打つ（検証できる・ヘッドレスで動く。区間の切り替わりはステップ）。
   キャラクターの FBX は、別プロセスで一時シーンを開き、ショットのクリップ列を合成し直してベイクする（開いているシーンの合成の有無に依存しない）。ジョイント名はネームスペースを外す。範囲は 0 に寄せず、ショットの範囲のまま（D-Drive: 同じショットの全ファイルで開始〜終了を揃える）
@@ -312,14 +312,14 @@ D-Drive の **CutsceneData 1 つ**に相当する Maya 側の単位。`anim/<Mod
 
 - 対象: `animset.meshes` のメッシュ + `skeletonRoot` 以下のジョイント（バインドポーズ、アニメ無し）。Toon の出力（`tdrive_toon.export.export_in_place`: 頂点カラー `tdToonMask`・UV `tdSmoothNormal`・参照のフラット化・`_tdToon` を元マテリアルに戻す）を**そのまま使う**（相乗り。二重実装しない）
 - 追加で `humanoid.json`（§2.4）と `animset.json` の写しを同じフォルダに出す
-- 出力先: `build/unity/<ModelId>/SK_<ModelId>.fbx`。「D-Drive の SourceAssets へ」プリセット: `SourceAssets/Model/<Category>/SK_<ModelId>.fbx`
+- 出力先: `build/unity/<ModelId>/SK_<ModelId>.fbx`。「共有フォルダ…」: `<共有フォルダ>/Model/<Category>/SK_<ModelId>.fbx`
 
 ### 6.2 アニメーション `A_<ModelId>_<動作>.fbx`（クリップごと 1 ファイル）
 
 - 対象: `skeletonRoot` 以下のジョイントだけ。クリップ範囲で **ベイク**（`bakeResults`、Step 1、コントローラやコンストレイントは出さない）。`rootMotion=none` のときは humanoid.json の Hips（無ければスケルトンのルート）の平行移動の XZ を開始フレームの値に固定（Y は固定しない。「任意で Y」は実装しない）
 - FBX: Animation ON、Bake Animation ON、Deformed Models / Skins / Blend Shapes OFF、Embed Media OFF、Input Connections OFF、1 ファイル 1 テイク（**実装での変更 2026-10-22**: テイク名は Maya の既定 `Take 001`。名前付きのテイクに分けると 2 テイクになり、D-Drive が先頭を取り込む仕組み（ファイル名で取り込む）と合わないため。範囲の先頭は 0 フレームに寄せる）
 - **`@` は使わない**（D-Drive の規則）。ファイル名は `A_<ModelId>_<動作>.fbx`、D-Drive は最初の埋め込みクリップを `ANIM_<Category>_A_<ModelId>_<動作>` として取り込む
-- 出力先: `build/unity/<ModelId>/anim/`。プリセット: `SourceAssets/Anim/<Category>/`
+- 出力先: `build/unity/<ModelId>/anim/`。「共有フォルダ…」: `<共有フォルダ>/Anim/<Category>/`
 - 「変更のあるクリップだけ」: クリップの範囲内のカーブのハッシュを `animset.json` 横の `.export-state.json`（Git 管理外）に記録し、変わっていないものは飛ばす（任意、既定 ON）
 
 ### 6.3 付帯 JSON（Unity 側の取り込み U-A1 の入力）
@@ -328,7 +328,7 @@ D-Drive の **CutsceneData 1 つ**に相当する Maya 側の単位。`anim/<Mod
 
 ### 6.4 出力タブの UI
 
-- 上: 出力先（既定 / D-Drive / MS2026 のプリセット、フォルダを開く）
+- 上: 出力先（既定 / 共有フォルダ…の 2 択、フォルダを開く）
 - 中: 「モデル」「アニメーション（クリップの一覧にチェック、変更のあるものだけ）」「ショット」の 3 つの区画。各区画に「出力」。進捗はウィンドウ内（別プロセスなので Maya は止まらない。既存の `ExportJob` の流儀）
 - 下: 直近の出力ログ（ファイル名・サイズ・警告）。命名検査の ❌ があれば出力ボタンを無効にして理由を表示
 
@@ -392,7 +392,7 @@ D-Drive（`C:/Users/yamag/wrench/unity/D-Drive`）は読み取りのみ（変更
 | Q-1 | ModelId | `MisotenChara` |
 | Q-2 | クロスフェードの既定 | クリップ既定 0.1 s（D-Drive）、状態図の遷移 0.08 s（MS2026 の Controller）。Unity 側で一本化するなら Controller 側の値に合わせる |
 | Q-3 | 顔のアニメーション（ボーン駆動）を Unity でどう扱うか | 本仕様ではボーンのキーとして A_ / ショット FBX に含める（Humanoid の Jaw / Eye + extra ボーン）。FacialController のベイク（FC_ シェイプ）は顔メッシュに blendShape を足してから |
-| Q-4 | 出力先のパス（MS2026 の `Assets/_Project/DDrive/SourceAssets/`） | プロジェクト設定で指定。既定は `build/` |
+| Q-4 | 出力先のパス | **決定（2026-10-23。AN-F-18）**: 「既定（build/）」と「共有フォルダ…」の 2 択。D-Drive / MS2026 のプリセットとブランチ判定（CR-6）は外した（デザイナーの PC に D-Drive は無く、共有は Google Drive が主）。共有フォルダの下位は MS2026 の `SourceAssets` と同じ `Model/<Category>`・`Anim/<Category>`・`Cutscene/<Category>` |
 | Q-5 | 24 → 30 fps 化で既存キーの時間をどう扱うか | **決定（2026-10-23。AN-F-13）**: 「直す」のダイアログで選ぶ。既定は**キーの時刻を保つ**（Maya 既定。フレーム番号が 1.25 倍になるので、クリップ・ショットの範囲とイベントのフレームも同じ比率で直す。開始は切り捨て・終了は切り上げ）。もう一方は**フレーム番号を保つ**（`updateAnimation=False`。再生速度が変わる。範囲はそのまま）。範囲にキーが無いクリップはクリップタブに⚠ |
 | Q-6 | テクスチャの改名（ファイル名も変わる） | 提案のみ。実施は人 |
 

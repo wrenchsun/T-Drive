@@ -99,7 +99,7 @@ def _run(tmp: Path) -> None:
     s.listeners.append(ui.refresh)
     ui.refresh()
     check("既定の出力先は build/unity/<ModelId>", ui.dirs_for_preset() == (tmp / "build" / "unity" / "MisotenChara", tmp / "build" / "unity" / "MisotenChara" / "anim"))
-    check("MS2026 / D-Drive は未設定なので選べない（理由つき）", not ui.preset.model().item(1).isEnabled() and "設定" in ui.preset.model().item(1).toolTip())
+    check("共有フォルダは未設定なので選べない（理由つき）", not ui.preset.model().item(1).isEnabled() and "設定" in ui.preset.model().item(1).toolTip())
     check("命名の❌が無ければ出せる", ui.check_names() and ui.model_btn.isEnabled() and ui.anim_btn.isEnabled(), ui.blocked)
 
     started = ui.start(model=True, clips=names)
@@ -181,12 +181,10 @@ def _run(tmp: Path) -> None:
     check("直すと出せる", ui.check_names())
 
     # ---- 出力先のプリセット
-    ui.choose_root("animMs2026Root", str(tmp / "ms"))
-    check("パスを設定すると MS2026 のプリセットが選べる", ui.preset.model().item(1).isEnabled())
-    ui.preset.setCurrentIndex(1)
-    ui.refresh()
-    check("MS2026 の出力先が SourceAssets/Model|Anim/<Category>", ui.dirs_for_preset() == (tmp / "ms" / "Assets" / "_Project" / "DDrive" / "SourceAssets" / "Model" / "Player",
-                                                                                   tmp / "ms" / "Assets" / "_Project" / "DDrive" / "SourceAssets" / "Anim" / "Player"))
+    ui.choose_shared(str(tmp / "shared"))
+    check("共有フォルダを設定すると、出力先が共有フォルダになる", ui.preset.currentData() == "shared" and ui.preset.model().item(1).isEnabled())
+    check("共有フォルダの出力先が Model|Anim/<Category>", ui.dirs_for_preset() == (tmp / "shared" / "Model" / "Player", tmp / "shared" / "Anim" / "Player"))
+    check("出力先のコンボは 2 択", ui.preset.count() == 2, str(ui.preset.count()))
     ui.preset.setCurrentIndex(0)
 
     # ---- メッシュの自動設定・存在しないスケルトンのルート

@@ -3,7 +3,7 @@
 - 別プロセスの mayapy が FBX を書く（`export.SplitJob`）ので Maya は止まらない。進捗はウィンドウ内、ログに出力ファイルとサイズ・警告
 - 命名の❌（禁止文字・`@`・24 fps・クリップ名の形 など）があるうち、またはブレンド / ショットの合成中は出力ボタンを無効にして理由を表示する（docs/20 §2.5。SF-1）。
   命名の検査は「命名を確認」か出力ボタンを押したときに行う（タブを開いただけでは行わない。UX-9）
-- 出力中は「中止」で裏のプロセスを止められる（UX-7）。MS2026 への出力は毎回確認、D-Drive が main / master のときは止める（CR-6）
+- 出力中は「中止」で裏のプロセスを止められる（UX-7）。出力先は「既定」か「共有フォルダ…」（AN-F-18）
 - dx11Shader・Render Override は使わない
 """
 
@@ -52,20 +52,17 @@ class ExportTab(QtWidgets.QWidget):
         self.preset = WG.ComboBox()
         for p in E.PRESETS:
             self.preset.addItem(E.PRESET_LABEL[p], p)
-        self.preset.setToolTip("既定: プロジェクトの build/unity/<ModelId>。MS2026 / D-Drive の SourceAssets は「パス…」で Unity プロジェクトを指定すると選べます（docs/20 §9 Q-4）。\n"
-                               "「animset の指定先」は animset の export.modelDir / animDir に書いたフォルダです。MS2026 へ書くときは毎回確認し、D-Drive が main / master のときは出力を止めます")
+        self.preset.setToolTip("既定: プロジェクトの build/unity/<ModelId>。「共有フォルダ…」はボタンで選んだフォルダ（Google Drive など）の下の Model / Anim / Cutscene の<Category> フォルダへ出します（docs/20 §9 Q-4）")
         self.preset.activated.connect(lambda *_: self.refresh())
         row.addWidget(self.preset, 1)
         self.open_btn = QtWidgets.QPushButton("フォルダを開く")
         self.open_btn.setToolTip("モデルの出力先のフォルダをエクスプローラーで開きます（無ければ作ります）")
         self.open_btn.clicked.connect(lambda *_: self.open_folder())
         row.addWidget(self.open_btn)
-        for label, key, tip in (("MS2026 のパス…", "animMs2026Root", "MS2026 の Unity プロジェクトのフォルダ（Assets の 1 つ上）を選びます。プロジェクト設定に保存されます"),
-                                ("D-Drive のパス…", "animDdriveRoot", "D-Drive の Unity プロジェクトのフォルダ（Assets の 1 つ上）を選びます。プロジェクト設定に保存されます")):
-            b = QtWidgets.QPushButton(label)
-            b.setToolTip(tip)
-            b.clicked.connect(lambda *_, k=key: self.choose_root(k))
-            row.addWidget(b)
+        self.shared_btn = QtWidgets.QPushButton("共有フォルダ…")
+        self.shared_btn.setToolTip("共有フォルダ（Google Drive など。任意のフォルダ）を選びます。下に Model / Anim / Cutscene の <Category> フォルダを作って出します。ユーザーごとの設定に覚えます（Git 管理外）")
+        self.shared_btn.clicked.connect(lambda *_: self.choose_shared())
+        row.addWidget(self.shared_btn)
         tv.addLayout(row)
         self.dirs = QtWidgets.QLabel()
         self.dirs.setWordWrap(True)
@@ -238,7 +235,7 @@ class ExportTab(QtWidgets.QWidget):
             return self.blocked
         if K.active():
             return X.COMPOSITION_BLOCK
-        return self.preset_problem() or E.write_problem(self.preset.currentData(), self._config())
+        return self.preset_problem()
 
     def _update_buttons(self) -> None:
         busy = self.job is not None
@@ -340,15 +337,17 @@ class ExportTab(QtWidgets.QWidget):
         self.session.set_value("meshes", found)
         self._append(f"出力するメッシュを設定しました: {', '.join(found)}（上の「保存」で animset に保存）")
 
-    def choose_root(self, key: str, path: str | None = None) -> None:
-        """MS2026 / D-Drive の Unity プロジェクトのパスをプロジェクト設定に保存する（path を渡すとダイアログを出さない。テスト用）。"""
+    def choose_shared(self, path: str | None = None) -> None:
+        """共有フォルダをプロジェクト設定に保存し、出力先を共有フォルダにする（path を渡すとダイアログを出さない。テスト用）。"""
         if path is None:
-            picked = cmds.fileDialog2(fileMode=3, caption="Unity プロジェクトのフォルダ（Assets の 1 つ上）")
+            picked = cmds.fileDialog2(fileMode=3, caption="共有フォルダ（Google Drive など）")
             if not picked:
                 return
             path = picked[0]
-        project.write_config(**{key: path})
-        self._append(f"設定しました: {key} = {path}")
+        project.write_config(**{E.SHARED_KEY: path})
+        self._append(f"共有フォルダを設定しました: {path}")
+        self.refresh()
+        self.preset.setCurrentIndex(list(E.PRESETS).index("shared"))
         self.refresh()
 
     def open_folder(self) -> None:
@@ -363,21 +362,6 @@ class ExportTab(QtWidgets.QWidget):
         first = text.strip().splitlines()[0] if text.strip() else ""
         if first.startswith(("✔", "⛔", "⚠")):
             self.message.setText(first)
-
-    def _confirm_write(self) -> bool:
-        """MS2026 へ直接書くときの確認（既定「いいえ」。CR-6）。D-Drive の main への書き込みは block_reason が止める。"""
-        problem = E.write_problem(self.preset.currentData(), self._config())
-        if problem:
-            self._append("⛔ " + problem)
-            return False
-        warn = E.write_warning(self.preset.currentData())
-        if not warn:
-            return True
-        r = QtWidgets.QMessageBox.question(self, "T-Drive Animation", warn, QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No)
-        if r != QtWidgets.QMessageBox.Yes:
-            self._append("出力を取りやめました（MS2026 へは書き出していません）")
-            return False
-        return True
 
     def cancel(self) -> None:
         """出力を中止する（裏のプロセスを止める）。書き終えたファイルは残り、書きかけの一時ファイルは次回の出力で消える。"""
@@ -405,8 +389,6 @@ class ExportTab(QtWidgets.QWidget):
         dirs = self.dirs_for_preset()
         if dirs is None:
             self._append("⛔ " + self.preset_problem())
-            return False
-        if not self._confirm_write():
             return False
         model_dir, anim_dir = dirs
         fps: dict[str, str] | None = None
@@ -453,11 +435,6 @@ class ExportTab(QtWidgets.QWidget):
         why = self.shot_problem()
         if why:
             self._append("⛔ " + why)
-            return False
-        if E.write_problem(self.preset.currentData(), self._config()):
-            self._append("⛔ " + E.write_problem(self.preset.currentData(), self._config()))
-            return False
-        if not self._confirm_write():
             return False
         try:
             out_dir = E.resolve_shot_dir(sh, self.preset.currentData(), self._config(), project.root())

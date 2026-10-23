@@ -198,29 +198,6 @@ def _run(tmp: Path) -> None:
     check("UX-7: ログに中止が出る", "中止" in ui.log.toPlainText())
     check("SF-13: 中止しても以前の出力は壊れない", sk.stat().st_size > 0 and fbx_version(sk) == 7700)
 
-    # ---- CR-6: 出力先の安全
-    repo = tmp / "ddrive"
-    repo.mkdir()
-    subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)
-    subprocess.run(["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@t", "commit", "--allow-empty", "-q", "-m", "x"], check=True)
-    project.write_config(animDdriveRoot=str(repo), animMs2026Root=str(tmp / "ms2026"))
-    ui.refresh()
-    ui.preset.setCurrentIndex(list(E.PRESETS).index("ddrive"))
-    ui.refresh()
-    check("CR-6: D-Drive が main のときは出力を止める（理由が出る）", "main" in ui.block_reason() and not ui.model_btn.isEnabled(), ui.block_reason())
-    check("CR-6: start も始まらない", ui.start(model=True, clips=[]) is False and "main" in ui.log.toPlainText())
-    subprocess.run(["git", "-C", str(repo), "checkout", "-q", "-b", "tdrive-facial"], check=True)
-    ui.refresh()
-    check("CR-6: ブランチを切れば出せる", ui.block_reason() == "" and ui.model_btn.isEnabled(), ui.block_reason())
-    ui.preset.setCurrentIndex(list(E.PRESETS).index("ms2026"))
-    ui.refresh()
-    ANSWER["value"] = QtWidgets.QMessageBox.No
-    check("CR-6: MS2026 へは確認し、「いいえ」なら書かない", ui._confirm_write() is False and "取りやめ" in ui.log.toPlainText())
-    ANSWER["value"] = QtWidgets.QMessageBox.Yes
-    check("CR-6: 「はい」なら進む", ui._confirm_write() is True)
-    ui.preset.setCurrentIndex(0)
-    ui.refresh()
-
     # ---- ショット: DD-6 / UX-8 / DD-2 / SF-21
     cam = cmds.camera(name="CAM_Main")[0]
     cmds.move(0, 100, 300, cam)

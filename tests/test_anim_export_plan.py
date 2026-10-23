@@ -21,24 +21,28 @@ def test_default_dirs(tmp_path):
     assert model == tmp_path / "build" / "unity" / "MisotenChara" and anim == model / "anim"
 
 
-def test_presets_need_configured_paths(tmp_path):
+def test_shared_preset_needs_configured_folder(tmp_path):
+    """出力先は「既定」と「共有フォルダ」の 2 択（AN-F-18）。共有フォルダの下は Model|Anim|Cutscene/<Category>。"""
     d = A.new_animset("MisotenChara")
     d["export"]["category"] = "Player"
-    cfg = {"animMs2026Root": "C:/ms", "animDdriveRoot": "C:/dd"}
-    m, a = E.resolve_dirs(d, "ms2026", cfg, tmp_path)
-    assert m == Path("C:/ms/Assets/_Project/DDrive/SourceAssets/Model/Player") and a == Path("C:/ms/Assets/_Project/DDrive/SourceAssets/Anim/Player")
-    m, a = E.resolve_dirs(d, "ddrive", cfg, tmp_path)
-    assert m == Path("C:/dd/Assets/SourceAssets/Model/Player") and a == Path("C:/dd/Assets/SourceAssets/Anim/Player")
+    assert E.PRESETS == ("default", "shared")
+    cfg = {"animSharedRoot": "G:/Shared/Unity"}
+    m, a = E.resolve_dirs(d, "shared", cfg, tmp_path)
+    assert m == Path("G:/Shared/Unity/Model/Player") and a == Path("G:/Shared/Unity/Anim/Player")
+    assert E.resolve_shot_dir({"export": {"category": "Cutscene"}}, "shared", cfg, tmp_path) == Path("G:/Shared/Unity/Cutscene/Cutscene")
     with pytest.raises(E.ExportPlanError):
-        E.resolve_dirs(d, "ms2026", {}, tmp_path)
-    with pytest.raises(E.ExportPlanError):
-        E.resolve_dirs(d, "custom", {}, tmp_path)
-    d["export"].update(modelDir="X:/m", animDir="X:/a")
-    assert E.resolve_dirs(d, "custom", {}, tmp_path) == (Path("X:/m"), Path("X:/a"))
-    with pytest.raises(E.ExportPlanError):
-        E.resolve_dirs(d, "nope", {}, tmp_path)
+        E.resolve_dirs(d, "shared", {}, tmp_path)
+    for old in ("ms2026", "ddrive", "custom", "nope"):
+        with pytest.raises(E.ExportPlanError):
+            E.resolve_dirs(d, old, cfg, tmp_path)
     avail = E.available_presets(A.new_animset("X"), {})
-    assert avail["default"] == "" and avail["ms2026"] != "" and avail["custom"] != ""
+    assert avail["default"] == "" and avail["shared"] != ""
+
+
+def test_no_ddrive_or_ms2026_presets_left():
+    """D-Drive / MS2026 へのパス・ブランチ判定は持たない（デザイナーの PC に D-Drive は無い。AN-F-18）。"""
+    for name in ("write_problem", "write_warning", "git_branch", "MS2026_SUB", "DDRIVE_SUB", "CONFIG_KEYS"):
+        assert not hasattr(E, name), name
 
 
 def test_changed_clips(tmp_path):
@@ -75,46 +79,14 @@ def test_shot_dirs(tmp_path):
     sh = SH.new_shot("Opening01")
     sh["export"]["category"] = "Opening"
     assert E.resolve_shot_dir(sh, "default", {}, tmp_path) == tmp_path / "build" / "cutscene" / "Opening"
-    cfg = {"animMs2026Root": "C:/ms", "animDdriveRoot": "C:/dd"}
-    assert E.resolve_shot_dir(sh, "ms2026", cfg, tmp_path) == Path("C:/ms/Assets/_Project/DDrive/SourceAssets/Cutscene/Opening")
-    assert E.resolve_shot_dir(sh, "ddrive", cfg, tmp_path) == Path("C:/dd/Assets/SourceAssets/Cutscene/Opening")
+    cfg = {"animSharedRoot": "G:/Shared"}
+    assert E.resolve_shot_dir(sh, "shared", cfg, tmp_path) == Path("G:/Shared/Cutscene/Opening")
     with pytest.raises(E.ExportPlanError):
-        E.resolve_shot_dir(sh, "ms2026", {}, tmp_path)
+        E.resolve_shot_dir(sh, "shared", {}, tmp_path)
     with pytest.raises(E.ExportPlanError):
         E.resolve_shot_dir(sh, "custom", {}, tmp_path)
-    sh["export"]["dir"] = "X:/c"
-    assert E.resolve_shot_dir(sh, "custom", {}, tmp_path) == Path("X:/c")
-    assert E.shot_file("Opening01") == "Opening01.fbx"
-    with pytest.raises(E.ExportPlanError):
-        E.shot_file("Open@ing")
-
-
-# ---------------------------------------------------------------- docs/21 CR-6: 出力先の安全
-import subprocess  # noqa: E402
 
 
 def _git_repo(path, branch):
     subprocess.run(["git", "init", "-q", "-b", branch, str(path)], check=True)
     subprocess.run(["git", "-C", str(path), "-c", "user.name=t", "-c", "user.email=t@t", "commit", "--allow-empty", "-q", "-m", "x"], check=True)
-
-
-def test_ddrive_main_branch_is_blocked_and_feature_branch_is_allowed(tmp_path):
-    from tdrive_anim.core import export_plan as EP
-
-    repo = tmp_path / "ddrive"
-    repo.mkdir()
-    _git_repo(repo, "main")
-    cfg = {"animDdriveRoot": str(repo)}
-    assert EP.git_branch(repo) == "main"
-    assert "main" in EP.write_problem("ddrive", cfg)
-    subprocess.run(["git", "-C", str(repo), "checkout", "-q", "-b", "tdrive-facial"], check=True)
-    assert EP.write_problem("ddrive", cfg) == ""
-    assert EP.write_problem("default", cfg) == "" and EP.write_problem("ddrive", {}) == ""  # パス未設定は resolve_dirs が止める
-    assert EP.git_branch(tmp_path / "nothing") is None
-
-
-def test_ms2026_asks_before_writing():
-    from tdrive_anim.core import export_plan as EP
-
-    assert "MS2026" in EP.write_warning("ms2026") and "読み取りのみ" in EP.write_warning("ms2026")
-    assert EP.write_warning("default") == "" and EP.write_warning("ddrive") == ""

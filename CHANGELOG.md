@@ -22,6 +22,7 @@
   - AN-1: 骨格（5 つのサブタブの枠・`tdrive_anim` パッケージ）、`animset.json` の読み書き・検証、メニュー Tools › T-Drive › Animation…
 
 ### 修正
+  - AN-F-18: 出力タブの出力先を「既定」と「共有フォルダ…」の 2 択に（D-Drive / MS2026 のパス・ブランチ判定・確認ダイアログを削除。共有フォルダの下は Model / Anim / Cutscene の <Category>。選んだフォルダは project 設定 animSharedRoot に覚える）。MINOR/互換: project.json の animMs2026Root / animDdriveRoot は使わなくなった
   - AN-F-15: ショットの「シーケンサー再生」でビューポートのカメラが切り替わらない不具合。timeChanged でショットのカメラの区間に合わせてパネルのカメラを切り替え、止めたら元のカメラに戻す
   - AN-F-17: 各タブの警告・結果のメッセージが、スクロール領域の最下部で画面外になっていた不具合。メッセージ欄をタブの外・最上部に固定し、⚠ / ⛔ はオレンジの背景で目立たせる
   - AN-F-8: クリップタブの▶再生のあとの一時停止・コマ送りは Maya 標準（Alt+V、Alt+. / Alt+,）で行う旨をマニュアルに記載

@@ -2,11 +2,9 @@
 
 - モデル `SK_<ModelId>.fbx`（メッシュ + スキン + スケルトン、アニメ無し）と、クリップごとの `A_<ModelId>_<動作>.fbx`（ジョイントだけ・ベイク済み・1 テイク）
 - **`@` は使わない**（D-Drive の規則）。ファイル名はクリップ名そのもの
-- 出力先: 既定 `<プロジェクト>/build/unity/<ModelId>/`（モデル）と `…/anim/`（アニメ）。プリセット:
-  - `ms2026`: `<MS2026>/Assets/_Project/DDrive/SourceAssets/Model|Anim/<Category>/`
-  - `ddrive`: `<D-Drive>/Assets/SourceAssets/Model|Anim/<Category>/`
-  - `custom`: animset の `export.modelDir` / `export.animDir`
-  MS2026・D-Drive のパスはプロジェクト設定（`.tdrive/project.json` の `animMs2026Root` / `animDdriveRoot`）に持つ。未設定のプリセットは使えない
+- 出力先: 既定 `<プロジェクト>/build/unity/<ModelId>/`（モデル）と `…/anim/`（アニメ）。もう 1 つは**共有フォルダ**（任意のフォルダ。Google Drive など）で、
+  その下に `Model/<Category>/`・`Anim/<Category>/`・`Cutscene/<Category>/` の構成で作る（MS2026 の `SourceAssets` と同じ下位フォルダ名。AN-F-18）。
+  共有フォルダのパスはプロジェクト設定（`.tdrive/project.json` の `animSharedRoot`。ユーザーごと・Git 管理外）に持つ。未設定なら使えない
 - 「変更のあるクリップだけ」: クリップごとの指紋（範囲内のカーブ + 属性のハッシュ）を `anim/<ModelId>/.export-state.json`（Git 管理外）に記録し、
   指紋が同じで出力ファイルがあれば飛ばす
 """
@@ -19,12 +17,10 @@ from typing import Any
 
 from .fileio import write_text_atomic
 
-PRESETS = ("default", "ms2026", "ddrive", "custom")
-PRESET_LABEL = {"default": "既定（build/unity/<ModelId>）", "ms2026": "MS2026 の SourceAssets", "ddrive": "D-Drive の SourceAssets", "custom": "animset の指定先"}
+PRESETS = ("default", "shared")
+PRESET_LABEL = {"default": "既定（build/unity/<ModelId>）", "shared": "共有フォルダ…"}
 STATE_NAME = ".export-state.json"
-MS2026_SUB = Path("Assets") / "_Project" / "DDrive" / "SourceAssets"
-DDRIVE_SUB = Path("Assets") / "SourceAssets"
-CONFIG_KEYS = {"ms2026": "animMs2026Root", "ddrive": "animDdriveRoot"}
+SHARED_KEY = "animSharedRoot"
 
 
 class ExportPlanError(ValueError):
@@ -42,76 +38,34 @@ def clip_file(clip_name: str) -> str:
     return f"{clip_name}.fbx"
 
 
+def _shared_root(config: dict[str, Any]) -> Path:
+    root = config.get(SHARED_KEY)
+    if not root:
+        raise ExportPlanError(f"共有フォルダが設定されていません（出力タブの「共有フォルダ…」で選んでください。プロジェクト設定 {SHARED_KEY}）")
+    return Path(root)
+
+
 def resolve_dirs(animset: dict[str, Any], preset: str, config: dict[str, Any], project_root: str | Path) -> tuple[Path, Path]:
-    """(モデルの出力先, アニメの出力先)。プリセットが使えないとき（パス未設定・指定先が空）は ExportPlanError。"""
+    """(モデルの出力先, アニメの出力先)。プリセットが使えないとき（共有フォルダ未設定）は ExportPlanError。"""
     mid = animset["modelId"]
     cat = (animset.get("export") or {}).get("category") or "Player"
     if preset == "default":
         base = Path(project_root) / "build" / "unity" / mid
         return base, base / "anim"
-    if preset in CONFIG_KEYS:
-        root = config.get(CONFIG_KEYS[preset])
-        if not root:
-            raise ExportPlanError(f"{PRESET_LABEL[preset]} のパスが設定されていません（プロジェクト設定 {CONFIG_KEYS[preset]}）")
-        sub = MS2026_SUB if preset == "ms2026" else DDRIVE_SUB
-        return Path(root) / sub / "Model" / cat, Path(root) / sub / "Anim" / cat
-    if preset == "custom":
-        exp = animset.get("export") or {}
-        if not exp.get("modelDir") or not exp.get("animDir"):
-            raise ExportPlanError("animset の export.modelDir / animDir が空です")
-        return Path(exp["modelDir"]), Path(exp["animDir"])
+    if preset == "shared":
+        root = _shared_root(config)
+        return root / "Model" / cat, root / "Anim" / cat
     raise ExportPlanError(f"出力先のプリセットが不明です: {preset}")
 
 
 def resolve_shot_dir(shot: dict[str, Any], preset: str, config: dict[str, Any], project_root: str | Path) -> Path:
-    """ショットの出力先（docs/20 §5.3）。既定 `build/cutscene/<Category>/`、MS2026 / D-Drive は `…/SourceAssets/Cutscene/<Category>/`、custom は shot の export.dir。"""
+    """ショットの出力先（docs/20 §5.3）。既定 `build/cutscene/<Category>/`、共有フォルダは `<共有>/Cutscene/<Category>/`。"""
     cat = (shot.get("export") or {}).get("category") or "Cutscene"
     if preset == "default":
         return Path(project_root) / "build" / "cutscene" / cat
-    if preset in CONFIG_KEYS:
-        root = config.get(CONFIG_KEYS[preset])
-        if not root:
-            raise ExportPlanError(f"{PRESET_LABEL[preset]} のパスが設定されていません（プロジェクト設定 {CONFIG_KEYS[preset]}）")
-        return Path(root) / (MS2026_SUB if preset == "ms2026" else DDRIVE_SUB) / "Cutscene" / cat
-    if preset == "custom":
-        d = (shot.get("export") or {}).get("dir")
-        if not d:
-            raise ExportPlanError("shot.json の export.dir が空です")
-        return Path(d)
+    if preset == "shared":
+        return _shared_root(config) / "Cutscene" / cat
     raise ExportPlanError(f"出力先のプリセットが不明です: {preset}")
-
-
-PROTECTED_BRANCHES = ("main", "master")
-
-
-def git_branch(repo: str | Path) -> str | None:
-    """`repo` の今のブランチ名（git が無い・リポジトリでない・detached HEAD は None）。"""
-    import subprocess
-
-    try:
-        r = subprocess.run(["git", "-C", str(repo), "rev-parse", "--abbrev-ref", "HEAD"], capture_output=True, text=True, timeout=10,
-                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-    except (OSError, subprocess.SubprocessError):
-        return None
-    name = r.stdout.strip()
-    return name if r.returncode == 0 and name and name != "HEAD" else None
-
-
-def write_problem(preset: str, config: dict[str, Any]) -> str:
-    """プリセットの出力先に書くのを止める理由（無ければ ""）。D-Drive は main / master に直接書かない（ブランチを切ってローカルで作業。CLAUDE.md）。"""
-    if preset == "ddrive":
-        root = config.get(CONFIG_KEYS["ddrive"])
-        branch = git_branch(root) if root else None
-        if branch in PROTECTED_BRANCHES:
-            return f"D-Drive が {branch} ブランチです。{branch} に直接書き出さず、ブランチを切ってから出力してください"
-    return ""
-
-
-def write_warning(preset: str) -> str:
-    """プリセットの出力先に書く前の確認文（無ければ ""）。MS2026 は読み取りのみの参照リポジトリ（CLAUDE.md）なので、毎回確かめる。"""
-    if preset == "ms2026":
-        return "MS2026 のフォルダへ直接書き出します。MS2026 は本来読み取りのみの参照リポジトリです（変更するとリポジトリが汚れます）。続けますか？"
-    return ""
 
 
 def shot_file(shot_name: str) -> str:

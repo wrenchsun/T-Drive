@@ -435,7 +435,7 @@ D-Drive 側の詳しい手順は D-Drive の `docs/52_manual_verification_fc.md`
 | AN-5-3 | 「UpperBody を使う」にして別のクリップを選び、重みを動かす | 胸から上と腕だけが別のクリップになり、下半身は変わらない。重み 0 で元に戻る | ✅（値を確認。見た目は人） | [ ] | |
 | AN-5-4 | animset を保存して開き直す | 状態図が保存されている | ✅（pytest の保存 → 読み込みと、mayapy の保存 → 開き直しで確認。docs/21 TS-6） | [ ] | |
 | AN-5-5 | MS2026（Unity）の Player Preview と、同じパラメータで見比べる | 遷移の長さ・タイミングが同じに見える | ❌ 人（Unity 側との見比べ） | [ ] | |
-| AN-6-1 | 出力タブを開く（animset を作って保存した状態） | 出力先に `build/unity/<ModelId>` と `…/anim` が出る。MS2026 / D-Drive は灰色（理由つき）。「MS2026 のパス…」で選ぶと使えるようになる | ✅ | [x] | 2026-10-23 ユーザー確認 OK（プリセットはコンボを開くと MS2026 / D-Drive が灰色。「パス…」で有効になる） |
+| AN-6-1 | 出力タブを開く（animset を作って保存した状態） | 出力先のコンボは「既定（build/unity/<ModelId>）」と「共有フォルダ…」の 2 択。既定の出力先に `build/unity/<ModelId>` と `…/anim` が出る。共有フォルダは未設定なら灰色（理由つき）。「共有フォルダ…」ボタンでフォルダを選ぶと使えるようになる | ✅（出力先の計算・コンボの 2 択を mayapy）。ボタンのダイアログは人 | [ ] | 2026-10-23 旧版（MS2026 / D-Drive のプリセット）はユーザー確認 OK。AN-F-18 で 2 択に置き換え、再確認待ち |
 | AN-6-2 | シーンを 30 fps にして、命名の❌を直してから「モデルを出力」 | 進捗バーが動き、Maya は操作できる。`SK_<ModelId>.fbx` ができ、ログにサイズが出る。`humanoid.json` / `animset.json` が同じフォルダにできる | ✅（裏の Maya で書き出し → 読み戻し） | [x] | 2026-10-23 ユーザー確認 OK（2769 KB・9.3 秒・警告 3 件: スムーズ法線未ベイク） |
 | AN-6-3 | `SK_<ModelId>.fbx` を Unity（または Maya の FBX 読み込み）で見る | メッシュとスキンと骨が入っていて、アニメーションは入っていない。骨はバインドポーズ | ✅（Maya で読み戻し。Unity は人）＋骨のワールド行列×bindPreMatrix の突き合わせを mayapy で確認（decomposeMatrix 駆動のミニリグ・MisotenChara 読込。AN-F-14） | [ ] | AN-F-14 で修正、再確認待ち（2026-10-23 の結果: NG: 読み戻した SK_MisotenChara.fbx の骨がバインドポーズでない（Hips ty 77.92・arm_L rz 4.18 = 出力時の現在フレームのポーズ。mGear はジョイントが mgear_matrixConstraint に駆動されるので dagPose の restore が効かない）→ AN-F-14（高）） |
 | AN-6-4 | クリップにチェックを入れて「チェックしたクリップを出力」 | `A_<ModelId>_<動作>.fbx` がクリップごとにできる（`@` を含む名前は無い）。メッシュは入っておらず、骨だけ。先頭が 0 フレーム。1 テイク | ✅ | [x] | 2026-10-23 ユーザー確認 OK（3 本。読み戻し: メッシュ 0・ジョイント 131・animCurve 1180・1 テイク・先頭 0 フレーム・ntsc） |
@@ -501,7 +501,7 @@ D-Drive 側の詳しい手順は D-Drive の `docs/52_manual_verification_fc.md`
 | AN-R-26 | （DD-3）A_<ModelId>_Idle.fbx と <Shot>__<ModelId>.fbx を D-Drive に置く。Generic / Humanoid の取り込みで、ルートの名前と階層（Hips の下の階層の道筋）を見る | ルートの名前がファイル名に替わらず、カーブが当たる。当たらなければ preserveHierarchy を D-Drive に提案（docs/20 §8.1） | ❌ 人（Unity / D-Drive） | [ ] | |
 | AN-R-27 | （DD-7）カメラを 2 台、30 fps の区間で切り替えるショットを 60 fps の D-Drive のカットシーンに取り込んで再生 | カットの前後に 2 台の間の絵が 1 コマ出ない。出るなら docs/20 §8.1 の D-Drive 側の提案 | ❌ 人（Unity / D-Drive） | [ ] | |
 | AN-R-28 | （DD-15）PRP_Mic など小道具を動かしたショットの <Shot>.fbx を D-Drive に取り込む | 小物が動く（カーブの道筋が小物に当たる） | ❌ 人（Unity / D-Drive） | [ ] | |
-| AN-R-29 | （CR-6）出力タブで D-Drive のパスを main ブランチのフォルダにして出力 / MS2026 のパスを指定して出力 | D-Drive が main のとき出力ボタンが灰色で理由が出る。MS2026 は毎回「続けますか？」が出て、「いいえ」なら書かない | ✅（mayapy。ダイアログの見た目は人） | [x] | 2026-10-23 ユーザー判断で**機能を外す**: デザイナーの PC に D-Drive は無く MS2026 も人による。共有は Google Drive が主。D-Drive / MS2026 のパス・ブランチ判定を外し、「共有フォルダ…」の指定に置き換える → AN-F-18 |
+| AN-R-29 | （AN-F-18）出力タブで「共有フォルダ…」を押して Google Drive 上のフォルダを選び、モデルとクリップを出力する。ショットも出力する | 選んだフォルダの下に `Model/<Category>/SK_…fbx`・`Anim/<Category>/A_…fbx`・`Cutscene/<Category>/<Shot>…fbx` ができる。D-Drive / MS2026 のパスや確認ダイアログ・ブランチ判定は出ない。選んだフォルダは次回起動後も覚えている | ✅（mayapy で出力先の計算とコンボの 2 択）。Google Drive への実際の書き出しは人＋x | [ ] | AN-F-18 で修正、再確認待ち（2026-10-23 の結果: 旧版（CR-6）はユーザー判断で機能を外した → AN-F-18 で修正、再確認待ち） |
 | AN-R-30 | （DD-11）出力した FBX を Unity で開く | 単位 cm・Y-up・バイナリ。取り込みで警告が出ない | ✅（FBX のヘッダー = 2020 版は mayapy）／Unity は人 | [ ] | |
 | AN-R-31 | （SP-9）ルートジョイントの上に別のジョイントがあるリグで rootMotion=none のクリップを出力 | humanoid.json の Hips の XZ が固定され、その上のルートの動きは残る | ✅（mayapy） | [ ] | |
 | AN-R-32 | （DD-6）animset の frameRate と違う fps のショットを出力しようとする | ショットの出力ボタンが灰色で理由が見える | ✅（mayapy） | [ ] | |
