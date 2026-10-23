@@ -26,10 +26,13 @@ from __future__ import annotations
 
 import contextlib
 import json
+import time
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from maya import cmds
+from maya.api import OpenMaya as om
+from maya.api import OpenMayaAnim as oma
 
 from tdrive import lifecycle
 
@@ -65,6 +68,7 @@ class Result:
     nodes: int
     layers: int = 0
     warnings: list[str] = field(default_factory=list)
+    timings: dict[str, float] = field(default_factory=dict)  # 段階ごとの所要秒（サンプリング / 切り離し / 連鎖 / 保存。AN-F-26）
 
 
 @contextlib.contextmanager
@@ -209,6 +213,18 @@ class ComposeCancelled(Exception):
 
 Progress = Callable[[int, int], bool]  # (済んだ数, 全体) → 続けるか（False で中止）
 
+# サンプリング結果の使い回し（AN-F-26）。スライダーのドラッグ後の作り直しなど、アニメーションが同じなら 1 回だけ読む。
+# 「同じ」の判定は、チャンネルの組・フレーム列・すべてのアニメーションカーブのキーの指紋。キーの無いコントローラの値を手で変えたときは検知できないので、
+# ユーザーが押す「合成を作る」では使わない（`use_cache=False`）。
+_sample_cache: dict[str, Any] = {"key": None, "table": None}
+
+
+def _anim_fingerprint() -> int:
+    curves = cmds.ls(type=["animCurveTL", "animCurveTA", "animCurveTU", "animCurveTT"]) or []
+    vals = cmds.keyframe(curves, query=True, valueChange=True) if curves else []
+    times = cmds.keyframe(curves, query=True, timeChange=True) if curves else []
+    return hash((len(curves), tuple(vals or ()), tuple(times or ())))
+
 
 def _sample_table(chans: dict[str, list[str]], frames: list[int], progress: Progress | None) -> dict[int, dict[tuple[str, str], tuple[float, ...]]]:
     """frames の各フレームについて、全ジョイントの translate / rotate / scale をまとめて読む（AN-F-21）。
@@ -256,14 +272,22 @@ class _Builder:
             cmds.setAttr(f"{n}.{k}", v)
         return n
 
+    _CURVE_KIND = {"translate": oma.MFnAnimCurve.kAnimCurveTL, "rotate": oma.MFnAnimCurve.kAnimCurveTA, "scale": oma.MFnAnimCurve.kAnimCurveTU}
+    _TO_INTERNAL = {"translate": om.MDistance.uiToInternal, "rotate": om.MAngle.uiToInternal, "scale": float}
+
     def curve(self, family: str, label: str, times: list[float], values: list[float], loop: bool) -> str:
-        c = self.make(CURVE_TYPE[family], f"{PREFIX}{self.name}_{label}")
-        for t, v in zip(times, values):
-            cmds.setKeyframe(c, time=t, value=v)
-        cmds.keyTangent(c, inTangentType="linear", outTangentType="linear")
-        cmds.setAttr(f"{c}.preInfinity", 0)  # constant
-        cmds.setAttr(f"{c}.postInfinity", 3 if loop and len(times) > 1 else 0)  # 3 = cycle（2 は欠番）、0 = constant
-        return c
+        """複製のカーブ。`cmds.setKeyframe` を 1 キーずつ呼ぶと MisotenChara（131 ジョイント × 113 フレーム）で 5 秒以上かかるので、API でまとめて打つ（AN-F-26）。"""
+        fn = oma.MFnAnimCurve()
+        obj = fn.create(self._CURVE_KIND[family])
+        name = om.MFnDependencyNode(obj).setName(f"{PREFIX}{self.name}_{label}")
+        self.created.append(name)
+        units = om.MTime.uiUnit()
+        conv = self._TO_INTERNAL[family]
+        fn.addKeys(om.MTimeArray([om.MTime(t, units) for t in times]), om.MDoubleArray([conv(v) for v in values]),
+                   oma.MFnAnimCurve.kTangentLinear, oma.MFnAnimCurve.kTangentLinear)
+        fn.setPreInfinityType(oma.MFnAnimCurve.kConstant)
+        fn.setPostInfinityType(oma.MFnAnimCurve.kCycle if loop and len(times) > 1 else oma.MFnAnimCurve.kConstant)
+        return name
 
     def weight_curve(self, label: str, start: float, fade: float) -> str:
         """前の結果 → この配置へ、fade フレームで線形に 0 → 1（fade 0 は即切り替え）。"""
@@ -310,17 +334,17 @@ def _statics(joint: str, channels: list[str]) -> dict[str, float]:
 
 
 def compose(name: str, placements: list[Seq.Placement], joints: list[str], fps: int, layers: list[Layer] | None = None, playback: bool = True,
-            progress: Progress | None = None) -> Result:
+            progress: Progress | None = None, use_cache: bool = False) -> Result:
     """合成を作る。同じ名前の合成は先に外す（別の名前の合成は残る。ジョイントが重ならなければ同時に使える。ショットのキャラクターごとの合成）。
     配置が空・ジョイントにつながりが無いときは ValueError。`progress(済, 全体)` が False を返すと `ComposeCancelled`（何も作らず元のまま）。`playback=False` は再生範囲・時刻に触れない（ショットが自分で決める）。"""
     if not placements:
         raise ValueError("遷移列が空です")
     with undo_off():
-        return _compose(name, placements, joints, fps, layers, playback, progress)
+        return _compose(name, placements, joints, fps, layers, playback, progress, use_cache)
 
 
 def _compose(name: str, placements: list[Seq.Placement], joints: list[str], fps: int, layers: list[Layer] | None, playback: bool,
-             progress: Progress | None = None) -> Result:
+             progress: Progress | None = None, use_cache: bool = False) -> Result:
     MC.stop()  # クリップ再生中なら先に止めて、再生範囲を元へ戻してから合成の範囲にする（控えが混ざらないように。SF-8）
     remove(name)
     chans = animated_channels(joints)
@@ -328,6 +352,8 @@ def _compose(name: str, placements: list[Seq.Placement], joints: list[str], fps:
         raise ValueError("合成できるジョイントがありません（キーやコンストレイントでつながったチャンネルが無い）")
     b = _Builder(name, fps)
     warnings: list[str] = []
+    timings: dict[str, float] = {}
+    t_all = time.perf_counter()
     layer_list = layers or []
     outputs: list[list[str]] = []  # [[合成の出力, ジョイントのプラグ], ...]（保存の間だけ元へ戻すため）
     try:
@@ -343,7 +369,16 @@ def _compose(name: str, placements: list[Seq.Placement], joints: list[str], fps:
                         continue
                     needed[(j, p.clip, p.src_start, p.src_end)] = (j, chs)
         frame_set = sorted({f for (_, _, a, b) in needed for f in range(a, b + 1)})
-        table = _sample_table(chans, frame_set, progress)
+        n_frames = len(frame_set)
+        n_steps = n_frames + len(chans)  # 進捗はサンプリング（フレーム数）+ ノード作成（ジョイント数）
+        t_sample = time.perf_counter()
+        cache_key = (tuple((j, tuple(chs)) for j, chs in chans.items()), tuple(frame_set), _anim_fingerprint()) if use_cache else None
+        if cache_key is not None and _sample_cache["key"] == cache_key:
+            table = _sample_cache["table"]
+        else:
+            table = _sample_table(chans, frame_set, (lambda d, _t: progress(d, n_steps)) if progress else None)
+            _sample_cache.update(key=cache_key, table=table if cache_key is not None else None)
+        timings["sample"] = time.perf_counter() - t_sample
         samples: dict[tuple[str, str, int, int], dict[str, list[float]]] = {}
         for key, (j, chs) in needed.items():
             out: dict[str, list[float]] = {ch: [] for ch in chs}
@@ -351,6 +386,7 @@ def _compose(name: str, placements: list[Seq.Placement], joints: list[str], fps:
                 for ch in chs:
                     out[ch].append(float(table[f][(j, _family(ch))]["XYZ".index(ch[-1])]))
             samples[key] = out
+        t_detach = time.perf_counter()
         # ---- 2. 元のつながりを切り離して控える
         for j, chs in chans.items():
             for fam in FAMILIES:
@@ -375,9 +411,13 @@ def _compose(name: str, placements: list[Seq.Placement], joints: list[str], fps:
         for i, L in enumerate(layer_list):
             cmds.addAttr(node, longName=f"layerWeight{i}", attributeType="double", minValue=0.0, maxValue=1.0, defaultValue=float(L.weight), keyable=True)
         layer_w = [weights(L.placements, f"L{i}") for i, L in enumerate(layer_list)]
+        timings["detach"] = time.perf_counter() - t_detach
+        t_chain = time.perf_counter()
         # ---- 4. ジョイントごとに連鎖
         n_plugs = 0
-        for j, chs in chans.items():
+        for ji, (j, chs) in enumerate(chans.items()):
+            if progress is not None and not progress(n_frames + ji, n_steps):
+                raise ComposeCancelled()
             statics = _statics(j, chs)
 
             def chain(pls: list[Seq.Placement], ws: list[str], tag: str) -> dict[str, str]:
@@ -400,6 +440,9 @@ def _compose(name: str, placements: list[Seq.Placement], joints: list[str], fps:
                 cmds.connectAttr(plug, f"{j}.{ch}", force=True)  # 複合プラグは上で切ってある
                 outputs.append([plug, f"{j}.{ch}"])
                 n_plugs += 1
+        timings["chain"] = time.perf_counter() - t_chain
+        if progress is not None:
+            progress(n_steps, n_steps)
         # ---- 5. 状態の保存・再生範囲
         total = Seq.total_frames(placements + [p for L in layer_list for p in L.placements])
         _store(node, "tdOriginal", b.original)
@@ -420,7 +463,8 @@ def _compose(name: str, placements: list[Seq.Placement], joints: list[str], fps:
     if playback:
         cmds.playbackOptions(minTime=0, maxTime=total, animationStartTime=0, animationEndTime=total)
         cmds.currentTime(0, edit=True)
-    return Result(name, node, total, len(chans), n_plugs, len(b.created), len(layer_list), warnings)
+    timings["total"] = time.perf_counter() - t_all
+    return Result(name, node, total, len(chans), n_plugs, len(b.created), len(layer_list), warnings, timings)
 
 
 def _rollback(b: _Builder) -> None:

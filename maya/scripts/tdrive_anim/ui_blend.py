@@ -485,11 +485,11 @@ class BlendTab(QtWidgets.QWidget):
             raise ValueError(f"スケルトンのルート {root} がシーンにありません")
         return [root] + (cmds.listRelatives(root, allDescendents=True, type="joint") or [])
 
-    def _compose(self, placements: list[Seq.Placement]) -> None:
+    def _compose(self, placements: list[Seq.Placement], use_cache: bool = False) -> None:
         self._remember_speed()
         progress = ComposeProgress(self)
         try:
-            res = K.compose(COMP_NAME, placements, self._skeleton(), self._fps(), self._layers(Seq.total_frames(placements)), progress=progress)
+            res = K.compose(COMP_NAME, placements, self._skeleton(), self._fps(), self._layers(Seq.total_frames(placements)), progress=progress, use_cache=use_cache)
         except K.ComposeCancelled:
             self._say("合成の作成を中止しました（合成は作っていません）")
             self.refresh()
@@ -499,7 +499,9 @@ class BlendTab(QtWidgets.QWidget):
         cmds.playbackOptions(loop="continuous" if self.loop_cb.isChecked() else "once")
         warns = "".join(f"\n⚠ {w}" for w in Seq.overlap_warnings(placements, self._fps()))
         self._mix_placements = list(placements)
-        self._say(f"合成を作りました（{res.frames:.0f} フレーム、{res.joints} ジョイント、{res.plugs} チャンネル）。▶ 再生で確認できます{warns}{self._fps_note()}")
+        t = res.timings
+        took = f"（{t.get('total', 0):.1f} 秒: 読み取り {t.get('sample', 0):.1f} / 切り離し {t.get('detach', 0):.1f} / ノード作成 {t.get('chain', 0):.1f}）" if t else ""
+        self._say(f"合成を作りました（{res.frames:.0f} フレーム、{res.joints} ジョイント、{res.plugs} チャンネル）{took}。▶ 再生で確認できます{warns}{self._fps_note()}")
         self.refresh()
 
     def build_from_rows(self) -> None:
@@ -578,7 +580,7 @@ class BlendTab(QtWidgets.QWidget):
         t = cmds.currentTime(query=True)
         playing = cmds.play(query=True, state=True)
         cmds.play(state=False)
-        self._guard(lambda: self._compose(self._graph_placements()))
+        self._guard(lambda: self._compose(self._graph_placements(), use_cache=True))  # スライダーの作り直しは、アニメーションが同じならサンプリングを使い回す（AN-F-26）
         self._mark_graph()
         cmds.currentTime(t, edit=True)
         if playing:
