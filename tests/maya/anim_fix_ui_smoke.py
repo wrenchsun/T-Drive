@@ -789,6 +789,41 @@ def _run(tmp: Path) -> None:
         msg41 = str(exc)
     check("AN-F-41: 失敗したジョブも作業フォルダを残さず、ログの内容は例外の文に入る", not job41.work.exists() and "エラーの内容" in msg41, msg41)
 
+    # ---- AN-F-42: ▶ の直前の再生範囲・速度・ループに戻る（リロード / ■ / 範囲を変えて ▶ し直したとき）
+    from tdrive import lifecycle as LC42
+    from tdrive_anim import clips as MC42
+
+    clip42 = {"name": "A_X_Clip", "start": 100, "end": 118, "loop": False}
+
+    def set_state(mn, mx, loop, speed):
+        cmds.playbackOptions(minTime=mn, maxTime=mx, animationStartTime=mn, animationEndTime=mx, loop=loop, playbackSpeed=speed, maxPlaybackSpeed=1)
+
+    def get_state():
+        return (cmds.playbackOptions(query=True, minTime=True), cmds.playbackOptions(query=True, maxTime=True), cmds.playbackOptions(query=True, loop=True),
+                cmds.playbackOptions(query=True, playbackSpeed=True))
+
+    set_state(10, 200, "continuous", 1.0)
+    MC42.play(clip42)
+    MC42.stop()
+    check("AN-F-42: ▶ → ■ で範囲 A（10〜200・連続・1 倍）に戻る", get_state() == (10, 200, "continuous", 1.0), str(get_state()))
+    set_state(20, 150, "once", 0.5)  # 範囲 B・速度 0.5 に変えて ▶ → ■ を押さずにリロード
+    MC42.play(clip42)
+    check("AN-F-42: ▶ 中は clip の範囲", get_state()[:2] == (100, 118), str(get_state()))
+    LC42.run_reload_cleanups()
+    check("AN-F-42: ▶ のあとリロードしても、直前の範囲 B・once・速度 0.5 に戻る", get_state() == (20, 150, "once", 0.5), str(get_state()))
+    # ▶ のあと ■ を押さずにユーザーが範囲を変えて、また ▶ → リロード
+    set_state(10, 200, "continuous", 1.0)
+    MC42.play(clip42)
+    cmds.play(state=False)  # Maya 側で止めた（■ ではない）
+    set_state(30, 90, "once", 0.5)  # ユーザーが範囲 C に変えた
+    MC42.play(clip42)
+    LC42.run_reload_cleanups()
+    check("AN-F-42: 範囲を変えて ▶ し直してからリロードしても、直前の範囲 C に戻る（古い控えに戻らない）", get_state() == (30, 90, "once", 0.5), str(get_state()))
+    MC42.forget()
+    set_state(1, 120, "once", 1.0)
+    MC42.stop()
+    check("AN-F-42: ▶ していなければ何も変えない（控えが無いときは触らない）", get_state() == (1, 120, "once", 1.0), str(get_state()))
+
     # ---- AN-F-17: メッセージ欄はスクロール領域の外・最上部
     from tdrive_anim.ui import AnimPanel
     from tdrive_anim.ui_common import MessageLabel

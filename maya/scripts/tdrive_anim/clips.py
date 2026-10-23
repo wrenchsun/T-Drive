@@ -45,13 +45,22 @@ def keyed_range(root: str) -> tuple[int, int] | None:
 
 
 # ------------------------------------------------------------------ 再生
+_applied: tuple | None = None  # 直近の ▶ で当てた範囲 / ループ（これと違えば、ユーザーが変えた）
+
+
+def _range_state() -> tuple:
+    return (cmds.playbackOptions(query=True, minTime=True), cmds.playbackOptions(query=True, maxTime=True), cmds.playbackOptions(query=True, loop=True))
+
+
 def is_playing() -> bool:
     return _playing
 
 
 def play(clip: dict[str, Any]) -> None:
     """クリップの範囲でループ再生する。すでに再生中なら、元の状態を保ったまま範囲だけ切り替える。"""
-    global _playing
+    global _playing, _applied
+    if _playing and _applied is not None and _range_state() != _applied:
+        playstate.rebase(_OWNER)  # 前回の ▶ のあとにユーザーが範囲 / ループを変えていた: 「直前の値」を元にする（AN-F-42）
     if not _playing:
         playstate.acquire(_OWNER)
         _playing = True
@@ -61,25 +70,28 @@ def play(clip: dict[str, Any]) -> None:
     cmds.playbackOptions(minTime=clip["start"], maxTime=last, animationStartTime=clip["start"], animationEndTime=clip["end"],
                          loop="continuous" if clip["loop"] else "once")
     cmds.currentTime(clip["start"], edit=True)
+    _applied = _range_state()
     with contextlib.suppress(RuntimeError):
         cmds.play(forward=True)
 
 
 def forget() -> None:
     """再生前の状態の控えを捨てる（別のシーンを開いた・新しいシーンにしたとき。前のシーンの範囲・時刻を書き戻さない）。"""
-    global _playing
+    global _playing, _applied
     _playing = False
+    _applied = None
     playstate.forget()
 
 
 def stop() -> None:
     """再生を止めて、元の再生範囲・時刻・ループ設定に戻す。再生中でなければ何もしない。"""
-    global _playing
+    global _playing, _applied
     with contextlib.suppress(RuntimeError):
         cmds.play(state=False)
     if not _playing:
         return
     _playing = False
+    _applied = None
     playstate.release_and_restore(_OWNER)
 
 

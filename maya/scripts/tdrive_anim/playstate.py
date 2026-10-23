@@ -21,11 +21,14 @@ def capture() -> dict[str, Any]:
         "min": cmds.playbackOptions(query=True, minTime=True), "max": cmds.playbackOptions(query=True, maxTime=True),
         "start": cmds.playbackOptions(query=True, animationStartTime=True), "end": cmds.playbackOptions(query=True, animationEndTime=True),
         "loop": cmds.playbackOptions(query=True, loop=True), "time": cmds.currentTime(query=True),
+        "speed": cmds.playbackOptions(query=True, playbackSpeed=True), "maxSpeed": cmds.playbackOptions(query=True, maxPlaybackSpeed=True),  # 再生の速さも控える（AN-F-42）
     }
 
 
 def apply(state: dict[str, Any]) -> None:
     cmds.playbackOptions(minTime=state["min"], maxTime=state["max"], animationStartTime=state["start"], animationEndTime=state["end"], loop=state["loop"])
+    if "speed" in state:  # 古い控え（速さの無いもの）でも動く
+        cmds.playbackOptions(playbackSpeed=state["speed"], maxPlaybackSpeed=state["maxSpeed"])
     cmds.currentTime(state["time"], edit=True)
 
 
@@ -36,6 +39,16 @@ def acquire(owner: str) -> dict[str, Any]:
         _base = capture()
     _owners.add(owner)
     return dict(_base)  # type: ignore[arg-type]
+
+
+def rebase(owner: str) -> bool:
+    """`owner` だけが持っているとき、控えを「今の状態」に取り直す（▶ を押す直前に、前回の ▶ のあとで範囲などを変えられていた場合。AN-F-42）。
+    ほかにも持っている人がいれば、その人の控えが元なので触らない。戻り: 取り直したか。"""
+    global _base
+    if _owners == {owner}:
+        _base = capture()
+        return True
+    return False
 
 
 def release(owner: str, fallback: dict[str, Any] | None = None) -> dict[str, Any] | None:
