@@ -277,6 +277,9 @@ class BlendTab(QtWidgets.QWidget):
         self.stop_btn = QtWidgets.QPushButton("■ 停止")
         self.stop_btn.setToolTip("再生を止めます")
         self.stop_btn.clicked.connect(lambda *_: self.stop())
+        self.hide_ctl_cb = QtWidgets.QCheckBox("コントローラを隠す")  # 合成中はコントローラは元のキーのポーズのままで合わないので隠す（既定オン。AN-F-37）
+        self.hide_ctl_cb.setChecked(True)
+        self.hide_ctl_cb.setToolTip("合成中は、リグのコントローラ（rig_controllers_grp、無ければ *_ctl）を非表示にします。外すと元の表示に戻ります。次に合成を作るときから効きます。既定: ON")
         self.loop_cb = QtWidgets.QCheckBox("ループ")
         self.loop_cb.setChecked(True)
         self.loop_cb.setToolTip("ON: ループ再生／ OFF: 1 回だけ。既定: ON")
@@ -291,7 +294,7 @@ class BlendTab(QtWidgets.QWidget):
         self.shot_btn.setEnabled(False)
         self.shot_btn.setToolTip("ショットタブで開いているショットの、キャラクター（表で選んだ行）のクリップ列にします。ショットとキャラクターを先に用意してください")
         self.shot_btn.clicked.connect(lambda *_: self.send_to_shot())
-        for w in (self.play_btn, self.stop_btn, self.loop_cb, self.play_speed, self.remove_btn, self.shot_btn):
+        for w in (self.play_btn, self.stop_btn, self.loop_cb, self.hide_ctl_cb, self.play_speed, self.remove_btn, self.shot_btn):
             ph.addWidget(w)
         v.addWidget(pbox)
         self.message = MessageLabel()
@@ -380,7 +383,8 @@ class BlendTab(QtWidgets.QWidget):
             i = K.info(act[0])
             self.banner.setText(f"⚠ 合成中: {K.PREFIX}{act[0]}（{i.get('frames', 0):.0f} フレーム、{i.get('joints', 0)} ジョイント）。"
                                 "ジョイントは合成につながっています。シーンを保存しても合成は保存されません（保存の間だけ元のつながりに戻します）。"
-                                "合成中はジョイントにキーを打たないでください（オートキーは切ってあります）。使い終わったら「合成を外す」")
+                                "合成中はジョイントにキーを打たないでください（オートキーは切ってあります）。使い終わったら「合成を外す」"
+                                + (f"\n合成中はコントローラは動きません（{i.get('hiddenControllers')} 個を非表示にしています。外すと戻ります）" if i.get("hiddenControllers") else ""))
         else:
             self.banner.setText("")
         self.banner.setVisible(bool(act))
@@ -599,7 +603,7 @@ class BlendTab(QtWidgets.QWidget):
         self._remember_speed()
         progress = ComposeProgress(self)
         try:
-            res = K.compose(COMP_NAME, placements, self._skeleton(), self._fps(), self._layers(Seq.total_frames(placements)), progress=progress, use_cache=use_cache)
+            res = K.compose(COMP_NAME, placements, self._skeleton(), self._fps(), self._layers(Seq.total_frames(placements)), progress=progress, use_cache=use_cache, hide_ctls=self.hide_ctl_cb.isChecked())
         except K.ComposeCancelled:
             self._say("合成の作成を中止しました（合成は作っていません）")
             self.refresh()

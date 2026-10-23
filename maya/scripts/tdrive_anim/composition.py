@@ -334,17 +334,17 @@ def _statics(joint: str, channels: list[str]) -> dict[str, float]:
 
 
 def compose(name: str, placements: list[Seq.Placement], joints: list[str], fps: int, layers: list[Layer] | None = None, playback: bool = True,
-            progress: Progress | None = None, use_cache: bool = False) -> Result:
+            progress: Progress | None = None, use_cache: bool = False, hide_ctls: bool = True) -> Result:
     """合成を作る。同じ名前の合成は先に外す（別の名前の合成は残る。ジョイントが重ならなければ同時に使える。ショットのキャラクターごとの合成）。
     配置が空・ジョイントにつながりが無いときは ValueError。`progress(済, 全体)` が False を返すと `ComposeCancelled`（何も作らず元のまま）。`playback=False` は再生範囲・時刻に触れない（ショットが自分で決める）。"""
     if not placements:
         raise ValueError("遷移列が空です")
     with undo_off():
-        return _compose(name, placements, joints, fps, layers, playback, progress, use_cache)
+        return _compose(name, placements, joints, fps, layers, playback, progress, use_cache, hide_ctls)
 
 
 def _compose(name: str, placements: list[Seq.Placement], joints: list[str], fps: int, layers: list[Layer] | None, playback: bool,
-             progress: Progress | None = None, use_cache: bool = False) -> Result:
+             progress: Progress | None = None, use_cache: bool = False, hide_ctls: bool = True) -> Result:
     MC.stop()  # クリップ再生中なら先に止めて、再生範囲を元へ戻してから合成の範囲にする（控えが混ざらないように。SF-8）
     remove(name)
     chans = animated_channels(joints)
@@ -450,6 +450,10 @@ def _compose(name: str, placements: list[Seq.Placement], joints: list[str], fps:
         _store(node, "tdCreated", b.created)
         _store(node, "tdInfo", {"frames": total, "joints": len(chans), "plugs": n_plugs, "layers": [L.name for L in layer_list],
                                 "clips": [p.clip for p in placements], "fps": fps})
+        n_hidden = hide_controllers(node, joints, name) if hide_ctls else 0  # 合成中はコントローラは元のキーのポーズのままで合わないので隠す（AN-F-37）
+        info_now = _load(node, "tdInfo", {})
+        info_now["hiddenControllers"] = n_hidden
+        _store(node, "tdInfo", info_now)
         auto = bool(cmds.autoKeyframe(query=True, state=True))
         _store(node, "tdAutoKey", auto)
         if auto:  # 合成中にオートキーが働くと、合成の入力に紛れたキーが「外す」で消える（SF-7）
@@ -465,6 +469,52 @@ def _compose(name: str, placements: list[Seq.Placement], joints: list[str], fps:
         cmds.currentTime(0, edit=True)
     timings["total"] = time.perf_counter() - t_all
     return Result(name, node, total, len(chans), n_plugs, len(b.created), len(layer_list), warnings, timings)
+
+
+# ------------------------------------------------------------------ コントローラの非表示（AN-F-37）
+def controllers_for(joints: list[str]) -> list[str]:
+    """合成するリグのコントローラ: ジョイントと同じネームスペースの `rig_controllers_grp` セットの中身（transform）、無ければ `*_ctl` の transform。"""
+    ns = ""
+    if joints:
+        short = joints[0].split("|")[-1]
+        ns = short.rsplit(":", 1)[0] + ":" if ":" in short else ""
+    out: list[str] = []
+    for st in cmds.ls(f"{ns}rig_controllers_grp", type="objectSet") or []:
+        out += [n for n in (cmds.sets(st, query=True) or []) if cmds.objExists(n) and cmds.nodeType(n) == "transform"]
+    if not out:
+        out = cmds.ls(f"{ns}*_ctl", type="transform", long=True) or []
+    return list(dict.fromkeys(cmds.ls(out, long=True)))
+
+
+def _hidden_by_others(except_name: str) -> set[str]:
+    out: set[str] = set()
+    for nm in active():
+        if nm != except_name:
+            out.update(p for p, _ in _load(_comp_node(nm), "tdHidden", []))
+    return out
+
+
+def hide_controllers(node: str, joints: list[str], name: str) -> int:
+    """コントローラの表示を切り、元の表示状態を合成のノードに控える。つながっている / ロックされている / 別の合成が隠しているものは触らない。切った数。"""
+    skip = _hidden_by_others(name)
+    saved: list[list[Any]] = []
+    for c in controllers_for(joints):
+        plug = f"{c}.visibility"
+        if plug in skip or cmds.getAttr(plug, lock=True) or cmds.listConnections(plug, source=True, destination=False):
+            continue
+        old = bool(cmds.getAttr(plug))
+        if old:
+            cmds.setAttr(plug, 0)
+            saved.append([plug, old])
+    _store(node, "tdHidden", saved)
+    return len(saved)
+
+
+def _restore_controllers(node: str) -> None:
+    for plug, old in _load(node, "tdHidden", []):
+        if cmds.objExists(plug.split(".")[0]) and not cmds.getAttr(plug, lock=True):
+            with contextlib.suppress(RuntimeError):
+                cmds.setAttr(plug, int(old))
 
 
 def _rollback(b: _Builder) -> None:
@@ -513,6 +563,7 @@ def _remove(name: str | None) -> int:
                 continue
             with contextlib.suppress(RuntimeError):
                 _connect_original(src, dst)
+        _restore_controllers(node)
         existing = [x for x in created if cmds.objExists(x)]
         if existing:  # 空のリストを cmds.delete に渡さない
             cmds.delete(existing)
@@ -541,6 +592,7 @@ def suspend_for_save() -> int:
                     with contextlib.suppress(RuntimeError):
                         _connect_original(src, dst)
             _suspended.extend(_load(node, "tdOutputs", []))
+            _restore_controllers(node)  # 保存したシーンにコントローラの非表示が残らないように
     return len(_suspended)
 
 
@@ -548,6 +600,11 @@ def resume_after_save() -> int:
     """`suspend_for_save` のあと、ジョイントを合成につなぎ直す。つなぎ直したチャンネル数。"""
     n = 0
     with undo_off():
+        for nm in active():  # 保存のあいだ戻したコントローラを、また隠す
+            for plug, _old in _load(_comp_node(nm), "tdHidden", []):
+                if cmds.objExists(plug.split(".")[0]) and not cmds.getAttr(plug, lock=True):
+                    with contextlib.suppress(RuntimeError):
+                        cmds.setAttr(plug, 0)
         for out, dst in _suspended:
             if cmds.objExists(out.split(".")[0]) and cmds.objExists(dst.split(".")[0]):
                 with contextlib.suppress(RuntimeError):

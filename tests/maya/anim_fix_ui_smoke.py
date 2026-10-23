@@ -645,6 +645,32 @@ def _run(tmp: Path) -> None:
         cmds.scriptJob = orig_sj
     check("AN-F-35: 古い tdrive_anim の scriptJob だけを掃除（他ツールの job は触らない）", killed == [518, 746, 901] and n35 == 3, str(killed))
 
+    # ---- AN-F-37: 合成中はコントローラを隠す
+    ctl_a = cmds.spaceLocator(name="c37_a_ctl")[0]
+    ctl_b = cmds.spaceLocator(name="c37_b_ctl")[0]
+    cmds.setAttr(ctl_b + ".visibility", lock=True)
+    ctl_c = cmds.spaceLocator(name="c37_c_ctl")[0]
+    cmds.sets(ctl_a, ctl_b, ctl_c, name="rig_controllers_grp")
+    pls37 = Seq23.from_rows([{"clip": "A_MisotenChara_Idle", "holdSec": 1.0}], clips23, 30)
+    r37 = K23.compose("hide37", pls37, make_mini_rig.JOINTS, 30)
+    check("AN-F-37: 合成中はコントローラ（rig_controllers_grp の中身）が非表示、ロック済みは触らない", not cmds.getAttr(ctl_a + ".visibility") and not cmds.getAttr(ctl_c + ".visibility") and cmds.getAttr(ctl_b + ".visibility"), "")
+    check("AN-F-37: 非表示にした数が合成の情報に残る（バナー用）", K23.info("hide37").get("hiddenControllers") == 2, str(K23.info("hide37")))
+    K23.suspend_for_save()
+    check("AN-F-37: 保存の間は表示を戻す", cmds.getAttr(ctl_a + ".visibility") and cmds.getAttr(ctl_c + ".visibility"))
+    K23.resume_after_save()
+    check("AN-F-37: 保存のあとまた隠す", not cmds.getAttr(ctl_a + ".visibility"))
+    K23.remove("hide37")
+    check("AN-F-37: 外すと元の表示に戻る", cmds.getAttr(ctl_a + ".visibility") and cmds.getAttr(ctl_c + ".visibility"))
+    K23.compose("keep37", pls37, make_mini_rig.JOINTS, 30, hide_ctls=False)
+    check("AN-F-37: オプションをオフにすると隠さない", cmds.getAttr(ctl_a + ".visibility"))
+    K23.remove("keep37")
+    cmds.setAttr(ctl_a + ".visibility", 0)  # 元から隠していたものは、外しても隠したまま
+    K23.compose("hide37", pls37, make_mini_rig.JOINTS, 30)
+    K23.remove("hide37")
+    check("AN-F-37: 元から非表示のものは外しても非表示のまま", not cmds.getAttr(ctl_a + ".visibility") and cmds.getAttr(ctl_c + ".visibility"))
+    cmds.setAttr(ctl_b + ".visibility", lock=False)
+    cmds.delete("rig_controllers_grp", ctl_a, ctl_b, ctl_c)
+
     # ---- AN-F-17: メッセージ欄はスクロール領域の外・最上部
     from tdrive_anim.ui import AnimPanel
     from tdrive_anim.ui_common import MessageLabel
