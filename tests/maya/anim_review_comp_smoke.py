@@ -206,6 +206,7 @@ def _run(tmp: Path) -> None:
     check("SF-17: 合成なしで再生した速さは、閉じると元に戻る", changed and (cmds.playbackOptions(query=True, playbackSpeed=True), cmds.playbackOptions(query=True, maxPlaybackSpeed=True)) == speed0)
     # SF-5: スライダーのドラッグ中は作り直さない（compose の回数を数える）
     ui.use_graph()
+    ui.auto_rebuild.setChecked(True)  # 変更のたびに作り直す（既定はオフ。AN-F-29）
     ui.speed.setValue(40)
     ui.build_from_graph()
     calls = []

@@ -250,6 +250,7 @@ def _ui(tmp, cmds, S, A, K, clips) -> None:
     check("UI: 別の文字列は警告だけ", "貼り付けられません" in ui.message.text(), ui.message.text())
     # パラメータ駆動
     ui.use_graph()
+    ui.auto_rebuild.setChecked(True)  # 変更のたびに作り直す（既定はオフ。AN-F-29）
     check("UI: 状態図モードに切り替わる", ui.mode == "graph" and ui.graph is not None)
     ui.speed.setValue(50)  # 0.5
     ui.on_param_changed()

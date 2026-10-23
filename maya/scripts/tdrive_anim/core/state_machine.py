@@ -217,20 +217,46 @@ def describe_switches(result: Result) -> str:
 
 
 MAX_TIMELINE_ROWS = 50
+Timeline = list[tuple[float, dict[str, float]]]
 
 
-def timeline_rows(timeline: list[tuple[float, dict[str, float]]], result: Result, defaults: dict[str, float] | None = None) -> list[tuple[str, str, str]]:
-    """記録したパラメータの表の行: (時刻, 変えたパラメータ, その時刻の状態)。前の記録から変わったパラメータだけを出す。
-    最大 `MAX_TIMELINE_ROWS` 行で、古い記録は先頭の 1 行（「…ほか N 件」）に畳む。"""
-    prev = dict(defaults or {})
-    rows: list[tuple[str, str, str]] = []
-    for t, vals in sorted(timeline, key=lambda e: e[0]):
-        changed = {k: v for k, v in vals.items() if prev.get(k) != v}
-        prev.update(vals)
-        rows.append((f"{t:.2f}s", ", ".join(f"{k}={v:g}" for k, v in changed.items()) or "（変化なし）", state_at(result, t)))
+def markers(timeline: Timeline) -> list[tuple[float, str, float]]:
+    """時系列 → マーカーの列 (時刻, パラメータ, 値)。時刻順・同じ時刻ではパラメータ名順（タイムラインの表示用。AN-F-29）。"""
+    return sorted(((t, p, float(v)) for t, vals in timeline for p, v in vals.items()), key=lambda m: (m[0], m[1]))
+
+
+def delete_marker(timeline: Timeline, param: str, t: float) -> Timeline:
+    """時刻 t のパラメータ param の記録を消した新しい時系列（そのイベントが空になれば、イベントごと消える）。"""
+    out: Timeline = []
+    for tt, vals in timeline:
+        if abs(tt - t) <= 1e-6:
+            vals = {k: v for k, v in vals.items() if k != param}
+            if not vals:
+                continue
+        out.append((tt, dict(vals)))
+    return out
+
+
+def move_marker(timeline: Timeline, param: str, t_old: float, t_new: float) -> Timeline:
+    """パラメータ param の記録を t_old から t_new へ動かした新しい時系列（行き先に同じパラメータがあれば上書き）。"""
+    value = next((vals[param] for tt, vals in timeline if abs(tt - t_old) <= 1e-6 and param in vals), None)
+    if value is None or abs(t_old - t_new) <= 1e-6:
+        return [(tt, dict(v)) for tt, v in timeline]
+    return with_event(delete_marker(timeline, param, t_old), t_new, {param: value})
+
+
+def state_bands(result: Result, total_sec: float) -> list[tuple[float, float, str]]:
+    """評価結果の状態の区間 (開始, 終了, 状態)。遷移が始まった時刻から行き先の状態とみなす。"""
+    cuts = [(0.0, result.first_state)] + [(float(sw["t"]), sw["to"]) for sw in result.switches]
+    return [(t0, cuts[i + 1][0] if i + 1 < len(cuts) else float(total_sec), name) for i, (t0, name) in enumerate(cuts)]
+
+
+def marker_rows(timeline: Timeline, result: Result) -> list[tuple[str, str, str, str]]:
+    """記録の表の行: (時刻, パラメータ, 値, その時刻の状態)。最大 `MAX_TIMELINE_ROWS` 行で、古い記録は先頭の 1 行（「古い記録 N 件」）に畳む。"""
+    rows = [(f"{t:.2f}s", p, f"{v:g}", state_at(result, t)) for t, p, v in markers(timeline)]
     if len(rows) > MAX_TIMELINE_ROWS:
         hidden = len(rows) - (MAX_TIMELINE_ROWS - 1)
-        rows = [("…", f"古い記録 {hidden} 件", "")] + rows[hidden:]
+        rows = [("…", f"古い記録 {hidden} 件", "", "")] + rows[hidden:]
     return rows
 
 

@@ -21,6 +21,7 @@ from . import composition as K
 from . import scene_naming as SN
 from . import session
 from .ui_common import ComposeProgress, MessageLabel
+from .ui_timeline import ParamTimeline
 from .core import animset as A
 from .core import sequence as Seq
 from .core import state_machine as M
@@ -33,6 +34,7 @@ HEADERS = ["クリップ", "保持（秒）", "クロスフェード（秒）", 
 
 
 HUD_NAME = "tdAnimMixHUD"
+TIMELINE_KEY = "tdAnimParamTimeline"  # 記録したパラメータ（プレビュー用。animset には入れない。シーンの fileInfo に JSON で持つ。AN-F-29）
 
 
 def _hud_show(text: str) -> None:
@@ -89,6 +91,9 @@ class BlendTab(QtWidgets.QWidget):
         self.timeline: list[tuple[float, dict]] = []
         self._building = False
         self._mix_placements: list[Seq.Placement] = []
+        self._pending = False  # 記録を変えたのにまだ作り直していない（AN-F-29）
+        self._syncing_table = False
+        self._timeline_loaded = False
         self._mix_job: int | None = None
         self._saved_speed: tuple[float, float] | None = None
         self._rebuild_timer = QtCore.QTimer(self)  # Speed スライダーのドラッグ中は作り直さず、止まってからまとめて 1 回（SF-5）
@@ -108,6 +113,11 @@ class BlendTab(QtWidgets.QWidget):
         self.banner.setWordWrap(True)
         self.banner.setStyleSheet("color: #f0a040;")
         v.addWidget(self.banner)
+        self.pending_label = QtWidgets.QLabel()  # 記録を変えたのにまだ作り直していないとき（AN-F-29）
+        self.pending_label.setStyleSheet("background-color: #6a4210; color: #ffe2b0; padding: 4px; border-radius: 3px;")
+        self.pending_label.setWordWrap(True)
+        self.pending_label.setVisible(False)
+        v.addWidget(self.pending_label)
         self.mix_label = QtWidgets.QLabel()  # 合成中の今のブレンドの割合（タイムスライダーを動かすと変わる。AN-F-5）
         self.mix_label.setStyleSheet("color: #f0a040;")
         v.addWidget(self.mix_label)
@@ -189,14 +199,37 @@ class BlendTab(QtWidgets.QWidget):
         self.graph_info = QtWidgets.QLabel()
         self.graph_info.setWordWrap(True)
         gv.addWidget(self.graph_info)
-        self.timeline_table = QtWidgets.QTableWidget(0, 3)  # 記録したパラメータ（時刻 / 変えたパラメータ / その結果の状態。読み取り専用。AN-F-27）
-        self.timeline_table.setHorizontalHeaderLabels(["時刻", "変えたパラメータ", "その結果の状態"])
+        self.timeline_view = ParamTimeline()  # Maya のタイムスライダーと同期したタイムライン（AN-F-29）
+        self.timeline_view.selectionChanged.connect(self._on_marker_selected)
+        self.timeline_view.markerMoved.connect(self._on_marker_moved)
+        self.timeline_view.deleteRequested.connect(self._on_marker_delete)
+        self.timeline_view.addRequested.connect(self._on_marker_add)
+        gv.addWidget(self.timeline_view)
+        tl_row = QtWidgets.QHBoxLayout()
+        self.add_marker_btn = QtWidgets.QPushButton("現在フレームに追加")
+        self.add_marker_btn.setToolTip("今のタイムスライダーのフレームに、いまの Speed と ActionState の値を記録します")
+        self.add_marker_btn.clicked.connect(lambda *_: self._add_marker_here())
+        tl_row.addWidget(self.add_marker_btn)
+        self.auto_rebuild = QtWidgets.QCheckBox("変更のたびに作り直す")
+        self.auto_rebuild.setToolTip("オフ（既定）: 記録だけして、「作り直す」を押したときに 1 回だけ合成を作ります（まとめて打ってから反映できます）。オンにすると、記録を変えるたびに作り直します")
+        tl_row.addWidget(self.auto_rebuild)
+        self.rebuild_btn = QtWidgets.QPushButton("作り直す")
+        self.rebuild_btn.setToolTip("記録したパラメータで、状態図の合成を作り直します（現在の時刻と再生状態は保ちます）")
+        self.rebuild_btn.clicked.connect(lambda *_: self.rebuild_now())
+        tl_row.addWidget(self.rebuild_btn)
+        tl_row.addStretch(1)
+        gv.addLayout(tl_row)
+        self.timeline_table = QtWidgets.QTableWidget(0, 4)  # 時刻 / パラメータ / 値 / その結果の状態（読み取り専用。タイムラインの選択と同期）
+        self.timeline_table.setHorizontalHeaderLabels(["時刻", "パラメータ", "値", "その結果の状態"])
         self.timeline_table.horizontalHeader().setStretchLastSection(True)
         self.timeline_table.verticalHeader().setVisible(False)
         self.timeline_table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        self.timeline_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        self.timeline_table.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
         self.timeline_table.setMinimumHeight(90)
         self.timeline_table.setMaximumHeight(170)
-        self.timeline_table.setToolTip("スライダーを動かした時刻ごとの記録です（最大 50 行。古いものは畳みます）。同じ時刻の記録は上書きされます")
+        self.timeline_table.setToolTip("記録の一覧です（最大 50 行。古いものは畳みます）。選ぶとタイムラインのマーカーも選ばれます")
+        self.timeline_table.itemSelectionChanged.connect(self._on_table_selected)
         gv.addWidget(self.timeline_table)
         self.switch_label = QtWidgets.QLabel()  # 評価してできた遷移列（読み取り専用）
         self.switch_label.setWordWrap(True)
@@ -286,6 +319,7 @@ class BlendTab(QtWidgets.QWidget):
         self.update_mix()
 
     def update_mix(self) -> None:
+        self.timeline_view.set_current_frame(cmds.currentTime(query=True))
         if not self._mine() or not self._mix_placements:
             self.mix_label.setText("")
             _hud_hide()
@@ -348,6 +382,10 @@ class BlendTab(QtWidgets.QWidget):
             self._fill_rows()
             self._say(NEED_ANIMSET)
             return
+        self._load_timeline()  # 開き直したシーンの記録を戻す（AN-F-29）
+        if self.timeline and self.graph is None and isinstance(d_ := self.session.data.get("stateGraph"), dict):
+            self.graph, self.mode = d_, "graph"
+            self._fill_graph_info()
         if self.message.text() == NEED_ANIMSET:  # animset を作ったら案内を消す（AN-F-1）
             self._say("")
         d = self.session.data
@@ -387,6 +425,7 @@ class BlendTab(QtWidgets.QWidget):
         if self.graph is None:
             self.graph_info.setText("スライダーを動かすか「状態図で合成を作る」を押すと、既定の状態図（Idle / Run / Jump）で動かします")
             self.timeline_table.setRowCount(0)
+            self.timeline_view.set_data([], [], self.total_sec.value(), self._fps())
             self.switch_label.setText("")
             return
         probs = M.validate(self.graph, self.session.data["clips"] if self.session.data else [])
@@ -401,13 +440,20 @@ class BlendTab(QtWidgets.QWidget):
             r = M.evaluate(self.graph, self.timeline, self.total_sec.value(), self._fps())
         except Exception:  # noqa: BLE001  壊れた状態図は上の警告で知らせる
             self.timeline_table.setRowCount(0)
+            self.timeline_view.set_data([], [], self.total_sec.value(), self._fps())
             self.switch_label.setText("")
             return
-        rows = M.timeline_rows(self.timeline, r, M.initial_params(self.graph))
-        self.timeline_table.setRowCount(len(rows))
-        for i, cells in enumerate(rows):
-            for j, text in enumerate(cells):
-                self.timeline_table.setItem(i, j, QtWidgets.QTableWidgetItem(text))
+        rows = M.marker_rows(self.timeline, r)
+        self._syncing_table = True
+        try:
+            self.timeline_table.setRowCount(len(rows))
+            for i, cells in enumerate(rows):
+                for j, text in enumerate(cells):
+                    self.timeline_table.setItem(i, j, QtWidgets.QTableWidgetItem(text))
+        finally:
+            self._syncing_table = False
+        self.timeline_view.set_data(M.markers(self.timeline), M.state_bands(r, self.total_sec.value()), self.total_sec.value(), self._fps())
+        self.timeline_view.set_current_frame(cmds.currentTime(query=True))
         self.switch_label.setText("評価した遷移列: " + M.describe_switches(r))
 
     def _auto_total(self) -> None:
@@ -575,6 +621,8 @@ class BlendTab(QtWidgets.QWidget):
     def reset_timeline(self) -> None:
         self.timeline = []
         self._total_manual = False
+        self._set_pending(False)
+        self._save_timeline()
         self._fill_graph_info()
 
     def reset_graph(self) -> None:
@@ -607,11 +655,106 @@ class BlendTab(QtWidgets.QWidget):
         t = max(0.0, cmds.currentTime(query=True) / fps) if self._mine() else 0.0
         t = round(round(t * fps) / fps, 3)  # 同じフレームの記録は上書き（AN-F-27）
         self.timeline = M.with_event(self.timeline, t, self._params())
+        self._commit_timeline()
+
+    # ------------------------------------------------------------ タイムラインの編集（AN-F-29）
+    def _commit_timeline(self) -> None:
+        """記録を変えた: 保存し、表示を直し、作り直す（トグルがオンなら）か「作り直していません」を出す。"""
+        self._save_timeline()
         self._fill_graph_info()
         if self._mine() and K.info(COMP_NAME).get("graph"):
-            self._rebuild_timer.start()  # ドラッグが止まってから 1 回だけ作り直す
+            if self.auto_rebuild.isChecked():
+                self._rebuild_timer.start()  # ドラッグが止まってから 1 回だけ作り直す
+            else:
+                self._set_pending(True)
         elif self._mine():
             self._say("⚠ 今の合成は遷移列から作ったものなので、スライダーを動かしても反映されません。「状態図で合成を作る」を押してください")
+
+    def _set_pending(self, on: bool) -> None:
+        self._pending = on
+        self.pending_label.setText("⚠ 記録を変えましたが、まだ合成を作り直していません。「作り直す」を押すと反映されます" if on else "")
+        self.pending_label.setVisible(on)
+
+    def rebuild_now(self) -> None:
+        """「作り直す」: 記録したパラメータで 1 回だけ合成を作る。合成が無ければ状態図で新しく作る。"""
+        self._rebuild_timer.stop()
+        if self.graph is None:
+            self.use_graph()
+        if self._mine() and K.info(COMP_NAME).get("graph"):
+            self._rebuild_keeping_time()
+        else:
+            self.build_from_graph()
+        self._set_pending(False)
+
+    def _save_timeline(self) -> None:
+        """記録をシーンの fileInfo に JSON で持つ（animset には入れない）。"""
+        with contextlib.suppress(RuntimeError, TypeError):
+            cmds.fileInfo(TIMELINE_KEY, json.dumps([[t, v] for t, v in self.timeline], ensure_ascii=False))
+
+    def _load_timeline(self) -> None:
+        """シーンの fileInfo から記録を戻す（開き直し後。記録が空のときだけ）。"""
+        if self.timeline or self._timeline_loaded:
+            return
+        self._timeline_loaded = True
+        with contextlib.suppress(RuntimeError, ValueError, TypeError, KeyError):
+            raw = cmds.fileInfo(TIMELINE_KEY, query=True)
+            if raw:
+                data = json.loads(raw[0].replace('\\"', '"'))  # fileInfo は " を \" にして持つ
+                self.timeline = [(float(t), {str(k): float(x) for k, x in v.items()}) for t, v in data]
+
+    def _on_marker_moved(self, param: str, t_old: float, t_new: float) -> None:
+        self.timeline = M.move_marker(self.timeline, param, t_old, t_new)
+        self._commit_timeline()
+        self.timeline_view.select(param, t_new)
+
+    def _on_marker_delete(self, param: str, t: float) -> None:
+        self.timeline = M.delete_marker(self.timeline, param, t)
+        self._commit_timeline()
+
+    def _on_marker_add(self, frame: int, lane: str) -> None:
+        """ダブルクリック: そのフレームに、その段のパラメータの今の値を記録する。"""
+        if self.graph is None:
+            self.use_graph()
+        value = self._params()[lane]
+        self.timeline = M.with_event(self.timeline, round(frame / self._fps(), 3), {lane: value})
+        self._commit_timeline()
+
+    def _add_marker_here(self) -> None:
+        if self.graph is None:
+            self.use_graph()
+        if self.graph is None:
+            return
+        t = round(round(max(0.0, cmds.currentTime(query=True))) / self._fps(), 3)
+        self.timeline = M.with_event(self.timeline, t, self._params())
+        self._commit_timeline()
+
+    def _on_marker_selected(self, param: str, t: float) -> None:
+        """タイムラインで選んだ → 表の行も選ぶ。"""
+        if self._syncing_table:
+            return
+        self._syncing_table = True
+        try:
+            self.timeline_table.clearSelection()
+            for i in range(self.timeline_table.rowCount()):
+                it = self.timeline_table.item(i, 1)
+                tt = self.timeline_table.item(i, 0)
+                if it is not None and tt is not None and it.text() == param and tt.text() == f"{t:.2f}s":
+                    self.timeline_table.selectRow(i)
+                    break
+        finally:
+            self._syncing_table = False
+
+    def _on_table_selected(self) -> None:
+        """表で選んだ → タイムラインのマーカーも選ぶ。"""
+        if self._syncing_table:
+            return
+        rows = sorted({i.row() for i in self.timeline_table.selectedIndexes()})
+        if not rows:
+            self.timeline_view.select("", 0.0)
+            return
+        t_item, p_item = self.timeline_table.item(rows[0], 0), self.timeline_table.item(rows[0], 1)
+        if t_item is not None and p_item is not None and t_item.text().endswith("s") and p_item.text() in ("Speed", "ActionState"):
+            self.timeline_view.select(p_item.text(), float(t_item.text()[:-1]))
 
     def _graph_placements(self) -> list[Seq.Placement]:
         r = M.evaluate(self.graph, self.timeline, self.total_sec.value(), self._fps())
@@ -650,6 +793,7 @@ class BlendTab(QtWidgets.QWidget):
         t = cmds.currentTime(query=True)
         playing = cmds.play(query=True, state=True)
         cmds.play(state=False)
+        self._set_pending(False)
         self._say("作り直し中…")
         QtWidgets.QApplication.processEvents()
         self._guard(lambda: self._compose(self._graph_placements(), use_cache=True))  # スライダーの作り直しは、アニメーションが同じならサンプリングを使い回す（AN-F-26）

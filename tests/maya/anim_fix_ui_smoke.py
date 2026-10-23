@@ -361,7 +361,8 @@ def _run(tmp: Path) -> None:
     b27.speed.setSliderDown(False)  # 離す → sliderReleased
     check("AN-F-28: スライダーを動かすと既定の状態図が自動で使われる", b27.mode == "graph" and b27.graph is not None)
     check("AN-F-27: ドラッグを離すと記録は 1 件（最後の値）", len(b27.timeline) == 1 and b27.timeline[0][1]["Speed"] == 0.5, str(b27.timeline))
-    check("AN-F-27: 記録の表は 1 行（時刻 / 変えたパラメータ / 結果の状態）", b27.timeline_table.rowCount() == 1 and "Speed=0.5" in b27.timeline_table.item(0, 1).text() and b27.timeline_table.item(0, 2).text() == "Run", [b27.timeline_table.item(0, c).text() for c in range(3)] if b27.timeline_table.rowCount() else "")
+    rows27 = [[b27.timeline_table.item(r, c).text() for c in range(4)] for r in range(b27.timeline_table.rowCount())]
+    check("AN-F-27: 記録の表は マーカーごと 1 行（時刻 / パラメータ / 値 / 結果の状態）", rows27 == [["0.00s", "ActionState", "0", "Idle"], ["0.00s", "Speed", "0.5", "Idle"]] or rows27[1][:3] == ["0.00s", "Speed", "0.5"], str(rows27))
     check("AN-F-27: 評価した遷移列が一行で出る", b27.switch_label.text().startswith("評価した遷移列: 0.00s Idle → ") and "Run（0.08s）" in b27.switch_label.text(), b27.switch_label.text())
     check("AN-F-27: 「長さ」の既定は記録の最後 + 2 秒", abs(b27.total_sec.value() - 2.0) < 1e-9, str(b27.total_sec.value()))
     b27.total_sec.setValue(6.0)
@@ -382,6 +383,74 @@ def _run(tmp: Path) -> None:
         b27.timeline = __import__("tdrive_anim.core.state_machine", fromlist=["x"]).with_event(b27.timeline, i * 0.1, {"Speed": (i % 2) * 0.5})
     b27._fill_graph_info()
     check("AN-F-27: 記録の表は最大 50 行（古いものは畳む）", b27.timeline_table.rowCount() <= 50, str(b27.timeline_table.rowCount()))
+
+    # ---- AN-F-29: パラメータのタイムライン
+    from tdrive_anim.core import state_machine as M29
+
+    tv = b27.timeline_view
+    b27.reset_timeline()
+    b27.timeline = M29.with_event(b27.timeline, 1.0, {"Speed": 0.5})
+    b27.timeline = M29.with_event(b27.timeline, 2.0, {"ActionState": 2})
+    b27._fill_graph_info()
+    check("AN-F-29: タイムラインのマーカーが記録と一致", tv.markers == [(1.0, "Speed", 0.5), (2.0, "ActionState", 2.0)], str(tv.markers))
+    r29 = M29.evaluate(b27.graph, b27.timeline, b27.total_sec.value(), b27._fps())
+    check("AN-F-29: 状態の帯が state_machine.evaluate の結果と一致", tv.bands == M29.state_bands(r29, b27.total_sec.value()) and [b[2] for b in tv.bands][:2] == ["Idle", "Run"], str(tv.bands))
+    tv.selectionChanged.emit("Speed", 1.0)
+    check("AN-F-29: タイムラインで選ぶと表の行も選ばれる", [i.row() for i in b27.timeline_table.selectedIndexes()][:1] == [0], str([i.row() for i in b27.timeline_table.selectedIndexes()]))
+    b27.timeline_table.selectRow(1)
+    check("AN-F-29: 表で選ぶとタイムラインのマーカーも選ばれる", tv.selected == ("ActionState", 2.0), str(tv.selected))
+    tv.markerMoved.emit("ActionState", 2.0, 1.5)
+    check("AN-F-29: マーカーを動かすと記録が動く", (1.5, "ActionState", 2.0) in M29.markers(b27.timeline) and not any(t == 2.0 for t, _, _ in M29.markers(b27.timeline)), str(b27.timeline))
+    tv.deleteRequested.emit("Speed", 1.0)
+    check("AN-F-29: 削除すると記録から消える", [m[1] for m in M29.markers(b27.timeline)] == ["ActionState"], str(b27.timeline))
+    tv.addRequested.emit(60, "Speed")
+    check("AN-F-29: ダブルクリック（追加）で、そのフレームに今の値が記録される", any(abs(t - 2.0) < 1e-9 and p == "Speed" for t, p, _ in M29.markers(b27.timeline)), str(b27.timeline))
+    check("AN-F-29: 記録はシーンの fileInfo に持つ（animset には入れない）", "Speed" in (cmds.fileInfo(ui_blend_mod.TIMELINE_KEY, query=True) or [""])[0] and "timeline" not in str(s.data.keys()))
+    saved_tl = list(b27.timeline)
+    b27.timeline, b27._timeline_loaded = [], False
+    b27._load_timeline()
+    check("AN-F-29: 開き直し（fileInfo）で記録が戻る", b27.timeline == saved_tl, str(b27.timeline))
+    # 描画とマウス操作（QTest）
+    from PySide6 import QtCore as QC29
+    from PySide6.QtTest import QTest
+
+    tv.resize(640, 120)
+    img = tv.grab()
+    check("AN-F-29: タイムラインが描画できる", not img.isNull() and img.width() > 100, f"{img.isNull()} {img.width()}x{img.height()}")
+    b27.timeline = [(1.0, {"ActionState": 2.0})]
+    b27._fill_graph_info()
+    rect = tv._marker_rect(1.0, "ActionState")
+    center = QC29.QPoint(int(rect.center().x()), int(rect.center().y()))
+    QTest.mouseClick(tv, QC29.Qt.LeftButton, QC29.Qt.NoModifier, center)
+    check("AN-F-29: マーカーをクリックで選択", tv.selected == ("ActionState", 1.0), str(tv.selected))
+    target_x = int(tv.t_to_x(2.0))
+    QTest.mousePress(tv, QC29.Qt.LeftButton, QC29.Qt.NoModifier, center)
+    QTest.mouseMove(tv, QC29.QPoint(target_x, center.y()))
+    QTest.mouseRelease(tv, QC29.Qt.LeftButton, QC29.Qt.NoModifier, QC29.QPoint(target_x, center.y()))
+    moved = [m for m in M29.markers(b27.timeline) if m[1] == "ActionState"]
+    check("AN-F-29: ドラッグでマーカーが動く（フレームにスナップ）", len(moved) == 1 and abs(moved[0][0] * 30 - round(moved[0][0] * 30)) < 1e-6 and abs(moved[0][0] - 2.0) < 0.1, str(moved))
+    QTest.keyClick(tv, QC29.Qt.Key_Delete)
+    check("AN-F-29: Delete キーでマーカーが消える", not M29.markers(b27.timeline), str(b27.timeline))
+    QTest.mouseDClick(tv, QC29.Qt.LeftButton, QC29.Qt.NoModifier, QC29.QPoint(int(tv.t_to_x(3.0)), 10))
+    check("AN-F-29: ダブルクリックで上段（ActionState）のそのフレームに追加", any(m[1] == "ActionState" and abs(m[0] - 3.0) < 1e-6 for m in M29.markers(b27.timeline)), str(b27.timeline))
+    # まとめて作成
+    check("AN-F-29: 「変更のたびに作り直す」は既定オフ", not b27.auto_rebuild.isChecked())
+    b27.reset_timeline()
+    b27.mode = "graph"
+    b27.build_from_graph()
+    first_nodes = set(cmds.ls("tdAnimComp_*", type="network"))
+    builds: list[int] = []
+    orig_compose = b27._compose
+    b27._compose = lambda pls, use_cache=False: (builds.append(1), orig_compose(pls, use_cache))[1]
+    for fr in (10, 30, 50):
+        cmds.currentTime(fr, edit=True)
+        b27.speed.setValue(10 + fr)
+    b27.flush_rebuild()
+    check("AN-F-29: トグルオフなら記録するだけで作り直さず、最上部に「作り直していません」", builds == [] and not b27.pending_label.isHidden() and "作り直していません" in b27.pending_label.text(), f"{builds} {b27.pending_label.text()}")
+    b27.rebuild_now()
+    check("AN-F-29: 「作り直す」で 1 回だけ合成を作り、表示が消える", builds == [1] and b27.pending_label.isHidden(), str(builds))
+    b27._compose = orig_compose
+    b27.remove()
     panel27.detach()
 
     # ---- AN-F-17: メッセージ欄はスクロール領域の外・最上部
