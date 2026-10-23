@@ -224,8 +224,9 @@ def _misoten(tmp: Path) -> None:
     cmds.file(str(ma), open=True, force=True, ignoreVersion=True, prompt=False)
     s = S.current()
     s.new("MisotenChara")
+    film = cmds.currentUnit(query=True, time=True) == "film"  # リグが 30 fps に直して保存されていたら、24 fps の❌は出ない
     rep = SN.inspect_scene("MisotenChara", s.data)
-    check("[MisotenChara] 24 fps が❌で出る", any(i.key == "time" for i in rep.settings), str(rep.settings))
+    check("[MisotenChara] 24 fps が❌で出る（リグが 24 fps のとき。30 fps で保存済みなら出ない）", any(i.key == "time" for i in rep.settings) == film, str(rep.settings))
     meshes = [f for f in rep.findings if f.kind == "mesh"]
     check("[MisotenChara] メッシュ 3 枚に SK_ の提案", {f.suggestion for f in meshes} >= {"SK_MisotenChara_Body", "SK_MisotenChara_Skirt", "SK_MisotenChara_RibbonBack"}, str([(f.name, f.suggestion) for f in meshes]))
     mats = [f for f in rep.findings if f.kind == "material"]

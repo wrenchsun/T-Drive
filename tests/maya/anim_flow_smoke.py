@@ -84,8 +84,9 @@ def _run(tmp: Path, which: str) -> None:
     ui_n = ui_naming.NamingTab(s)
     t0 = time.perf_counter()
     ui_n.inspect()
-    check("② 検査が動く（一覧が出る）", ui_n.table.rowCount() >= 1 and ui_n.report.has_errors, ui_n.summary.text())
-    check("② 24 fps（film）が❌で出る", any(i.key == "time" for i in ui_n.report.settings), str(ui_n.report.settings))
+    film = cmds.currentUnit(query=True, time=True) == "film"  # リグが 30 fps に直して保存されていたら、24 fps の❌は出ない
+    check("② 検査が動く（一覧が出る）", ui_n.table.rowCount() >= 1 and (ui_n.report.has_errors or not film), ui_n.summary.text())
+    check("② 24 fps（film）が❌で出る（リグが 24 fps のとき）", any(i.key == "time" for i in ui_n.report.settings) == film, str(ui_n.report.settings))
     ui_n.fix_setting("time")
     ui_n.fix_setting("linear")
     ui_n.fix_setting("up")
