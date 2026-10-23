@@ -235,6 +235,37 @@ Unity の `CrossFadeInFixedTime` は「固定秒・線形」の合成。Maya で
 - 下: 再生 / 停止 / ループ / 速度、「合成を外す」。右端に「この列をショットへ」（§5）
 - 再生中はタイムスライダーに遷移の区間を色で示す（`timeEditor` の表示をそのまま使う。独自描画はしない）
 
+### 4.5 ブレンドツリー（1D / 2D。AN-11、2026-10-23 追加）
+
+**要件（ユーザー指定）**: プレビューは **D-Drive の AnimEditor「確認する › ブレンド」でできることを最低限すべて**できること。D-Drive（`Packages/com.ddrive.core/Editor/Anim/AnimEditor.Blend.cs`）の 3 つの手段のうち、
+①遷移シーケンス（§4.2 の遷移列）と ②レイヤー同時再生（§4.3）は AN-4 / AN-5 で実装済み。**③ Blend Tree パラメータ（Controller の float を 2D パッド / スライダーで動かす）が未実装**なので、これを足す。
+
+- 状態図の状態は「クリップ 1 つ」か「**ブレンドツリー**」のどちらかを持てる。ブレンドツリーは Unity の Blend Tree と同じ 4 種類:
+
+| 種類 | 軸 | 重みの決め方（Unity と同じ式） | 例 |
+|---|---|---|---|
+| `1D` | float 1 つ（`threshold`） | 隣り合う 2 つのしきい値の間で線形 | `Speed`: Idle(0) / Walk(0.5) / Run(1) |
+| `2DSimpleDirectional` | float 2 つ（`position: [x, y]`） | 方向で隣の 2 モーション + 中央（原点）のモーションを混ぜる | `MoveX` / `MoveY`: Walk_F/B/L/R + Idle |
+| `2DFreeformDirectional` | 同上 | 角度と大きさの差で重み（Unity の gradient band interpolation） | 速さ違いの移動 |
+| `2DFreeformCartesian` | 同上 | 位置の差で重み（gradient band interpolation、極座標なし） | 任意の 2 軸 |
+
+- 重みの計算は Maya 非依存 `core/blend_tree.py`。Unity の実装（`Mecanim` の gradient band interpolation。[Rune Skovbo Johansen の論文](https://runevision.com/thesis/) の式）に合わせ、pytest で代表点（モーション上 = 1、中点 = 0.5/0.5、Simple Directional の原点 = 中央モーションのみ）を固定する
+- **時間の同期**: Unity の Blend Tree は各モーションを**正規化時間**で同期して再生する（長さが違うクリップは、重み付き平均の長さに合わせて速度が変わる）。合成でも同じにする（各クリップの範囲を正規化時間でサンプリング → 重み付きの長さで再生）。`Cycle Offset` と `Mirror` は対象外（MS2026 で使うまで）
+- **N 本の混ぜ方**（合成 `composition.py`）: 位置は重み付き和、回転は正規化した重みでクォータニオンを順に slerp（Unity と同じ順序依存の近似。重みが 1 本に偏れば一致）。重みはパラメータの値から決まり、**パラメータを動かすたびに作り直す**（SF-5 と同じ: ドラッグ中は作らず、止まって 0.15 秒後に 1 回。MisotenChara 規模で 1 秒以内）。合成の重みカーブに、各モーションの重みをアトリビュートとして残す（AN-F-5 の割合表示に使う）
+- **UI（ブレンドタブに 3 つ目の節）**: 「Blend Tree パラメータ」。X / Y のパラメータ名のコンボ（状態図の float から）、**2D パッド**（D-Drive と同じ 160 px、範囲は 0〜1 / -1〜1 の切替、ドラッグで点を動かす、現在の重みを各モーション名の横に %）、float ごとのスライダー（1D 用）。パッドの操作は再生中にも効く（作り直し）
+- **状態図の JSON**（§4.2 に追加。MINOR）:
+
+```jsonc
+{ "name": "Move", "blendTree": { "type": "2DSimpleDirectional", "parameters": ["MoveX", "MoveY"],
+    "motions": [ { "clip": "A_MisotenChara_Idle", "position": [0, 0] }, { "clip": "A_MisotenChara_Walk_F", "position": [0, 1] },
+                 { "clip": "A_MisotenChara_Walk_B", "position": [0, -1] }, { "clip": "A_MisotenChara_Walk_L", "position": [-1, 0] }, { "clip": "A_MisotenChara_Walk_R", "position": [1, 0] } ] } }
+{ "name": "Locomotion", "blendTree": { "type": "1D", "parameters": ["Speed"],
+    "motions": [ { "clip": "A_MisotenChara_Idle", "threshold": 0 }, { "clip": "A_MisotenChara_Walk_F", "threshold": 0.5 }, { "clip": "A_MisotenChara_Run_F", "threshold": 1 } ] } }
+```
+
+- Unity 側（U-A1）はこの JSON から `BlendTree` を生成する。MS2026 の `AC_PlayerPreview` は Blend Tree を使っていない（Idle / Run / Jump の遷移だけ）ので、既定の状態図は変えない。方向付きの移動クリップ（`_F/_B/_L/_R`）が揃ったとき「2D の移動ツリーを作る」ボタンで雛形を作る
+- 確認項目: docs/18 に AN-11 の節（パッドの四隅・中点で見た目が各モーション / 半々になる、1D の中間で Walk と Run が混ざる、D-Drive の AnimEditor と同じパラメータで見比べ）
+
 ## 5. ショット（ショットタブ、AN-7 / AN-8）
 
 ### 5.1 ショットとは

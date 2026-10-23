@@ -321,6 +321,9 @@ Phase A（アニメの“嘘”）より先に進める（作業台が A 系の�
 | AN-7 | **ショットの作成**: `shots/<Shot>.shot.json`（§5.1）、`tdShot_<Shot>` グループ、カメラ区間と Camera Sequencer の同期、キャラクターのクリップ列（ブレンドタブから「この列をショットへ」）、手付けキー用の animLayer、`EVT_` イベント、シーケンサー再生と `playblast`（`captures/shots/`） | — | 2.5 | AN-4 | ショットを作ってカメラ 2 台の切替とクリップ列が Maya で再生できる。`shot.json` の読み書き・検証は pytest | ✅ 2026-10-22 |
 | AN-8 | **ショットの出力**: `<Shot>.fbx`（Ubercam + `PRP_` + `EVT_`）、`<Shot>__<ModelId>.fbx`（ジョイント階層だけ・ベイク）、`.fctrack`（既存を呼ぶ）、D-Drive のオプション（§5.3）、同名上書き、`tools/export_fbx_batch.py --mode shot` | — | 2 | AN-6 AN-7 | fixture のショットから 2 本の FBX が出て、キャラクター FBX にメッシュが無い・カメラ FBX にカメラが 1 台だけあることをテストで確認。D-Drive（ブランチ `tdrive-facial`）に置いて CutsceneData が自動で作られる（人が確認） | ✅ 2026-10-22（D-Drive での取り込みは人の確認待ち） |
 | AN-9 | **マニュアルと確認項目の総点検**: `anim.html` `anim-naming.html` `anim-clips.html` `anim-blend.html` `anim-shot.html` `anim-export.html`、Readme の「今できること」、スクリーンショット（実機）、[18](18_manual_verification_facial.md) AN 節、[10](10_manual_verification_2026-09-28.md) に「OpenGL で Animation タブ」の項目、CHANGELOG | — | 1 | AN-1〜AN-8 | 準備中の表記と実装が食い違わない。MisotenChara で一周（命名 → クリップ → ブレンド → 出力 → ショット → 出力）を人が確認できる手順になっている | ✅ 2026-10-22（スクリーンショットは実機が要るので「準備中」のまま。裏の Maya で MisotenChara_Rig の一周は通る） |
+| AN-11-1 | **ブレンドツリーの重み計算**（Maya 非依存 `core/blend_tree.py`）: 1D / 2DSimpleDirectional / 2DFreeformDirectional / 2DFreeformCartesian を Unity と同じ式で。状態図 JSON の `blendTree`（§4.5）の読み書き・検証（モーションのクリップが存在・しきい値の重複・2D の位置の重複） | — | 1.5 | AN-5 | pytest: モーション上で 1、1D の中点で 0.5/0.5、Simple Directional の原点で中央のみ、Freeform の代表点が Unity の値（手計算の固定値）と一致。スキーマの検証 | ⬜ |
+| AN-11-2 | **N 本の合成とブレンドタブの「Blend Tree パラメータ」節**: 正規化時間で同期した N 本の重み付き合成（位置は重み付き和・回転は正規化重みの slerp）、パラメータの変更で作り直し（止まって 0.15 秒後）、2D パッド（160 px、0〜1 / -1〜1 切替、ドラッグ、重みの %）、float スライダー、合成に各モーションの重みを残す（AN-F-5 の表示に使う） | — | 2.5 | AN-11-1 AN-F-6 | mayapy: 4 方向 + 中央の 2D ツリーでパッドの四隅・中点・原点の合成値が重みどおり。1D の中点で 2 クリップの半々。MisotenChara 規模で作り直し 1 秒以内。見た目は人（docs/18 AN-11 節） | ⬜ |
+| AN-11-3 | **雛形とマニュアル・出力**: `_F/_B/_L/_R` が揃ったら「2D の移動ツリーを作る」/ Idle・Walk・Run で「1D の Locomotion を作る」、animset への保存、Unity 用の `animset.json` にそのまま出る（U-A1 の入力）、マニュアル anim-blend.html の節、D-Drive の AnimEditor との対応表（遷移シーケンス / レイヤー / Blend Tree = 3 つとも揃ったことを明記）、確認項目 | — | 1 | AN-11-2 | 雛形で作った状態図が保存・再読込で戻る。マニュアルに D-Drive との対応表 | ⬜ |
 | AN-10 | （保留）OpenGL 用の簡易セル表示（ramp / surfaceShader の 2 階調。Unity との一致は保証しない） | — | 2 | AN-1 | DX11 が無い PC でも影の段が見える | ⬜ 保留 |
 
 Unity 側（U-A1 / U-A2。[20](20_animation_workbench_spec.md) §8）は Phase U に積む。
@@ -336,9 +339,9 @@ Unity 側（U-A1 / U-A2。[20](20_animation_workbench_spec.md) §8）は Phase U
 | AN-F-3 | ブレンドタブの既定の遷移列は最初に開いたときの 1 回しか作られず、あとで足したクリップ（Jump）が載らない。未編集（既定のまま）ならクリップの増減で作り直す。「既定の列に戻す」ボタンも足す | 中 | 0.5 | Idle/Run だけで開いたあと Jump を足すと 3 行になる（pytest + パネル） | ✅（ae5af07） |
 | AN-F-4 | Animation タブのスピンボックス・コンボ・スライダーが、マウスが重なっただけのホイールで値が変わる。Phase E-8 と同じ「フォーカスしているときだけ」に（`tdrive_toon.ui_look` の作法を `tdrive` の共通ウィジェットに切り出し、Toon / Facial / Animation で共用） | 中 | 0.5 | `test_ui_patterns.py` に「ホイールはフォーカス時だけ」の検査を足し、3 ツールで通る | ✅（f176aa7） |
 | AN-F-5 | 再生中に今のブレンドの割合を表示する（ブレンドタブのバナーに「Idle 70% / Run 30%（f=35）」。timeChanged の scriptJob。合成の重みカーブから計算） | 低 | 0.5 | 合成中にタイムスライダーを動かすと割合が変わる（mayapy で値、見た目は人） | ✅（258a086） |
-| AN-F-2 | クリップ一覧・遷移列の表に「ダブルクリックで編集」の一言（表の下のグレーの注記）。「現在の範囲から追加」の動作コンボに「入力もできます」のプレースホルダー | 低 | 0.2 | — | ✅（このコミット） |
+| AN-F-2 | クリップ一覧・遷移列の表に「ダブルクリックで編集」の一言（表の下のグレーの注記）。「現在の範囲から追加」の動作コンボに「入力もできます」のプレースホルダー | 低 | 0.2 | — | ✅（dea1abf） |
 | AN-F-7 | 「ツールをリロード」で古い `AnimSession`（`export_state` の無い版）から引き継ぐとき `AttributeError` で警告が出る。`getattr(..., None)` で守り、無ければ「引き継ぎなし」と出す | 低 | 0.2 | 古い形のセッションを渡しても例外にならない（pytest） | ✅（c7f80e8） |
-| AN-F-8 | クリップタブの「▶ 再生」のあとの一時停止・コマ送りは Maya 標準（`Alt+V`、`Alt+.`／`Alt+,`）で行う旨をマニュアル anim-clips.html に書く | 低 | 0.1 | — | ✅（このコミット） |
+| AN-F-8 | クリップタブの「▶ 再生」のあとの一時停止・コマ送りは Maya 標準（`Alt+V`、`Alt+.`／`Alt+,`）で行う旨をマニュアル anim-clips.html に書く | 低 | 0.1 | — | ✅（dea1abf） |
 | AN-F-9 | 命名タブのテクスチャ検査が、どの面にも割り当てられていないマテリアルにつながる file ノードまで拾う（マテリアルは割り当て済みだけなのと食い違う）。割り当て済みマテリアルに届く file だけにし、部位名はマテリアル名から推定（`HairM` → `Hair`。`T_<ModelId>_Part_BaseColor2…` の連番を減らす） | 中 | 0.5 | 未割り当てマテリアルの file が一覧に出ない。割り当て済みの file は部位名がマテリアル由来になる（mayapy） | ⬜ |
 | AN-F-10 | 命名タブの表示（検査の一覧・シーン設定・掃除候補）が、「適用」「削除」「直す」のあとや Maya 側の Undo / Redo に追従しない（検査を押すまで古いまま）。適用・削除・直すの直後は自動で再検査し、`Undo` / `Redo` / `timeUnitChanged` / `NameChanged` の scriptJob（`lifecycle.keep_alive` + `on_reload`。連続する変化は 0.3 秒まとめる）で再検査する。重いシーンでは一覧だけ更新 | 中 | 0.5 | 改名を Undo すると一覧の「今の名前」が戻る。単位を変えると表示が変わる（mayapy で scriptJob の登録と更新） | ⬜ |
 | AN-F-11 | 掃除候補の「未使用のマテリアル」が shadingEngine ごとに並び、同じマテリアル（`Hair` × 5 SG）が重複して見える。マテリアル 1 行にまとめて、消すときはその SG を全部消す（割り当てのある SG が 1 つでもあれば候補に出さない） | 低 | 0.3 | Hair が 1 行になり、削除で 5 つの SG が消える（mayapy） | ⬜ |
@@ -379,7 +382,7 @@ A 系の詳細仕様は Phase 3 完了時に起こす。A 系は Phase AN の作
 | E | エディタの操作感（lilToon / Poiyomi を参考に） | 11.5 |
 | R | Maya ツールの配布・導入・更新（R-7〜R-13 外部ツールパッケージ 7 日を含む） | 13 |
 | U | T-Drive for Unity パッケージ | 39 |
-| AN | アニメーション作業台（命名・クリップ・ブレンド / 遷移・分割出力・ショット） | 21.5 |
+| AN | アニメーション作業台（命名・クリップ・ブレンド / 遷移・分割出力・ショット。AN-11 ブレンドツリー 5 日を含む） | 26.5 |
 | A | アニメーション | 22 |
 | S | サンプルモデルの移行（shizuku） | 5 |
 | F0 | FacialController 基盤（殻 + コア） | 11.5 |
