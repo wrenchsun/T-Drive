@@ -147,3 +147,20 @@ def test_state_graph_accepts_blend_tree_state():
     assert M.validate(g, d["clips"]) == []
     g["states"][-1]["blendTree"]["parameters"] = ["Nope", "MoveY"]
     assert any("Nope" in e for e in M.validate(g, d["clips"]))
+
+
+def test_animset_roundtrip_keeps_blend_tree(tmp_path):
+    """状態図の blendTree は animset.json にそのまま保存され、読み込みで戻る（Unity 用の animset.json の入力。AN-11-3）。"""
+    d = A.new_animset("X")
+    for n in ("Idle", "Run_F", "Jump", "Walk_F", "Walk_B"):
+        A.add_clip(d, A.default_clip(f"A_X_{n}", 0, 30, "X"))
+    g = M.default_graph(d["clips"], "X")
+    g["parameters"] += [{"name": "MoveX", "type": "float", "default": 0}, {"name": "MoveY", "type": "float", "default": 0}]
+    g["states"].append({"name": "Move", "blendTree": BT.template_2d(d["clips"], "X")})
+    d["stateGraph"] = g
+    path = tmp_path / "X.animset.json"
+    A.save(path, d)
+    back = A.load(path)
+    assert back["stateGraph"]["states"][-1]["blendTree"] == g["states"][-1]["blendTree"]
+    assert M.validate(back["stateGraph"], back["clips"]) == []
+    assert A.errors(back) == []

@@ -53,7 +53,7 @@
 </ol>
 <table>
 <tr><th>パラメータ</th><th>動き</th></tr>
-<tr><td>Speed</td><td>0.1 を境に Idle ⇄ Run（0.1 より大きい → Run へ、0.08 秒でクロスフェード。0.1 より小さい → Idle へ）。この状態図では速さの違いは出ません（速さのブレンドは後の AN-11）</td></tr>
+<tr><td>Speed</td><td>0.1 を境に Idle ⇄ Run（0.1 より大きい → Run へ、0.08 秒でクロスフェード。0.1 より小さい → Idle へ）。この状態図では速さの違いは出ません（速さのブレンドは下の「入口 3: Blend Tree パラメータ」）</td></tr>
 <tr><td>ActionState</td><td>Jump (2) にすると、Idle・Run から Jump へ（Fall (3) も Jump 扱い）。Jump 以外に戻すと、Speed に応じて Idle か Run へ（MS2026 の Controller と同じ）</td></tr>
 </table>
 <ul>
@@ -62,6 +62,34 @@
 <li>長さの欄で、合成する秒数を決めます（既定 8 秒）</li>
 </ul>
 <div class="tip">0.08 秒は状態図の遷移の値です。クリップごとの既定のクロスフェードは 0.1 秒（D-Drive）で、どちらに揃えるかは確認が必要です（<span class="tentative">仮の決め</span>）。</div>
+
+<h2 id="blendtree">入口 3: Blend Tree パラメータ（1D / 2D パッド）</h2>
+<p>Unity の <strong>Blend Tree</strong> と同じ式で、パラメータ（Speed や MoveX / MoveY）を動かしたときの混ざり方を確かめます。D-Drive の AnimEditor「確認する › ブレンド」の 3 つ目の手段にあたります。</p>
+<table>
+<tr><th>D-Drive の AnimEditor「確認する › ブレンド」</th><th>T-Drive のブレンドタブ</th></tr>
+<tr><td>遷移シーケンス（クリップを順に、固定秒でクロスフェード）</td><td>入口 1「遷移列」</td></tr>
+<tr><td>レイヤー同時再生（上半身だけ別のクリップ）</td><td>「レイヤー」（UpperBody）</td></tr>
+<tr><td>Blend Tree パラメータ（float を 2D パッド / スライダーで動かす）</td><td><strong>この節「Blend Tree パラメータ」</strong>（3 つとも揃いました）</td></tr>
+</table>
+<ol>
+<li>まず<strong>ブレンドツリー</strong>を用意します。「<strong>2D の移動ツリーを作る</strong>」は、Walk（無ければ Run）の <code>_F</code> / <code>_B</code> / <code>_L</code> / <code>_R</code> が 2 方向以上そろっているとき、Idle を中央にした 2D のツリー（パラメータ MoveX / MoveY）を作ります。「<strong>1D の Locomotion を作る</strong>」は、Idle(0) / Walk_F(0.5) / Run_F(1) のツリー（パラメータ Speed。Idle と Run があれば作れます）を作ります。できたツリーは状態図に入り、animset に保存されます（Undo もできます）</li>
+<li>「ブレンドツリー」のプルダウンでツリーを選びます。<strong>X / Y のパラメータ</strong>は状態図の float から選び直せます（1D は X だけ）</li>
+<li><strong>2D パッド</strong>（160 px）をドラッグすると、その位置のパラメータ値で合成が作り直されます。青い点が各モーションの位置（大きさが今の重み）、橙の十字が今の値です。右の「0 〜 1 / -1 〜 1」で範囲を切り替え、その下の<strong>スライダー</strong>でも動かせます（1D はこちら）。モーションごとの重みが <strong>% で</strong>名前の横に出ます</li>
+<li>ドラッグ中は作り直さず、<strong>止まって 0.15 秒後に 1 回</strong>だけ作ります。再生中に動かしても効き、時刻と再生状態は保たれます。「合成を作り直す」で手動でも作れます</li>
+</ol>
+<table>
+<tr><th>種類</th><th>重みの決め方（Unity と同じ）</th></tr>
+<tr><td>1D</td><td>隣り合う 2 つのしきい値の間で線形。範囲の外は端のモーションだけ</td></tr>
+<tr><td>2D Simple Directional</td><td>パッドの角度で隣の 2 モーション + 中央（原点）の Idle を混ぜる。外側（大きさ 1 以上）では中央は 0</td></tr>
+<tr><td>2D Freeform Directional / Cartesian</td><td>Unity の gradient band interpolation。角度と大きさ（Directional）か位置（Cartesian）の差で決める</td></tr>
+</table>
+<ul>
+<li>長さの違うクリップは、Unity と同じく<strong>正規化時間</strong>で同期します（どのクリップも同じ割合の位置を読み、全体の長さは重み付き平均）。回転は<strong>四元数</strong>で混ぜます</li>
+<li>合成中の「今のブレンド」には、時刻によらず一定の割合（例: <code>Walk_F 70% / Idle 30%</code>）が出ます。UpperBody レイヤーはブレンドツリーには重ねません</li>
+<li>「合成を外す」で、元のカーブ・再生範囲に戻ります（遷移列の合成と同じ）。Cycle Offset と Mirror は未対応です</li>
+<li>ツリーの JSON は animset の <code>stateGraph.states[].blendTree</code> にあります（Unity 側が読めば Blend Tree を作れる形です）。手で書くこともできます</li>
+<li>画面の写真は実機で撮ったものを足します（<span class="soon">準備中</span>）</li>
+</ul>
 
 <h2>レイヤー（上半身だけ別のクリップ）</h2>
 <p>「UpperBody を使う」にチェックを入れてクリップを選ぶと、<strong>胸から上と腕</strong>（既定では <code>spine_C0_3_jnt</code> 以下）にだけそのクリップが重なり、下半身は元の列のままです。重みのスライダー（0〜1）は、合成中でも動かせます。</p>

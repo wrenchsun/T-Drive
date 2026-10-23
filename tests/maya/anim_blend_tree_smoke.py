@@ -187,6 +187,10 @@ def ui_checks(ui, cmds, K, BT, s, plugs, pre) -> None:  # noqa: PLR0915
     check("UI: 状態図に blendTree の状態ができる（MoveX / MoveY のパラメータも）", len(states) == 1 and {"MoveX", "MoveY"} <= {p["name"] for p in s.data["stateGraph"]["parameters"]}, str(s.data.get("stateGraph")))
     probs = M.validate(s.data["stateGraph"], s.data["clips"])
     check("UI: 雛形は検証を通る（クリップ未割り当ての Jump は除く）", [p for p in probs if "Jump" not in p] == [], str(probs))
+    s.rename_clip(pre + "Idle", pre + "IdleX")
+    names = [m["clip"] for m in next(st for st in s.data["stateGraph"]["states"] if "blendTree" in st)["blendTree"]["motions"]]
+    check("クリップ名を変えるとブレンドツリーのモーションも追従する", pre + "IdleX" in names and pre + "Idle" not in names, str(names))
+    s.rename_clip(pre + "IdleX", pre + "Idle")
     ui.make_template_1d()
     check("UI: 1D の Locomotion の雛形は Idle / Walk_F / Run_F がそろったときだけ", len([st for st in s.data["stateGraph"]["states"] if "blendTree" in st]) in (1, 2))
     ui.select_tree(states[0]["name"])
