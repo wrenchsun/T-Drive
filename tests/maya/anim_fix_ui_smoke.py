@@ -265,32 +265,50 @@ def _run(tmp: Path) -> None:
     check("AN-F-20: Undo の直後にも表が戻る", panel20.blend_tab.rows_table.rowCount() == 3)
     panel20.detach()
 
-    # ---- AN-F-15: シーケンサー再生でパネルのカメラが切り替わる
+    # ---- AN-F-15 / AN-F-25: ショットの再生はシーケンス時間で駆動する（QTimer のトランスポート）
+    from PySide6 import QtCore as QC2
+
     from tdrive_anim import shot_scene as SS
 
     cam_a = cmds.camera(name="CAM_Main")[0]
     cam_b = cmds.camera(name="CAM_Close")[0]
     cmds.camera(name="CAM_Orig")
-    shot = {"shot": "Opening01", "range": [0, 240], "cameras": [{"name": "CAM_Main", "node": cam_a, "start": 0, "end": 120},
-                                                                  {"name": "CAM_Close", "node": cam_b, "start": 121, "end": 240}]}
+    shot = {"shot": "Opening01", "frameRate": 30, "range": [0, 240], "cameras": [{"name": "CAM_Main", "node": cam_a, "start": 0, "end": 120},
+                                                                                  {"name": "CAM_Close", "node": cam_b, "start": 121, "end": 240}]}
     looks: list[str] = []
-    saved = (SS._model_panel, SS._panel_camera, SS._look_thru)
+    seq: list[int] = []
+    binds: list[str] = []
+    saved = (SS._model_panel, SS._panel_camera, SS._look_thru, SS._set_sequence_time, SS._bind_sequencer)
     SS._model_panel, SS._panel_camera, SS._look_thru = (lambda: "modelPanel4", lambda p: "CAM_Orig1", lambda p, c: looks.append(c))
+    SS._set_sequence_time, SS._bind_sequencer = (lambda f: seq.append(f)), (lambda p: binds.append(p))
     try:
-        following = SS.play(shot)
-        check("AN-F-15: 再生を始めると最初のカメラ（CAM_Main）に切り替わる", following and looks == [cam_a], str(looks))
-        cmds.currentTime(50, edit=True)
-        SS.follow_frame()
-        check("AN-F-15: 区間の中では切り替え直さない", looks == [cam_a], str(looks))
-        cmds.currentTime(130, edit=True)
-        SS.follow_frame()
-        check("AN-F-15: 121 フレーム以降は CAM_Close に切り替わる", looks == [cam_a, cam_b], str(looks))
+        check("AN-F-25: 再生を始める（Maya の play は使わない）", SS.play(shot) is True and SS.is_playing() and not cmds.play(query=True, state=True) and seq == [0])
+        check("AN-F-25: パネルを sequenceManager に結ぶ（lookThru は使わない）", binds == ["modelPanel4"] and looks == [], f"{binds} {looks}")
+        check("AN-F-25: QTimer の間隔がシーンの fps（30 fps → 33 ms）", isinstance(SS._transport["timer"], QC2.QTimer) and SS._transport["timer"].interval() == 33)
+        check("AN-F-25: 1 ティックずつ進めると sequenceManager の時刻が進む", SS.transport_step(1) and SS.transport_step(120) and SS.transport_step(121) and seq == [0, 1, 120, 121], str(seq))
+        check("AN-F-25: 同じフレームでは繰り返さない", SS.transport_step(121) and seq[-1] == 121 and seq.count(121) == 1)
+        check("AN-F-25: 範囲の最後で False（止まる）", SS.transport_step(240) is False and seq[-1] == 240)
         SS.stop()
-        check("AN-F-15: 止めたら元のカメラに戻る", looks[-1] == "CAM_Orig1" and SS._follow["shot"] is None, str(looks))
+        check("AN-F-25: 止めたらタイマーが止まり、lookThru で元のカメラに戻して結び直す", not SS.is_playing() and looks == ["CAM_Orig1"] and binds == ["modelPanel4", "modelPanel4"], f"{looks} {binds}")
     finally:
-        SS._model_panel, SS._panel_camera, SS._look_thru = saved
+        SS._model_panel, SS._panel_camera, SS._look_thru, SS._set_sequence_time, SS._bind_sequencer = saved
+    # 本物の Camera Sequencer: 121 フレーム以降は CAM_Close の shot になる（パネルは無いのでカメラの切り替わりは shot の currentCamera で確認）
+    s.new_shot("Seq01", 30, 0, 240)
+    s.shot_add_camera(cam_a, 0, 120)
+    s.shot_add_camera(cam_b, 121, 240)
+    SS.sync_cameras(s.shot)
+    SS._transport.update(shot=s.shot, lo=0, hi=240, last=None)
+    SS.transport_step(50)
+    cur_a = cmds.sequenceManager(query=True, currentShot=True)
+    SS.transport_step(130)
+    cur_b = cmds.sequenceManager(query=True, currentShot=True)
+    cams = (cmds.listConnections(f"{cur_a}.currentCamera", source=True, destination=False) or [""])[0], (cmds.listConnections(f"{cur_b}.currentCamera", source=True, destination=False) or [""])[0]
+    check("AN-F-25: 実際の sequenceManager で、50 フレームは CAM_Main・130 フレームは CAM_Close", cams == (cam_a, cam_b) and cmds.currentTime(query=True) == 130, f"{cams} {cmds.currentTime(query=True)}")
+    SS._transport.update(shot=None)
+    SS.remove("Seq01")
     SS._model_panel = lambda: None
-    check("AN-F-15: パネルが無い環境では追従しない", SS.start_follow(shot) is False)
+    check("AN-F-25: パネルが無い環境でも再生できる（時刻だけ進む）", SS.play(shot) is True)
+    SS.stop()
     SS._model_panel = saved[0]
 
     # ---- AN-F-16: 反映したパネルのカメラを、外すと元に戻す

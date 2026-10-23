@@ -184,7 +184,7 @@ class ShotTab(QtWidgets.QWidget):
         self.remove_btn.setToolTip("ショットがシーンに作ったもの（合成・shot ノード・イベントのロケータ）を外し、再生範囲を戻します")
         self.remove_btn.clicked.connect(lambda *_: self.remove())
         self.play_btn = QtWidgets.QPushButton("▶ シーケンサー再生")
-        self.play_btn.setToolTip("ショットの範囲を 1 回再生します（カメラの区間が切り替わります）")
+        self.play_btn.setToolTip("ショットの範囲を 1 回再生します（カメラの区間にあわせてビューポートのカメラが切り替わります）。ツールの再生なので Esc は効きません。■ で止めます")
         self.play_btn.clicked.connect(lambda *_: self.play())
         self.stop_btn = QtWidgets.QPushButton("■")
         self.stop_btn.setToolTip("再生を止めます")

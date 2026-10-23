@@ -226,6 +226,7 @@ def _remember_panel_camera(shot_name: str) -> None:
     if panel is not None:
         with contextlib.suppress(RuntimeError):
             _reflected_camera[shot_name] = (panel, _panel_camera(panel))
+        _bind_sequencer(panel)  # 反映時にパネルを Camera Sequencer に結ぶ（AN-F-25）
 
 
 def _restore_panel_camera(shot_name: str) -> None:
@@ -275,9 +276,11 @@ def _remove(shot_name: str, delete_group: bool) -> int:
 
 
 # ------------------------------------------------------------------ 再生・動画
-# シーケンサー再生: Maya の通常の再生ではビューポートのカメラは変わらないので、timeChanged でショットのカメラの区間に合わせて
-# パネルのカメラを切り替える（シーケンス時間 = ショットのフレーム番号。カメラの区間は同じ番号で作ってある）。止めたら元のカメラに戻す。AN-F-15
-_follow: dict[str, Any] = {"shot": None, "panel": None, "restore": None, "current": None, "jobs": []}
+# シーケンサー再生（AN-F-25。AN-F-15 の方式を置き換え）: Maya の `play` 中は timeChanged の scriptJob + lookThru でカメラが切り替わらず、
+# しかも lookThru は `sequenceManager -modelPanel` の結び付けを外す。一方 `sequenceManager(currentTime=f)` は、そのフレームのカメラへ即座に切り替え、
+# シーンの時刻も動かす（Camera Sequencer の仕組み）。そこでショットの再生は Maya の play を使わず、QTimer のトランスポート（シーンの fps）で
+# 毎ティック `sequenceManager(currentTime=f)` を進める。パネルは `sequenceManager(modelPanel=…)` で結ぶ（lookThru は使わない）。止めたら元のカメラへ戻す。
+_transport: dict[str, Any] = {"timer": None, "shot": None, "panel": None, "restore": None, "lo": 0, "hi": 0, "fps": 30, "t0": 0.0, "last": None, "loop": False}
 
 
 def _model_panel() -> str | None:
@@ -297,81 +300,93 @@ def _look_thru(panel: str, camera: str) -> None:
     cmds.lookThru(panel, camera)
 
 
-def follow_frame(frame: float | None = None) -> str | None:
-    """今のフレームのショットのカメラへ、パネルのカメラを切り替える（区間が無ければ変えない）。切り替えたカメラ、変えなければ None。"""
-    shot, panel = _follow["shot"], _follow["panel"]
-    if shot is None or panel is None:
-        return None
-    cam = SH.camera_at(shot, int(round(cmds.currentTime(query=True) if frame is None else frame)))
-    if cam is None or cam == _follow["current"] or not cmds.objExists(cam):
-        return None
-    _look_thru(panel, cam)
-    _follow["current"] = cam
-    return cam
+def _bind_sequencer(panel: str) -> None:
+    """Camera Sequencer のカメラ切り替えを、このパネルに結ぶ。"""
+    with contextlib.suppress(RuntimeError, TypeError):
+        cmds.sequenceManager(modelPanel=panel)
+
+
+def _set_sequence_time(frame: int) -> None:
+    """シーケンス時間をそのフレームにする（カメラの区間があれば、パネルのカメラも切り替わる）。無ければ普通に時刻を動かす。"""
+    if cmds.ls(type="shot"):
+        cmds.sequenceManager(currentTime=frame)
+    else:
+        cmds.currentTime(frame, edit=True)
+
+
+def transport_step(frame: int) -> bool:
+    """1 ティック: frame へ進める。戻り: 続けるか（範囲の最後に着いたら止めて False）。"""
+    lo, hi = _transport["lo"], _transport["hi"]
+    frame = min(max(frame, lo), hi)
+    if frame != _transport["last"]:
+        _set_sequence_time(frame)
+        _transport["last"] = frame
+    return frame < hi
 
 
 @lifecycle.guarded()
-def _cb_time_changed() -> None:
-    follow_frame()
+def _tick() -> None:
+    if _transport["shot"] is None:
+        return
+    import time
+
+    frame = _transport["lo"] + int((time.perf_counter() - _transport["t0"]) * _transport["fps"])  # 実時間で進める（描画が遅れても全体の長さは変わらない）
+    if not transport_step(frame):
+        if _transport["loop"]:
+            _transport["t0"] = time.perf_counter()
+            _transport["last"] = None
+        else:
+            stop()
 
 
-@lifecycle.guarded()
-def _cb_playing_changed() -> None:
-    if _follow["shot"] is not None and not cmds.play(query=True, state=True):
-        stop_follow()  # 再生が止まった（最後まで・停止ボタン・Esc）→ 元のカメラへ
+lifecycle.keep_alive(_tick)
 
 
-lifecycle.keep_alive(_cb_time_changed)
-lifecycle.keep_alive(_cb_playing_changed)
+def is_playing() -> bool:
+    return _transport["shot"] is not None
 
 
-def start_follow(shot: dict[str, Any]) -> bool:
-    """カメラの追従を始める。戻り: 始めたか（パネルが無い環境では False）。"""
-    stop_follow()
+def play(shot: dict[str, Any], loop: bool = False) -> bool:
+    """ショットの範囲を再生する（QTimer のトランスポート。Esc は Maya の再生ではないので効かない。■ で止める）。戻り: 始めたか。"""
+    import time
+
+    stop()
+    lo, hi = shot["range"]
+    cmds.playbackOptions(minTime=lo, maxTime=hi, loop="once")
     panel = _model_panel()
-    if panel is None:
-        return False
-    _follow.update(shot=shot, panel=panel, restore=_panel_camera(panel), current=None)
-    jobs = []
-    with contextlib.suppress(RuntimeError):
-        jobs.append(cmds.scriptJob(event=["timeChanged", _cb_time_changed]))
-        jobs.append(cmds.scriptJob(conditionChange=["playingBack", _cb_playing_changed]))
-    _follow["jobs"] = jobs
-    follow_frame()
+    restore = None
+    if panel is not None:
+        with contextlib.suppress(RuntimeError):
+            restore = _panel_camera(panel)
+        _bind_sequencer(panel)
+    _transport.update(shot=shot, panel=panel, restore=restore, lo=lo, hi=hi, fps=shot["frameRate"], t0=time.perf_counter(), last=None, loop=loop)
+    transport_step(lo)
+    from PySide6 import QtCore
+
+    timer = QtCore.QTimer()
+    timer.setInterval(max(1, int(1000 / shot["frameRate"])))
+    timer.timeout.connect(_tick)
+    _transport["timer"] = timer
+    timer.start()
     return True
 
 
-def stop_follow() -> None:
-    """追従を止めて、パネルのカメラを元に戻す。"""
-    for j in _follow["jobs"]:
-        with contextlib.suppress(RuntimeError, TypeError):
-            cmds.scriptJob(kill=j, force=True)
-    panel, restore = _follow["panel"], _follow["restore"]
-    _follow.update(shot=None, panel=None, restore=None, current=None, jobs=[])
+def stop() -> None:
+    """再生を止めて、パネルのカメラを元に戻す（lookThru はここだけ。戻したあと、また結び直す）。"""
+    timer = _transport["timer"]
+    if timer is not None:
+        timer.stop()
+        timer.deleteLater()
+    panel, restore = _transport["panel"], _transport["restore"]
+    _transport.update(timer=None, shot=None, panel=None, restore=None, last=None)
     if panel and restore and cmds.objExists(restore):
         with contextlib.suppress(RuntimeError):
             _look_thru(panel, restore)
+        _bind_sequencer(panel)
 
 
-lifecycle.on_reload(stop_follow)
+lifecycle.on_reload(stop)
 lifecycle.on_reload(_reflected_camera.clear)
-
-
-def play(shot: dict[str, Any]) -> bool:
-    """ショットの範囲を 1 回再生する。カメラの区間にあわせてパネルのカメラを切り替える。戻り: カメラを追従するか。"""
-    lo, hi = shot["range"]
-    cmds.playbackOptions(minTime=lo, maxTime=hi, loop="once")
-    cmds.currentTime(lo, edit=True)
-    following = start_follow(shot) if shot.get("cameras") else False
-    with contextlib.suppress(RuntimeError):
-        cmds.play(forward=True)
-    return following
-
-
-def stop() -> None:
-    """再生を止めて、カメラを元に戻す。"""
-    cmds.play(state=False)
-    stop_follow()
 
 
 def movie_path(shot_name: str) -> Path:
