@@ -18,7 +18,7 @@ from typing import Any
 
 from maya import cmds
 
-from tdrive import lifecycle, project
+from tdrive import lifecycle, panels, project
 
 from . import clips as MC
 from . import composition as K
@@ -220,13 +220,12 @@ _reflected_camera: dict[str, tuple[str, str]] = {}  # ショット名 → (パ�
 
 def _remember_panel_camera(shot_name: str) -> None:
     """Camera Sequencer の shot を作ると、ビューポートのカメラが CAM_* に切り替わったままになる。反映する前のカメラを覚える。"""
-    if shot_name in _reflected_camera:
-        return
     panel = _model_panel()
     if panel is not None:
-        with contextlib.suppress(RuntimeError):
-            _reflected_camera[shot_name] = (panel, _panel_camera(panel))
-        _bind_sequencer(panel)  # 反映時にパネルを Camera Sequencer に結ぶ（AN-F-25）
+        if shot_name not in _reflected_camera:
+            with contextlib.suppress(RuntimeError):
+                _reflected_camera[shot_name] = (panel, _panel_camera(panel))
+        _bind_sequencer(panel)  # 反映のたびに、いま見えているパネルを Camera Sequencer に結ぶ（AN-F-25 / AN-F-45）
 
 
 def _restore_panel_camera(shot_name: str) -> None:
@@ -283,13 +282,20 @@ def _remove(shot_name: str, delete_group: bool) -> int:
 _transport: dict[str, Any] = {"timer": None, "shot": None, "panel": None, "restore": None, "lo": 0, "hi": 0, "fps": 30, "t0": 0.0, "last": None, "loop": False}
 
 
+_panel_visible = True  # 直近に選んだパネルが見えているか（見えていなければ画面に注意を出す。AN-F-45）
+
+
 def _model_panel() -> str | None:
-    """カメラを切り替えるビューポート: フォーカスのあるモデルパネル、無ければ最初のモデルパネル。ヘッドレスでは None。"""
-    focus = cmds.getPanel(withFocus=True)
-    if focus and cmds.getPanel(typeOf=focus) == "modelPanel":
-        return focus
-    panels = cmds.getPanel(type="modelPanel") or []
-    return panels[0] if panels else None
+    """カメラを切り替えるビューポート: 見えているモデルパネルを優先（フォーカス → 最後にアクティブ → 先頭。`tdrive.panels`）。ヘッドレスでは None。"""
+    global _panel_visible
+    panel, visible = panels.model_panel_info()
+    _panel_visible = visible
+    return panel
+
+
+def panel_notice() -> str:
+    """カメラを切り替えるパネルが見えていないときの注意（無ければ ""）。"""
+    return "" if _panel_visible else "⚠ カメラを切り替えるビューポートが表示されていません（見えているビューポートが無い）。ビューポートを表示してからもう一度操作してください"
 
 
 def _panel_camera(panel: str) -> str:

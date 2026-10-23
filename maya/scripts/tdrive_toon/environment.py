@@ -211,12 +211,7 @@ class capture_panel:  # noqa: N801 (with 文で使う)
 
 
 def model_panel() -> str | None:
-    panel = cmds.getPanel(withFocus=True)
-    if panel and cmds.getPanel(typeOf=panel) == "modelPanel":
-        return panel
-    visible = set(cmds.getPanel(visiblePanels=True) or [])
-    panels = cmds.getPanel(type="modelPanel") or []
-    for p in panels:
-        if p in visible:
-            return p
-    return panels[0] if panels else None
+    """プレビューを出すモデルパネル。見えているものを優先する共通の選び方（`tdrive.panels`。AN-F-45）。"""
+    from tdrive import panels
+
+    return panels.model_panel()

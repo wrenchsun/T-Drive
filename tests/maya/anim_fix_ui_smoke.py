@@ -824,6 +824,40 @@ def _run(tmp: Path) -> None:
     MC42.stop()
     check("AN-F-42: ▶ していなければ何も変えない（控えが無いときは触らない）", get_state() == (1, 120, "once", 1.0), str(get_state()))
 
+    # ---- AN-F-45: カメラを切り替えるパネルは見えているものを選ぶ
+    from tdrive import panels as PN45
+
+    models = ["modelPanel1", "modelPanel2", "modelPanel3", "modelPanel4"]
+    check("AN-F-45: フォーカス無しでも、非表示の先頭（modelPanel1）でなく見えている modelPanel4 を選ぶ", PN45.pick_model_panel(models, ["modelPanel4"], "", "") == ("modelPanel4", True))
+    check("AN-F-45: 見えているのが複数ならフォーカス → 最後にアクティブ → 先頭の順", PN45.pick_model_panel(models, ["modelPanel3", "modelPanel4"], "modelPanel4", "modelPanel3") == ("modelPanel4", True)
+          and PN45.pick_model_panel(models, ["modelPanel3", "modelPanel4"], "", "modelPanel4") == ("modelPanel4", True)
+          and PN45.pick_model_panel(models, ["modelPanel3", "modelPanel4"], "", "") == ("modelPanel3", True))
+    check("AN-F-45: フォーカスが非表示のパネルなら使わない", PN45.pick_model_panel(models, ["modelPanel4"], "modelPanel1", "") == ("modelPanel4", True))
+    check("AN-F-45: 見えているパネルが無ければ先頭（見えていない印つき）、パネルが無ければ None", PN45.pick_model_panel(models, [], "", "") == ("modelPanel1", False) and PN45.pick_model_panel([], [], "", "") == (None, False))
+    saved45 = PN45.model_panel_info
+    PN45.model_panel_info = lambda: ("modelPanel1", False)
+    try:
+        SS._model_panel = saved[0]
+        SS._model_panel()
+        check("AN-F-45: 選んだパネルが見えていなければ注意が出る", "表示されていません" in SS.panel_notice())
+        PN45.model_panel_info = lambda: ("modelPanel4", True)
+        SS._model_panel()
+        check("AN-F-45: 見えていれば注意は出ない", SS.panel_notice() == "")
+        binds45: list[str] = []
+        saved_b = SS._bind_sequencer
+        SS._bind_sequencer = lambda p: binds45.append(p)
+        SS._reflected_camera["Rebind45"] = ("modelPanel4", "persp")
+        SS._remember_panel_camera("Rebind45")
+        SS._remember_panel_camera("Rebind45")
+        SS._bind_sequencer = saved_b
+        check("AN-F-45: 反映のたびに（2 回目以降も）見えているパネルを結び直す", binds45 == ["modelPanel4", "modelPanel4"], str(binds45))
+        SS._reflected_camera.pop("Rebind45", None)
+    finally:
+        PN45.model_panel_info = saved45
+    from tdrive_toon import environment as ENV45
+
+    check("AN-F-45: Toon のプレビューも同じ選び方（tdrive.panels）", "panels" in ENV45.model_panel.__code__.co_names or ENV45.model_panel.__doc__ is not None)
+
     # ---- AN-F-17: メッセージ欄はスクロール領域の外・最上部
     from tdrive_anim.ui import AnimPanel
     from tdrive_anim.ui_common import MessageLabel

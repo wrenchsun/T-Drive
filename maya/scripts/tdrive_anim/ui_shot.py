@@ -444,7 +444,8 @@ class ShotTab(QtWidgets.QWidget):
             warn = "".join(f"\n⚠ {w}" for w in res["warnings"])
             if SN.scene_fps_exact() != s["frameRate"]:
                 warn += f"\n⚠ シーンの時間単位は {SN.scene_fps_exact() or '不明な'} fps、ショットは {s['frameRate']} fps です。命名タブの「直す」で合わせてください（カメラの区間・イベントはフレーム番号のままです）"
-            self._say(f"ショットを反映しました（カメラ区間 {res['cameras']}、イベント {res['events']}、合成 {len(res['compositions'])}）{warn}")
+            notice = SS.panel_notice()
+            self._say(f"ショットを反映しました（カメラ区間 {res['cameras']}、イベント {res['events']}、合成 {len(res['compositions'])}）{warn}" + (f"\n{notice}" if notice else ""))
         self.refresh()
 
     def remove(self) -> None:
@@ -460,6 +461,9 @@ class ShotTab(QtWidgets.QWidget):
         s = self._shot()
         if s is not None:
             SS.play(s)
+            notice = SS.panel_notice()
+            if notice:
+                self._say(notice)
 
     def capture(self) -> None:
         s = self._shot()
