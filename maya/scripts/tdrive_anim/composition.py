@@ -347,11 +347,14 @@ def _compose(name: str, placements: list[Seq.Placement], joints: list[str], fps:
              progress: Progress | None = None, use_cache: bool = False, hide_ctls: bool = True) -> Result:
     MC.stop()  # クリップ再生中なら先に止めて、再生範囲を元へ戻してから合成の範囲にする（控えが混ざらないように。SF-8）
     remove(name)
+    removed = remove_conflicting(name, joints)  # 同じジョイントを使っている別の合成（ブレンド ⇄ ショット）は先に外す（AN-F-46）
     chans = animated_channels(joints)
     if not chans:
-        raise ValueError("合成できるジョイントがありません（キーやコンストレイントでつながったチャンネルが無い）")
+        taken = [nm for nm in active() if nm != name]
+        why = f"別の合成（{', '.join(PREFIX + n for n in taken)}）がジョイントを使っています。" if taken else ""
+        raise ValueError(why + "合成できるジョイントがありません（キーやコンストレイントでつながったチャンネルが無い）")
     b = _Builder(name, fps)
-    warnings: list[str] = []
+    warnings: list[str] = [f"同じジョイントを使っていた別の合成（{', '.join(PREFIX + n for n in removed)}）を外しました"] if removed else []
     timings: dict[str, float] = {}
     t_all = time.perf_counter()
     layer_list = layers or []
@@ -469,6 +472,32 @@ def _compose(name: str, placements: list[Seq.Placement], joints: list[str], fps:
         cmds.currentTime(0, edit=True)
     timings["total"] = time.perf_counter() - t_all
     return Result(name, node, total, len(chans), n_plugs, len(b.created), len(layer_list), warnings, timings)
+
+
+# ------------------------------------------------------------------ 別の合成との取り合い（AN-F-46）
+def _long(nodes) -> set[str]:
+    return {x for n in nodes if cmds.objExists(n) for x in (cmds.ls(n, long=True) or [])}
+
+
+def conflicting(name: str, joints: list[str]) -> list[str]:
+    """`joints` のどれかを（出力のつながりで）使っている、`name` 以外の合成の名前。ジョイントは 1 つの合成にしか取られないので、同時には使えない。"""
+    mine = _long(joints)
+    out = []
+    for nm in active():
+        if nm == name:
+            continue
+        taken = _long(dst.split(".")[0] for _out, dst in _load(_comp_node(nm), "tdOutputs", []))
+        if taken & mine:
+            out.append(nm)
+    return out
+
+
+def remove_conflicting(name: str, joints: list[str]) -> list[str]:
+    """同じジョイントを使っている別の合成を外す。外した合成の名前。"""
+    names = conflicting(name, joints)
+    for nm in names:
+        remove(nm)
+    return names
 
 
 # ------------------------------------------------------------------ コントローラの非表示（AN-F-37）

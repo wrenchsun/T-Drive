@@ -619,7 +619,7 @@ class BlendTab(QtWidgets.QWidget):
         finally:
             progress.close()
         cmds.playbackOptions(loop="continuous" if self.loop_cb.isChecked() else "once")
-        warns = "".join(f"\n⚠ {w}" for w in Seq.overlap_warnings(placements, self._fps()))
+        warns = "".join(f"\n⚠ {w}" for w in [*res.warnings, *Seq.overlap_warnings(placements, self._fps())])
         self._mix_placements = list(placements)
         t = res.timings
         took = f"（{t.get('total', 0):.1f} 秒: 読み取り {t.get('sample', 0):.1f} / 切り離し {t.get('detach', 0):.1f} / ノード作成 {t.get('chain', 0):.1f}）" if t else ""

@@ -246,7 +246,8 @@ def _build(shot: dict[str, Any], current: dict[str, Any] | None, progress: K.Pro
     except Exception:
         remove(shot["shot"])  # 途中で失敗したら、ここまでに作ったものを全部戻す（ジョイントを合成につないだまま残さない）
         raise
-    return {"events": len(events), "cameras": len(sequencer_shots(shot["shot"])), "compositions": [c.name for c in comps], "warnings": warnings}
+    comp_warnings = [w for c in comps for w in c.warnings]  # 例: 同じジョイントを使っていたブレンドの合成を外した（AN-F-46）
+    return {"events": len(events), "cameras": len(sequencer_shots(shot["shot"])), "compositions": [c.name for c in comps], "warnings": [*warnings, *comp_warnings]}
 
 
 def remove(shot_name: str, delete_group: bool = False) -> int:

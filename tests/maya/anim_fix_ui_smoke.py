@@ -858,6 +858,34 @@ def _run(tmp: Path) -> None:
 
     check("AN-F-45: Toon のプレビューも同じ選び方（tdrive.panels）", "panels" in ENV45.model_panel.__code__.co_names or ENV45.model_panel.__doc__ is not None)
 
+    # ---- AN-F-46: ブレンドの合成が残っていてもショットを反映できる（逆も）。別の合成を外し、理由を知らせる
+    import tdrive_anim.composition as K46
+    from tdrive_anim.core import sequence as Seq46
+
+    pls46 = Seq46.from_rows([{"clip": "A_MisotenChara_Idle", "holdSec": 1.0}], {c["name"]: c for c in s.data["clips"]}, 30)
+    K46.compose("blend", pls46, make_mini_rig.JOINTS, 30)
+    check("AN-F-46: 前提: ブレンドの合成が残っている", K46.active() == ["blend"])
+    r46 = K46.compose("shot_X_Y", pls46, make_mini_rig.JOINTS, 30, playback=False)
+    check("AN-F-46: ショットの合成を作ると、ブレンドの合成が外れてから作れる", K46.active() == ["shot_X_Y"] and r46.joints >= 1, str(K46.active()))
+    check("AN-F-46: 外したことが結果の警告に出る", any("tdAnimComp_blend" in w and "外しました" in w for w in r46.warnings), str(r46.warnings))
+    r46b = K46.compose("blend", pls46, make_mini_rig.JOINTS, 30)
+    check("AN-F-46: 逆も同じ（ブレンドを作るとショットの合成が外れる）", K46.active() == ["blend"] and any("shot_X_Y" in w for w in r46b.warnings), f"{K46.active()} {r46b.warnings}")
+    K46.remove()
+    # 外せなかった（何も取れない）ときの文言に原因が入る: 別の合成が使っているが外せない状況を模す
+    orig_rc = K46.remove_conflicting
+    K46.compose("other46", pls46, make_mini_rig.JOINTS, 30)
+    K46.remove_conflicting = lambda name, joints: []  # 外す処理を止めて、取り合いの文言だけ確かめる
+    try:
+        try:
+            K46.compose("again46", pls46, make_mini_rig.JOINTS, 30)
+            msg46 = ""
+        except ValueError as exc:
+            msg46 = str(exc)
+    finally:
+        K46.remove_conflicting = orig_rc
+    check("AN-F-46: 合成できないときの文言に、使っている別の合成の名前が入る", "tdAnimComp_other46" in msg46 and "ジョイントを使っています" in msg46, msg46)
+    K46.remove()
+
     # ---- AN-F-17: メッセージ欄はスクロール領域の外・最上部
     from tdrive_anim.ui import AnimPanel
     from tdrive_anim.ui_common import MessageLabel
