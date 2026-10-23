@@ -196,6 +196,27 @@ class ShellWidget(QtWidgets.QWidget):
         self.detach()
         super().closeEvent(event)
 
+    # workspaceControl の「閉じる」は widget を壊さず非表示にするだけで、detach が走らない（実機: 閉じても合成・scriptJob・パネルのカメラが残った。AN-F-39）。
+    # 非表示 / 再表示を、ツールが持っていれば `on_hidden()` / `on_shown()` で知らせる（Toon / Facial は持たないので従来どおり何も起きない）。
+    def hideEvent(self, event) -> None:  # noqa: N802 (Qt)
+        super().hideEvent(event)
+        self._notify_tools("on_hidden")
+
+    def showEvent(self, event) -> None:  # noqa: N802 (Qt)
+        super().showEvent(event)
+        self._notify_tools("on_shown")
+
+    def _notify_tools(self, hook: str) -> None:
+        for tool in self.tools:
+            fn = getattr(tool, hook, None)
+            if fn is not None:
+                try:
+                    fn()
+                except RuntimeError:
+                    pass  # 枠ごと破棄済み
+                except Exception:  # noqa: BLE001  1 つのツールの失敗で殻を止めない
+                    lifecycle.report_error(f"{tool.label} の {hook} で例外", traceback.format_exc())
+
     # -------------------------------------------------------------- Undo / Redo（今開いているツールへ）
     def _undo(self) -> None:
         tool = self.current_tool()

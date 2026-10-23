@@ -517,6 +517,11 @@ class NamingTab(QtWidgets.QWidget):
             self.summary.setText("先に animset を作ってください（上の ModelId 欄 → 新規）")
             self.humanoid = None
 
+    def resume(self) -> None:
+        """再表示: 検査済みなら Maya の変化を見る scriptJob を戻す（AN-F-39）。"""
+        if self._inspected:
+            self._start_jobs()
+
     def detach(self) -> None:
         global _active_tab
         self._reinspect_timer.stop()

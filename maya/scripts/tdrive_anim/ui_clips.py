@@ -390,6 +390,11 @@ class ClipsTab(QtWidgets.QWidget):
         m.addAction("フレームへ移動", lambda *_: cmds.currentTime(c["events"][rows[0]]["frame"], edit=True))
         m.exec(self.events.viewport().mapToGlobal(pos))
 
+    def resume(self) -> None:
+        """再表示: 範囲表示のタイマーを戻す（AN-F-39）。"""
+        self._range_timer.start()
+        self.refresh()
+
     def detach(self) -> None:
         self._range_timer.stop()
         MC.stop()  # 閉じるときは再生範囲を戻す

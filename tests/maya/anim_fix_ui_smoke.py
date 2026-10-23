@@ -692,6 +692,47 @@ def _run(tmp: Path) -> None:
     panel38.detach()
     s.close_shot()
 
+    # ---- AN-F-39: workspaceControl の「閉じる」（非表示）で合成・再生・scriptJob を外す
+    from tdrive import shell as shell39
+    from tdrive_anim import transport as T39
+    from tdrive_anim.ui import AnimTool as AT39
+
+    tool39 = AT39()
+    widget39 = tool39.build_widget()
+    shell_w = shell39.ShellWidget.__new__(shell39.ShellWidget)  # 殻の hide / show の知らせだけ試す（ツールの一覧を差し替える）
+    QtWidgets.QWidget.__init__(shell_w)
+    shell_w.tools = [tool39]
+    shell_w.tool_widgets = {}
+    shell_w.show()
+    sj39 = []
+    orig_sj39 = cmds.scriptJob
+    cmds.scriptJob = lambda **kw: (sj39.append(kw), len(sj39))[1]
+    try:
+        p39 = tool39._panel
+        p39.blend_tab.rows = [{"clip": "A_MisotenChara_Idle", "holdSec": 1.0, "crossFadeSec": 0.1, "switchAt": 1.0, "speed": 1.0}]
+        p39.blend_tab.build_from_rows()
+        p39.naming_tab.inspect()
+        SS.play({"shot": "Hide39", "frameRate": 30, "range": [0, 240], "cameras": []})
+        check("AN-F-39: 前提: 合成中・再生中", K23.active() == ["blend"] and SS.is_playing() and p39.blend_tab._mix_job is not None)
+        shell_w.hide()  # workspaceControl の「閉じる」相当
+        check("AN-F-39: 非表示で合成が全部外れる", K23.active() == [] and not cmds.ls("tdAnimComp_*") and cmds.listConnections("spine_C0_0_jnt.translateX", source=True, destination=False) is not None)
+        check("AN-F-39: 非表示で再生・トランスポートが止まる", not SS.is_playing() and not cmds.play(query=True, state=True) and T39.status() == [])
+        check("AN-F-39: 非表示で scriptJob が外れ、タイマーが止まる", p39.blend_tab._mix_job is None and p39.naming_tab._jobs == [] and not p39._transport_timer.isActive() and not p39.clips_tab._range_timer.isActive())
+        check("AN-F-39: 非表示で変更通知の購読も外れる", p39.refresh not in s.listeners)
+        shell_w.show()  # 再表示
+        check("AN-F-39: 再表示で使える状態に戻る（購読・タイマー・scriptJob）", p39.refresh in s.listeners and p39._transport_timer.isActive() and p39.clips_tab._range_timer.isActive() and bool(p39.naming_tab._jobs))
+        p39.blend_tab.rows = [{"clip": "A_MisotenChara_Idle", "holdSec": 1.0, "crossFadeSec": 0.1, "switchAt": 1.0, "speed": 1.0}]
+        p39.blend_tab.build_from_rows()
+        check("AN-F-39: 再表示のあとで合成を作れる", K23.active() == ["blend"])
+        shell_w.hide()
+        check("AN-F-39: もう一度閉じても外れる", K23.active() == [])
+        shell_w.show()
+        p39.detach()
+    finally:
+        cmds.scriptJob = orig_sj39
+        shell_w.hide()
+    check("AN-F-39: ツールに知らせの関数が無い殻（Toon / Facial）は何も起きない", not hasattr(object(), "on_hidden"))
+
     # ---- AN-F-17: メッセージ欄はスクロール領域の外・最上部
     from tdrive_anim.ui import AnimPanel
     from tdrive_anim.ui_common import MessageLabel

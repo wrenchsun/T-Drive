@@ -171,6 +171,7 @@ class AnimPanel(QtWidgets.QWidget):
         self.stop_all_btn.clicked.connect(lambda *_: self.stop_all())
         bar.addWidget(self.stop_all_btn)
         layout.addLayout(bar)
+        self._suspended = False
         self._transport_timer = QtCore.QTimer(self)
         self._transport_timer.setInterval(300)
         self._transport_timer.timeout.connect(lambda *_: self._update_transport())
@@ -228,6 +229,35 @@ class AnimPanel(QtWidgets.QWidget):
             self.transport_label.setText(text)
             self.transport_label.setStyleSheet("color: #f0a040;" if T.status() else "")
 
+    def suspend(self) -> None:
+        """ウィンドウが非表示になった（workspaceControl の「閉じる」は破棄でなく非表示）: 合成を全部外し、再生・トランスポート・scriptJob・パネルのカメラ・
+        再生範囲と速度を元に戻す（AN-F-39）。実行中の出力は止めない。`resume()` で使える状態に戻る。"""
+        if self._suspended:
+            return
+        self._suspended = True
+        self._transport_timer.stop()
+        T.stop_all()
+        for tab in reversed(self._all_tabs()):
+            if tab is self.export_tab:
+                continue  # 出力中のジョブは非表示で止めない
+            tab.detach()
+        if self.refresh in self.session.listeners:
+            self.session.listeners.remove(self.refresh)
+
+    def resume(self) -> None:
+        """再表示された: 変更通知・表示更新のタイマー・scriptJob を戻して描き直す。"""
+        if not self._suspended:
+            return
+        self._suspended = False
+        if self.refresh not in self.session.listeners:
+            self.session.listeners.append(self.refresh)
+        self._transport_timer.start()
+        for tab in self._all_tabs():
+            fn = getattr(tab, "resume", None)
+            if fn is not None:
+                fn()
+        self.refresh()
+
     def detach(self) -> None:
         self._transport_timer.stop()
         T.stop_all()  # ウィンドウを閉じるときも全部止める（AN-F-35）
@@ -257,6 +287,14 @@ class AnimTool:
     def build_widget(self) -> QtWidgets.QWidget:
         self._panel = AnimPanel()
         return self._panel
+
+    def on_hidden(self) -> None:
+        if self._panel is not None:
+            self._panel.suspend()
+
+    def on_shown(self) -> None:
+        if self._panel is not None:
+            self._panel.resume()
 
     def on_scene_opened(self) -> None:
         T.stop_all()  # 別のシーンを開いたら、再生・トランスポートを全部止める（AN-F-35）
